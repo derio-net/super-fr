@@ -10366,3 +10366,14 @@ queues:
     main: 36d8ffa46f425f7087b22ab21032fa689db0e3a5
     entries:
     - batch: triage-hardening
+  - kind: queue_built
+    at: '2026-11-24T23:22:21.717959Z'
+    slot: 1
+    sha: b24df489646f55d774cb3d470fea328f1c0be701
+    entry:
+      pr: 1681
+      kind: closeout
+    head: 6340021d281107bf1928237dc714263ae1c9565c
+    patch_id: 8b13139d47c0bafcee24b574855d2ad0a5268efa
+    base: 36d8ffa46f425f7087b22ab21032fa689db0e3a5
+    parent: 36d8ffa46f425f7087b22ab21032fa689db0e3a5
