@@ -28,7 +28,7 @@ from fr.acceptance.model import DEBT_STATUSES, LISTED_STATUSES
 from fr.triage.batch import BATCH_STAGES, derive_batch_stage, last_dispatch, planned_merge_order
 from fr.triage.batch import batch_pr as find_batch_pr
 from fr.triage.batch_drive import finished_waves
-from fr.triage.check import CLEARING_RULE, CheckResult, classify, is_set_apart
+from fr.triage.check import CLEARING_RULE, CheckResult, classify
 from fr.triage.components import (
     CHROME_CSS,
     GRID_CSS,
@@ -54,6 +54,7 @@ from fr.triage.fragments import Entry, Resolved, moved_notes, splice
 from fr.triage.merge_stops import MergeStop
 from fr.triage.mergeability import conflicting
 from fr.triage.model import issue_key
+from fr.triage.sets import is_set_apart
 from fr.triage.stage import IN_FLIGHT
 from fr.triage.views import (
     CX_RANK,
@@ -194,7 +195,7 @@ details.batch > .detail { padding: 4px 12px 10px; }
 .pill.bstage-dispatched, .pill.bstage-pr-open { background: var(--live); }
 .pill.bstage-merged { background: var(--accent); }
 .pill.bstage-partial { background: var(--sev-2); }
-.pill.bstage-cancelled, .pill.bstage-abandoned { background: var(--sev-4); }
+.pill.bstage-cancelled, .pill.bstage-abandoned, .pill.bstage-obsolete { background: var(--sev-4); }
 .pill.bstage-proposed { background: transparent; color: var(--muted);
   border: 1px solid var(--line); }
 .merge-order { margin: 8px 0 0; padding-left: 22px; font-size: .9rem; }
@@ -250,6 +251,7 @@ SCRIPT = """
 (function () {
   var KEY = "fr-triage:view";
   var q = document.getElementById("q"), sort = document.getElementById("sort");
+  if (!q || !sort) return;
   var chips = Array.prototype.slice.call(document.querySelectorAll(".chip"));
   var rows = Array.prototype.slice.call(document.querySelectorAll("details.row"));
   var TESTS = {
@@ -460,6 +462,15 @@ def esc(s: str) -> str:
     return html.escape(s, quote=True)
 
 
+TITLE_WITHHELD = '<span class="quiet">title withheld</span>'
+
+
+def issue_title(title: str) -> str:
+    """An issue's title for a page: escaped, or a quiet "title withheld" where collect
+    withheld it, an ineligible issue's text (2026-11-22-triage-hardening R1)."""
+    return esc(title) if title else TITLE_WITHHELD
+
+
 def inline(text: str, linker: Linker | None = None) -> str:
     """Escape first, then allow exactly `code` and **bold** (spec §3.D), then, with a
     *linker*, link each PR or issue reference outside a code span (triage-pages-ux R11).
@@ -529,7 +540,7 @@ def _duplicates_block(duplicates: Sequence[Nested]) -> str:
         )
         closed = ' <span class="tag">closed</span>' if d.issue.state == "closed" else ""
         cmd = f" <code>{esc(d.command)}</code>" if d.command else ""
-        lines.append(f"<li>{link} {esc(d.issue.title)}{closed}{cmd}</li>")
+        lines.append(f"<li>{link} {issue_title(d.issue.title)}{closed}{cmd}</li>")
     return (
         f'<p class="dupes"><strong>Duplicates</strong></p><ul class="dupes">{"".join(lines)}</ul>'
     )
@@ -659,7 +670,7 @@ def _row(
     return (
         f'<details class="row" {attr_s}>'
         f'<summary><span class="num">{esc(label)}</span>'
-        f'<span class="title">{esc(issue.title)}</span>'
+        f'<span class="title">{issue_title(issue.title)}</span>'
         f'<span class="tags">{"".join(tags)}</span>{cx_chip}'
         f'<span class="pill stage-{stage}">{stage}</span></summary>'
         f'<div class="detail">{"".join(detail)}</div></details>'
@@ -1150,7 +1161,7 @@ def _parked(facts: Facts, judgements: Judgements) -> str:
             original = by_key.get(dup)
             ref = _link(dup, original.url) if original else esc(dup)
             note = f" <em>duplicate of {ref}</em>"
-        lis.append(f"<li>{_link(i.key, i.url)} {esc(i.title)}{note}</li>")
+        lis.append(f"<li>{_link(i.key, i.url)} {issue_title(i.title)}{note}</li>")
     items = "".join(lis)
     return fold("parked", "Parked", len(parked), f"<ul>{items}</ul>")
 
@@ -1337,7 +1348,8 @@ def _closed_in_progress(entries: Sequence[StaleInProgress]) -> str:
     if not entries:
         return ""
     items = "".join(
-        f'<li>{_link(e.title, e.url)} <span class="mono">{esc(e.key)}</span> · '
+        f"<li>{_link(e.title, e.url) if e.title else _link(e.key, e.url) + ' ' + TITLE_WITHHELD} "
+        f'<span class="mono">{esc(e.key)}</span> · '
         f"<strong>{esc(e.state)}</strong>"
         + (f" · closed {esc(e.closed_at)}" if e.closed_at else "")
         + "</li>"
@@ -1383,7 +1395,7 @@ def _sections(
     by_key = {i.key: i for i in facts.issues}
     batches_by_key: dict[str, list[str]] = {}
     for b in judgements.batches:
-        if derive_batch_stage(b, facts) != "cancelled":
+        if derive_batch_stage(b, facts) not in {"cancelled", "obsolete"}:
             for key in b.ids:
                 batches_by_key.setdefault(key, []).append(b.id)
     order = 0

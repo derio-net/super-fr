@@ -131,7 +131,7 @@ changed outside the R11 limits, comparing file texts block by block. New plumbin
 their rule. Hunk paths are written resolved and staged. Whole generated paths take ours.
 Then, if any generated kind conflicted, the mirrors run and the R11 limits are checked.
 Merge (`_merged_tree`) and rebase (`_combine`'s cherry-pick loop) both go through it.
-`TriageConfig.generated` is a `list[str]`. `FACTS_SCHEMA` moves to 17 with the usual comment
+`TriageConfig.generated` is a `list[str]`. `FACTS_SCHEMA` moves to 18 (17 is 2026-11-22-triage-hardening's, which landed first) with the usual comment
 (R14).
 
 The mirror commands run the combination's own code on the driver host. The queue already

@@ -32,6 +32,7 @@ from fr.triage.batch import (
     derive_batch_stage,
     foreign_batch_prs,
     is_open,
+    meets_dependency,
     pr_open_queue,
 )
 from fr.triage.batch_drive import (
@@ -58,7 +59,7 @@ from fr.triage.batch_drive import _dispatch_key as dispatch_key
 from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
-from fr.triage.check import batch_awaits_live, classify, is_set_apart, stale_dispatches
+from fr.triage.check import batch_awaits_live, classify, stale_dispatches
 from fr.triage.driver_record import DriverRecord, stopped, stopped_line
 from fr.triage.errors import TriageError
 from fr.triage.intake import rejected_by_batch
@@ -77,6 +78,7 @@ from fr.triage.model import (
 )
 from fr.triage.queue_exec import queue_config
 from fr.triage.scope_config import scope_id
+from fr.triage.sets import is_set_apart
 from fr.triage.timestamps import parse_aware
 
 CX_RANK = {"XS": 0, "S": 1, "S-M": 2, "M": 3, "L": 4, "-": 5}
@@ -636,7 +638,7 @@ def next_up(
     for b in sorted(judgements.batches, key=dispatch_key):
         if snap.stages.get(b.id) != "proposed" or b.id in started or b.id in skipped:
             continue
-        unmerged = [d for d in b.after if snap.stages.get(d) != "merged"]
+        unmerged = [d for d in b.after if not meets_dependency(snap.stages.get(d))]
         if unmerged:
             reason = f"waits for {', '.join(unmerged)} to merge"
         else:
@@ -701,7 +703,7 @@ def cancelled_waves(batches: Iterable[Batch], stages: Mapping[str, str]) -> froz
     delivered = {
         str(b.wave)
         for b in batches
-        if b.wave is not None and stages.get(b.id) not in {"cancelled", "abandoned"}
+        if b.wave is not None and stages.get(b.id) not in {"cancelled", "abandoned", "obsolete"}
     }
     return finished_waves(batches, stages) - delivered
 
@@ -726,7 +728,7 @@ def preselected_wave(
     live = [
         n
         for n, stage, b in waved
-        if stage not in {"merged", "cancelled"} and not batch_awaits_live(b, facts)
+        if stage not in {"merged", "cancelled", "obsolete"} and not batch_awaits_live(b, facts)
     ]
     return max(live) if live else max(n for n, _, _ in waved)
 

@@ -173,6 +173,15 @@ def test_terminal_means_landed_cancelled_abandoned_or_deferred() -> None:
     assert _one(plan, "queue-open").wave == 5
 
 
+def test_an_obsolete_batch_holds_no_wave_open() -> None:
+    # 2026-11-22-triage-hardening R8: a never-dispatched batch whose members all closed
+    # finishes its wave, so the queue moves on to the next one.
+    batches = [_batch("a", 1, wave=3), _batch("b", 2, wave=3), _batch("e", 5, wave=5)]
+    stages = {"a": "obsolete", "b": "merged", "e": "pr-open"}
+    plan = plan_queue(_qs(batches, stages))
+    assert _one(plan, "queue-open").wave == 5
+
+
 def test_a_requeued_batch_belongs_to_the_wave_it_names() -> None:
     moved = [{"kind": "deferred", "at": AT, "wave": 3},
              {"kind": "requeued", "at": "2026-11-20T10:05:00Z", "wave": 6}]  # fmt: skip

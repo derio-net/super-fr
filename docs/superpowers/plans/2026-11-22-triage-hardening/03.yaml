@@ -1,0 +1,97 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Collect PRs past the limit, snapshot keys in the privacy guard, filter-script
+    guard (R11-R13)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - collect-past-limit-pr
+  - privacy-snapshot-keys
+  - issues-page-filter-guard
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/triage/privacy.py
+  - packages/fr/src/fr/triage/snapshot.py
+  - packages/fr/src/fr/triage/render.py
+  - tests/unit/test_triage_collect*.py
+  - tests/unit/test_triage_privacy.py
+  - tests/unit/test_triage_render*.py
+  - tests/unit/test_triage_pages*.py
+  - docs/acceptance/features/2026-11-22-triage-hardening.yaml
+  estimate_lines: 350
+tasks:
+- number: 1
+  title: Judged PRs past the list limit (R11, spec §F)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_triage_collect_carry.py — a fake forge whose PR list omits judged PR #7 and whose `view_issue(7)` returns a `/pull/` URL and `view_pr(7)` state MERGED: after one collect `judged_prs` holds #7 with state MERGED, url and title from the issue record, no `Unviewed`; a second collect over the first's facts makes no `view_issue`/`view_pr` call for #7 (count calls); an OPEN past-limit PR is viewed again on the second collect; a `view_pr` raising `ForgeError` records `Unviewed` with its message. `PR_PAST_LIMIT` no longer exists in collect.py.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: `Forge.view_pr` and `ClientForge.view_pr` (wrapping `GhClient.pr_view`, beside `pr_labels`, collect.py:213-217) — add the method to every fake Forge the tests use; the judged-key loop carries CLOSED/MERGED previous `judged_prs` in collected repos, views a `/pull/` hit as a PR, removes `PR_PAST_LIMIT`. Tests green.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: the carry lookup of previous judged PRs is one map built once before the loop. Re-run.
+- number: 2
+  title: Snapshot keys in the privacy guard (R12, spec §G)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests/unit/test_triage_privacy.py — a state dir with only `snapshots/<t>.json` whose `issues` holds `acme/private#3`: `state_keys` returns it; a snapshot whose `prs` holds `acme/private#4` is returned too; `guard_state` to a public state repo with `acme/private` private refuses (fake client_for); a snapshot whose `debt` names `acme/private` refuses; an unparseable snapshot file raises `TriageError`.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: snapshot.py `load_snapshot_strict`; privacy.py `state_keys` reads snapshots' issues and prs keys, `state_repos` the debt repos, `guard_state` adds them. Tests green.
+- number: 3
+  title: Filter-script guard (R13, spec §H)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: render test — render the Issues page with a fragment manifest that leaves `backlog-by-tier` out; assert the page has no `id="q"`, that `SCRIPT`'s text holds `if (!q || !sort) return;` before its first `addEventListener`, and that `PAGE_SCRIPT` is in the same `<script>` after it.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: add the guard in render.py `SCRIPT` after the lookup at :252. Test green.
+  - id: P3.T3.S3
+    text: |-
+      Move collect-past-limit-pr, privacy-snapshot-keys, issues-page-filter-guard to `ci` with `fr acceptance set-status ... --level unit=...`. Run the fast tier from the brief last.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-11-23T00:51:53+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-11-23T00:51:53+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-11-23T00:51:53+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-11-23T00:51:53+00:00'
+      note: null
+    P3.T2.S2:
+      state: x
+      ticked_at: '2026-11-23T00:51:53+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-11-23T00:51:53+00:00'
+      note: null
+    P3.T3.S2:
+      state: x
+      ticked_at: '2026-11-23T00:51:53+00:00'
+      note: null
+    P3.T3.S3:
+      state: x
+      ticked_at: '2026-11-23T00:51:53+00:00'
+      note: null
+  completion:
+    at: '2026-11-23T00:51:53+00:00'
+    note: null
+    observed_prs: []
