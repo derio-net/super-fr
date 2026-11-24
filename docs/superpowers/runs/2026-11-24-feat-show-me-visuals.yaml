@@ -150,3 +150,4 @@ steps:
           session: 21912ebc-378e-41be-ad3b-a1a39f6684f2
 fr_version: 9.0.0rc2
 issue: 1641
+pr: https://github.com/derio-net/super-fr/pull/1665
