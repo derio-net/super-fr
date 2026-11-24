@@ -698,3 +698,38 @@ Predates this change: the older ci.yml jobs had no permissions block before it; 
 ### l-out-probe-rules-resolved · finding [out-of-scope] · resolves l-out-probe-rules: The early conflict probe resolves only version and lock files, so a stamp or generated conflict outside a queue slot still costs a hand-back
 
 R12 scopes the new resolution rules to the combination builder; the early probe in batch_merge predates this change and is a separate improvement.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved-2 created=2026-11-24T21:59:06+00:00 phase=1 state=open resolves=p1-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1670 -->
+### p1-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1670] · resolves p1-r5: real_glabclient._CI_FAIL still treats canceled as failing (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1670.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved-2 created=2026-11-24T21:59:06+00:00 phase=2 state=open resolves=p2-r4 tracked_by=https://github.com/derio-net/super-fr/issues/1671 -->
+### p2-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1671] · resolves p2-r4: a manual re-run of an older run in a PR's concurrency group cancels the newer in-progress run (phase 2)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1671.
+
+<!-- fr:journal kind=finding scope=plan id=p4-s6-resolved-2 created=2026-11-24T21:59:06+00:00 phase=4 state=open resolves=p4-s6 tracked_by=https://github.com/derio-net/super-fr/issues/1672 -->
+### p4-s6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1672] · resolves p4-s6: Mirrors run as the driver's user on its host; no container or VM isolates them (phase 4)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1672.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved-2 created=2026-11-24T21:59:06+00:00 phase=4 state=open resolves=p4-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1673 -->
+### p4-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1673] · resolves p4-r5: The mirror shares the operator's uv cache and python installs, which queued code could poison (phase 4)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1673.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved-2 created=2026-11-24T21:59:06+00:00 phase=4 state=open resolves=p4-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1674 -->
+### p4-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1674] · resolves p4-r6: Mirror timeout is per command, output is uncapped, killpg after reap has a pid-reuse window (phase 4)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1674.
+
+<!-- fr:journal kind=finding scope=plan id=l-out-workflow-permissions-resolved-2 created=2026-11-24T21:59:06+00:00 state=open resolves=l-out-workflow-permissions tracked_by=https://github.com/derio-net/super-fr/issues/1675 -->
+### l-out-workflow-permissions-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1675] · resolves l-out-workflow-permissions: ci.yml has no workflow-level permissions block; the older jobs run with the repo's default token
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1675.
+
+<!-- fr:journal kind=finding scope=plan id=l-out-probe-rules-resolved-2 created=2026-11-24T21:59:06+00:00 state=open resolves=l-out-probe-rules tracked_by=https://github.com/derio-net/super-fr/issues/1676 -->
+### l-out-probe-rules-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1676] · resolves l-out-probe-rules: The early conflict probe resolves only version and lock files, so a stamp or generated conflict outside a queue slot still costs a hand-back
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1676.
