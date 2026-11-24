@@ -179,6 +179,7 @@ class LivePr:
     # a collected close-out's PR merges only once `MERGEABLE` (exit-gates R15).
     mergeable: str = ""
     merge_state: str = ""
+    url: str = ""  # the PR's page; "" when not read (batch-merge-readiness R6's links)
 
 
 @dataclass(frozen=True)
