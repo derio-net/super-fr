@@ -313,3 +313,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-24-s1-configuration-homes-p6 created=2026-11-24T20:41:27+00:00 -->
 ### tier-2026-11-24-s1-configuration-homes-p6 · decision · hard: moves durable triage state under a possibly live driver, where a wrong rule loses state
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-s1-configuration-homes-p7-1 created=2026-11-24T20:41:44+00:00 -->
+### phase-split-2026-11-24-s1-configuration-homes-p7-1 · decision · review-size: the cross-placement walk scenario every row cites, the section-H pages and the generated mirrors are one more diff than phases 1-6 can each review; it links no row because it advances none
