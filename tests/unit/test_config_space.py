@@ -335,3 +335,109 @@ def test_forge_side_settings_follow_the_quiet_switch() -> None:
         }
     )
     assert remote_settings_text(forge, "o/r") == QUIET
+
+
+# --- forge_ref: only a not-found is "no switch" (review p1-r2, p1-r6) ------------------
+
+
+class _Failing(_Forge):
+    """Every read fails with *exc*."""
+
+    def __init__(self, exc: Exception) -> None:
+        super().__init__({})
+        self.exc = exc
+
+    def read_file_at_ref(self, *, repo: str, path: str, ref: str) -> str:
+        self.reads.append((path, ref))
+        raise self.exc
+
+
+def test_forge_ref_propagates_a_forge_error_that_is_not_a_not_found() -> None:
+    from fr.config.space import forge_ref
+
+    boom = RuntimeError("HTTP 500: server error")
+    with pytest.raises(RuntimeError, match="HTTP 500"):
+        forge_ref(_Failing(boom), "o/r")
+
+
+def test_forge_ref_is_no_switch_on_a_forge_that_cannot_read_at_a_ref() -> None:
+    from fr.config.space import forge_ref
+    from fr.ghclient import UnsupportedForgeOperation
+
+    assert forge_ref(object(), "o/r") is None
+    glab = _Failing(UnsupportedForgeOperation("read_file_at_ref", "glab"))
+    assert forge_ref(glab, "o/r") is None
+
+
+def test_forge_ref_is_no_switch_when_triage_wrapped_the_unsupported_operation() -> None:
+    """Triage's `ClientForge` turns `UnsupportedForgeOperation` into its `ForgeError`; the
+    cause still says the backend cannot read a file at a ref."""
+    from fr.config.space import forge_ref
+    from fr.ghclient import UnsupportedForgeOperation
+    from fr.triage.errors import ForgeError
+
+    unsupported = UnsupportedForgeOperation("read_file_at_ref", "tea")
+    wrapped = ForgeError(str(unsupported))
+    wrapped.__cause__ = unsupported
+    assert forge_ref(_Failing(wrapped), "o/r") is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "schema: 1\nplacement: 'quiet'\n",
+        "schema: 1\nplacement: quiet  # on\n",
+        "schema: 1\nplacement: stealth\n",
+        "schema: 1\nplacement: quiet\nbogus_key: 1\n",
+    ],
+)
+def test_forge_ref_refuses_a_switch_the_local_reader_refuses(text: str) -> None:
+    from fr.config.space import forge_ref
+    from fr.settings import SettingsError
+
+    forge = _Forge({(".fr/settings.yaml", "fr-config"): text})
+    with pytest.raises(SettingsError):
+        forge_ref(forge, "o/r")
+
+
+def test_forge_ref_is_no_switch_for_a_file_naming_no_placement() -> None:
+    from fr.config.space import forge_ref
+
+    assert forge_ref(_Forge({(".fr/settings.yaml", "fr-config"): "schema: 1\n"}), "o/r") is None
+
+
+def test_remote_settings_refuses_when_the_switch_probe_fails() -> None:
+    from fr.settings import SettingsError
+    from fr.settings.remote import remote_settings_text
+
+    with pytest.raises(SettingsError, match="HTTP 500"):
+        remote_settings_text(_Failing(RuntimeError("HTTP 500: boom")), "o/r")
+
+
+def test_remote_settings_passes_a_switch_refusal_through_unwrapped() -> None:
+    from fr.settings import SettingsError
+    from fr.settings.remote import remote_settings_text
+
+    forge = _Forge({(".fr/settings.yaml", "fr-config"): "schema: 1\nplacement: stealth\n"})
+    with pytest.raises(SettingsError, match="stealth") as info:
+        remote_settings_text(forge, "o/r")
+    assert "cannot read" not in str(info.value)
+
+
+def test_triage_config_read_reports_a_bad_switch_as_that_repos_failure() -> None:
+    """Collect skips a repo whose read raised `TriageError` (org scope) and names the
+    reason; a malformed switch is one, never a traceback."""
+    from fr.triage.collect import read_config_lenient
+    from fr.triage.errors import TriageError
+
+    forge = _Forge({(".fr/settings.yaml", "fr-config"): "schema: 1\nplacement: 'quiet'\n"})
+    with pytest.raises(TriageError, match="o/r"):
+        read_config_lenient(forge, "o/r")  # type: ignore[arg-type]
+
+
+def test_triage_config_read_propagates_a_forge_error_on_the_switch_probe() -> None:
+    from fr.triage.collect import read_config_lenient
+    from fr.triage.errors import ForgeError
+
+    with pytest.raises(ForgeError, match="HTTP 500"):
+        read_config_lenient(_Failing(ForgeError("HTTP 500: boom")), "o/r")  # type: ignore[arg-type]

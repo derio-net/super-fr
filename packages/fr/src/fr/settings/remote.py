@@ -83,6 +83,8 @@ def remote_settings_text(client: Any, repo: str) -> str | None:
         if ref is not None:
             return str(client.read_file_at_ref(repo=repo, path=SETTINGS_PATH, ref=ref))
         return str(client.read_file(repo, SETTINGS_PATH))
+    except SettingsError:
+        raise  # a malformed switch on `fr-config` is its own refusal (review p1-r2)
     except Exception as exc:  # noqa: BLE001 — every backend's error; only a 404 is "absent"
         if _not_found(exc):
             return None

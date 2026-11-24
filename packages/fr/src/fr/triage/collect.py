@@ -1088,10 +1088,15 @@ def read_config_lenient(forge: Forge, repo: str) -> tuple[TriageConfig | None, t
     and named, never refused (R4); a known key with a bad value, or a file that is not
     valid config, is refused naming the repo and file, which fails a repo-scope collect
     and skips just that repo in org scope (review r2p-f4). Any other forge failure
-    propagates like the list calls' do."""
+    propagates like the list calls' do, the quiet switch probe's included; a malformed
+    switch on `fr-config` is refused like a bad config (review p1-r2)."""
+    from fr.settings import SettingsError
+
     try:
         ref = forge_ref(forge, repo) or DEFAULT_BRANCH_REF
         body = forge.read_file_at_ref(repo=repo, path=CONFIG_PATH, ref=ref)
+    except SettingsError as exc:
+        raise TriageError(f"{repo}: its configuration switch cannot be read: {exc}") from exc
     except ForgeError as exc:
         if _NOT_FOUND in str(exc):
             return None, ()

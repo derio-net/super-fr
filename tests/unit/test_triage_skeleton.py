@@ -59,7 +59,9 @@ class FixtureForge:
         raise AssertionError("the skeleton never views a single issue")
 
     def read_file_at_ref(self, *, repo: str, path: str, ref: str) -> str:
-        assert path == ".fr/triage.yaml", path  # the captured PRs carry no anchor files
+        # The captured PRs carry no anchor files: only the config read and the quiet
+        # switch probe at `fr-config` (`fr.config.space.forge_ref`) reach here.
+        assert path in (".fr/triage.yaml", ".fr/settings.yaml"), path
         raise ForgeError("Not Found (HTTP 404)")
 
     def list_issue_comments(self, *, repo: str, number: int) -> list[dict[str, Any]]:

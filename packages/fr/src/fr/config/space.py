@@ -272,22 +272,37 @@ def _notice_ignored(root: Path, placement: str) -> None:
         )
 
 
-QUIET_SWITCH_LINE: Final = "placement: quiet"
-"""The canonical switch line (`fr.placement.quiet.switch_spelling_problem`)."""
-
-
 def forge_ref(client: object, repo: str) -> str | None:
     """The ref a forge-side reader reads *repo*'s `.fr/<file>` at (R1): `fr-config` when
     that branch's `.fr/settings.yaml` carries a quiet switch, else None (the default
-    branch). A branch that is absent, or a forge that cannot read a file at a ref, is no
-    switch: the default branch, as every forge-side reader read before S1."""
+    branch).
+
+    Only "there is no switch there" reads as no switch: a not-found (no branch, no file),
+    a forge that cannot read a file at a ref (no `read_file_at_ref`, or the backend raising
+    `UnsupportedForgeOperation`, glab and tea today), or a file naming no placement. Any
+    other forge error propagates, and the text is validated as the local switch reader
+    validates it (`fr.placement.quiet.parse_switch_text`), so an unreadable or malformed
+    switch refuses (`SettingsError`), never reads as absent (review p1-r2)."""
+    from fr.ghclient import UnsupportedForgeOperation
+    from fr.settings.remote import _not_found
+
     reader = getattr(client, "read_file_at_ref", None)
     if reader is None:
         return None
+    path = rel("settings")
     try:
-        text = reader(repo=repo, path=rel("settings"), ref=CONFIG_BRANCH)
-    except Exception:  # noqa: BLE001 — every backend's error reads as "no switch"
-        return None
-    if not isinstance(text, str):
-        return None
-    return CONFIG_BRANCH if QUIET_SWITCH_LINE in text.splitlines() else None
+        text = reader(repo=repo, path=path, ref=CONFIG_BRANCH)
+    except Exception as exc:  # noqa: BLE001 — every backend's error; only these mean "none"
+        if isinstance(exc, UnsupportedForgeOperation) or isinstance(
+            exc.__cause__, UnsupportedForgeOperation
+        ):
+            return None
+        if _not_found(exc):
+            return None
+        raise
+    from fr.placement.quiet import parse_switch_text
+
+    found = parse_switch_text(
+        str(text), source=f"{repo}:{CONFIG_BRANCH}:{path}", branch=CONFIG_BRANCH
+    )
+    return None if found is None else CONFIG_BRANCH

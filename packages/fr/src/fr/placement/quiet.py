@@ -156,28 +156,46 @@ def _read(root: Path) -> Switch | None:
         return _CACHE[key]
     if not _has_origin(root):
         return None  # R23: no origin is `repo`; a stale tracking ref speaks for nobody
-    from fr.settings.load import parse_settings_text, show_at_commit, yaml_of
+    from fr.settings.load import show_at_commit
 
     text = show_at_commit(root, sha, paths.SWITCH_SETTINGS)
     result: Switch | None = None
-    # Review pr1431-r8: a file with no live `placement` line is not a switch (an
-    # unrelated branch that happens to be named `fr`), so it reads as `repo`, as the
-    # hooks read it, and its schema is nobody's business here.
-    if text is not None and names_placement(text):
-        settings = parse_settings_text(text, source=_SOURCE, servable=False)
-        problem = switch_spelling_problem(text, yaml_of(text, _SOURCE))
-        if problem is not None:
-            raise SettingsError(problem)
-        if settings.placement == paths.QUIET:
-            result = Switch(settings, yaml_of(text, _SOURCE), sha)
-        elif settings.placement != paths.REPO:
-            raise SettingsError(
-                f"{_SOURCE}: placement: {settings.placement} cannot be set on the `fr` switch: "
-                "stealth is chosen per run, never by repo settings (R24); the switch says "
-                "`placement: quiet`"
-            )
+    parsed = None if text is None else parse_switch_text(text)
+    if parsed is not None:
+        result = Switch(parsed[0], parsed[1], sha)
     _CACHE[key] = result
     return result
+
+
+def parse_switch_text(
+    text: str, source: str = _SOURCE, branch: str = QUIET_BRANCH
+) -> tuple[Any, object] | None:
+    """A switch file's quiet settings and raw mapping, or None when it is no quiet switch:
+    no live `placement` line, or `placement: repo`. One validation for every reader of a
+    switch, local or through the forge (review p1-r2): a schema error, a non-canonical
+    spelling or `placement: stealth` refuses (`SettingsError`), never reads as absent.
+
+    Review pr1431-r8: a file with no live `placement` line is not a switch (an unrelated
+    branch that happens to be named `fr`), so it reads as `repo`, as the hooks read it,
+    and its schema is nobody's business here."""
+    from fr.settings.load import parse_settings_text, yaml_of
+
+    if not names_placement(text):
+        return None
+    settings = parse_settings_text(text, source=source, servable=False)
+    data = yaml_of(text, source)
+    problem = switch_spelling_problem(text, data, source, branch)
+    if problem is not None:
+        raise SettingsError(problem)
+    if settings.placement == paths.QUIET:
+        return settings, data
+    if settings.placement != paths.REPO:
+        raise SettingsError(
+            f"{source}: placement: {settings.placement} cannot be set on the `{branch}` "
+            "switch: stealth is chosen per run, never by repo settings (R24); the switch "
+            "says `placement: quiet`"
+        )
+    return None
 
 
 _CANONICAL_PLACEMENT: Final = re.compile(r"placement: [a-z]+")
@@ -210,7 +228,9 @@ def is_switch_branch(root: Path) -> bool:
     return text is not None and names_placement(text)
 
 
-def switch_spelling_problem(text: str, data: object) -> str | None:
+def switch_spelling_problem(
+    text: str, data: object, source: str = _SOURCE, branch: str = QUIET_BRANCH
+) -> str | None:
     """Why the switch's `placement` is not spelled canonically, or None (review p6-r3).
 
     The hooks and the OpenCode plugin read the switch WITHOUT `fr` (R26), so they and fr
@@ -227,10 +247,10 @@ def switch_spelling_problem(text: str, data: object) -> str | None:
         return None
     found = "; ".join(repr(line) for line in live) or "a key that does not read `placement`"
     return (
-        f"{_SOURCE}: the placement must be spelled exactly `placement: quiet` (or "
+        f"{source}: the placement must be spelled exactly `placement: quiet` (or "
         "`placement: repo`): one line, at column 0, unquoted, with no comment, and no other "
         "line naming placement, because the hooks read the switch without fr (R26); found "
-        f"{found}. Rewrite it and push `{QUIET_BRANCH}`"
+        f"{found}. Rewrite it and push `{branch}`"
     )
 
 
