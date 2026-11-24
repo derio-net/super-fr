@@ -26,7 +26,7 @@ from typing import Any, Literal, Protocol
 
 import yaml
 
-from fr.checkstate import Verdict, verdict_of
+from fr.checkstate import Verdict, is_superseded, verdict_of
 from fr.ghclient import UnsupportedBatchOps, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
 from fr.triage.batch_merge import MergeConflictError, MergeStopError, unresolvable
@@ -698,6 +698,16 @@ def _state(check: Mapping[str, Any]) -> Verdict:
     return verdict_of(str(check.get("conclusion") or ""))
 
 
+def _cancelled(check: Mapping[str, Any]) -> bool:
+    return check.get("status") == "completed" and is_superseded(str(check.get("conclusion") or ""))
+
+
+def _unreplaced(checks: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """*checks* without each cancelled run another run of its name replaces (R4)."""
+    live = {str(c.get("name")) for c in checks if not _cancelled(c)}
+    return [c for c in checks if not (_cancelled(c) and str(c.get("name")) in live)]
+
+
 def slot_check(
     checks: Sequence[Mapping[str, Any]],
     required: Sequence[str],
@@ -708,8 +718,12 @@ def slot_check(
 ) -> tuple[SlotCheck, tuple[str, ...]]:
     """R7: a combination's verdict from `commit_checks` on its own sha, under the same
     required-checks rule as a PR (`checks_verdict`): the *required* names when the repo has
-    any, else every check; nothing reported is pending, never green. With it, the
-    required checks that have not reported `wait_minutes` after the build: each a Need."""
+    any, else every check; nothing reported is pending, never green. With it, the checks
+    that have not reported `wait_minutes` after the build: each a Need. A cancelled check no
+    newer run replaces is pending and, after the wait, late like one that never reported
+    (spec 2026-11-24-ci-economy R4)."""
+    checks = _unreplaced(checks)
+    overdue = now - built_at >= timedelta(minutes=wait_minutes)
     if required:
         by_name: dict[str, list[Mapping[str, Any]]] = {}
         for c in checks:
@@ -720,18 +734,20 @@ def slot_check(
         missing = tuple(sorted(n for n in required if n not in by_name))
         pending = [n for n in required
                    if n in by_name and any(_state(c) == "pending" for c in by_name[n])]  # fmt: skip
-        late = missing if now - built_at >= timedelta(minutes=wait_minutes) else ()
+        cancelled = [n for n in required if n in by_name and all(map(_cancelled, by_name[n]))]
+        late = tuple(sorted({*missing, *cancelled})) if overdue else ()
         if failing:
             return SlotCheck("failing", failing), late
         if missing or pending:
             return SlotCheck("pending"), late
         return SlotCheck("green"), ()
     states = [_state(c) for c in checks]
+    late = tuple(sorted({str(c.get("name")) for c in checks if _cancelled(c)})) if overdue else ()
     if "fail" in states:
         names = tuple(sorted(str(c.get("name")) for c in checks if _state(c) == "fail"))
-        return SlotCheck("failing", names), ()
+        return SlotCheck("failing", names), late
     if not states or "pending" in states:
-        return SlotCheck("pending"), ()
+        return SlotCheck("pending"), late
     return SlotCheck("green"), ()
 
 
@@ -757,22 +773,35 @@ def read_slots(
     wait_minutes: int,
 ) -> tuple[dict[str, SlotCheck], list[str]]:
     """Each standing combination of *record* (sha -> its verdict), and a Need per required
-    check that never reported on one of them in time, naming it (R7)."""
+    check that never reported on one of them in time, naming it (R7), and one per check
+    cancelled there that no newer run replaced in time (spec 2026-11-24-ci-economy R4)."""
     built_at = {e.sha: e.at for e in record.events if isinstance(e, QueueBuiltEvent)}
     out: dict[str, SlotCheck] = {}
     needs: list[str] = []
     for combo in replay(record).combos.values():
+        checks = client.commit_checks(repo, combo.sha)
         verdict, late = slot_check(
-            client.commit_checks(repo, combo.sha), required,
+            checks, required,
             built_at=built_at.get(combo.sha, now), now=now, wait_minutes=wait_minutes,
         )  # fmt: skip
         out[combo.sha] = verdict
-        if late:
+        reported = {str(c.get("name")) for c in checks}
+        missing = [n for n in late if n not in reported]
+        cancelled = [n for n in late if n in reported]
+        if missing:
             needs.append(
-                f"{repo}: required check{'s' if len(late) > 1 else ''} {', '.join(late)} did "
-                f"not report on combination {combo.sha[:12]} within {wait_minutes} min: the "
-                "workflow that reports it does not run on pushes to fr-queue/**; add "
+                f"{repo}: required check{'s' if len(missing) > 1 else ''} {', '.join(missing)} "
+                f"did not report on combination {combo.sha[:12]} within {wait_minutes} min: "
+                "the workflow that reports it does not run on pushes to fr-queue/**; add "
                 "`push: branches: ['fr-queue/**']` to it"
+            )
+        if cancelled:
+            many = len(cancelled) > 1
+            needs.append(
+                f"{repo}: check{'s' if many else ''} {', '.join(cancelled)} "
+                f"{'were' if many else 'was'} cancelled on combination {combo.sha[:12]} and no "
+                f"run replaced {'them' if many else 'it'} within {wait_minutes} min: re-run "
+                f"the cancelled workflow on {combo.sha[:12]}"
             )
     return out, needs
 
