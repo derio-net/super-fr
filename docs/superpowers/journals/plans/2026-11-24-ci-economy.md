@@ -683,3 +683,8 @@ fr-wave-driver.md and the fr-triage skill (mirrors synced) now say the probe use
 ### l-out-workflow-permissions · finding [open] (reviewer: out of scope) · ci.yml has no workflow-level permissions block; the older jobs run with the repo's default token
 
 Raised under the security lens (l-security-r2). This change gave its own lane jobs read-only tokens and credential-free checkouts; the older jobs predate it.
+
+<!-- fr:journal kind=finding scope=plan id=l-out-probe-rules created=2026-11-24T21:58:19+00:00 state=open review_scope=out -->
+### l-out-probe-rules · finding [open] (reviewer: out of scope) · The early conflict probe resolves only version and lock files, so a stamp or generated conflict outside a queue slot still costs a hand-back
+
+Raised under the docs-accuracy lens (l-docs-accuracy-r1). R12 scopes the new rules to the combination builder; batch_merge.trial_conflicts should call regen.classify_conflicts with the repo's mirrors and generated globs.
