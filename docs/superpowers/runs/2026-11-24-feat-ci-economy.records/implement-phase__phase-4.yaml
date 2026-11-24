@@ -78,6 +78,21 @@ journal:
       no help text did: stamp bumped). docs/explainers/fr-wave-driver.md now says which conflicts the
       queue settles, that the mirrors are the base's while the scripts are the PRs', and what the
       hardening does and does not do. The fr-triage skill says the same; both mirrors re-synced.
+  - kind: discovery
+    id: p4-fast-tier-scope
+    phase: 4
+    title: The declared fast tier selects 18,452 of 18,599 tests on this branch; a neighbour run stood in
+    body: |
+      `uv run pytest --fr-scope origin/main -n 2` reaches nearly the whole suite on this branch
+      (phase 3 touched 250 test modules and the conftest; the facts model is imported everywhere),
+      and on a host at load ~18 it ran at about 3% per quarter hour, so it was stopped. Scoped to
+      this phase's base (`--fr-scope 1fdc627f7`) it still selects 9,756. Instead the touched tests
+      and their neighbours ran (`tests/unit/test_triage*.py`, `test_queue*`, `test_wave_queue*`,
+      `tests/integration/test_queue*.py`, every `test_tripwire_*`, the smoke, settings, validate and
+      import-direction tests): 4,413 passed, 4 failed, the four committed scenario facts fixtures
+      generated at schema 16. Regenerated with their own generators (schema 17), the fixture tests
+      and `tests/integration/test_scenarios.py` (`-m ""`) then passed, 95 tests. CI is this repo's
+      suite evidence (`tests: ci`).
   - kind: finding
     id: p4-s1
     phase: 4
