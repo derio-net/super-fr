@@ -286,3 +286,6 @@ row_kinds:
 run_gate: none
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-wave-queue-gaps-p2 created=2026-11-24T22:52:30+00:00 -->
+### phase-split-2026-11-24-wave-queue-gaps-p2 · decision · ask: ask 3, operator queue entries (R11-R16)
