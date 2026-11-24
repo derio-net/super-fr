@@ -32,7 +32,7 @@ PINNED_AT_VERSION = 7
 """The `agents` kind's `current_version` when `CANONICAL_SHA256` was taken."""
 
 CANONICAL_SHA256: dict[str, str] = {
-    "fr-spec-reviewer": "bbacf0d6b1ea4ebb77ab80216f2a0503f701f83f1fedc1ce0419bb9a6743ad4f",
+    "fr-spec-reviewer": "0834aee0f64d134117f00af99f0b1093ac4c8718b333e335a272849eb107ddd7",
     "fr-phase-executor": "87c85757d9d402ca89f4674fba394b26799cf1200f162e5ecc492aa38b54e525",
 }
 

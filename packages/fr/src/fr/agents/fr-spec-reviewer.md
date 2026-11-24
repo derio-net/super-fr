@@ -61,7 +61,7 @@ expected, never a finding.
    heading is exactly `## Test Plan`: a numbered or suffixed one (`## 6. Test
    Plan (post-merge)`) is a finding, because fr reads no Test Plan from it.
 4. **Design shape.** The spec's `## Design shape` is a picture of the change
-   (the `fr-show-me` views), and a picture is a claim. Check it against the
+   (a file tree, a diff or a sequence), and a picture is a claim. Check it against the
    codebase: every file, function or module it names exists, cite it as
    `path:line`, or the spec creates it. Check it against the spec's own
    `## Design`: what it draws (added and removed entries, the order of events)
