@@ -1,0 +1,89 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-24-wave-queue-gaps
+repo: derio-net/super-fr
+rows:
+  - id: wave-queue-handback-slot
+    capability: Wave merge queue hand-backs
+    acceptance: A conflict hand-back names the combination commit ahead of the PR (fr-queue/<scope>/slot-<k-1>,
+      or the default branch for the first entry) to merge, and is re-issued free of
+      budget when an ejection ahead or a foreign move makes that commit stop leading
+      to main.
+    origin:
+    - spec:2026-11-24-wave-queue-gaps#R1
+    - spec:2026-11-24-wave-queue-gaps#R2
+    - spec:2026-11-24-wave-queue-gaps#R3
+    - spec:2026-11-24-wave-queue-gaps#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: wave-queue-handback-carry
+    capability: Wave merge queue hand-backs
+    acceptance: A PR whose head carries a queue combination commit that no longer leads
+      to main is never built and is briefed once to reset, force-with-lease push and
+      merge the new commit.
+    origin:
+    - spec:2026-11-24-wave-queue-gaps#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: wave-queue-gaps-live
+    capability: Wave merge queue hand-backs
+    acceptance: In a real wave on this repo, a hand-back merged onto the slot commit
+      lands with no second conflict, and an operator-added PR ships in the wave's release.
+    origin:
+    - spec:2026-11-24-wave-queue-gaps#R1
+    - spec:2026-11-24-wave-queue-gaps#R14
+    - spec:2026-11-24-wave-queue-gaps#R15
+    levels: {}
+    status: walk-owed
+    notes: ''
+    verify: live
+  - id: wave-queue-overlap-report
+    capability: Wave composition by file overlap
+    acceptance: batch suggest and batch create/edit --wave report each pair of batches
+      in one wave whose expected change sets overlap outside generated and version files,
+      with both remedies, and the later batch's dispatch brief names the overlap.
+    origin:
+    - spec:2026-11-24-wave-queue-gaps#R6
+    - spec:2026-11-24-wave-queue-gaps#R7
+    - spec:2026-11-24-wave-queue-gaps#R8
+    - spec:2026-11-24-wave-queue-gaps#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: wave-queue-operator-entry
+    capability: Operator queue entries
+    acceptance: fr triage queue add/remove --pr N records who added or removed any open
+      same-repo PR by an allowed author; the PR enters the open queue (or opens a between-waves
+      one) under approved-fr pinned to its patch-id, and the wave's drain and release
+      wait for it.
+    origin:
+    - spec:2026-11-24-wave-queue-gaps#R10
+    - spec:2026-11-24-wave-queue-gaps#R11
+    - spec:2026-11-24-wave-queue-gaps#R12
+    - spec:2026-11-24-wave-queue-gaps#R14
+    - spec:2026-11-24-wave-queue-gaps#R15
+    - spec:2026-11-24-wave-queue-gaps#R16
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: wave-queue-operator-preapproval
+    capability: Operator queue entries
+    acceptance: A PR added with --preapproved gets approved-fr from the driver, pinned
+      to its patch-id, whenever its own head is green and conflict-free, for as long
+      as it stays added.
+    origin:
+    - spec:2026-11-24-wave-queue-gaps#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none

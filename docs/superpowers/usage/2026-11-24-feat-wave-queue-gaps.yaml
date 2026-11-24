@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-24-feat-wave-queue-gaps
+captures:
+- host: h-98eb9405
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-24T22:39:42+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: e4ba8d5a-76b8-46bb-aa9a-81b12b1286eb
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 68
+        cache_write: 221787
+        cache_read: 5760357
+        output: 34401
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 11
+      other:
+        usd: null
+        turns: 12
+      paperwork:
+        usd: null
+        turns: 9
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+        input: 6
+        cache_write: 102359
+        cache_read: 134538
+        output: 1102
+      brainstorm:
+        usd: null
+        turns: 30
+        input: 62
+        cache_write: 119428
+        cache_read: 5625819
+        output: 33299
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 2
+          input: 6
+          cache_write: 102359
+          cache_read: 134538
+          output: 1102
+        brainstorm:
+          usd: null
+          turns: 30
+          input: 62
+          cache_write: 119428
+          cache_read: 5625819
+          output: 33299
