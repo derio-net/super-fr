@@ -650,3 +650,10 @@ Evidence: 2026-11-24: tests/unit/test_triage_queue_model.py, test_wave_queue_pha
 Step: `fr triage batch merge` drives the same engine to drain. (R23)
 
 Evidence: 2026-11-24: tests/integration/test_queue_drive_cmd.py, tests/unit/test_triage_batch_merge.py (batch merge drives the same engine); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-16 created=2026-11-24T12:40:54+00:00 -->
+### test-plan-step-16 · discovery · Test Plan step 16: ran
+
+Step: A driver killed after `queue_built` and after the land push resumes from events and the forge without landing twice; the slot branches are reused, never multiplied. (R4, R24)
+
+Evidence: 2026-11-24: tests/integration/test_queue_resume.py (resume after queue_built and after land push, slots reused); full wave-queue unit (542) + integration (134) + scenario (3) runs green
