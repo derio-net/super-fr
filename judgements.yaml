@@ -10272,3 +10272,13 @@ queues:
   events:
   - kind: queue_open
     at: '2026-11-24T21:56:03.048608Z'
+  - kind: queue_built
+    at: '2026-11-24T21:59:34.003765Z'
+    slot: 1
+    sha: 24130aa17578d13a79db3023676819dcdb9c6930
+    entry:
+      batch: closeout-truth
+    head: 2ddb8ead0bdeeb61ffa0a5241a0dc658a38ad19b
+    patch_id: 053b4b8efd81e07e220c55c712e9491e3d52d2d8
+    base: b0ea33e38dee4429bf0fa765d16034c65c8899e8
+    parent: b0ea33e38dee4429bf0fa765d16034c65c8899e8
