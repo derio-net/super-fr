@@ -39,6 +39,7 @@ from fr.isolation.types import IsolationState, save_state
 from typer.testing import CliRunner
 
 from tests.unit.fakes import FakeGhClient
+from tests.unit.requirements_support import write_shape_file
 
 runner_cli = CliRunner()
 
@@ -143,7 +144,10 @@ def _seed_plan_and_spec(workspace: Path) -> tuple[Path, Path]:
         f"# {SLUG}\n\n## Implementation Plans\n\n"
         "| Plan | Repo | File | Depends on |\n|---|---|---|---|\n"
         f"| {SLUG} | (this repo) | `docs/superpowers/plans/{SLUG}` | — |\n"
+        "\n## Design shape\n\nnone — an e2e fixture has no structure to draw\n"
     )
+    # spec 2026-11-24-show-me-visuals R9, R11: the run's shape file `deliver` asks for
+    write_shape_file(workspace, "r1", "none — an e2e fixture has no structure to draw\n")
     _git(workspace, "add", "-A")
     _git(workspace, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "seed plan+spec")
     return plan_dir, spec_path

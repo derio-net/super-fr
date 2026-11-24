@@ -4937,13 +4937,13 @@ def _lens_review_brief(step: Step, state: RunState) -> dict[str, Any]:
     compute refuses the brief (exit 2) before anything is written: an empty set
     read off an error would dispatch no reviewer for a lens a rule requires."""
     from fr.lenses.review import LENS_EVIDENCE, lens_review_brief
+    from fr.shape import shape_path
 
     if LENS_EVIDENCE not in step.evidence:
         return {}
     repo_root = resolve_repo_root()
-    return {
-        "lens_review": lens_review_brief(repo_root, _lens_set_or_exit(step.id, repo_root, state))
-    }
+    lenses = _lens_set_or_exit(step.id, repo_root, state)
+    return {"lens_review": lens_review_brief(repo_root, lenses, shape_path(repo_root, state.run))}
 
 
 def _lens_set_or_exit(key: str, repo_root: Path, state: RunState) -> LensSet:
@@ -5434,7 +5434,8 @@ def _refuse_spec_policy(
 ) -> None:
     """R7, R8: the step that accepts the spec (`brainstorm`, `spec-review`) refuses one the
     repo's policy forbids (a Test Plan under `test_plan: off`, a `gate:` line under
-    `gates: off`), naming the setting, before anything is written."""
+    `gates: off`), naming the setting, then one with no valid design shape
+    (`_refuse_spec_shape`), before anything is written."""
     if step_id not in ("brainstorm", *_spec_review_ids(repo_root, state)):
         return
     from fr.requirements import run_spec
@@ -5452,6 +5453,17 @@ def _refuse_spec_policy(
         err_console.print(f"[red]{step_id}: {escape(spec_rel)} breaks the repo's settings:[/red]")
         for problem in problems:
             err_console.print(f"  {escape(problem)}", soft_wrap=True)
+        raise typer.Exit(2)
+    _refuse_spec_shape(step_id, spec_rel, emitted_path(repo_root, spec_rel))
+
+
+def _refuse_spec_shape(step_id: str, spec_rel: str, spec: Path) -> None:
+    """Spec 2026-11-24-show-me-visuals R8: the same steps refuse a spec with no valid
+    `## Design shape`, naming it and the two forms, before anything is written."""
+    from fr.shape import spec_shape_refusal
+
+    if (refusal := spec_shape_refusal(step_id, spec_rel, spec)) is not None:
+        err_console.print(f"[red]{escape(refusal)}[/red]", soft_wrap=True)
         raise typer.Exit(2)
 
 
@@ -7251,7 +7263,11 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
         shared_closing_keywords,
     )
     from fr.settings import load_settings
+    from fr.shape import deliver_shape_refusal
 
+    if (shape := deliver_shape_refusal(repo_root, state)) is not None:  # show-me-visuals R11
+        err_console.print(f"refused: {shape}", markup=False, soft_wrap=True)
+        raise typer.Exit(2)
     _deliver_pr_ask_gate(repo_root, state, pr)
     pr = pr or state.pr
     minimal = load_settings(repo_root).settings.forge.pr_body == "minimal"
