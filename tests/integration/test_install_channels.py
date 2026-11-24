@@ -84,7 +84,7 @@ def test_preflight_refuses_a_detached_head_that_is_not_a_tag(tmp_path: Path) -> 
     repo = _install_checkout(tmp_path)
     _git(repo, "tag", "rc/some-branch/abc1234")  # per-branch pre-merge tag: not a channel
     _git(repo, "checkout", "-q", "--detach", "HEAD")
-    res = _run_install(tmp_path, repo, "--version", "main")  # no --version: stable channel
+    res = _run_install(tmp_path, repo, "--version", "main")  # the preflight is main's
     assert res.returncode != 0
     assert "Preflight failed" in res.stderr
     assert "Channel:" not in res.stdout
@@ -340,7 +340,7 @@ def test_preflight_refuses_a_loose_v_tag(tmp_path: Path) -> None:
     repo = _install_checkout(tmp_path)
     _git(repo, "tag", "v5-hotfix")
     _git(repo, "checkout", "-q", "--detach", "v5-hotfix")
-    res = _run_install(tmp_path, repo, "--version", "main")  # no --version: stable channel
+    res = _run_install(tmp_path, repo, "--version", "main")  # the preflight is main's
     assert res.returncode != 0
     assert "Preflight failed" in res.stderr
     assert "Channel:" not in res.stdout
@@ -467,3 +467,12 @@ def test_the_wave_drivers_post_merge_installs_main_explicitly() -> None:
 
     config = yaml.safe_load((REPO_ROOT / ".fr" / "triage.yaml").read_text())
     assert config["post_merge"] == ["./scripts/install.sh", "--version", "main"]
+
+
+def test_uninstall_never_delegates(tmp_path: Path) -> None:
+    """--uninstall chooses no version: it runs from the clone, wherever its flag sits."""
+    _, clone = _clone_with_real_scripts(tmp_path)
+    res = _run_clone_install(tmp_path, clone, "--uninstall")
+    assert "newest stable release" not in res.stdout + res.stderr
+    assert _installed(res) is None
+    assert not (tmp_path / "src").exists()  # bootstrap's managed clone never made

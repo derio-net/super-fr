@@ -46,10 +46,14 @@ case "${1:-}" in
         main) ;;
         *) fr_delegate=1 ;;
       esac
-    elif git -C "$fr_here" symbolic-ref -q HEAD >/dev/null 2>&1 \
-         || ! git -C "$fr_here" tag --points-at HEAD 2>/dev/null \
-              | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'; then
-      fr_delegate=1
+    else
+      # Read first: `git tag | grep -q` under pipefail can lose git to SIGPIPE, which
+      # would read a tagged checkout as untagged.
+      fr_head_tags="$(git -C "$fr_here" tag --points-at HEAD 2>/dev/null || true)"
+      if git -C "$fr_here" symbolic-ref -q HEAD >/dev/null 2>&1 \
+         || ! printf '%s\n' "$fr_head_tags" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'; then
+        fr_delegate=1
+      fi
     fi ;;
 esac
 if [ "$fr_delegate" = 1 ]; then
@@ -76,6 +80,9 @@ if [ "$fr_delegate" = 1 ]; then
   fr_bootstrap="$(cat "$fr_here/scripts/bootstrap.sh")"
   exec bash -c "$fr_bootstrap" bootstrap.sh "$@"
 fi
+# The guard is for the one hand-off above; this run installs, so nothing it starts
+# inherits it.
+unset FR_INSTALL_DELEGATED
 
 # One install per machine at a time (gh#938). Every release is followed by a
 # reinstall — by hand, by a watcher, by `fr triage batch drive`'s post_merge —
