@@ -144,6 +144,7 @@ def test_minimal_under_an_outside_placement_keeps_the_render_beside_the_cursor(
     import fr.hostclient
     import fr.record.pr_body
     import fr.settings
+    import fr.shape
     from fr.commands import run_cmd
     from fr.record.pr_body import durable_pr_body_path
 
@@ -155,6 +156,7 @@ def test_minimal_under_an_outside_placement_keeps_the_render_beside_the_cursor(
     monkeypatch.setattr(fr.settings, "load_settings", lambda _root: minimal_settings)
     monkeypatch.setattr(fr.record.pr_body, "render_pr_body", lambda *_a: "## Findings\n")
     monkeypatch.setattr(run_cmd, "_deliver_pr_ask_gate", lambda *_a: None)
+    monkeypatch.setattr(fr.shape, "deliver_shape_refusal", lambda *_a: None)
     monkeypatch.setattr(run_cmd, "_refuse_premature_closes", lambda *_a: None)
     forge = SimpleNamespace(pr_body=lambda ref, cwd=None: PLAIN)
     monkeypatch.setattr(fr.hostclient, "client_for", lambda _root: forge)

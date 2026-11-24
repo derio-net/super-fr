@@ -37,6 +37,7 @@ from fr.run import units
 from fr.run.model import load_run_state
 from fr.test_support import build_plan_journal
 
+from tests.unit.requirements_support import DESIGN_SHAPE_SECTION
 from tests.unit.test_run_cli import (
     _invoke,
     _repo,
@@ -451,7 +452,7 @@ def _at_flat_spec_review(tmp_path: Path, *, with_evidence: bool) -> tuple[Path, 
     )
     assert _invoke(repo, shipped, ["run", "advance", "r1"]).exit_code == 0
     emitted = repo / "spec.md"
-    emitted.write_text("# Spec\n")
+    emitted.write_text("# Spec\n" + DESIGN_SHAPE_SECTION)
     assert (
         _invoke(
             repo,

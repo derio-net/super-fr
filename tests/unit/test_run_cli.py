@@ -28,7 +28,14 @@ from fr.version_floor import CEILING_VERSION
 from fr_dispatch.work_item import run_item_id
 from typer.testing import CliRunner
 
-from tests.unit.requirements_support import seed_requirements
+from tests.unit.requirements_support import (
+    DESIGN_SHAPE_SECTION,
+    seed_requirements,
+    write_shape_file,
+)
+
+SHAPED_SPEC = "# spec\n" + DESIGN_SHAPE_SECTION
+"""A fixture spec the `brainstorm` resolve accepts (spec 2026-11-24-show-me-visuals R8)."""
 
 # --- reading a cursor by MEANING, never by storage ---------------------------
 #
@@ -620,7 +627,7 @@ def test_resolve_done_completes_the_step_and_advances_the_cursor(tmp_path: Path)
     # so the fixture writes the one it is about to report. Assertions unchanged.
     spec = repo / "docs" / "superpowers" / "specs" / "2026-08-14-x-design.md"
     spec.parent.mkdir(parents=True, exist_ok=True)
-    spec.write_text("# x\n")
+    spec.write_text(SHAPED_SPEC)
     _invoke(repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])  # marks brainstorm running, emits brief
     result = _invoke(
@@ -823,7 +830,7 @@ def test_resolve_clears_a_blocked_agent_step_and_advances_the_cursor(tmp_path: P
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
-    (repo / "s.md").write_text("# spec\n")  # `--emitted` now requires it to exist
+    (repo / "s.md").write_text(SHAPED_SPEC)  # `--emitted` now requires it to exist
     _invoke(repo, shipped, ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
     assert load_run_state(repo, "r1").steps["brainstorm"].state == "blocked"
@@ -1860,7 +1867,7 @@ def test_an_artifact_the_step_does_not_emit_is_refused_naming_the_declared_ones(
     run would carry a key nothing will ever read."""
     repo, shipped = _emitting_repo(tmp_path)
     (repo / "docs" / "superpowers" / "specs").mkdir(parents=True)
-    (repo / "docs" / "superpowers" / "specs" / "x.md").write_text("# x\n")
+    (repo / "docs" / "superpowers" / "specs" / "x.md").write_text(SHAPED_SPEC)
 
     result = _resolve(repo, shipped, "spec=docs/superpowers/specs/x.md")
 
@@ -2568,7 +2575,7 @@ def test_resolve_on_a_step_with_no_emits_still_refuses_emitted(tmp_path: Path) -
         "quiet",
         "workflow: quiet\nschema: 1\nunit: run\nsteps:\n  - id: quiet\n    kind: agent\n",
     )
-    (repo / "docs" / "spec.md").write_text("# spec\n")
+    (repo / "docs" / "spec.md").write_text(SHAPED_SPEC)
     _invoke(repo, shipped, ["run", "start", "quiet", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
 
@@ -3235,7 +3242,7 @@ def test_a_gated_agent_step_records_provenance_too(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
-    (repo / "s.md").write_text("# spec\n")
+    (repo / "s.md").write_text(SHAPED_SPEC)
     _invoke(repo, shipped, ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
 
@@ -3267,7 +3274,7 @@ def test_a_gated_agent_step_can_record_an_operator(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
-    (repo / "s.md").write_text("# spec\n")
+    (repo / "s.md").write_text(SHAPED_SPEC)
     _invoke(repo, shipped, ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
 
@@ -3305,7 +3312,7 @@ def _gated_agent_blocked(tmp_path: Path, root: Path, session: str) -> tuple[Path
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
     (repo / "docs" / "superpowers" / "specs").mkdir(parents=True, exist_ok=True)
-    (repo / "docs" / "superpowers" / "specs" / "2026-09-21-x-design.md").write_text("# spec\n")
+    (repo / "docs" / "superpowers" / "specs" / "2026-09-21-x-design.md").write_text(SHAPED_SPEC)
     argv = ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"]
     _invoke_measurable(repo, shipped, argv, root, session)
     _invoke_measurable(repo, shipped, ["run", "advance", "r1"], root, session)
@@ -4756,7 +4763,7 @@ def test_resolve_closes_a_flat_agent_steps_record(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "agentic-two-step", _AGENT_TWO_STEP_SHAPE)
-    (repo / "s.md").write_text("# spec\n")
+    (repo / "s.md").write_text(SHAPED_SPEC)
     _invoke(repo, shipped, ["run", "start", "agentic-two-step", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
 
@@ -4913,7 +4920,7 @@ def test_resolve_a_gated_step_with_no_dispatch_record_still_works(tmp_path: Path
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
-    (repo / "s.md").write_text("# spec\n")
+    (repo / "s.md").write_text(SHAPED_SPEC)
     _invoke(repo, shipped, ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
     assert _attempts_by_unit(load_run_state(repo, "r1").steps["brainstorm"]) is None
@@ -5476,7 +5483,7 @@ def _walk_to_implement(repo: Path, shipped: Path):
 
     spec_rel = "docs/superpowers/specs/2026-09-20-fixture-design.md"
     (repo / spec_rel).parent.mkdir(parents=True, exist_ok=True)
-    (repo / spec_rel).write_text("# Fixture\n")
+    (repo / spec_rel).write_text(SHAPED_SPEC)
     seed_requirements(repo, spec_rel)
     from tests.unit.skeleton_override import write_skeleton_override
 
@@ -5577,7 +5584,7 @@ def _plan_with_tags(
     (repo / spec_rel).write_text(
         "# Tagged\n\n## Implementation Plans\n\n"
         "| Plan | Repo | File | Depends on |\n"
-        "|------|------|------|------------|\n"
+        "|------|------|------|------------|\n" + DESIGN_SHAPE_SECTION
     )
     create(
         repo_root=repo,
@@ -6532,7 +6539,7 @@ def test_start_advance_and_resolve_each_commit_the_cursor(tmp_path: Path) -> Non
     _assert_fr_commit(repo, "r1", "advance")
 
     step = load_run_state(repo, "r1").cursor
-    (repo / "s.md").write_text("# spec\n")
+    (repo / "s.md").write_text(SHAPED_SPEC)
     resolve = ["run", "resolve", "r1", "--step", step, "--state", "done", "--emitted", "spec=s.md"]
     res = _invoke(repo, shipped, resolve)
     assert res.exit_code == 0, res.output
@@ -6709,10 +6716,13 @@ def _resolved_to_deliver(repo: Path, shipped: Path) -> None:
     artifacts on disk (rule 5's existence check), leaving `deliver` dispatched."""
     spec_dir = repo / "docs" / "superpowers" / "specs"
     spec_dir.mkdir(parents=True, exist_ok=True)
-    (spec_dir / "2026-09-30-fixture-design.md").write_text("# Fixture\n")
+    (spec_dir / "2026-09-30-fixture-design.md").write_text(SHAPED_SPEC)
     plan_dir = repo / "docs" / "superpowers" / "plans" / "2026-09-30-fixture"
     plan_dir.mkdir(parents=True, exist_ok=True)
     (plan_dir / "_meta.yaml").write_text("plan: 2026-09-30-fixture\n")
+    shape = write_shape_file(repo, "r1")  # what `deliver` asks of a spec with a design shape
+    _git_out(repo, "add", "--", str(shape))
+    _git_out(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "shape")
 
     _invoke(repo, shipped, ["run", "start", "closeout", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])  # brainstorm: running + brief
@@ -6935,7 +6945,7 @@ def test_a_gate_on_a_harness_with_no_question_reader_records_unobserved(
     repo = _repo(tmp_path)
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "gated-agent", _GATED_AGENT_SHAPE)
-    (repo / "s.md").write_text("# spec\n")
+    (repo / "s.md").write_text(SHAPED_SPEC)
     env = {"FR_HARNESS": harness}
     start = ["run", "start", "gated-agent", "--branch", "b", "--run-id", "r1"]
     _invoke_as_harness(repo, shipped, start, env)

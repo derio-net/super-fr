@@ -216,6 +216,7 @@ def test_the_required_sections_carry_no_input_section() -> None:
     assert REQUIRED_SECTIONS == (
         "## Findings",
         "## Out-of-scope findings",
+        "## Shape of the change",
         "## Pre-merge verification owed",
         "## Post-merge verification owed",
         "## Manual operations",
