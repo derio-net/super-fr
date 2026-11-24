@@ -21,14 +21,14 @@ with no markers is real, so it is handed back rather than written as it stands.
 
 **Trust boundary.** The mirrors are the BASE's `mirrors:` (the `.fr/triage.yaml` collected
 from the default branch), never the merged tree's, but the scripts they run are the merged
-tree's, so they run code from the queued PRs. The queue already trusts that code to the
-level it tests it: CI runs the same combination, and an entry is in the queue only once the
-operator approved it or its trust rule attributed it. The executor adds defence in depth,
-not a sandbox (`fr.triage.queue_exec._regenerate`): the commands get a named environment
-(`fr.triage.gitseam.mirror_env`: no forge token, no fr setting, no SSH agent, no index URL,
-an empty HOME, no global git config); a change to the git dir's config or hooks is undone and
-hands the entry back; and every later git call on that worktree runs with hooks and
-fsmonitor off. A mirror still runs as the driver's user, on the driver's host.
+tree's: code from the queued PRs, which are in the queue only once the operator approved
+them or their trust rule attributed them, and which CI runs anyway. The executor runs that
+code by a structural rule (`fr.triage.queue_exec._regenerate`): the mirrors never see a git
+directory. They run in a git-less copy of the combination's tracked files, with a named
+environment and an empty HOME (`fr.triage.gitseam.mirror_env`: no forge token, no fr
+setting, no SSH agent, no index URL), in a process group killed when they end, and only
+their changes to `generated:` files and blocks are copied back, as regular files, never
+through a symlink. This is not a sandbox: they still run as the driver's user.
 """
 
 from __future__ import annotations
@@ -41,6 +41,9 @@ from dataclasses import dataclass, field
 _OURS, _BASE, _SPLIT, _THEIRS = "<<<<<<<", "|||||||", "=======", ">>>>>>>"
 _OPEN = re.compile(r"<!-- generated:(\S+) -->")
 _CLOSE = re.compile(r"<!-- /generated:(\S+) -->")
+IRREGULAR = "\0irregular:"
+"""How `fr.triage.gitseam.snapshot_export` spells a path that is not a regular file (a
+symlink, a directory a file became, a device): never equal to any file's text."""
 REGULAR: tuple[str, ...] = ("100644", "100755")
 """The index modes of a regular blob: the only kind whose text a hunk resolution may write."""
 _STAMP = re.compile(r"reviewed:\s*(\d{4}-\d{2}-\d{2})(?:\s.*)?")

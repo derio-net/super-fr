@@ -9,8 +9,8 @@ so the outputs conflict while the sources do not.
 
 from __future__ import annotations
 
-import os
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -237,7 +237,6 @@ def test_mirror_env_names_its_variables_and_swaps_home(
     env = mirror_env(home)
     assert env["HOME"] == str(home) and env["XDG_CONFIG_HOME"].startswith(str(home))
     assert env["XDG_DATA_HOME"].startswith(str(home))
-    assert env["GIT_CONFIG_GLOBAL"] == os.devnull and env["GIT_CONFIG_NOSYSTEM"] == "1"
     assert env["UV_CACHE_DIR"] == str(real / ".cache" / "uv")  # resolved before the swap
     assert env["UV_PYTHON_INSTALL_DIR"] == str(real / ".local" / "share" / "uv" / "python")
     assert env["UV_NO_PROGRESS"] == "1"
@@ -246,43 +245,63 @@ def test_mirror_env_names_its_variables_and_swaps_home(
         assert gone not in env
 
 
-def _common_dir(w: World) -> Path:
-    return Path(git(w.clone, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+# ------------------------- the mirrors never see a git directory (p4-mirror-export)
+
+PROBE_GIT = (PY, "-c", "import pathlib, sys; here = pathlib.Path.cwd(); "
+             "sys.exit(any((d / '.git').exists() for d in (here, *here.parents)))")  # fmt: skip
+GIT_REV_PARSE = ("git", "rev-parse", "--git-dir")
 
 
-PLANT_HOOK = (PY, "-c", "import pathlib, subprocess; d = subprocess.check_output(['git', "
-              "'rev-parse', '--path-format=absolute', '--git-common-dir'], text=True).strip(); "
-              "h = pathlib.Path(d, 'hooks'); h.mkdir(exist_ok=True); "
-              "(h / 'post-commit').write_text('#!/bin/sh\\ntouch planted\\n')")  # fmt: skip
-PLANT_CONFIG = (PY, "-c", "import subprocess; subprocess.check_call(['git', 'config', "
-                "'core.fsmonitor', 'touch planted'])")  # fmt: skip
-
-
-@pytest.mark.parametrize("plant", [PLANT_HOOK, PLANT_CONFIG], ids=["hook", "config"])
-def test_a_mirror_that_touches_git_config_or_hooks_hands_back_and_is_undone(
-    tmp_path: Path, plant: tuple[str, ...]
-) -> None:
-    from fr.triage.queue_exec import slot_ref
-
+def test_a_mirror_sees_no_git_directory(tmp_path: Path) -> None:
     w = _generated_world(tmp_path)
-    config_before = (_common_dir(w) / "config").read_bytes()
+    _, two = _build(w, regen=Regen(mirrors=(PROBE_GIT, *MIRRORS), generated=("gen/*",)))
+    assert _show(w, two.sha, "gen/out.txt") == "one=A two=B"
+
+
+def test_git_itself_finds_no_repository_where_a_mirror_runs(tmp_path: Path) -> None:
+    w = _generated_world(tmp_path)
     with pytest.raises(MergeConflictError) as raised:
-        _build(w, regen=Regen(mirrors=(*MIRRORS, plant), generated=("gen/*",)))
-    assert "git's own config or hooks" in str(raised.value)
-    assert not (_common_dir(w) / "hooks" / "post-commit").exists()
-    assert (_common_dir(w) / "config").read_bytes() == config_before
-    assert w.checkout.remote_sha(slot_ref(SCOPE, 2)) is None  # nothing built from that tree
+        _build(w, regen=Regen(mirrors=(GIT_REV_PARSE,), generated=("gen/*",)))
+    assert "git rev-parse --git-dir" in str(raised.value)
 
 
-def test_no_hook_runs_on_the_scratch_worktree_after_a_mirror(tmp_path: Path) -> None:
-    """The rebase's own commit after the mirrors ran carries `core.hooksPath=/dev/null`: a
-    hook already in the clone runs for the pick before them and not for the one after."""
+SYMLINK_OUT = (PY, "-c", "import os; os.remove('gen/out.txt'); "
+               "os.symlink('/etc/hosts', 'gen/out.txt')")  # fmt: skip
+
+
+def test_a_generated_path_turned_into_a_symlink_hands_back(tmp_path: Path) -> None:
     w = _generated_world(tmp_path)
-    marker = tmp_path / "hook-ran"
-    hook = _common_dir(w) / "hooks" / "post-commit"
-    hook.parent.mkdir(exist_ok=True)
-    hook.write_text(f"#!/bin/sh\ngit log -1 --format=%s >> {marker}\n")
-    hook.chmod(0o755)
-    _build(w, "rebase", Regen(mirrors=MIRRORS, generated=("gen/*",)))
-    ran = marker.read_text().splitlines() if marker.exists() else []
-    assert not any("pr 2" in line for line in ran), ran
+    with pytest.raises(MergeConflictError) as raised:
+        _build(w, regen=Regen(mirrors=(*MIRRORS, SYMLINK_OUT), generated=("gen/*",)))
+    assert raised.value.paths == ("gen/out.txt",)
+    assert "other than a file" in str(raised.value)
+
+
+def test_a_background_child_of_a_mirror_is_killed(tmp_path: Path) -> None:
+    late = tmp_path / "late"
+    sleeper = tmp_path / "sleeper.py"
+    sleeper.write_text(
+        f"import pathlib, time\ntime.sleep(1.5)\npathlib.Path({str(late)!r}).touch()\n"
+    )
+    spawn = f"import subprocess, sys; subprocess.Popen([sys.executable, {str(sleeper)!r}])"
+    w = _generated_world(tmp_path)
+    _build(w, regen=Regen(mirrors=((PY, "-c", spawn), *MIRRORS), generated=("gen/*",)))
+    time.sleep(2.5)
+    assert not late.exists()
+
+
+def test_only_the_generated_changes_are_copied_back(tmp_path: Path) -> None:
+    """A new file under a glob and an ignored build output: the first lands in the
+    combination, the second is no change and stays out."""
+    extra = (PY, "-c", "import pathlib; pathlib.Path('gen/new.txt').write_text('n\\n'); "
+             "pathlib.Path('build').mkdir(); "
+             "pathlib.Path('build/x.o').write_text('o')")  # fmt: skip
+    w = world(tmp_path)
+    w.move_main({"scripts/regen.py": REGEN, ".gitignore": "build/\n", **_outputs("a", "b")})
+    w.pr(1, _outputs("A", "b"))
+    w.pr(2, {k: v for k, v in _outputs("a", "B").items() if k != "src/one.txt"})
+    w.fetch()
+    _, two = _build(w, regen=Regen(mirrors=(*MIRRORS, extra), generated=("gen/*",)))
+    files = set(git(w.origin, "ls-tree", "-r", "--name-only", two.sha).split())
+    assert "gen/new.txt" in files and not any(f.startswith("build/") for f in files)
+    assert _show(w, two.sha, "gen/out.txt") == "one=A two=B"

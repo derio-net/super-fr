@@ -18,6 +18,7 @@ through the `GhClient` adapter, both passed in, so this module starts no process
 
 from __future__ import annotations
 
+import tempfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
@@ -58,7 +59,7 @@ from fr.triage.model import (
     QueueSlotLostEvent,
     VersionBlock,
 )
-from fr.triage.regen import classify_conflicts, outside_generated
+from fr.triage.regen import IRREGULAR, classify_conflicts, outside_generated
 from fr.triage.wave_queue import (
     HOLD_HALT,
     HOLD_REF,
@@ -201,43 +202,45 @@ def _mirror_failed(entry: EntryInput, paths: Sequence[str], words: str) -> Mirro
 def _regenerate(
     wt: Worktree, regen: Regen, entry: EntryInput, paths: Sequence[str], abort: Callable[[], None]
 ) -> None:
-    """R11: run the mirrors over the resolved worktree and stage what they wrote; hand the
-    entry back when one fails, a file keeps conflict markers, or they changed a tracked path
-    that is neither generated nor inside a generated block."""
-    before = wt.snapshot_tracked()
-    guarded = wt.git_state()
-    failed: GitError | None = None
-    try:
-        for argv in regen.mirrors:
-            wt.run_argv(argv, regen.timeout)
-    except GitError as exc:
-        failed = exc
-    finally:
-        wt.harden()  # security review: no hook or fsmonitor a mirror planted runs from here
-    now = wt.git_state()
-    if now != guarded:
-        wt.restore_git_state(guarded, now)
-        abort()
-        touched = sorted(p for p in {*guarded, *now} if guarded.get(p) != now.get(p))
-        raise _mirror_failed(
-            entry, paths, f"the mirrors changed git's own config or hooks ({', '.join(touched)}); "
-            "fr restored them, and builds nothing from this tree",
-        )  # fmt: skip
-    if failed is not None:
-        abort()
-        raise _mirror_failed(entry, paths, str(failed)) from failed
+    """R11, by a structural rule: the mirrors never see a git directory. The resolved
+    worktree's tracked files are exported to a fresh directory with no `.git`; each command
+    runs there (`gitseam.run_mirror`: a named environment, an empty HOME, its process group
+    killed when it ends). Then the entry is handed back when one failed, a file keeps
+    conflict markers, a changed path is not a regular file, or a change lies outside the
+    `generated:` files and blocks; otherwise only those changed paths are copied back and
+    staged."""
+    with tempfile.TemporaryDirectory(prefix="fr-mirror-") as where:
+        export = Path(where)
+        tracked = wt.export_tracked(export)
+        before = wt.snapshot_export(export, tracked)
+        try:
+            for argv in regen.mirrors:
+                wt.run_mirror(argv, export, regen.timeout)
+        except GitError as exc:
+            abort()
+            raise _mirror_failed(entry, paths, str(exc)) from exc
+        after = wt.snapshot_export(export, tracked)
+        marked = [p for p in paths if "\n<<<<<<< " in "\n" + (after.get(p) or "")]
+        if marked:
+            abort()
+            raise _mirror_failed(entry, marked, "conflict markers are left after the mirrors ran")
+        stray = outside_generated(dict(before), dict(after), regen.generated)
+        if stray:
+            abort()
+            raise _mirror_failed(
+                entry, stray, "the mirrors changed it outside the generated files and blocks"
+            )
+        changed = sorted(p for p in {*before, *after} if before.get(p) != after.get(p))
+        odd = [p for p in changed if (after.get(p) or "").startswith(IRREGULAR)]
+        if odd:
+            abort()
+            raise _mirror_failed(entry, odd, "the mirrors left it as something other than a file")
+        try:
+            wt.take_generated(export, changed)
+        except GitError as exc:
+            abort()
+            raise _mirror_failed(entry, changed, str(exc)) from exc
     wt.stage_all()
-    after = wt.snapshot_tracked()
-    marked = [p for p in paths if "\n<<<<<<< " in "\n" + (after.get(p) or "")]
-    if marked:
-        abort()
-        raise _mirror_failed(entry, marked, "conflict markers are left after the mirrors ran")
-    stray = outside_generated(before, after, regen.generated)
-    if stray:
-        abort()
-        raise _mirror_failed(
-            entry, stray, "the mirrors changed it outside the generated files and blocks"
-        )
 
 
 def _resolve(

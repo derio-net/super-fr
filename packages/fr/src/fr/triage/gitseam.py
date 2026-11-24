@@ -23,16 +23,18 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import stat
 import subprocess
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal
 
 from fr.safe_spawn import fr_argv, safe_fr_env
 from fr.triage.errors import TriageError
+from fr.triage.regen import IRREGULAR
 
 
 class GitError(TriageError):
@@ -449,8 +451,7 @@ def mirror_env(home: Path) -> dict[str, str]:
     """The WHOLE environment a mirror command runs with: `MIRROR_ENV_NAMES`, every `LC_*`,
     `MIRROR_UV_NAMES` (uv's cache and Python directories resolved from this environment
     first), an empty *home* as HOME and its XDG config and data directories (so no
-    `~/.config/gh`, `~/.ssh`, `~/.netrc` or `~/.git-credentials` is reachable), and no global
-    or system git config."""
+    `~/.config/gh`, `~/.ssh`, `~/.netrc` or `~/.git-credentials` is reachable)."""
     env = {k: v for k, v in os.environ.items()
            if k in MIRROR_ENV_NAMES or k in MIRROR_UV_NAMES or k.startswith("LC_")}  # fmt: skip
     env.update(_uv_dirs(os.environ))
@@ -458,17 +459,91 @@ def mirror_env(home: Path) -> dict[str, str]:
         HOME=str(home),
         XDG_CONFIG_HOME=str(home / ".config"),
         XDG_DATA_HOME=str(home / ".local" / "share"),
-        GIT_CONFIG_GLOBAL=os.devnull,
-        GIT_CONFIG_NOSYSTEM="1",
     )
     return env
 
 
-HARDENED_GIT: Final[tuple[str, ...]] = (
-    "-c", f"core.hooksPath={os.devnull}", "-c", "core.fsmonitor=false",
-)  # fmt: skip
-"""What every git call on a scratch worktree carries once a mirror ran there (security
-review): no hook and no fsmonitor command a mirror could have planted runs."""
+def _kill_group(pid: int) -> None:
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except ProcessLookupError, PermissionError:
+        pass
+
+
+def run_mirror(argv: Sequence[str], cwd: Path, timeout: float) -> None:
+    """Run one `mirrors:` argument list in *cwd*, the git-less export of a combination (spec
+    2026-11-24-ci-economy R11), with `mirror_env` as its whole environment, in a session and
+    process group of its own. Once it exits or times out the whole group is killed, so no
+    background child it left outlives the step. A non-zero exit, or a run past *timeout*
+    seconds, raises `GitError` naming the command."""
+    if not argv:
+        raise GitError("an empty mirrors command was declared")
+    words = shlex.join(argv)
+    with (
+        tempfile.TemporaryDirectory(prefix="fr-mirror-home-") as home,
+        tempfile.TemporaryFile() as out,
+    ):
+        try:
+            proc = subprocess.Popen(
+                list(argv), cwd=cwd, env=mirror_env(Path(home)), stdin=subprocess.DEVNULL,
+                stdout=out, stderr=subprocess.STDOUT, start_new_session=True,
+            )  # fmt: skip
+        except OSError as exc:
+            raise GitError(f"cannot run `{words}`: {exc}") from exc
+        try:
+            code = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            _kill_group(proc.pid)
+            proc.wait()
+            raise GitError(f"`{words}` timed out after {timeout:g}s") from exc
+        finally:
+            _kill_group(proc.pid)
+        if code != 0:
+            out.seek(0)
+            tail = " ".join(out.read().decode("utf-8", "replace").split()[-40:])
+            raise GitError(f"`{words}` failed (exit {code}): {tail}")
+
+
+def _regular_text(path: Path) -> str:
+    return path.read_bytes().decode("utf-8", "surrogateescape")
+
+
+def snapshot_export(
+    root: Path, tracked: Sequence[str], ignored: Callable[[list[str]], Sequence[str]]
+) -> dict[str, str]:
+    """Every path under *root* (an export, no `.git`) that a mirror may be judged by: each
+    regular file's text, `IRREGULAR` plus a kind for anything else, symlinks never followed.
+    A new path or directory the repo's ignore rules exclude (*ignored*, asked of the scratch
+    worktree with paths relative to *root*) is left out, so a `.venv` or `__pycache__` the
+    commands made is not a change."""
+    known = set(tracked)
+    known_dirs = {str(parent) for t in known for parent in Path(t).parents}
+    out: dict[str, str] = {}
+    new: list[str] = []
+    for top, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
+        rel_top = os.path.relpath(top, root)
+        prefix = "" if rel_top == "." else rel_top + "/"
+        fresh = [
+            d
+            for d in dirnames
+            if prefix + d not in known_dirs and not os.path.islink(os.path.join(top, d))
+        ]
+        asked = ignored([prefix + d + "/" for d in fresh]) if fresh else ()
+        dropped = {d.rstrip("/") for d in asked}
+        dirnames[:] = [d for d in dirnames if prefix + d not in dropped]
+        for name in [*filenames, *(d for d in dirnames if os.path.islink(os.path.join(top, d)))]:
+            rel, full = prefix + name, Path(top) / name
+            if full.is_symlink():
+                out[rel] = f"{IRREGULAR}symlink -> {os.readlink(full)}"
+            elif stat.S_ISREG(full.lstat().st_mode):
+                out[rel] = _regular_text(full)
+            else:
+                out[rel] = f"{IRREGULAR}special"
+            if rel not in known:
+                new.append(rel)
+    for rel in ignored(new) if new else ():
+        out.pop(rel, None)
+    return out
 
 
 def run_declared(command: str, cwd: Path, **fields: str) -> None:
@@ -1083,18 +1158,6 @@ class Worktree:
 
     def __init__(self, path: Path) -> None:
         self.path = path
-        self._config: tuple[str, ...] = ()
-        self._dirs: tuple[Path, ...] | None = None
-
-    def harden(self) -> None:
-        """Every git call from here on carries `HARDENED_GIT` (a mirror ran here)."""
-        self._config = HARDENED_GIT
-
-    def _git(self, args: list[str], cwd: Path) -> str:
-        return git([*self._config, *args], cwd)
-
-    def _git_ok(self, args: list[str], cwd: Path) -> bool:
-        return git_ok([*self._config, *args], cwd)
 
     def merge(self, ref: str) -> list[str]:
         """Start merging *ref* without committing; the conflicted paths ([] if none).
@@ -1119,22 +1182,22 @@ class Worktree:
             "--no-commit",
             ref,
         ]
-        clean = self._git_ok(argv, self.path)
-        conflicted = self._git(["diff", "--name-only", "--diff-filter=U"], self.path).split()
+        clean = git_ok(argv, self.path)
+        conflicted = git(["diff", "--name-only", "--diff-filter=U"], self.path).split()
         if not clean and not conflicted:
             raise GitError(f"`git merge {ref}` failed in {self.path} without a conflict")
         return conflicted
 
     def merge_base(self, ref: str) -> str:
         """The merge base of HEAD (the PR side) and *ref*."""
-        return self._git(["merge-base", "HEAD", ref], self.path).strip()
+        return git(["merge-base", "HEAD", ref], self.path).strip()
 
     def show(self, ref: str, file: str) -> str | None:
         """*file*'s UTF-8 text at *ref*, or None when it does not exist there (`show_text`)."""
         return show_text(self.path, ref, file)
 
     def abort_merge(self) -> None:
-        self._git(["merge", "--abort"], self.path)
+        git(["merge", "--abort"], self.path)
 
     def read(self, file: str) -> str | None:
         target = self.path / file
@@ -1146,83 +1209,94 @@ class Worktree:
     def stage(self, version_files: Sequence[str]) -> None:
         """Stage tracked changes plus untracked files matching the declared
         *version_files* globs, never anything else (review r3-f7)."""
-        self._git(["add", "--update"], self.path)
-        untracked = self._git(["ls-files", "-z", "--others", "--exclude-standard"], self.path)
+        git(["add", "--update"], self.path)
+        untracked = git(["ls-files", "-z", "--others", "--exclude-standard"], self.path)
         declared = [
             p
             for p in untracked.split("\0")
             if p and any(fnmatch.fnmatch(p, g) for g in version_files)
         ]
         if declared:
-            self._git(["add", "--", *declared], self.path)
+            git(["add", "--", *declared], self.path)
 
     # ------------------------------------ the wave merge queue's combinations
 
     def take_ours(self, paths: list[str]) -> None:
         """Resolve *paths* to the side being built on (HEAD), so no file keeps conflict
         markers: the combination's, when a queue entry is merged into it."""
-        self._git(["checkout", "--ours", "--", *paths], self.path)
-        self._git(["add", "--", *paths], self.path)
+        git(["checkout", "--ours", "--", *paths], self.path)
+        git(["add", "--", *paths], self.path)
 
     def write_resolved(self, path: str, text: str) -> None:
         """Write *path*'s resolved *text* (no conflict markers left) and stage it."""
         (self.path / path).write_text(text, encoding="utf-8")
-        self._git(["add", "--", path], self.path)
+        git(["add", "--", path], self.path)
 
-    def run_argv(self, argv: Sequence[str], timeout: float) -> None:
-        """Run a repo's declared `mirrors:` command, an argument list with no shell, in this
-        worktree (spec 2026-11-24-ci-economy R11), with `mirror_env()` as its WHOLE
-        environment: the scripts it runs are the queued PRs' code. A non-zero exit, or a run
-        past *timeout* seconds, raises `GitError` naming the command."""
-        if not argv:
-            raise GitError("an empty mirrors command was declared")
-        with tempfile.TemporaryDirectory(prefix="fr-mirror-home-") as home:
-            env = mirror_env(Path(home))
-            _run(list(argv), self.path, timeout=timeout, env=env, exact_env=True)
+    def export_tracked(self, dest: Path) -> list[str]:
+        """Copy this worktree's tracked files into *dest*, a fresh directory with no `.git`
+        and no link to any git dir (spec 2026-11-24-ci-economy R11, the mirrors' copy):
+        regular files with their mode, symlinks recreated as symlinks and never followed.
+        The tracked paths, in `git ls-files` order."""
+        paths = [p for p in git(["ls-files", "-z"], self.path).split("\0") if p]
+        for rel in paths:
+            src, dst = self.path / rel, dest / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if src.is_symlink():
+                os.symlink(os.readlink(src), dst)
+            elif stat.S_ISREG(src.lstat().st_mode):
+                shutil.copyfile(src, dst, follow_symlinks=False)
+                os.chmod(dst, src.lstat().st_mode & 0o777)
+        return paths
 
-    def git_state(self) -> dict[str, bytes | None]:
-        """What a mirror must not touch (security review): the bytes of the common git
-        dir's `config`, `config.worktree` and every file under `hooks/`, and of this
-        worktree's own gitdir `config` and `config.worktree`, keyed by absolute path."""
-        if self._dirs is None:  # read once, before any mirror ran: no git call after one
-            self._dirs = tuple(
-                Path(self._git(["rev-parse", "--path-format=absolute", flag], self.path).strip())
-                for flag in ("--git-common-dir", "--git-dir")
-            )
-        common, own = self._dirs
-        state: dict[str, bytes | None] = {}
-        for d in (common, own):
-            for name in ("config", "config.worktree"):
-                f = d / name
-                state[str(f)] = f.read_bytes() if f.is_file() else None
-        hooks = common / "hooks"
-        for f in sorted(hooks.rglob("*")) if hooks.is_dir() else []:
-            if f.is_file() or f.is_symlink():
-                state[str(f)] = f.read_bytes() if f.is_file() else b"symlink"
-        return state
+    def _safe_parent(self, rel: str) -> Path:
+        """*rel*'s directory in this worktree, every component lstat-checked not to be a
+        symlink (and made when missing); a symlinked component raises `GitError`."""
+        here = self.path
+        for part in Path(rel).parts[:-1]:
+            here = here / part
+            if here.is_symlink():
+                raise GitError(f"{rel}: {here.relative_to(self.path)} is a symlink")
+            if not here.exists():
+                here.mkdir()
+            elif not here.is_dir():
+                raise GitError(f"{rel}: {here.relative_to(self.path)} is not a directory")
+        return here
 
-    @staticmethod
-    def restore_git_state(before: dict[str, bytes | None], after: dict[str, bytes | None]) -> None:
-        """Put back what `git_state` read *before*: rewrite each changed file and delete each
-        file that appeared. Touches no git command, so nothing a mirror planted runs."""
-        for path in set(before) | set(after):
-            target, data = Path(path), before.get(path)
-            if data == after.get(path):
+    def take_generated(self, export: Path, paths: Sequence[str]) -> None:
+        """Copy each of *paths* back from *export* (a regular file there) or delete it (gone
+        there), never through a symlink: each parent component is lstat-checked and the file
+        is opened with `O_NOFOLLOW`. A path the copy may not take raises `GitError`."""
+        for rel in paths:
+            parent = self._safe_parent(rel)
+            dst, src = parent / Path(rel).name, export / rel
+            if not os.path.lexists(src):
+                if dst.is_symlink() or dst.is_file():
+                    dst.unlink()
                 continue
-            if target.is_symlink() or target.is_file():
-                target.unlink()
-            elif target.is_dir():
-                shutil.rmtree(target)
-            if data is not None:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(data)
-                if target.parent.name == "hooks":
-                    target.chmod(0o755)
+            if src.is_symlink() or not stat.S_ISREG(src.lstat().st_mode):
+                raise GitError(f"{rel} is not a regular file after the mirrors ran")
+            mode = src.lstat().st_mode & 0o777
+            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                fd = os.open(dst, flags, mode)
+            except OSError as exc:
+                raise GitError(f"{rel}: cannot write it in the worktree: {exc}") from exc
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(src.read_bytes())
+            os.chmod(dst, mode)
+
+    def run_mirror(self, argv: Sequence[str], export: Path, timeout: float) -> None:
+        """`run_mirror` in *export*, the git-less copy this worktree's `export_tracked` made."""
+        run_mirror(argv, export, timeout)
+
+    def snapshot_export(self, export: Path, tracked: Sequence[str]) -> dict[str, str]:
+        """`snapshot_export` of *export*, judged by this worktree's ignore rules."""
+        return snapshot_export(export, tracked, self.ignored)
 
     def unmerged_stages(self) -> dict[str, dict[int, str]]:
         """Each conflicted path's index stages, stage number to mode (`git ls-files -u`)."""
         out: dict[str, dict[int, str]] = {}
-        for entry in self._git(["ls-files", "-u", "-z"], self.path).split("\0"):
+        for entry in git(["ls-files", "-u", "-z"], self.path).split("\0"):
             if not entry:
                 continue
             meta, _, path = entry.partition("\t")
@@ -1232,28 +1306,11 @@ class Worktree:
 
     def stage_all(self) -> None:
         """Stage every change and every new file git does not ignore (what a mirror wrote)."""
-        self._git(["add", "--all"], self.path)
-
-    def snapshot_tracked(self) -> dict[str, str | None]:
-        """Each tracked path's working-tree text (bytes that are not UTF-8 kept by
-        `surrogateescape`, a symlink as its target, a missing file None): what a mirror run
-        is compared against (R11)."""
-        out: dict[str, str | None] = {}
-        for path in self._git(["ls-files", "-z"], self.path).split("\0"):
-            if not path:
-                continue
-            target = self.path / path
-            if target.is_symlink():
-                out[path] = f"symlink -> {os.readlink(target)}"
-            elif target.is_file():
-                out[path] = target.read_bytes().decode("utf-8", "surrogateescape")
-            else:
-                out[path] = None
-        return out
+        git(["add", "--all"], self.path)
 
     def write_tree(self) -> str:
         """The tree the index holds now."""
-        return self._git(["write-tree"], self.path).strip()
+        return git(["write-tree"], self.path).strip()
 
     def commit_tree(
         self, tree: str, parents: Sequence[str], message: str, *, date: str | None = None
@@ -1264,14 +1321,12 @@ class Worktree:
         for parent in parents:
             argv += ["-p", parent]
         env = {"GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date} if date else None
-        out: str = _run(
-            ["git", *self._config, *argv], self.path, env=env, timeout=GIT_TIMEOUT_SECONDS
-        )
+        out: str = _run(["git", *argv], self.path, env=env, timeout=GIT_TIMEOUT_SECONDS)
         return out.strip()
 
     def commit_date(self, sha: str) -> int:
         """*sha*'s committer time, in seconds since the epoch."""
-        return int(self._git(["log", "-1", "--format=%ct", sha], self.path).strip())
+        return int(git(["log", "-1", "--format=%ct", sha], self.path).strip())
 
     def cherry_pick(self, sha: str) -> list[str]:
         """Replay *sha* onto HEAD, committing it; the conflicted paths ([] if none), with
@@ -1279,23 +1334,23 @@ class Worktree:
         for `merge`."""
         argv = ["-c", "rerere.enabled=false", "-c", "merge.directoryRenames=false",
                 "cherry-pick", "--allow-empty", "--keep-redundant-commits", sha]  # fmt: skip
-        clean = self._git_ok(argv, self.path)
-        conflicted = self._git(["diff", "--name-only", "--diff-filter=U"], self.path).split()
+        clean = git_ok(argv, self.path)
+        conflicted = git(["diff", "--name-only", "--diff-filter=U"], self.path).split()
         if not clean and not conflicted:
             raise GitError(f"`git cherry-pick {sha}` failed in {self.path} without a conflict")
         return conflicted
 
     def continue_pick(self) -> None:
-        self._git(["-c", "core.editor=true", "cherry-pick", "--continue"], self.path)
+        git(["-c", "core.editor=true", "cherry-pick", "--continue"], self.path)
 
     def abort_pick(self) -> None:
-        self._git_ok(["cherry-pick", "--abort"], self.path)
+        git_ok(["cherry-pick", "--abort"], self.path)
 
     def amend(self, version_files: Sequence[str]) -> str:
         """Fold the staged and tracked changes (and *version_files*) into HEAD, keeping its
         message; the new HEAD."""
         self.stage(version_files)
-        self._git(["commit", "--no-verify", "--quiet", "--amend", "--no-edit", "--allow-empty"],
+        git(["commit", "--no-verify", "--quiet", "--amend", "--no-edit", "--allow-empty"],
             self.path)  # fmt: skip
         return self.head()
 
@@ -1309,11 +1364,11 @@ class Worktree:
         names what it kept out."""
         if not paths:
             raise GitError("commit_paths needs at least one path")
-        self._git(["add", "--all", "--", *paths], self.path)
-        if self._git_ok(["diff", "--cached", "--quiet", "--", *paths], self.path):
+        git(["add", "--all", "--", *paths], self.path)
+        if git_ok(["diff", "--cached", "--quiet", "--", *paths], self.path):
             return None
-        self._git(["commit", "--no-verify", "-m", message, "--", *paths], self.path)
-        return self._git(["rev-parse", "HEAD"], self.path).strip()
+        git(["commit", "--no-verify", "-m", message, "--", *paths], self.path)
+        return git(["rev-parse", "HEAD"], self.path).strip()
 
     def ignored(self, paths: list[str]) -> tuple[str, ...]:
         """The *paths* this repo's ignore rules exclude (`git check-ignore`), sorted;
@@ -1330,12 +1385,12 @@ class Worktree:
     # ------------------------------------ the collected close-out (exit-gates §E)
 
     def head(self) -> str:
-        return self._git(["rev-parse", "HEAD"], self.path).strip()
+        return git(["rev-parse", "HEAD"], self.path).strip()
 
     def start_branch(self, branch: str) -> None:
         """Put this worktree on a local *branch* at its HEAD (replacing a stale one of that
         name), so the close-out's own verbs commit on a branch, never a detached HEAD."""
-        self._git(["switch", "--quiet", "-C", branch], self.path)
+        git(["switch", "--quiet", "-C", branch], self.path)
 
     def run_fr(self, args: list[str]) -> tuple[int, str]:
         """Run THIS `fr` (`python -m fr` of the running interpreter, never one found on
@@ -1388,8 +1443,8 @@ class Worktree:
     def reset_hard(self, sha: str) -> None:
         """Back to *sha*, every change and untracked file since gone: a held batch moves
         nothing (R15)."""
-        self._git(["reset", "--hard", "--quiet", sha], self.path)
-        self._git(["clean", "-fdq"], self.path)
+        git(["reset", "--hard", "--quiet", sha], self.path)
+        git(["clean", "-fdq"], self.path)
 
     def squash_all(self, base: str, message: str) -> str | None:
         """Everything since *base* (commits, staged and unstaged changes, new files) as ONE
@@ -1397,11 +1452,11 @@ class Worktree:
         here, unlike `commit_all`: the worktree is fresh and only fr's own verbs wrote in
         it, and an archive's moves are new files. With the close-out's migration commit
         (R16) as *base*, only the archive is squashed and the migration commit stays."""
-        self._git(["add", "--all"], self.path)
-        self._git(["reset", "--soft", "--quiet", base], self.path)
-        if self._git_ok(["diff", "--cached", "--quiet"], self.path):
+        git(["add", "--all"], self.path)
+        git(["reset", "--soft", "--quiet", base], self.path)
+        if git_ok(["diff", "--cached", "--quiet"], self.path):
             return None
-        self._git(["commit", "--no-verify", "--quiet", "-m", message], self.path)
+        git(["commit", "--no-verify", "--quiet", "-m", message], self.path)
         return self.head()
 
     def rebase_onto(self, new_base: str, upstream: str) -> None:
@@ -1410,9 +1465,9 @@ class Worktree:
         keeps only its own evidence commits (spec 2026-10-22-fr-ops R15). A conflict
         aborts the rebase and raises, leaving the branch where it was."""
         argv = ["rebase", f"--onto={new_base}", "--end-of-options", upstream]
-        if self._git_ok(argv, self.path):
+        if git_ok(argv, self.path):
             return
-        self._git_ok(["rebase", "--abort"], self.path)
+        git_ok(["rebase", "--abort"], self.path)
         raise GitError(f"`git rebase --onto {new_base} {upstream}` failed in {self.path}")
 
     def push(self, branch: str, *, force: bool = False) -> None:
