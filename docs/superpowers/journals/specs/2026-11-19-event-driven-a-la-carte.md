@@ -307,3 +307,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-24-s1-configuration-homes-p2 created=2026-11-24T20:41:23+00:00 -->
 ### tier-2026-11-24-s1-configuration-homes-p2 · decision · hard: changes the edit gate (bash library, OpenCode plugin, Hermes hook) every write decision relies on
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-24-s1-configuration-homes-p4 created=2026-11-24T20:41:25+00:00 -->
+### tier-2026-11-24-s1-configuration-homes-p4 · decision · hard: changes the artifact migration runner every artifact kind relies on, with cross-space ordering and crash-window rules
