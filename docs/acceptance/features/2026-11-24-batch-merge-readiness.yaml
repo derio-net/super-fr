@@ -78,3 +78,15 @@ rows:
     status: walk-owed
     notes: ''
     verify: live
+  - id: batch-readiness-no-cursor-hold
+    capability: Visible hold for a PR that can never carry a cursor
+    acceptance: A batch PR not delivered for want of a cursor, a readable head or a
+      clone is held with its own reason, and one that can never carry a cursor names
+      merging by hand or delivering through a run as the next action.
+    origin:
+    - spec:2026-11-24-batch-merge-readiness#R1
+    - spec:2026-11-24-batch-merge-readiness#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
