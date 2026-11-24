@@ -198,3 +198,10 @@ Evidence: PR #1593 CI green on the single leg: lint, typecheck and all 7 test sh
 Step: pre-merge — CI: `test_ci_python_floor.py` (`test_ci_tests_one_python_the_floor`, `test_every_shard_feeds_coverage`), `tests/unit/test_ci_split_workflow.py` and `tests/unit/test_ci_shards.py` pin R3-R5/R7, and this PR's own CI run is the one-leg layout running (row `ci-single-leg`; amended rows `ci-coverage-newest-leg`, `ci-shards-complete`).
 
 Evidence: PR #1593 CI run shows one-leg layout: test (1)..(7) with no per-version matrix, split-check and coverage pass.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-11-24T13:29:37+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: pre-merge — CI: `tests/unit/test_acceptance_scaffold_publish.py` and `tests/unit/test_acceptance_services.py` read the scaffold golden fixtures, which name `python:3.14` (R8) (row `ci-scaffold-python-3-14`).
+
+Evidence: PR #1593 CI: collect and all test shards pass, including the scaffold golden-fixture tests naming python:3.14.
