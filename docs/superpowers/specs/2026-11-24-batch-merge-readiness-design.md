@@ -145,3 +145,9 @@ gate: batch-merge-live-drive=reviewer
 ## Test Plan
 
 1. post-merge — operator-driven: on the next live `fr triage batch drive`, an approved, green batch PR whose run is not at `deliver: done` stays on the Batches page as "Approved, not delivered" and is neither marked ready nor merged; once its run delivers and the operator re-labels, it merges.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-24-batch-merge-readiness | `derio-net/super-fr` | `2026-11-24-batch-merge-readiness` | — |
