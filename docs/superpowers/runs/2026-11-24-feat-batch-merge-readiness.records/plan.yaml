@@ -1,9 +1,0 @@
-schema_version: 12
-run: 2026-11-24-feat-batch-merge-readiness
-step: plan
-outcome: done
-journal: []
-resolves: []
-emitted:
-  plan: docs/superpowers/plans/2026-11-24-batch-merge-readiness
-evidence: {}
