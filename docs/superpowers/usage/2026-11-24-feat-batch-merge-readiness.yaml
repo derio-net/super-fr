@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-24-feat-batch-merge-readiness
+captures:
+- host: h-ead0bc65
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-24T22:27:44+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 1fe5a340-bc55-41b6-a9a1-b81e47aa1f3c
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 74
+        cache_write: 173222
+        cache_read: 5487846
+        output: 26851
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 15
+      other:
+        usd: null
+        turns: 9
+      paperwork:
+        usd: null
+        turns: 11
+    steps:
+      (outside run):
+        usd: null
+        turns: 4
+        input: 10
+        cache_write: 103842
+        cache_read: 391678
+        output: 1086
+      brainstorm:
+        usd: null
+        turns: 31
+        input: 64
+        cache_write: 69380
+        cache_read: 5096168
+        output: 25765
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 4
+          input: 10
+          cache_write: 103842
+          cache_read: 391678
+          output: 1086
+        brainstorm:
+          usd: null
+          turns: 31
+          input: 64
+          cache_write: 69380
+          cache_read: 5096168
+          output: 25765

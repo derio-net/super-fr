@@ -1,0 +1,80 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-24-batch-merge-readiness
+repo: derio-net/super-fr
+rows:
+  - id: batch-merge-needs-deliver
+    capability: Driver merges only delivered batch PRs
+    acceptance: The wave driver never marks ready, admits or merges a batch PR whose
+      run cursor at the live head has not resolved deliver; an approved green one is
+      held as approved, not delivered.
+    origin:
+    - spec:2026-11-24-batch-merge-readiness#R1
+    - spec:2026-11-24-batch-merge-readiness#R2
+    - spec:2026-11-24-batch-merge-readiness#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: batch-readiness-verdict
+    capability: Batches page readiness verdict per batch PR
+    acceptance: Every batch PR card leads with one readiness verdict and the facts it
+      came from (delivered, CI, merge, approval, whose move, next action), computed
+      by the same function the driver merges by.
+    origin:
+    - spec:2026-11-24-batch-merge-readiness#R4
+    - spec:2026-11-24-batch-merge-readiness#R5
+    - spec:2026-11-24-batch-merge-readiness#R6
+    - spec:2026-11-24-batch-merge-readiness#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: batch-readiness-other-entries
+    capability: Readiness verdict for close-out, archive and export PRs
+    acceptance: Close-out, archive and export PRs on the Batches page carry a verdict
+      from the function the queue admits them by, their trust rule in place of delivered.
+    origin:
+    - spec:2026-11-24-batch-merge-readiness#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: gc-keeps-running-run
+    capability: gc keeps a workspace whose run is still running
+    acceptance: fr isolation gc keeps a workspace whose PR merged while its run cursor
+      has a step or unit running, and says which run and step.
+    origin:
+    - spec:2026-11-24-batch-merge-readiness#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: fr-debugging-run-cursor
+    capability: A debug run has a cursor with deliver
+    acceptance: A shipped fr-debugging workflow (debug, review, deliver) is started
+      and resolved by the fr-debugging skill, so a debug PR's head carries a cursor
+      whose deliver the driver reads; review owes a dispatched reviewer's entry in the
+      debug journal.
+    origin:
+    - spec:2026-11-24-batch-merge-readiness#R10
+    - spec:2026-11-24-batch-merge-readiness#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: batch-merge-live-drive
+    capability: Live drive holds an undelivered approved batch PR
+    acceptance: On a real drive pass, an approved green batch PR whose run has not delivered
+      stays Approved, not delivered and is neither readied nor merged; it merges once
+      delivered and re-labelled.
+    origin:
+    - spec:2026-11-24-batch-merge-readiness#R2
+    levels: {}
+    status: walk-owed
+    notes: ''
+    verify: live

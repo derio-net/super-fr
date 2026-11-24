@@ -3,11 +3,14 @@ run: 2026-11-24-feat-batch-merge-readiness
 workflow: fr-goal@1
 branch: feat/batch-merge-readiness
 started: '2026-11-24T22:14:00+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-24T22:14:17+00:00'
+    state: done
+    at: '2026-11-24T22:27:42+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-24-batch-merge-readiness-design.md
   spec-review:
     state: pending
   plan:
