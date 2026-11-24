@@ -173,3 +173,6 @@ row_kinds:
 run_gate: developer
 run_kind: none
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-show-me-visuals-p2 created=2026-11-24T13:59:31+00:00 -->
+### phase-split-2026-11-24-show-me-visuals-p2 · decision · ask: the fr-show-me skill, pipeline prose, spec reviewer and docs are a separately reviewable ask (R1-R5, R13-R15) from the engine
