@@ -728,3 +728,8 @@ what: Post-merge, live: the next wave on this repo drains through the queue; rec
 why: live post-merge walk on the next real wave (row wave-queue-live-wave): needs a real wave drained through the queue; not runnable now
 how: fr journal resolve --scope spec --slug 2026-11-19-wave-merge-queue --id test-plan-step-26 --state fixed --note "<evidence>"
 owed_key: spec:2026-11-19-wave-merge-queue#step26
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-26-resolved created=2026-11-24T13:25:31+00:00 state=open resolves=test-plan-step-26 filed_as=derio-net/super-fr#1642 -->
+### test-plan-step-26-resolved · finding [filed → derio-net/super-fr#1642] · resolves test-plan-step-26: Test Plan step 26 owed
+
+Filed at archive as derio-net/super-fr#1642; still owed until discharged.
