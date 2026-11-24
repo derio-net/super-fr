@@ -3,7 +3,7 @@ run: 2026-11-19-feat-event-driven-a-la-carte
 workflow: fr-goal@1
 branch: feat/event-driven-a-la-carte
 started: '2026-11-19T22:20:35+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -46,7 +46,11 @@ steps:
           returned: '2026-11-24T20:43:02+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-11-24T20:43:06+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
