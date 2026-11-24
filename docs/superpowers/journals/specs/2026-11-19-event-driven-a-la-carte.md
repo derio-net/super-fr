@@ -292,3 +292,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-s1-configuration-homes-p3 created=2026-11-24T20:41:14+00:00 -->
 ### phase-split-2026-11-24-s1-configuration-homes-p3 · decision · ask: executable configuration behind verified forge protection (R7), operator decision q-quiet-trust
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-s1-configuration-homes-p4 created=2026-11-24T20:41:16+00:00 -->
+### phase-split-2026-11-24-s1-configuration-homes-p4 · decision · ask: the relocating-kind framework and the migration of every moved file (R9-R14)
