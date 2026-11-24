@@ -487,7 +487,10 @@ ref), those whose imports reach a changed module directly or through `tests/`
 helpers, everything under a changed `conftest.py`, those whose source names a changed
 non-Python file's name (an agent, a skill, YAML, a script), and the `smoke` set
 (`tests/unit/test_smoke_cli.py`, one CLI round trip per top-level command); never the
-`scenario` tier. It is not sound: a test that starts `fr` as a subprocess is invisible
+`scenario` tier. Every `own_artifacts` test (one that reads this checkout's own files;
+`tests/unit/test_tripwire_own_artifacts.py` keeps the mark on every module that resolves the
+root) is selected too when a changed path lies under `docs/`, `.fr/` or `.changes/`, or is a
+root-level `*.md` or `.test_durations`. It is not sound: a test that starts `fr` as a subprocess is invisible
 to the import graph. Any session that is not the whole configured suite (`--fr-scope`,
 a non-empty `-m` or `-k`, explicit paths or a run from a subdirectory, `--lf`, `--sw`,
 `--ignore`, `--ignore-glob`, `--deselect`, `-x`/`--maxfail`, `-o testpaths=`,

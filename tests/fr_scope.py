@@ -22,7 +22,10 @@ The selection, for a set of changed repo-relative paths:
   (`unreached`), so a gap the import graph cannot see is visible.
 
 `smoke` tests always run and `scenario` tests never do; both are item-level, so
-they are decided in `keep_item`, not here.
+they are decided in `keep_item`, not here. So is `own_artifacts` (spec
+2026-11-24-ci-economy R19): a test that reads this checkout's own tracked files runs
+whenever a changed path lies under `docs/`, `.fr/` or `.changes/`, or is a root-level
+`*.md` or `.test_durations` (`touches_own_artifacts`), which no import reaches.
 """
 
 from __future__ import annotations
@@ -264,11 +267,32 @@ def reasons_line(reasons: Sequence[str]) -> str:
     return f"fr-scope: advisory because {', '.join(reasons)}"
 
 
-def keep_item(rel_path: str, markers: Iterable[str], selected: set[str]) -> bool:
-    """Whether the fast tier runs one collected item."""
+OWN_ARTIFACT_DIRS = ("docs", ".fr", ".changes")
+OWN_ARTIFACT_ROOT_FILES = (".test_durations",)
+
+
+def touches_own_artifacts(changed: Iterable[str]) -> bool:
+    """Whether a changed path is one the `own_artifacts` tests read (R19): under
+    `docs/`, `.fr/` or `.changes/`, or a root-level `*.md` or `.test_durations`."""
+    for path in changed:
+        parts = PurePosixPath(path).parts
+        if len(parts) > 1 and parts[0] in OWN_ARTIFACT_DIRS:
+            return True
+        if len(parts) == 1 and (path.endswith(".md") or path in OWN_ARTIFACT_ROOT_FILES):
+            return True
+    return False
+
+
+def keep_item(
+    rel_path: str, markers: Iterable[str], selected: set[str], *, own_artifacts: bool = False
+) -> bool:
+    """Whether the fast tier runs one collected item. *own_artifacts*: the changed
+    set touches the checkout's own files (`touches_own_artifacts`)."""
     marks = set(markers)
     if "scenario" in marks:
         return False
+    if own_artifacts and "own_artifacts" in marks:
+        return True
     return "smoke" in marks or rel_path in selected
 
 

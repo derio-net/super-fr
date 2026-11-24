@@ -741,6 +741,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         changed_paths,
         keep_item,
         resolve_base,
+        touches_own_artifacts,
         unparseable_line,
         unreached,
         unreached_line,
@@ -757,11 +758,13 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     # Printed in the terminal summary: what this tier covers with the smoke set alone.
     lines = (unreached_line(unreached(index, changed)), unparseable_line(index))
     config._fr_scope_unreached = [line for line in lines if line]  # type: ignore[attr-defined]
+    own_artifacts = touches_own_artifacts(changed)
     kept, dropped = [], []
     for item in items:
         rel = item.path.relative_to(root).as_posix()
         marks = [m.name for m in item.iter_markers()]
-        (kept if keep_item(rel, marks, selected) else dropped).append(item)
+        keep = keep_item(rel, marks, selected, own_artifacts=own_artifacts)
+        (kept if keep else dropped).append(item)
     if dropped:
         config.hook.pytest_deselected(items=dropped)
         items[:] = kept
