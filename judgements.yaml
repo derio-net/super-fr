@@ -9290,6 +9290,11 @@ batches:
     head: 50f44efea052a19d34d0232006abb5c17cea3bee
     voided_at: ea6ad2ff8f0ca2f9e833614643740f0787f7d095
     patch_id: fc09585b20cbe49c10b22add1bdea70351301255
+  - kind: approval
+    at: '2026-11-24T22:58:13.710743Z'
+    pr: 1630
+    head: ea6ad2ff8f0ca2f9e833614643740f0787f7d095
+    patch_id: 5b177e09f58a2d01f6c397f293b569292afd2884
 - id: merge-readiness
   title: 'Merge only what delivered: the driver reads deliver from the cursor, and the Batches page shows
     one readiness verdict per PR'
@@ -10313,3 +10318,13 @@ queues:
     main: 24130aa17578d13a79db3023676819dcdb9c6930
     entries:
     - batch: closeout-truth
+  - kind: queue_built
+    at: '2026-11-24T22:58:49.135740Z'
+    slot: 1
+    sha: 36d8ffa46f425f7087b22ab21032fa689db0e3a5
+    entry:
+      batch: triage-hardening
+    head: ea6ad2ff8f0ca2f9e833614643740f0787f7d095
+    patch_id: 5b177e09f58a2d01f6c397f293b569292afd2884
+    base: 0160e4677f456c77fe157f3401444d3a2aee9440
+    parent: 0160e4677f456c77fe157f3401444d3a2aee9440
