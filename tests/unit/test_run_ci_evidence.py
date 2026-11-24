@@ -201,16 +201,36 @@ def test_a_gate_that_did_not_succeed_is_refused_with_its_url(
     assert "ci-ok" in str(exc.value) and conclusion in str(exc.value) and url in str(exc.value)
 
 
-def test_a_cancelled_gate_is_pending_never_refused(tmp_path: Path) -> None:
+def test_a_cancelled_gate_waits_while_a_run_is_still_going(tmp_path: Path) -> None:
     """Spec 2026-11-24-ci-economy R3: a cancelled gate run was superseded, so `deliver`
-    waits (exit 75) instead of refusing. DERIVED from the captured green head."""
+    waits (exit 75) while anything on the sha still runs. DERIVED from the captured
+    green head: `ci-ok` cancelled, another check still in progress."""
     repo, client, head = _world(tmp_path)
-    client.commit_checks_by_sha[(REPO, head)] = _with("green-head", "ci-ok", conclusion="cancelled")
+    records = _with("green-head", "ci-ok", conclusion="cancelled")
+    other = next(r for r in records if r["name"] != "ci-ok")
+    other.update(status="in_progress", conclusion=None)
+    client.commit_checks_by_sha[(REPO, head)] = records
 
     with pytest.raises(CiPending) as exc:
         verify_ci(repo, client)
 
     assert "ci-ok" in str(exc.value)
+
+
+def test_a_cancelled_gate_nothing_replaces_is_refused_naming_a_rerun(tmp_path: Path) -> None:
+    """Review p1-r1: once nothing on the sha runs, no run will replace the cancelled gate,
+    so `deliver` refuses, naming it and the re-run, rather than wait forever. DERIVED
+    from the captured green head with `ci-ok` cancelled."""
+    repo, client, head = _world(tmp_path)
+    records = _with("green-head", "ci-ok", conclusion="cancelled")
+    client.commit_checks_by_sha[(REPO, head)] = records
+    url = next(r["url"] for r in records if r["name"] == "ci-ok")
+
+    with pytest.raises(CiEvidenceRefused) as exc:
+        verify_ci(repo, client)
+
+    words = str(exc.value)
+    assert "ci-ok" in words and "cancelled" in words and "re-run" in words and url in words
 
 
 def test_an_absent_gate_on_a_finished_head_is_refused(tmp_path: Path) -> None:

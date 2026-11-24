@@ -148,7 +148,7 @@ def _ci_state(
     if absent:
         # A gate not reported yet: a job waiting on others, or a workflow that has not
         # started; CI finished without it only once the head is past the no-CI wait.
-        running = any(c.get("bucket") == "pending" for c in checks)
+        running = any(bucket_verdict(c.get("bucket")) == "pending" for c in checks)
         if running:
             return "pending", (), "gate-pending", absent
         if fresh:

@@ -703,9 +703,15 @@ def _cancelled(check: Mapping[str, Any]) -> bool:
 
 
 def _unreplaced(checks: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
-    """*checks* without each cancelled run another run of its name replaces (R4)."""
-    live = {str(c.get("name")) for c in checks if not _cancelled(c)}
-    return [c for c in checks if not (_cancelled(c) and str(c.get("name")) in live)]
+    """*checks* without each cancelled run another run of its workflow and name replaces
+    (R4): `commit_checks` keeps the latest run per (workflow, name), so a same-named check
+    of another workflow replaces nothing (p1-r4)."""
+
+    def key(c: Mapping[str, Any]) -> tuple[str, str]:
+        return str(c.get("workflow") or ""), str(c.get("name"))
+
+    live = {key(c) for c in checks if not _cancelled(c)}
+    return [c for c in checks if not (_cancelled(c) and key(c) in live)]
 
 
 def slot_check(
@@ -734,7 +740,7 @@ def slot_check(
         missing = tuple(sorted(n for n in required if n not in by_name))
         pending = [n for n in required
                    if n in by_name and any(_state(c) == "pending" for c in by_name[n])]  # fmt: skip
-        cancelled = [n for n in required if n in by_name and all(map(_cancelled, by_name[n]))]
+        cancelled = [n for n in required if n in by_name and any(map(_cancelled, by_name[n]))]
         late = tuple(sorted({*missing, *cancelled})) if overdue else ()
         if failing:
             return SlotCheck("failing", failing), late

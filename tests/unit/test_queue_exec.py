@@ -217,6 +217,16 @@ def test_a_cancelled_check_replaced_by_a_newer_run_reads_as_the_newer_run() -> N
     )
 
 
+def test_a_same_named_check_of_another_workflow_replaces_no_cancel() -> None:
+    """Review p1-r4: `commit_checks` keeps the latest run per (workflow, name), so a
+    cancelled run is replaced only by a run of its own workflow."""
+    other = {"name": "test", "workflow": "other", "status": "completed", "conclusion": "success"}
+    checks = [_check("test", conclusion="cancelled"), other]
+    verdict, late = slot_check(checks, ["test"], built_at=NOW,
+                               now=NOW + timedelta(minutes=61), wait_minutes=60)  # fmt: skip
+    assert verdict.verdict == "pending" and late == ("test",)
+
+
 def test_with_no_required_checks_a_cancelled_check_is_late_after_the_wait() -> None:
     checks = [_check("x"), _check("y", conclusion="cancelled")]
     early = slot_check(checks, [], built_at=NOW, now=NOW, wait_minutes=60)

@@ -337,3 +337,14 @@ def test_the_deliver_line_names_the_coupling() -> None:
 
     assert "settle.conflicts" in DELIVER_LINE and "settle.ci" in DELIVER_LINE
     assert "unrunnable" in DELIVER_LINE
+
+
+def test_a_cancelled_check_counts_as_running_while_a_gate_is_absent() -> None:
+    """Review p1-r2 (spec 2026-11-24-ci-economy R3): with the gate not yet reported, a
+    cancelled check is pending, so the gate reads as pending, never as absent."""
+    from fr.settle.evaluate import _ci_state
+
+    checks = [{"name": "test (1)", "bucket": "cancel"}]
+    state, _, hint, absent = _ci_state(False, checks, ["ci-ok"], ci_none=False,
+                                       age=NO_CI_WAIT_SECONDS + 1)  # fmt: skip
+    assert (state, hint, absent) == ("pending", "gate-pending", ("ci-ok",))

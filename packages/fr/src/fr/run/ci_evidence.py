@@ -433,6 +433,17 @@ def verify_ci(repo_root: Path, client: Any = None, *, now: Callable[[], float] =
         raise CiEvidenceRefused(
             f"tests: ci — on {ci_sha[:12]}, gate check(s) did not succeed: {'; '.join(failed)}"
         )
+    # A cancelled gate is owed a run, not failed (spec 2026-11-24-ci-economy R3). While
+    # anything on the sha still runs, a replacement may be on its way: wait. Once nothing
+    # runs, nothing will replace it: refuse, naming it, rather than wait forever (p1-r1).
+    stranded = [g for g, cs in by_gate.items() if cs and all(_superseded(c) for c in cs)]
+    if stranded and not unfinished and not rerunning:
+        urls = sorted({str(c.get("url")) for g in stranded for c in by_gate[g] if c.get("url")})
+        raise CiEvidenceRefused(
+            f"tests: ci — gate check(s) {', '.join(stranded)} on {ci_sha[:12]} were cancelled "
+            "and no run replaced them: re-run the workflow"
+            f"{' (' + ', '.join(urls) + ')' if urls else ''}, then resolve again."
+        )
     waiting = unfinished + [c for c in checks if c.get("name") in gates and _superseded(c)]
     running = [
         g for g, cs in by_gate.items() if any(not _finished(c) or _superseded(c) for c in cs)

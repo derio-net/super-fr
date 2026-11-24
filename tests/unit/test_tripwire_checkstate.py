@@ -13,6 +13,7 @@ import ast
 from pathlib import Path
 
 import pytest
+from fr.checkstate import FAILED_STATES
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "packages" / "fr" / "src"
@@ -21,10 +22,13 @@ EXEMPT = {
     SRC / "fr" / "real_ghclient.py",
     SRC / "fr" / "real_glabclient.py",
 }
-PAIRS = (("cancel", "fail"), ("cancelled", "failure"))
+# A cancelled word beside any failed state or bucket is a second rule (p1-r3): the failed
+# side is `fr.checkstate.FAILED_STATES` plus the `gh pr checks` bucket `fail`.
+CANCELLED_WORDS = frozenset({"cancel", "cancelled", "canceled"})
+FAILED_WORDS = frozenset(FAILED_STATES | {"fail"})
 
 
-def _strings(node: ast.Set | ast.Tuple) -> set[str]:
+def _strings(node: ast.Set | ast.Tuple | ast.List) -> set[str]:
     return {
         e.value.lower()
         for e in node.elts
@@ -33,13 +37,14 @@ def _strings(node: ast.Set | ast.Tuple) -> set[str]:
 
 
 def check_state_sets(source: str) -> list[int]:
-    """The line of every set, frozenset or tuple literal holding a cancelled check state
-    beside a failed one (any case). `frozenset({...})` is a set literal inside a call."""
+    """The line of every set, frozenset, tuple or list literal holding a cancelled check
+    state beside any failed one (any case). `frozenset({...})` is a set literal inside a
+    call."""
     found = []
     for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Set | ast.Tuple):
+        if isinstance(node, ast.Set | ast.Tuple | ast.List):
             values = _strings(node)
-            if any(a in values and b in values for a, b in PAIRS):
+            if values & CANCELLED_WORDS and values & FAILED_WORDS:
                 found.append(node.lineno)
     return found
 
@@ -52,6 +57,10 @@ def check_state_sets(source: str) -> list[int]:
         'X = ("failure", "cancelled")',
         'if b in {"fail", "cancel"}: pass',
         'X = frozenset(("Cancelled", "Failure"))',
+        'X = {"CANCELLED", "TIMED_OUT", "ERROR"}',
+        'X = ["cancelled", "stale"]',
+        'X = ["fail", "cancel"]',
+        'X = {"canceled", "failed"}',
     ],
 )
 def test_the_detector_finds_a_check_state_set(source: str) -> None:
@@ -64,7 +73,6 @@ def test_the_detector_finds_a_check_state_set(source: str) -> None:
         'X = frozenset({"merged", "partial", "cancelled", "abandoned"})',
         'X = ("cancelled", "abandoned")',
         'X = {"fail", "pending", "pass"}',
-        'X = ["fail", "cancel"]',
     ],
 )
 def test_the_detector_leaves_batch_stages_and_other_sets_alone(source: str) -> None:
