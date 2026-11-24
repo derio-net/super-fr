@@ -71,16 +71,18 @@ rows:
     verify: candidate
   - id: s1-triage-state-home
     capability: triage
-    acceptance: A triage scope keeps its working state in the host cache and its durable
-      state on its fr-triage branch by default (the repo itself, the org's state repo,
-      or the stealth tracking repo), a repo can name another state repo in .fr/settings.yaml,
-      an existing .fr/triage-state is moved unless a live driver holds it, and the privacy
-      guard still refuses a private issue in a public state repo
+    acceptance: A triage scope keeps its working state in a host-cache git repository
+      that syncs its fr-triage branch with no product clone, moves an existing .fr/triage-state
+      safely (refused while a driver runs or when two copies differ), defaults its state
+      repo (stealth tracking repo, else the one repo, else asked), honours a repo's
+      triage.state_repo, and the privacy guard still refuses a private issue in a public
+      state repo
     origin:
-    - spec:2026-11-19-event-driven-a-la-carte#R12
-    - spec:2026-11-19-event-driven-a-la-carte#R13
-    - spec:2026-11-19-event-driven-a-la-carte#R14
-    - spec:2026-11-19-event-driven-a-la-carte#R15
+    - spec:2026-11-19-event-driven-a-la-carte#R17
+    - spec:2026-11-19-event-driven-a-la-carte#R18
+    - spec:2026-11-19-event-driven-a-la-carte#R19
+    - spec:2026-11-19-event-driven-a-la-carte#R20
+    - spec:2026-11-19-event-driven-a-la-carte#R21
     levels: {}
     status: not-implemented
     notes: ''
