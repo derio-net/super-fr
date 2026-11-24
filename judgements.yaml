@@ -8913,6 +8913,8 @@ batches:
     pr: 1568
     head: de1f1337afb4dbc0f5fb9ca2e6cb7599dd2fb716
     patch_id: 4e07aa3bc67025a39a1929638fd89a27b5fca0da
+  - kind: post_merge
+    at: '2026-11-24T19:59:42.100566Z'
 - id: dispatch-safety
   title: 'Dispatch safety: no submission past a failed dedup, no symlinked content in cncd payloads'
   ids:
@@ -10179,3 +10181,8 @@ queues:
     patch_id: 4e07aa3bc67025a39a1929638fd89a27b5fca0da
     base: 11c158e462514cd2a7a8d21553561ddeae8b9d4d
     parent: 11c158e462514cd2a7a8d21553561ddeae8b9d4d
+  - kind: queue_land
+    at: '2026-11-24T19:59:07.844670Z'
+    main: 68902f6bb2d3054c43e9095ee36fcf1a398cdf02
+    entries:
+    - batch: run-durability
