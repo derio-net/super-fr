@@ -38,8 +38,9 @@ def _doc(schema: int, *events: dict[str, Any]) -> dict[str, Any]:
         "schema": schema,
         "tiers": [{"n": 1, "title": "Now"}],
         "issues": {"super-fr#1": {"tier": 1}},
-        "batches": [{"id": "b", "title": "t", "ids": ["super-fr#1"], "wave": 1,
-                     "events": list(events)}],  # fmt: skip
+        "batches": [
+            {"id": "b", "title": "t", "ids": ["super-fr#1"], "wave": 1, "events": list(events)}
+        ],  # fmt: skip
     }
 
 
@@ -54,7 +55,9 @@ def test_a_conflict_event_defaults_to_no_onto_and_no_reissue() -> None:
     assert event.onto is None and event.reissue is False
 
 
-@pytest.mark.parametrize("over", [{"onto": ONTO}, {"reissue": True}, {"onto": ONTO, "reissue": True}])
+@pytest.mark.parametrize(
+    "over", [{"onto": ONTO}, {"reissue": True}, {"onto": ONTO, "reissue": True}]
+)
 def test_a_conflict_onto_or_reissue_in_a_file_stamped_13_is_refused(over: dict[str, Any]) -> None:
     with pytest.raises(ValidationError, match="schema 14"):
         Judgements.model_validate(_doc(13, _conflict(**over)))
