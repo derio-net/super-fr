@@ -217,3 +217,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-24-batch-merge-readiness-p1 created=2026-11-24T22:40:00+00:00 -->
 ### tier-2026-11-24-batch-merge-readiness-p1 · decision · hard: phase 1 changes the merge gate every queue admission and driver merge relies on, and the facts schema
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-batch-merge-readiness-p2 created=2026-11-24T22:40:02+00:00 -->
+### phase-split-2026-11-24-batch-merge-readiness-p2 · decision · ask: the Batches page verdict (R5-R8) is its own reviewable ask
