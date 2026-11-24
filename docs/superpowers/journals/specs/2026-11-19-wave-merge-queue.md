@@ -559,3 +559,10 @@ Evidence: 2026-11-24: tests/integration/test_queue_build.py, test_queue_land.py 
 Step: The same wave under `squash`: after landing, each PR's head is its squashed commit, every commit's subject is `<title> (#n)`, and the fake forge, reading reachability, reports all three merged. Under `merge` the subjects are `Merge pull request #n …` and the heads are unchanged. (R5, R10)
 
 Evidence: 2026-11-24: tests/integration/test_queue_land.py, test_queue_resume.py (squash/merge subjects and reachability); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-11-24T12:40:32+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: Lease failure, under both `squash` and `merge`: a session pushes to b between build and land; the atomic push lands nothing and moves no ref; the next pass rebuilds. A server that refuses `--atomic` holds the queue. (R10, R22)
+
+Evidence: 2026-11-24: tests/integration/test_queue_errors.py, test_queue_land.py (atomic push, lease failure, refused --atomic holds); full wave-queue unit (542) + integration (134) + scenario (3) runs green
