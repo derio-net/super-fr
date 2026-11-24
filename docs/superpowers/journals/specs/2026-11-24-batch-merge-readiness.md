@@ -220,3 +220,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-batch-merge-readiness-p2 created=2026-11-24T22:40:02+00:00 -->
 ### phase-split-2026-11-24-batch-merge-readiness-p2 · decision · ask: the Batches page verdict (R5-R8) is its own reviewable ask
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-batch-merge-readiness-p3 created=2026-11-24T22:40:05+00:00 -->
+### phase-split-2026-11-24-batch-merge-readiness-p3 · decision · ask: gc keeping a running run (R9) is its own ask in isolation code
