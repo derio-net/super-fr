@@ -1,0 +1,119 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Location-stamped kinds and the migration (R9-R14)
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+  acceptance:
+  - s1-migration
+  tier: hard
+  files:
+  - packages/fr/src/fr/artifacts/**
+  - packages/fr/src/fr/config/**
+  - packages/fr/src/fr/models.py
+  - packages/fr/src/fr/tracker/model.py
+  - packages/fr/src/fr/plan_config.py
+  - packages/fr/src/fr/repair.py
+  - packages/fr/src/fr/migrate.py
+  - packages/fr/src/fr/repos.py
+  - packages/fr/src/fr/commands/**
+  - packages/fr/src/fr/isolation/**
+  - packages/fr/src/fr/services/**
+  - packages/fr/src/fr/ops/**
+  - packages/fr/src/fr/workflow/**
+  - packages/fr/src/fr/verification/**
+  - packages/fr/src/fr/triage/ledger.py
+  - packages/fr/src/fr/placement/stealth.py
+  - packages/fr/src/fr/data/validate-plans.sh
+  - scripts/validate-plans.sh
+  - scripts/sync-opencode.py
+  - .devcontainer/fr-profiles.yaml
+  - .fr/**
+  - docs/superpowers/journals/specs/2026-11-19-event-driven-a-la-carte.md
+  - tests/**/*.py
+  estimate_lines: 1500
+tasks:
+- number: 1
+  title: Framework support for relocating hops
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: `tests/unit/test_migration_relocate.py` with a toy registered kind: `ArtifactKind.locators=(old, new)` gives stamp 1 at the old path and 2 at the new; a `SchemaMigration(..., relocates=True)` hop stages `PlannedAction.moved_to`, the runner writes no stamp, accepts the source gone, validates at the destination, and the commit holds a rename (`git log --follow` sees it); a relocating hop that is not the last hop is allowed; a destination that already exists refuses that artifact (R12) and the rest migrate.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: implement in `fr/artifacts/registry.py` and `fr/artifacts/runner.py`; keep `retires` semantics unchanged. The existing runner tests stay green.
+  - id: P4.T1.S3
+    text: |-
+      RED then GREEN: cross-space hops (R10): with a fake configuration-space checkout, the hop writes and commits the destination there and pushes it before staging the product deletion; a refused push leaves the product file byte-identical and reports that artifact's failure.
+- number: 2
+  title: The moved kinds (R9)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: per kind (`workflow-config`, `verification-config`, `models-config`, `trackers-config`, `plan-config`, `settings-location`, `quiet-config`, `isolation-allow`), a migration test moves the old path to its destination under repo (one `chore(fr): migrate` commit), under quiet (fr-config first, product second) and under stealth; `isolation-allow` stays in its checkout and is renamed without a commit when untracked; `profiles` 2 → 3 relocates to `.fr/profiles.yaml` writing `schema_version: 3`, a `.fr/profiles.yaml` at `schema_version: 2` with no old file is finished, and the chain test asserts 1 → 2 → 3 hop by hop.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: register the kinds and hops in `fr/artifacts/` (a module imported by `fr/artifacts/__init__.py`); move the five `_TABLE` rows to `.fr/` and delete `REPO_CONFIG_KINDS`; point `kind_dir`, `search_roots` and `settings_cmd`'s path answers at `config_space`; move the `profiles` locator; each kind's validator is its existing reader (`fr workflow check`, `fr verification check`, `load_models`, the trackers loader, the plan-config loader, `validate_profiles`, the settings model, a glob check).
+  - id: P4.T2.S3
+    text: |-
+      GREEN: move the hard-coded copies: `scripts/validate-plans.sh` and `packages/fr/src/fr/data/validate-plans.sh` (`FR_PLAN_CONFIG_FILE` tries `.fr/plan-config.yaml`, then the old path), `scripts/sync-opencode.py`'s `AGENTS_MODELS_REL`, `fr/migrate.py`'s plan-config path, `ops/gate.py`'s `PROFILES_FILE`, every `profiles_config` reader; `stealth.FR_OWNED_PATHS` keeps the old entries and adds none (`.fr/` is already there).
+- number: 3
+  title: The transition and the owed end (R13, R14)
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: a reader of each moved kind finds the file only at its old path, uses it, and prints `fr: <old> is at its old location; run fr migrate artifacts --yes` once per process.
+  - id: P4.T3.S2
+    text: |-
+      GREEN: `fr.config.space.legacy(rel)` and its use in every reader; then record R14: `uv run fr journal add --scope spec --slug 2026-11-19-event-driven-a-la-carte --kind owed --id s1-refuse-old-paths --title "Refuse the old configuration paths and drop the legacy settings copy" --body "S1 (R13, R6) reads old paths with a notice and writes the legacy settings file; the release after S1's minor turns both into a refusal (fr.config.space.legacy, write_settings)."` (filed at deliver under #1653).
+- number: 4
+  title: Dogfood the migration
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      Run `uv run fr migrate artifacts` (preview) then `uv run fr migrate artifacts --yes` in this workspace: this repo's `.devcontainer/fr-profiles.yaml` moves to `.fr/profiles.yaml` and any `docs/superpowers/{models,trackers,plan-config}.yaml` or `workflows/`/`verifications/` move to `.fr/`. `uv run fr validate artifacts` is clean and `uv run pytest --fr-scope -n 2 -q --no-cov` is green.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

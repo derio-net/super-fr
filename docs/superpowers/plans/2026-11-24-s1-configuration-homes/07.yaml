@@ -1,0 +1,73 @@
+schema_version: 2
+phase:
+  number: 7
+  title: The configuration-homes scenario, pages and mirrors (Test Plan, section H)
+  tag: agentic
+  depends_on:
+  - 3
+  - 4
+  - 5
+  - 6
+  tracking_issue: null
+  acceptance:
+  - s1-config-root
+  - s1-switch-moved
+  - s1-executable-config-protection
+  - s1-migration
+  - s1-shipped-defaults
+  - s1-triage-state-home
+  tier: standard
+  files:
+  - tests/scenarios/**
+  - tests/integration/test_scenarios.py
+  - docs/**/*.md
+  - AGENTS.md
+  - README.md
+  - plugins/super-fr/skills/**
+  - plugins/super-fr/rules/**
+  - .claude/rules/fr-isolation-required.md
+  - .opencode/**
+  - .hermes/**
+  - docs/acceptance/features/2026-11-19-event-driven-a-la-carte.yaml
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: The scenario
+  steps:
+  - id: P7.T1.S1
+    text: |-
+      Write `tests/scenarios/config-homes.sh` (shape of the existing scenarios, run by `tests/integration/test_scenarios.py`): build fixture repos with local bare remotes under repo, quiet and stealth, each holding every old path; run the installed candidate's `fr migrate artifacts --yes`, then `fr settings paths --shell`, `fr workflow check`, `fr verification list`, a walk refused under quiet against a stub forge answering not-enforced, and a `fr triage collect --offline`-style state check that finds the cache repository and its branch; each step asserts its expected output. Add its test to `test_scenarios.py`; run it with `uv run pytest tests/integration/test_scenarios.py -m "" -q --no-cov -k config_homes` — green.
+  - id: P7.T1.S2
+    text: |-
+      Point every S1 row at the scenario: `uv run fr acceptance set-status --feature 2026-11-19-event-driven-a-la-carte --id <row> --status not-implemented --scenario tests/scenarios/config-homes.sh --notes "candidate walk scenario"` for each of the six rows, plus each row's unit `--level` refs from P1-P6.
+- number: 2
+  title: Pages, skills, rules and mirrors
+  steps:
+  - id: P7.T2.S1
+    text: |-
+      Update the pages of spec section H (`docs/explainers/01-fr-goal.md`, `index.md`, `why-fr.md`, `fr-triage.md`, `fr-isolation.md`, `docs/reference/workflow-shapes.md`, `components.md`, `docs/review-lenses.md`, `docs/verification-strategies.md`) and `AGENTS.md` for the new paths, the fr-config branch and protection rule, the defaults tree and the triage cache; fix their `covers:` globs and `reviewed:` stamps; `uv run fr docs check --base origin/main` exits 0.
+  - id: P7.T2.S2
+    text: |-
+      Update the `fr-init`, `fr-isolation` and `fr-goal` skills and both copies of the `fr-isolation-required` rule (`plugins/super-fr/rules/`, `.claude/rules/`, hand-kept) for `.fr/isolation-allow`, `.fr/profiles.yaml`, `.fr/workflows/` and the configuration branch; run `uv run --no-project python scripts/sync-opencode.py`, `scripts/sync-hermes.py`, `scripts/sync-readme.py`; their `--check` modes and `uv run fr harness parity --check` exit 0; `uv run pytest --fr-scope -n 2 -q --no-cov` green.
+state:
+  steps:
+    P7.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P7.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

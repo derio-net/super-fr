@@ -1,0 +1,64 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Executable configuration behind verified protection (R7)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - s1-executable-config-protection
+  tier: standard
+  files:
+  - packages/fr/src/fr/config/**
+  - packages/fr/src/fr/ghclient.py
+  - packages/fr/src/fr/real_ghclient.py
+  - packages/fr/src/fr/real_ghrestclient.py
+  - packages/fr/src/fr/verification/walk.py
+  - packages/fr/src/fr/triage/gitseam.py
+  - packages/fr/src/fr/triage/queue_exec.py
+  - packages/fr/src/fr/ops/**
+  - tests/**/*.py
+  - tests/fixtures/github_rest/**
+  estimate_lines: 500
+tasks:
+- number: 1
+  title: The protection answer
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: `tests/unit/test_config_protection.py`: `branch_protection(client, repo, branch)` answers `Enforced` for a `rules/branches/<b>` reply holding a `pull_request` rule; `NotEnforced(reason)` for the free-plan 403 (`_plan_lacks_rulesets`), a 404, a reply with no `pull_request` rule, an unparseable reply, and a client without the rules read (GitLab, Gitea); the answer is cached per process. Fixtures under `tests/fixtures/github_rest/` captured shape, RFC 2606 names.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: add `branch_rules(repo, branch)` to the `GhClient` protocol and both real clients (the REST one already reads `rules/branches` for required checks; reuse it), and `fr/config/protection.py` with `branch_protection` and the reason strings.
+- number: 2
+  title: Every executor asks first
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: under quiet with `NotEnforced`, `fr verification walk` refuses before running `.fr/candidate-install`; the driver's `post_merge` and version commands (`triage/gitseam.py`) refuse; `fr ops apply`/`fr ops gate` probes refuse; the queue refuses to gate on `.fr/ci.yaml`'s `gate_checks` and reports `queue-held` with the reason. Each message names the reason and the fix ("protect fr-config with a ruleset requiring pull requests; GitHub needs a public repo or a paid plan for a private one"). Under repo, nothing asks.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: one guard `fr.config.protection.require_protected(space, client, what)` called at each executor; under `repo` it returns at once. Tests green; `uv run pytest --fr-scope -n 2 -q --no-cov` green.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

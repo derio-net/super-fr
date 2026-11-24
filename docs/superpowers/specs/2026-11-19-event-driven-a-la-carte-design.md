@@ -365,3 +365,9 @@ gate: developer
   candidate, migrates fixture repos holding every old path under repo, quiet and stealth (with local
   bare remotes), and runs `fr settings paths`, `fr workflow check`, `fr verification list` and a
   triage collect against them (every row above).
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-24-s1-configuration-homes | `derio-net/super-fr` | `2026-11-24-s1-configuration-homes` | — |
