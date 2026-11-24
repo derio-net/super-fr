@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from fr.artifacts.paths import KIND_DIRS
+from fr.config.space import SPACE_DIR
 from fr.ghclient import UnsupportedForgeOperation
 from fr.journal.model import (
     JournalEntry,
@@ -615,7 +616,7 @@ def apply_phase(gate: Gate, phase: str) -> None:
 def _head_paths(t: GateTarget, spec_rel: str) -> list[str]:
     """What the ops-gap check reads at the PR head (spec 2026-11-01-ops-gate-probes §A),
     plus the run's own spec when it lives elsewhere."""
-    paths = [KIND_DIRS["spec"], t.plan_rel, KIND_DIRS["acceptance-fragment"], ".fr"]
+    paths = [KIND_DIRS["spec"], t.plan_rel, KIND_DIRS["acceptance-fragment"], SPACE_DIR]
     return paths if spec_rel.startswith(f"{KIND_DIRS['spec']}/") else [*paths, spec_rel]
 
 

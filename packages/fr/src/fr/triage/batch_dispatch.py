@@ -15,6 +15,7 @@ from collections.abc import Iterable, Sequence
 import yaml
 from pydantic import ValidationError
 
+from fr.config.space import rel
 from fr.settle.managed import MANAGED_SENTENCE
 from fr.triage.batch import (
     batch_branch,
@@ -40,7 +41,7 @@ LIVE_STAGES = frozenset({"dispatched", "pr-open"})
 # `dispatch --yes` may start a batch only from these (§3.C step 6.1).
 DISPATCHABLE = frozenset({"proposed", "cancelled", "abandoned"})
 
-TRIAGE_CONFIG_PATH = ".fr/triage.yaml"
+TRIAGE_CONFIG_PATH = rel("triage")
 
 CLOUD_PREFLIGHT_RUNNERS = frozenset({"claude-cloud"})
 """Runners whose sessions do not load the plugin's agents before their first turn (a

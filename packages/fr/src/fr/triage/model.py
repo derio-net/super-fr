@@ -33,6 +33,7 @@ from pydantic import (
     model_validator,
 )
 
+from fr.config.space import PRODUCT_TRIAGE_STATE
 from fr.gates import Gate
 from fr.isolation.types import _home
 from fr.triage.errors import TriageError
@@ -208,7 +209,7 @@ class Scope:
         return self.target.split("/", 1)[0]
 
 
-STATE_EXCLUDE = ".fr/triage-state/"
+STATE_EXCLUDE = f"{PRODUCT_TRIAGE_STATE}/"
 """The `info/exclude` line that keeps every scope's workspace state out of git (R4)."""
 
 
@@ -255,7 +256,7 @@ def state_dir(
             f"{workspace} is in no git clone, and --workspace names the clone that holds the "
             "state: pass a clone, or --dir to name a directory outright"
         )
-    target = root / ".fr" / "triage-state" / scope.name
+    target = root / PRODUCT_TRIAGE_STATE / scope.name
     if not prepare:
         return target  # pure resolution: no exclude update or legacy import
     gitseam.ensure_excluded(root, STATE_EXCLUDE)

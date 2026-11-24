@@ -24,6 +24,7 @@ from pathlib import Path
 import yaml
 
 from fr.artifacts.paths import KIND_DIRS
+from fr.config.space import SPACE_DIR
 from fr.triage.batch_drive import RUNS_DIR, GatedRow, find_run
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout
@@ -32,7 +33,7 @@ ARCHIVED_RUNS_DIR = KIND_DIRS["run-archived"]
 
 EXIT_INPUTS = (
     KIND_DIRS["acceptance-fragment"],
-    ".fr",
+    SPACE_DIR,
     KIND_DIRS["verification"],
     KIND_DIRS["workflow"],
 )

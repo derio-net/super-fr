@@ -22,11 +22,12 @@ from typing import Any, Final, Literal
 import yaml
 from pydantic import BaseModel
 
+from fr.config.space import rel
 from fr.git import GitRefusal, GitUnavailableError, git_answer, remote_default_ref, remote_name
 from fr.settings import SettingsError
 from fr.settings.model import PLACEMENTS, Settings, parse_settings
 
-SETTINGS_PATH: Final = ".fr/settings.yaml"
+SETTINGS_PATH: Final = rel("settings")
 SERVABLE_PLACEMENTS: Final = frozenset({"repo", "quiet", "stealth"})
 """The placements this fr can serve."""
 

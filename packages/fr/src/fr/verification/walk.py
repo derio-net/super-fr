@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from fr.config.space import rel
 from fr.verification.effective import install_problem
 from fr.verification.model import StrategyManifest
 
@@ -54,7 +55,7 @@ __all__ = [
 ]
 
 WALK_SCHEMA = 1
-CANDIDATE_INSTALL = ".fr/candidate-install"
+CANDIDATE_INSTALL = rel("candidate-install")
 STEP_TIMEOUT_SECONDS = 1800
 SMOKE_VERSION = "smoke:version"
 SMOKE_STATUS = "smoke:status"

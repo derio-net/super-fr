@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fr.artifacts.paths import emitted_path
-from fr.config.space import rel
+from fr.config.space import rel as config_rel
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
@@ -104,7 +104,7 @@ section must still pass `missing_sections` (spec 2026-11-12-review-lenses R12)."
 
 _CLOSED_OUT = frozenset({"out-of-scope", "deferred"})
 
-LENS_CONFIG = rel("lenses")
+LENS_CONFIG = config_rel("lenses")
 """The repo's lens config, `.fr/lenses.yaml` in its configuration space."""
 
 

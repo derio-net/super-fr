@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import urlparse
 
 from fr.artifacts import paths
+from fr.config.space import SPACE_DIR
 from fr.settings import SettingsError
 
 if TYPE_CHECKING:
@@ -443,7 +444,7 @@ def tracking_root(space: paths.ArtifactSpace) -> Path:
 
 FR_OWNED_PATHS: Final = (
     *(f"{d}/" for d in paths.ARTIFACT_TREES),
-    ".fr/",
+    f"{SPACE_DIR}/",
     ".fr-isolation",
     ".claude/agents/fr-",
     ".claude/rules/acceptance-matrix.md",

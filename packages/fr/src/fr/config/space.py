@@ -33,10 +33,14 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Final
 
-from fr.artifacts import paths
-
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+_REPO: Final = "repo"
+_QUIET: Final = "quiet"
+_STEALTH: Final = "stealth"
+"""The placements (`fr.artifacts.paths.REPO`, `QUIET`, `STEALTH`), named here so that
+importing this module pulls in nothing: settings and lens parsing import it."""
 
 SPACE_DIR: Final = ".fr"
 """The configuration directory's name at the root of every configuration space."""
@@ -157,7 +161,7 @@ class ConfigSpace:
         """Where reads at the configuration branch run: the product clone under quiet (the
         `fr-config` worktree is a worktree of it, so it shares the object store and the
         remote-tracking ref), the configuration clone under stealth (None until it exists)."""
-        if self.placement == paths.QUIET:
+        if self.placement == _QUIET:
             return self.product
         return self.checkout if (self.checkout / ".git").exists() else None
 
@@ -207,14 +211,14 @@ def config_space(root: Path) -> ConfigSpace:
     The placement is read as `fr.artifacts.paths.outside_repo` reads it (the marker, then
     the switch), never creating a worktree or asking a tracking repo: a configuration read
     must not have side effects."""
+    from fr.artifacts.paths import outside_repo
+
     root = Path(root)
-    placement = paths.outside_repo(root) or paths.REPO
-    if placement == paths.QUIET:
+    placement = outside_repo(root) or _REPO
+    if placement == _QUIET:
         checkout = quiet_checkout(root)
-        space = ConfigSpace(
-            paths.QUIET, checkout / SPACE_DIR, checkout, root, f"origin/{CONFIG_BRANCH}"
-        )
-    elif placement == paths.STEALTH:
+        space = ConfigSpace(_QUIET, checkout / SPACE_DIR, checkout, root, f"origin/{CONFIG_BRANCH}")
+    elif placement == _STEALTH:
         from fr.placement.stealth import marker_tracking, worktree_path
 
         found = marker_tracking(root)
@@ -222,7 +226,7 @@ def config_space(root: Path) -> ConfigSpace:
         ref, target = found
         checkout = stealth_checkout(root, worktree_path(root, ref))
         space = ConfigSpace(
-            paths.STEALTH,
+            _STEALTH,
             checkout / target / SPACE_DIR,
             checkout,
             root,
@@ -230,7 +234,7 @@ def config_space(root: Path) -> ConfigSpace:
             f"{target}/{SPACE_DIR}",
         )
     else:
-        return ConfigSpace(paths.REPO, root / SPACE_DIR, root, root)
+        return ConfigSpace(_REPO, root / SPACE_DIR, root, root)
     _notice_ignored(root, placement)
     return space
 
@@ -266,3 +270,24 @@ def _notice_ignored(root: Path, placement: str) -> None:
             f"{', '.join(files)}",
             file=sys.stderr,
         )
+
+
+QUIET_SWITCH_LINE: Final = "placement: quiet"
+"""The canonical switch line (`fr.placement.quiet.switch_spelling_problem`)."""
+
+
+def forge_ref(client: object, repo: str) -> str | None:
+    """The ref a forge-side reader reads *repo*'s `.fr/<file>` at (R1): `fr-config` when
+    that branch's `.fr/settings.yaml` carries a quiet switch, else None (the default
+    branch). A branch that is absent, or a forge that cannot read a file at a ref, is no
+    switch: the default branch, as every forge-side reader read before S1."""
+    reader = getattr(client, "read_file_at_ref", None)
+    if reader is None:
+        return None
+    try:
+        text = reader(repo=repo, path=rel("settings"), ref=CONFIG_BRANCH)
+    except Exception:  # noqa: BLE001 — every backend's error reads as "no switch"
+        return None
+    if not isinstance(text, str):
+        return None
+    return CONFIG_BRANCH if QUIET_SWITCH_LINE in text.splitlines() else None
