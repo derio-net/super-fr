@@ -141,10 +141,10 @@ acceptance:
     or the default branch for the first entry) to merge, and is re-issued free of budget when an ejection
     ahead or a foreign move makes that commit stop leading to main.
   origin:
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R1
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R2
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R3
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R5
+  - spec:2026-11-24-wave-queue-gaps#R1
+  - spec:2026-11-24-wave-queue-gaps#R2
+  - spec:2026-11-24-wave-queue-gaps#R3
+  - spec:2026-11-24-wave-queue-gaps#R5
   status: not-implemented
   verify: none
 - id: wave-queue-handback-carry
@@ -152,7 +152,7 @@ acceptance:
   acceptance: A PR whose head carries a queue combination commit that no longer leads to main is never
     built and is briefed once to reset, force-with-lease push and merge the new commit.
   origin:
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R4
+  - spec:2026-11-24-wave-queue-gaps#R4
   status: not-implemented
   verify: none
 - id: wave-queue-overlap-report
@@ -161,10 +161,10 @@ acceptance:
     expected change sets overlap outside generated and version files, with both remedies, and the later
     batch's dispatch brief names the overlap.
   origin:
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R6
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R7
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R8
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R9
+  - spec:2026-11-24-wave-queue-gaps#R6
+  - spec:2026-11-24-wave-queue-gaps#R7
+  - spec:2026-11-24-wave-queue-gaps#R8
+  - spec:2026-11-24-wave-queue-gaps#R9
   status: not-implemented
   verify: none
 - id: wave-queue-operator-entry
@@ -173,12 +173,12 @@ acceptance:
     an allowed author; the PR enters the open queue (or opens a between-waves one) under approved-fr pinned
     to its patch-id, and the wave's drain and release wait for it.
   origin:
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R10
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R11
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R12
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R14
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R15
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R16
+  - spec:2026-11-24-wave-queue-gaps#R10
+  - spec:2026-11-24-wave-queue-gaps#R11
+  - spec:2026-11-24-wave-queue-gaps#R12
+  - spec:2026-11-24-wave-queue-gaps#R14
+  - spec:2026-11-24-wave-queue-gaps#R15
+  - spec:2026-11-24-wave-queue-gaps#R16
   status: not-implemented
   verify: none
 - id: wave-queue-operator-preapproval
@@ -186,7 +186,7 @@ acceptance:
   acceptance: A PR added with --preapproved gets approved-fr from the driver, pinned to its patch-id,
     whenever its own head is green and conflict-free, for as long as it stays added.
   origin:
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R13
+  - spec:2026-11-24-wave-queue-gaps#R13
   status: not-implemented
   verify: none
 - id: wave-queue-gaps-live
@@ -194,9 +194,9 @@ acceptance:
   acceptance: In a real wave on this repo, a hand-back merged onto the slot commit lands with no second
     conflict, and an operator-added PR ships in the wave's release.
   origin:
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R1
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R14
-  - derio-net/super-fr:docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md#R15
+  - spec:2026-11-24-wave-queue-gaps#R1
+  - spec:2026-11-24-wave-queue-gaps#R14
+  - spec:2026-11-24-wave-queue-gaps#R15
   status: walk-owed
   verify: live
 emitted:
