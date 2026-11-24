@@ -1,0 +1,524 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>fr meets Pocock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column (~70ch) with diagrams breaking wider; three verdict colours carry meaning everywhere. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #1a1e24;
+  --muted: #5b6370;
+  --rule: #d5dae2;
+  --compat: #2f7a4d;
+  --clash: #b9471a;
+  --enhance: #2b5fc7;
+  --compat-soft: #e3f1e8;
+  --clash-soft: #f8e6dd;
+  --enhance-soft: #e3ebfa;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --body: "Public Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151a; --surface: #1a1f26; --fg: #e6e9ee; --muted: #9aa3b0; --rule: #313844;
+    --compat: #6cc892; --clash: #f08a5a; --enhance: #82a8ff;
+    --compat-soft: #1b2e23; --clash-soft: #33221a; --enhance-soft: #1c2740;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151a; --surface: #1a1f26; --fg: #e6e9ee; --muted: #9aa3b0; --rule: #313844;
+  --compat: #6cc892; --clash: #f08a5a; --enhance: #82a8ff;
+  --compat-soft: #1b2e23; --clash-soft: #33221a; --enhance-soft: #1c2740;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.6 var(--body); padding-inline: 16px; padding-block: 40px 80px; }
+main { max-width: 1120px; margin: 0 auto; display: grid; gap: 56px; }
+.prose { max-width: 70ch; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3.1rem); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.6rem; font-weight: 700; }
+h3 { font-size: 1.1rem; font-weight: 600; }
+p { margin: 0; }
+section { display: grid; gap: 18px; }
+.eyebrow { font: 600 0.75rem/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 1.12rem; color: var(--fg); }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px 22px; font-size: 0.92rem; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+.sw.c { background: var(--compat); } .sw.x { background: var(--clash); } .sw.e { background: var(--enhance); }
+
+figure { margin: 0; display: grid; gap: 10px; }
+.fig-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; }
+.fig-scroll svg { display: block; width: 100%; height: auto; min-width: 720px; }
+figcaption { color: var(--muted); font-size: 0.93rem; max-width: 80ch; }
+
+/* SVG classes (styled from the page, not from inside the SVG) */
+svg { color: var(--fg); font-family: var(--body); }
+.bx { fill: var(--surface); stroke: var(--rule); stroke-width: 1.2; }
+.bx-dash { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 4 4; }
+.band { fill: var(--bg); stroke: var(--rule); stroke-width: 1; }
+.t { fill: var(--fg); font-size: 12px; }
+.tb { fill: var(--fg); font-size: 12.5px; font-weight: 600; font-family: var(--mono); }
+.tm { fill: var(--muted); font-size: 11px; }
+.th { fill: var(--muted); font-size: 11px; font-family: var(--mono); letter-spacing: 0.08em; }
+.ln { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+.ln-c { stroke: var(--compat); stroke-width: 2.4; fill: none; }
+.ln-x { stroke: var(--clash); stroke-width: 2.4; fill: none; }
+.ln-e { stroke: var(--enhance); stroke-width: 2.4; fill: none; }
+.ln-e-d { stroke: var(--enhance); stroke-width: 2; fill: none; stroke-dasharray: 5 4; }
+.pill-c { fill: var(--compat-soft); stroke: var(--compat); }
+.pill-x { fill: var(--clash-soft); stroke: var(--clash); }
+.pill-e { fill: var(--enhance-soft); stroke: var(--enhance); }
+.pt-c { fill: var(--compat); font: 600 11px var(--mono); }
+.pt-x { fill: var(--clash); font: 600 11px var(--mono); }
+.pt-e { fill: var(--enhance); font: 600 11px var(--mono); }
+.hi { fill: var(--enhance-soft); stroke: var(--enhance); stroke-width: 1.6; }
+.hi-t { fill: var(--enhance); font-size: 12.5px; font-weight: 600; font-family: var(--mono); }
+.dot-m { fill: var(--clash); } .dot-f { fill: var(--compat); } .dot-h { fill: var(--enhance); }
+.ring-h { fill: none; stroke: var(--enhance); stroke-width: 1.6; stroke-dasharray: 4 3; }
+.ah { fill: var(--muted); } .ah-e { fill: var(--enhance); }
+.win-m { fill: var(--clash-soft); stroke: var(--clash); stroke-width: 1.2; }
+.win-f { fill: var(--compat-soft); stroke: var(--compat); stroke-width: 1.2; }
+.rail { stroke: var(--compat); stroke-width: 3; }
+
+/* verdict lists */
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; align-items: start; }
+.col { display: grid; gap: 12px; min-width: 0; }
+.col h3 { display: flex; align-items: center; gap: 10px; }
+.item { background: var(--surface); border: 1px solid var(--rule); border-left-width: 4px; border-radius: 8px; padding: 12px 14px; display: grid; gap: 6px; min-width: 0; }
+.col.c .item { border-left-color: var(--compat); }
+.col.x .item { border-left-color: var(--clash); }
+.col.e .item { border-left-color: var(--enhance); }
+.item b { font-family: var(--display); font-weight: 600; font-size: 1rem; }
+.item p { font-size: 0.92rem; color: var(--muted); }
+.item p strong { color: var(--fg); font-weight: 600; }
+.item q { font-style: italic; }
+
+/* rails table */
+.tbl { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 0.93rem; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font: 600 0.75rem var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+.tag { display: inline-block; font: 600 0.72rem var(--mono); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.tag.c { color: var(--compat); background: var(--compat-soft); }
+.tag.x { color: var(--clash); background: var(--clash-soft); }
+.tag.e { color: var(--enhance); background: var(--enhance-soft); }
+.note { border-top: 1px solid var(--rule); padding-top: 18px; color: var(--muted); font-size: 0.93rem; }
+a { color: var(--enhance); }
+</style>
+
+<main>
+  <header class="prose" style="display:grid;gap:16px">
+    <p class="eyebrow">super-fr · design notes · 2026-10-10</p>
+    <h1>fr meets Pocock</h1>
+    <p class="lede">Matt Pocock's skills tell an agent <em>how to think</em> at each stage of a change: how to interview you, how to slice the work, what a good test and a good review look like. fr decides <em>where the work happens and what must be true</em> before it moves on: an isolated workspace, a cursor that refuses steps out of order, and journals and gates that prove a review happened. Most of the two fit together. They clash only where both try to own the same decision.</p>
+    <div class="legend" aria-label="Legend">
+      <span><i class="sw c"></i>compatible: fr already does this, in different words</span>
+      <span><i class="sw x"></i>opposite in spirit: one has to give way</span>
+      <span><i class="sw e"></i>enhance: each covers something the other lacks</span>
+    </div>
+  </header>
+
+  <!-- Diagram 1 -->
+  <section>
+    <p class="eyebrow">1 · Stage by stage</p>
+    <h2>The two pipelines, side by side</h2>
+    <figure>
+      <div class="fig-scroll">
+        <svg viewBox="0 0 1130 400" role="img" aria-label="Matt's main flow and fr-goal aligned stage by stage. Specify, break down and build are compatible; align is opposite because of the question budget; review, ship and learn enhance each other. fr's rails sit under every step with no Pocock counterpart.">
+          <!-- stage headers -->
+          <text class="th" x="167" y="30" text-anchor="middle">ALIGN</text>
+          <text class="th" x="312" y="30" text-anchor="middle">SPECIFY</text>
+          <text class="th" x="457" y="30" text-anchor="middle">BREAK DOWN</text>
+          <text class="th" x="602" y="30" text-anchor="middle">BUILD</text>
+          <text class="th" x="747" y="30" text-anchor="middle">REVIEW</text>
+          <text class="th" x="892" y="30" text-anchor="middle">SHIP</text>
+          <text class="th" x="1037" y="30" text-anchor="middle">LEARN</text>
+          <!-- row labels -->
+          <text class="tb" x="14" y="92">Pocock</text>
+          <text class="tm" x="14" y="108">main flow</text>
+          <text class="tb" x="14" y="242">fr</text>
+          <text class="tm" x="14" y="258">fr-goal</text>
+
+          <!-- Matt row -->
+          <g>
+            <rect class="bx" x="100" y="50" width="135" height="90" rx="6"/>
+            <text class="tb" x="112" y="76">grill-with-docs</text>
+            <text class="tm" x="112" y="98">rounds until the</text>
+            <text class="tm" x="112" y="113">design tree is empty</text>
+            <text class="tm" x="112" y="128">+ GLOSSARY, ADRs</text>
+
+            <rect class="bx" x="245" y="50" width="135" height="90" rx="6"/>
+            <text class="tb" x="257" y="76">to-spec</text>
+            <text class="tm" x="257" y="98">synthesise the talk;</text>
+            <text class="tm" x="257" y="113">you confirm seams;</text>
+            <text class="tm" x="257" y="128">no file paths</text>
+
+            <rect class="bx" x="390" y="50" width="135" height="90" rx="6"/>
+            <text class="tb" x="402" y="76">to-tickets</text>
+            <text class="tm" x="402" y="98">vertical slices +</text>
+            <text class="tm" x="402" y="113">blocking edges;</text>
+            <text class="tm" x="402" y="128">you approve the cut</text>
+
+            <rect class="bx" x="535" y="50" width="135" height="90" rx="6"/>
+            <text class="tb" x="547" y="76">implement · tdd</text>
+            <text class="tm" x="547" y="98">/clear per ticket;</text>
+            <text class="tm" x="547" y="113">red → green only,</text>
+            <text class="tm" x="547" y="128">refactor in review</text>
+
+            <rect class="bx" x="680" y="50" width="135" height="90" rx="6"/>
+            <text class="tb" x="692" y="76">code-review</text>
+            <text class="tm" x="692" y="98">Standards + Spec,</text>
+            <text class="tm" x="692" y="113">two parallel agents,</text>
+            <text class="tm" x="692" y="128">smell baseline</text>
+
+            <rect class="bx" x="825" y="50" width="135" height="90" rx="6"/>
+            <text class="tb" x="837" y="76">pr</text>
+            <text class="tm" x="837" y="98">smallest visual,</text>
+            <text class="tm" x="837" y="113">before/after proof,</text>
+            <text class="tm" x="837" y="128">one- or two-way door</text>
+
+            <rect class="bx" x="970" y="50" width="135" height="90" rx="6"/>
+            <text class="tb" x="982" y="76">retro</text>
+            <text class="tm" x="982" y="98">fix the environment,</text>
+            <text class="tm" x="982" y="113">not the code;</text>
+            <text class="tm" x="982" y="128">most severe first</text>
+          </g>
+
+          <!-- connectors -->
+          <line class="ln-x" x1="167" y1="140" x2="167" y2="200"/>
+          <rect class="pill-x" x="122" y="160" width="90" height="20" rx="10"/><text class="pt-x" x="167" y="174" text-anchor="middle">opposite</text>
+          <line class="ln-c" x1="312" y1="140" x2="312" y2="200"/>
+          <rect class="pill-c" x="262" y="160" width="100" height="20" rx="10"/><text class="pt-c" x="312" y="174" text-anchor="middle">compatible</text>
+          <line class="ln-c" x1="457" y1="140" x2="457" y2="200"/>
+          <rect class="pill-c" x="407" y="160" width="100" height="20" rx="10"/><text class="pt-c" x="457" y="174" text-anchor="middle">compatible</text>
+          <line class="ln-c" x1="602" y1="140" x2="602" y2="200"/>
+          <rect class="pill-c" x="552" y="160" width="100" height="20" rx="10"/><text class="pt-c" x="602" y="174" text-anchor="middle">compatible</text>
+          <line class="ln-e" x1="747" y1="140" x2="747" y2="200"/>
+          <rect class="pill-e" x="707" y="160" width="80" height="20" rx="10"/><text class="pt-e" x="747" y="174" text-anchor="middle">enhance</text>
+          <line class="ln-e" x1="892" y1="140" x2="892" y2="200"/>
+          <rect class="pill-e" x="852" y="160" width="80" height="20" rx="10"/><text class="pt-e" x="892" y="174" text-anchor="middle">enhance</text>
+          <line class="ln-e" x1="1037" y1="140" x2="1037" y2="200"/>
+          <rect class="pill-e" x="997" y="160" width="80" height="20" rx="10"/><text class="pt-e" x="1037" y="174" text-anchor="middle">enhance</text>
+
+          <!-- fr row -->
+          <g>
+            <rect class="bx" x="100" y="200" width="135" height="90" rx="6"/>
+            <text class="tb" x="112" y="226">fr-brainstorming</text>
+            <text class="tm" x="112" y="248">one question round</text>
+            <text class="tm" x="112" y="263">sized to the goal,</text>
+            <text class="tm" x="112" y="278">rarely two</text>
+
+            <rect class="bx" x="245" y="200" width="135" height="90" rx="6"/>
+            <text class="tb" x="257" y="226">spec + review</text>
+            <text class="tm" x="257" y="248">## Requirements;</text>
+            <text class="tm" x="257" y="263">separate reviewer</text>
+            <text class="tm" x="257" y="278">checks it</text>
+
+            <rect class="bx" x="390" y="200" width="135" height="90" rx="6"/>
+            <text class="tb" x="402" y="226">fr-plan</text>
+            <text class="tm" x="402" y="248">phases with</text>
+            <text class="tm" x="402" y="263">depends_on;</text>
+            <text class="tm" x="402" y="278">self-review gate</text>
+
+            <rect class="bx" x="535" y="200" width="135" height="90" rx="6"/>
+            <text class="tb" x="547" y="226">phase-executor</text>
+            <text class="tm" x="547" y="248">subagent per phase;</text>
+            <text class="tm" x="547" y="263">red → green →</text>
+            <text class="tm" x="547" y="278">refactor, gated</text>
+
+            <rect class="bx" x="680" y="200" width="135" height="90" rx="6"/>
+            <text class="tb" x="692" y="226">review-phase</text>
+            <text class="tm" x="692" y="248">dispatched reviewer;</text>
+            <text class="tm" x="692" y="263">findings in/out of</text>
+            <text class="tm" x="692" y="278">scope, must close</text>
+
+            <rect class="bx" x="825" y="200" width="135" height="90" rx="6"/>
+            <text class="tb" x="837" y="226">deliver</text>
+            <text class="tm" x="837" y="248">PR body from the</text>
+            <text class="tm" x="837" y="263">journal, tests log,</text>
+            <text class="tm" x="837" y="278">usage table</text>
+
+            <rect class="bx-dash" x="970" y="200" width="135" height="90" rx="6"/>
+            <text class="tb" x="982" y="226">(no step)</text>
+            <text class="tm" x="982" y="248">fr-audit covers</text>
+            <text class="tm" x="982" y="263">cost, not the</text>
+            <text class="tm" x="982" y="278">environment</text>
+          </g>
+
+          <!-- rails band -->
+          <rect class="band" x="100" y="314" width="1005" height="64" rx="8"/>
+          <text class="th" x="116" y="336">FR RAILS UNDER EVERY STEP · NO POCOCK COUNTERPART</text>
+          <text class="t" x="116" y="362">isolation worktree  ·  run cursor  ·  spec / plan / debug journals  ·  evidence gates  ·  acceptance matrix  ·  verification walks  ·  runners  ·  cost</text>
+        </svg>
+      </div>
+      <figcaption>The middle three stages agree. They split the work the same way, but the names differ. The clash is at the start: Matt's grilling never caps the questions, while fr-goal deliberately asks one round. From review onward, each side has something the other lacks. fr's rails (bottom) have no counterpart at all in Matt's pack, which is why keeping them costs nothing in his terms.</figcaption>
+    </figure>
+  </section>
+
+  <!-- Diagram 2 -->
+  <section>
+    <p class="eyebrow">2 · The real disagreement</p>
+    <h2>Who steers, and how a rule is kept</h2>
+    <figure>
+      <div class="fig-scroll">
+        <svg viewBox="0 0 680 430" role="img" aria-label="A two-by-two map. Matt's flow keeps the operator involved throughout and relies on prose. fr-goal asks one round up front and enforces with code that refuses. A Pocock flow on fr's rails sits in the remaining corner: checkpoints throughout, enforced by refusals.">
+          <defs>
+            <marker id="d2a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah-e" d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+          <!-- quadrant frame -->
+          <rect class="band" x="90" y="30" width="540" height="330" rx="6"/>
+          <line class="ln" x1="360" y1="30" x2="360" y2="360" stroke-dasharray="3 4"/>
+          <line class="ln" x1="90" y1="195" x2="630" y2="195" stroke-dasharray="3 4"/>
+          <!-- axes labels -->
+          <text class="th" x="360" y="392" text-anchor="middle">HOW A RULE IS KEPT</text>
+          <text class="tm" x="94" y="378">prose the agent is asked to follow</text>
+          <text class="tm" x="626" y="378" text-anchor="end">code that refuses to move on</text>
+          <text class="th" x="0" y="0" transform="translate(30 195) rotate(-90)" text-anchor="middle">WHERE YOU SIT</text>
+          <text class="tm" x="0" y="0" transform="translate(54 112) rotate(-90)" text-anchor="middle">checkpoints throughout</text>
+          <text class="tm" x="0" y="0" transform="translate(54 280) rotate(-90)" text-anchor="middle">one round up front</text>
+
+          <!-- Matt -->
+          <circle class="dot-m" cx="200" cy="100" r="9"/>
+          <text class="tb" x="200" y="78" text-anchor="middle">Pocock main flow</text>
+          <text class="tm" x="200" y="128" text-anchor="middle">grill · seam check · ticket quiz · retro</text>
+          <text class="tm" x="200" y="143" text-anchor="middle">"natural language is the control surface"</text>
+
+          <!-- fr-goal -->
+          <circle class="dot-f" cx="520" cy="285" r="9"/>
+          <text class="tb" x="520" y="263" text-anchor="middle">fr-goal</text>
+          <text class="tm" x="520" y="313" text-anchor="middle">ask once, then unattended to PR</text>
+          <text class="tm" x="520" y="328" text-anchor="middle">"instructions get absorbed under load"</text>
+
+          <!-- hybrid -->
+          <circle class="ring-h" cx="520" cy="100" r="16"/>
+          <circle class="dot-h" cx="520" cy="100" r="7"/>
+          <text class="hi-t" x="520" y="72" text-anchor="middle">Pocock on fr rails</text>
+          <text class="tm" x="520" y="132" text-anchor="middle">Matt's gates, fr's refusals</text>
+
+          <!-- arrows to hybrid -->
+          <line class="ln-e-d" x1="216" y1="100" x2="496" y2="100" marker-end="url(#d2a)"/>
+          <text class="pt-e" x="356" y="92" text-anchor="middle">fr adds refusals</text>
+          <line class="ln-e-d" x1="520" y1="270" x2="520" y2="122" marker-end="url(#d2a)"/>
+          <text class="pt-e" x="530" y="200">Matt's gates back</text>
+        </svg>
+      </div>
+      <figcaption>The two projects disagree on philosophy, not technique. Matt keeps you in the loop and steers with prose, and he rejects question caps and process frameworks on purpose. fr-goal asks once and then lets code refuse whatever was skipped. The open corner, top right, is what you're building: every checkpoint where Matt puts one, and each one recorded and enforced by fr.</figcaption>
+    </figure>
+  </section>
+
+  <!-- Diagram 3 -->
+  <section>
+    <p class="eyebrow">3 · How they stack</p>
+    <h2>Disciplines run inside steps; rails hold the proof</h2>
+    <figure>
+      <div class="fig-scroll">
+        <svg viewBox="0 0 1000 400" role="img" aria-label="Three layers. Matt's skills sit on top and each runs inside one fr run step. Below the steps are fr's rails. The highlighted path: code-review runs inside the review step, its findings go to the journal, the evidence gate refuses while any is open, and only then does the pr step unblock.">
+          <defs>
+            <marker id="d3a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+            <marker id="d3b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah-e" d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+          <!-- layer labels -->
+          <text class="th" x="20" y="28">POCOCK SKILLS · HOW TO THINK</text>
+          <text class="th" x="20" y="148">FR RUN STEPS · WHEN, IN WHAT ORDER</text>
+          <text class="th" x="20" y="278">FR RAILS · WHAT MUST BE TRUE</text>
+
+          <!-- skills row y=40 -->
+          <g>
+            <rect class="bx" x="20" y="40" width="110" height="40" rx="6"/><text class="t" x="75" y="57" text-anchor="middle">grilling +</text><text class="t" x="75" y="72" text-anchor="middle">domain-modeling</text>
+            <rect class="bx" x="142" y="40" width="110" height="40" rx="6"/><text class="t" x="197" y="65" text-anchor="middle">to-spec</text>
+            <rect class="bx" x="264" y="40" width="110" height="40" rx="6"/><text class="t" x="319" y="65" text-anchor="middle">to-tickets</text>
+            <rect class="bx" x="386" y="40" width="110" height="40" rx="6"/><text class="t" x="441" y="65" text-anchor="middle">tdd</text>
+            <rect class="hi" x="508" y="40" width="110" height="40" rx="6"/><text class="hi-t" x="563" y="65" text-anchor="middle">code-review</text>
+            <rect class="bx-dash" x="630" y="40" width="110" height="40" rx="6"/><text class="tm" x="685" y="65" text-anchor="middle">fr only</text>
+            <rect class="bx" x="752" y="40" width="110" height="40" rx="6"/><text class="t" x="807" y="65" text-anchor="middle">pr</text>
+            <rect class="bx" x="874" y="40" width="110" height="40" rx="6"/><text class="t" x="929" y="65" text-anchor="middle">retro</text>
+          </g>
+          <!-- runs inside -->
+          <g>
+            <line class="ln" x1="75" y1="80" x2="75" y2="156" marker-end="url(#d3a)"/>
+            <line class="ln" x1="197" y1="80" x2="197" y2="156" marker-end="url(#d3a)"/>
+            <line class="ln" x1="319" y1="80" x2="319" y2="156" marker-end="url(#d3a)"/>
+            <line class="ln" x1="441" y1="80" x2="441" y2="156" marker-end="url(#d3a)"/>
+            <line class="ln-e" x1="563" y1="80" x2="563" y2="156" marker-end="url(#d3b)"/>
+            <line class="ln" x1="807" y1="80" x2="807" y2="156" marker-end="url(#d3a)"/>
+            <line class="ln" x1="929" y1="80" x2="929" y2="156" marker-end="url(#d3a)"/>
+            <text class="tm" x="82" y="122">runs inside</text>
+          </g>
+          <!-- steps row y=158 -->
+          <g>
+            <rect class="bx" x="20" y="158" width="110" height="44" rx="6"/><text class="tb" x="75" y="185" text-anchor="middle">grill ⏸</text>
+            <rect class="bx" x="142" y="158" width="110" height="44" rx="6"/><text class="tb" x="197" y="185" text-anchor="middle">spec ⏸</text>
+            <rect class="bx" x="264" y="158" width="110" height="44" rx="6"/><text class="tb" x="319" y="185" text-anchor="middle">tickets ⏸</text>
+            <rect class="bx" x="386" y="158" width="110" height="44" rx="6"/><text class="tb" x="441" y="179" text-anchor="middle">implement</text><text class="tm" x="441" y="194" text-anchor="middle">× each ticket</text>
+            <rect class="hi" x="508" y="158" width="110" height="44" rx="6"/><text class="hi-t" x="563" y="185" text-anchor="middle">review</text>
+            <rect class="bx" x="630" y="158" width="110" height="44" rx="6"/><text class="tb" x="685" y="185" text-anchor="middle">journal-check</text>
+            <rect class="bx" x="752" y="158" width="110" height="44" rx="6"/><text class="tb" x="807" y="185" text-anchor="middle">pr</text>
+            <rect class="bx" x="874" y="158" width="110" height="44" rx="6"/><text class="tb" x="929" y="185" text-anchor="middle">retro ⏸</text>
+            <!-- sequence arrows -->
+            <line class="ln" x1="130" y1="180" x2="140" y2="180"/>
+            <line class="ln" x1="252" y1="180" x2="262" y2="180"/>
+            <line class="ln" x1="374" y1="180" x2="384" y2="180"/>
+            <line class="ln" x1="496" y1="180" x2="506" y2="180"/>
+            <line class="ln" x1="618" y1="180" x2="628" y2="180"/>
+            <line class="ln" x1="740" y1="180" x2="750" y2="180"/>
+            <line class="ln" x1="862" y1="180" x2="872" y2="180"/>
+          </g>
+          <text class="tm" x="20" y="222">⏸ = operator gate (Matt's checkpoint, recorded by fr)</text>
+
+          <!-- rails row y=290 -->
+          <g>
+            <rect class="bx" x="20" y="290" width="232" height="44" rx="6"/><text class="t" x="136" y="317" text-anchor="middle">isolation worktree + run cursor</text>
+            <rect class="bx" x="264" y="290" width="232" height="44" rx="6"/><text class="t" x="380" y="317" text-anchor="middle">spec + plan files (the record)</text>
+            <rect class="hi" x="508" y="290" width="110" height="44" rx="6"/><text class="hi-t" x="563" y="317" text-anchor="middle">journal</text>
+            <rect class="hi" x="630" y="290" width="110" height="44" rx="6"/><text class="hi-t" x="685" y="317" text-anchor="middle">evidence gate</text>
+            <rect class="bx" x="752" y="290" width="232" height="44" rx="6"/><text class="t" x="868" y="317" text-anchor="middle">acceptance matrix + verification</text>
+          </g>
+          <!-- highlighted path -->
+          <line class="ln-e" x1="563" y1="202" x2="563" y2="288" marker-end="url(#d3b)"/>
+          <text class="pt-e" x="570" y="250">findings,</text>
+          <text class="pt-e" x="570" y="264">in/out scope</text>
+          <line class="ln-e" x1="618" y1="312" x2="628" y2="312" marker-end="url(#d3b)"/>
+          <line class="ln-e" x1="685" y1="290" x2="685" y2="204" marker-end="url(#d3b)"/>
+          <text class="pt-e" x="692" y="250">refuses while</text>
+          <text class="pt-e" x="692" y="264">one is open</text>
+          <path class="ln-e" d="M740 312 H 746 V 238 H 790 V 204" marker-end="url(#d3b)"/>
+          <text class="pt-e" x="796" y="236">unblocks pr</text>
+          <text class="tm" x="20" y="372">Grill, spec and tickets also write to the rails: each answer becomes a journal decision, and the spec and plan are files fr can read offline.</text>
+        </svg>
+      </div>
+      <figcaption>Each of Matt's skills becomes the work inside one fr step. The highlighted path shows why the layers help each other. Matt's <code>code-review</code> knows what to look for, and fr's journal and gate make sure the review happened and nothing it found was dropped before the PR. Neither side can do both on its own.</figcaption>
+    </figure>
+  </section>
+
+  <!-- Diagram 4 -->
+  <section>
+    <p class="eyebrow">4 · Context windows</p>
+    <h2>Same boundaries, different things survive them</h2>
+    <figure>
+      <div class="fig-scroll">
+        <svg viewBox="0 0 1000 330" role="img" aria-label="Context windows over time. Matt keeps grilling, spec and tickets in one window, then clears between tickets; only the ticket file crosses each boundary. fr uses the same split, but a git-tracked run cursor and journal run under every window, so a session restart resumes with fr pickup.">
+          <defs>
+            <marker id="d4a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          </defs>
+          <text class="tb" x="20" y="64">Pocock</text>
+          <text class="tb" x="20" y="194">fr</text>
+          <!-- time axis -->
+          <line class="ln" x1="130" y1="306" x2="980" y2="306" marker-end="url(#d4a)"/>
+          <text class="tm" x="975" y="296" text-anchor="end">time</text>
+
+          <!-- Matt lane -->
+          <rect class="win-m" x="130" y="40" width="330" height="40" rx="6"/>
+          <text class="t" x="295" y="65" text-anchor="middle">grill → spec → tickets · one unbroken window</text>
+          <rect class="win-m" x="500" y="40" width="120" height="40" rx="6"/><text class="t" x="560" y="65" text-anchor="middle">ticket 01</text>
+          <rect class="win-m" x="660" y="40" width="120" height="40" rx="6"/><text class="t" x="720" y="65" text-anchor="middle">ticket 02</text>
+          <rect class="win-m" x="820" y="40" width="120" height="40" rx="6"/><text class="t" x="880" y="65" text-anchor="middle">ticket 03</text>
+          <text class="th" x="480" y="104" text-anchor="middle">/clear</text>
+          <text class="th" x="640" y="104" text-anchor="middle">/clear</text>
+          <text class="th" x="800" y="104" text-anchor="middle">/clear</text>
+          <text class="tm" x="130" y="124">crosses each boundary: only the ticket file (.scratch/… or a tracker issue). The reasoning stays behind.</text>
+
+          <!-- fr lane -->
+          <rect class="win-f" x="130" y="170" width="250" height="40" rx="6"/>
+          <text class="t" x="255" y="195" text-anchor="middle">orchestrator: brainstorm → spec</text>
+          <rect class="win-f" x="410" y="170" width="90" height="40" rx="6"/><text class="t" x="455" y="195" text-anchor="middle">reviewer</text>
+          <rect class="win-f" x="530" y="170" width="110" height="40" rx="6"/><text class="t" x="585" y="195" text-anchor="middle">executor p1</text>
+          <rect class="win-f" x="690" y="170" width="110" height="40" rx="6"/><text class="t" x="745" y="195" text-anchor="middle">executor p2</text>
+          <rect class="win-f" x="830" y="170" width="110" height="40" rx="6"/><text class="t" x="885" y="195" text-anchor="middle">deliver</text>
+          <!-- session restart marker -->
+          <line class="ln-x" x1="665" y1="160" x2="665" y2="280"/>
+          <text class="pt-x" x="665" y="154" text-anchor="middle">session restart</text>
+          <!-- rail -->
+          <line class="rail" x1="130" y1="250" x2="960" y2="250"/>
+          <text class="pt-c" x="130" y="272">run cursor + journals + spec/plan files (git-tracked)</text>
+          <text class="pt-c" x="680" y="290">fr pickup resumes here</text>
+          <!-- taps -->
+          <line class="ln" x1="255" y1="210" x2="255" y2="248"/>
+          <line class="ln" x1="455" y1="210" x2="455" y2="248"/>
+          <line class="ln" x1="585" y1="210" x2="585" y2="248"/>
+          <line class="ln" x1="745" y1="210" x2="745" y2="248"/>
+          <line class="ln" x1="885" y1="210" x2="885" y2="248"/>
+          <text class="tm" x="262" y="234">record</text>
+        </svg>
+      </div>
+      <figcaption>Both projects put boundaries in the same places: one window for the thinking, then a fresh one per unit of work. Matt spends a whole skill (<code>ask-matt</code>'s phase boundaries) on choosing between /clear, /compact and /handoff, because only a markdown file crosses a boundary. fr's cursor and journals sit under every window, so the state of the work survives a restart. The reasoning still doesn't, which is why Matt's rule to keep grill → spec → tickets in one window is still worth following on fr.</figcaption>
+    </figure>
+  </section>
+
+  <!-- Verdicts -->
+  <section>
+    <p class="eyebrow">5 · The full list</p>
+    <h2>Compatible, opposite, enhancing</h2>
+    <div class="cols">
+      <div class="col c">
+        <h3><i class="sw c"></i>Compatible</h3>
+        <div class="item"><b>Spec before code</b><p>Both turn the conversation into a spec that later work is checked against: Matt's <code>code-review</code> Spec axis, fr's "the spec is the contract".</p></div>
+        <div class="item"><b>Tickets are phases</b><p>Vertical tracer-bullet slices with <strong>blocking edges</strong> match fr phases with <code>depends_on</code>. Matt's "frontier" is the set of phases whose dependencies are done.</p></div>
+        <div class="item"><b>A fresh context per unit</b><p><code>/clear</code> between <code>/implement</code> tickets is the same move as one <code>fr-phase-executor</code> subagent per phase.</p></div>
+        <div class="item"><b>Test first, one slice at a time</b><p><code>tdd</code>'s red → green per slice is fr-execute's TDD-shaped step.</p></div>
+        <div class="item"><b>Parallel work on isolated branches</b><p><code>implement-spec</code> runs implementers in their own worktrees and merges to an integration branch. fr does the same with its isolation worktree and <code>fr apply --to &lt;runner&gt;</code>.</p></div>
+        <div class="item"><b>Review in a separate context</b><p>Matt's review sub-agents and fr's dispatched reviewer share a principle: the implementer never reviews its own work.</p></div>
+        <div class="item"><b>Bugs start with a red reproduction</b><p><code>diagnosing-bugs</code> refuses to theorise without a loop that goes red. fr-debugging puts root cause before fix. Both end with a regression test.</p></div>
+        <div class="item"><b>Harness-neutral text</b><p>Matt rejects harness-specific branches in his skills. fr has a tripwire that fails on harness-specific tool names in skill prose.</p></div>
+      </div>
+
+      <div class="col x">
+        <h3><i class="sw x"></i>Opposite in spirit</h3>
+        <div class="item"><b>Who owns the process</b><p>Matt positions his pack against frameworks that <q>own the process</q> and <q>take away your control</q>. His skills are small, and you're meant to hack them. fr's cursor owns the order and refuses a step taken out of turn.</p></div>
+        <div class="item"><b>How many questions</b><p>Grilling has no cap by design. A cap request is explicitly out of scope: <q>some plans need three questions, some need fifty</q>. fr-goal asks one round sized to the goal, rarely two.</p></div>
+        <div class="item"><b>Where the human sits</b><p>Matt checks in at the grill, the seams, the ticket cut and the retro. fr-goal waives gates and runs unattended to the PR.</p></div>
+        <div class="item"><b>Prose versus code</b><p>For Matt, natural language is the control surface, and stopping runaway loops is the harness's job, not the skill's. For fr, <q>an obligation enforced by an instruction gets absorbed under load</q>, so it uses tripwires, evidence gates and refusals.</p></div>
+        <div class="item"><b>Where refactoring goes</b><p><code>tdd</code>: <q>Refactoring is not part of the loop. It belongs to the review stage.</q> fr's phases are red → green → refactor, and a refactor gate checks it.</p></div>
+        <div class="item"><b>What a spec may name</b><p><code>to-spec</code>: <q>Do NOT include specific file paths or code snippets.</q> fr specs name modules and files, and its spec reviewer checks the spec against the code they point to.</p></div>
+        <div class="item"><b>Where the record lives</b><p>For Matt it's the issue tracker: the spec issue, ticket issues, triage labels. For fr it's files in the repo: the spec, plan, journal and cursor, which the gates can read offline.</p></div>
+        <div class="item"><b>Weight per change</b><p>Matt's flow leaves a few markdown files and a PR. An fr run adds cursor commits, step records, journal entries and a usage file.</p></div>
+      </div>
+
+      <div class="col e">
+        <h3><i class="sw e"></i>Coexist and enhance</h3>
+        <div class="item"><b>A shared vocabulary</b><p><code>domain-modeling</code>'s <code>GLOSSARY.md</code> and ADRs fill a gap in fr, which has no domain-language layer. Specs, reviewers and executors would all read them.</p></div>
+        <div class="item"><b>Grilling that leaves a record</b><p>Matt supplies the interview: design tree, frontier, a recommended answer for each question. fr makes each answer a journal decision that the spec reviewer checks the spec against.</p></div>
+        <div class="item"><b>A review you can trust</b><p><code>code-review</code>'s two axes and smell baseline tell the reviewer what to look for. fr's evidence gate proves the review ran, and nothing it found was quietly dropped.</p></div>
+        <div class="item"><b>A better PR body</b><p>Matt adds the smallest visual, before/after evidence and the one-way or two-way door call. fr adds the findings, the operator gates, proportionality and cost.</p></div>
+        <div class="item"><b>Retro meets tripwires</b><p><code>retro</code>'s rule that a mechanical violation gets a deterministic check, <q>full stop</q>, is fr's own rule. Retro findings could become journal entries or triage issues. fr-audit adds the cost data retro can't see.</p></div>
+        <div class="item"><b>Seams and acceptance rows</b><p>The seams <code>tdd</code> agrees up front are where the acceptance matrix's business-level rows get their test refs.</p></div>
+        <div class="item"><b>Cheaper boundaries</b><p>fr's cursor and <code>fr pickup</code> carry the state of the work across a clear or a restart, which takes most of the risk out of Matt's /clear-versus-/compact decision.</p></div>
+        <div class="item"><b>Debugging with rails</b><p><code>diagnosing-bugs</code>' red-loop discipline inside fr-debugging's isolation, debug journal and reviewed PR.</p></div>
+        <div class="item"><b>Surveys that feed triage</b><p>The deepening candidates <code>improve-codebase-architecture</code> finds become issues for fr-triage to rank and batch.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Rails table -->
+  <section>
+    <p class="eyebrow">6 · Deciding what to keep</p>
+    <h2>Each fr part, measured against Matt's flow</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>fr part</th><th>Against Matt's flow</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr><td>Isolation worktree</td><td>Matt says nothing about where work runs. <code>implement-spec</code> already uses worktrees.</td><td><span class="tag c">keep, no conflict</span></td></tr>
+          <tr><td>Run cursor</td><td>Matt already has an order. The cursor only enforces it, and makes it survive a restart.</td><td><span class="tag e">keep, enhances</span></td></tr>
+          <tr><td>Operator gates</td><td>These are exactly Matt's checkpoints, now recorded and verified.</td><td><span class="tag e">keep, enhances</span></td></tr>
+          <tr><td>Spec and plan as files</td><td>Replaces Matt's tracker record. You lose tracker visibility unless it's mirrored.</td><td><span class="tag x">trade-off</span></td></tr>
+          <tr><td>Journals and evidence gates</td><td>Matt would steer with prose. Here they record grill answers and review findings, which Matt keeps nowhere.</td><td><span class="tag e">keep, enhances</span></td></tr>
+          <tr><td>fr-spec-reviewer</td><td>It checks file paths that Matt's spec template forbids. Its "against decisions" check still applies.</td><td><span class="tag x">adapt or drop</span></td></tr>
+          <tr><td>fr plan self-review / refactor gate</td><td>It enforces red → green → refactor, which Matt's <code>tdd</code> rejects.</td><td><span class="tag x">drop for these flows</span></td></tr>
+          <tr><td>fr-goal's question cap and autonomy</td><td>Directly opposite to grilling and Matt's checkpoints.</td><td><span class="tag x">drop for these flows</span></td></tr>
+          <tr><td>Acceptance matrix</td><td>Matt has nothing like it. Seams could feed it, or it can stay out of these flows.</td><td><span class="tag e">optional add-on</span></td></tr>
+          <tr><td>Verification walks, cost, runners, triage</td><td>No counterpart and no conflict. These are separate tools that sit beside the flow.</td><td><span class="tag c">keep, no conflict</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Sources: mattpocock/skills at commit <span class="mono">49dd158</span> (plugin v1.3.1): <code>README.md</code>, <code>ask-matt</code>, <code>grilling</code>, <code>to-spec</code>, <code>to-tickets</code>, <code>tdd</code>, <code>code-review</code>, <code>pr</code>, <code>retro</code>, <code>diagnosing-bugs</code>, and the <code>.out-of-scope/</code> decisions on question limits, native question tools and subagent recursion. For fr: super-fr 5.19.1, the shipped <code>fr-goal</code> and <code>fr-goal-light</code> shapes, and the repo's <code>AGENTS.md</code>.</p>
+  </section>
+</main>
+
+</body></html>
