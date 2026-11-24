@@ -42,6 +42,8 @@ rows:
     - spec:2026-11-24-show-me-visuals#R9
     - spec:2026-11-24-show-me-visuals#R10
     - spec:2026-11-24-show-me-visuals#R11
+    - spec:2026-11-24-show-me-visuals#R16
+    - spec:2026-11-24-show-me-visuals#R18
     levels: {}
     status: not-implemented
     notes: ''
