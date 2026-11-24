@@ -41,6 +41,7 @@ rows:
     - spec:2026-11-24-ci-economy#R15
     - spec:2026-11-24-ci-economy#R16
     - spec:2026-11-24-ci-economy#R17
+    - spec:2026-11-24-ci-economy#R18
     levels: {}
     status: not-implemented
     notes: ''
