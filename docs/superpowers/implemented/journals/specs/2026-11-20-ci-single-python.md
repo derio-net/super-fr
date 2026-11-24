@@ -184,3 +184,31 @@ On the first push to main after merge: ci.yml's split-check merges the durations
 ### owed-main-push-walk-resolved · finding [filed → derio-net/super-fr#1600] · resolves owed-main-push-walk: Walk ci-single-leg-main-push after #1593 merges
 
 Filed at deliver as derio-net/super-fr#1600; still owed until discharged.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-24T13:29:30+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: pre-merge — CI: `tests/unit/test_ci_python_floor.py` (`test_ci_pins_the_requires_python_floor`, `test_release_suite_runs_on_the_requires_python_floor`) and `tests/unit/test_ops_isolated_python.py::test_the_python_floor_has_safe_path` pin R1/R6, and CI's `lint`/`typecheck` jobs run at the new targets (R2) (row `ci-floor-python-3-14`).
+
+Evidence: PR #1593 CI green on the single leg: lint, typecheck and all 7 test shards pass at Python 3.14; the floor tests (test_ci_python_floor.py, test_ops_isolated_python.py) ran inside them.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-11-24T13:29:33+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: pre-merge — CI: `test_ci_python_floor.py` (`test_ci_tests_one_python_the_floor`, `test_every_shard_feeds_coverage`), `tests/unit/test_ci_split_workflow.py` and `tests/unit/test_ci_shards.py` pin R3-R5/R7, and this PR's own CI run is the one-leg layout running (row `ci-single-leg`; amended rows `ci-coverage-newest-leg`, `ci-shards-complete`).
+
+Evidence: PR #1593 CI run shows one-leg layout: test (1)..(7) with no per-version matrix, split-check and coverage pass.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-11-24T13:29:37+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: pre-merge — CI: `tests/unit/test_acceptance_scaffold_publish.py` and `tests/unit/test_acceptance_services.py` read the scaffold golden fixtures, which name `python:3.14` (R8) (row `ci-scaffold-python-3-14`).
+
+Evidence: PR #1593 CI: collect and all test shards pass, including the scaffold golden-fixture tests naming python:3.14.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-11-24T13:48:26+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: post-merge — operator-driven: on the first push to `main` after merge, `ci.yml`'s `split-check` merges and saves `test-durations-<run_id>` from the `durations-shard-*` files, and the Release workflow's shards run green on Python 3.14 (row `ci-single-leg-main-push`).
+
+Evidence: Release run 45403054399 on main 34e88d2c1 (contains #1593): all 6 shards green on Python 3.14, published release: v9.0.0-rc.3. The first Release run on 978db9ffe had one red shard (test_two_concurrent_invocations_do_not_overlap, a timing flake in a stubbed hook test, unrelated to the Python floor). CI split-check on main passed.
