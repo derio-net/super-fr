@@ -9190,6 +9190,12 @@ batches:
     runner: herdr
     handle: w3V:p3
     archive: chore/closeout-2026-11-24-2
+  - kind: closeout
+    at: '2026-11-24T23:34:33.009175Z'
+    runner: herdr
+    handle: w3V:p3
+    archive: chore/closeout-2026-11-24-2
+    archived: 1681
 - id: hook-hardening
   title: 'Hook and install hardening: deny without jq, no cwd imports in the parser, pinned spawns, locked
     installs'
@@ -10277,6 +10283,7 @@ closeouts:
   planned:
   - closeout-truth
   pr: 1681
+  merged: true
   head: 6340021d281107bf1928237dc714263ae1c9565c
   members:
   - closeout-truth
