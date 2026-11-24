@@ -20,3 +20,8 @@ docs/superpowers/plans/2026-11-19-consumer-followups/_meta.yaml: fr_version '>=4
 ### f-1 · finding [fixed] · Migrated the branch plan's ceiling to <10.0.0 (commit 2e945b764)
 
 `fr migrate artifacts --yes` after merging origin/main 11c158e46, committed as its own chore(fr): migrate commit. Verified by the same repro on a detached clone of 2e945b764 merged with origin/main: rc=0, model: provider/big-model on the hard tier files.
+
+<!-- fr:journal kind=review scope=debug id=review-1 created=2026-11-24T18:52:49+00:00 -->
+### review-1 · review · Self-review of the merge and migration: no findings
+
+Reviewed 7c0c9974d (merge of origin/main 11c158e46: three reviewed: stamp conflicts, main's line kept, branch notes re-inserted at their date; no code conflict) and 2e945b764 (one-line fr_version ceiling widening written by fr migrate, its own commit). No findings raised. Out of scope, noted not fixed: install.sh's `fr models apply ... || true` hides a gate refusal, which is why this surfaced as a missing model: line rather than a named error.
