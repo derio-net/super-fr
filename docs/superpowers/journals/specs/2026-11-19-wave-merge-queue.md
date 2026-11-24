@@ -615,3 +615,10 @@ Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py, test_wave_queue_dri
 Step: Close-out as last entry: the queue stays open until the close-out lands; it takes only the wave's ungated batches; a stale-but-migratable cursor is migrated on the close-out branch by `fr migrate artifacts --path`, which refuses a retiring hop, and the branch passes `review_reasons`. (R15, R16)
 
 Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py closeout-last tests; tests/scenarios/wave-queue-closeout-migrates.sh; full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-11 created=2026-11-24T12:40:45+00:00 -->
+### test-plan-step-11 · discovery · Test Plan step 11: ran
+
+Step: Hold: `open` from queue open; the driver's push after the last landing moves it to `drained`; only the release run (or `release: none`) clears it, by a leased push; `fr release status --from-json` with a fresh `open` hold says held, with one older than 24 h warns and ignores it; `release.py` cuts nothing while `open`, including a `--version` run; a superseded run clears nothing; the workflow is dispatched on drain, and a failed dispatch only warns. (R17, R18, R19)
+
+Evidence: 2026-11-24: tests/integration/test_queue_hold.py, tests/unit/test_release_status.py, test_release_script.py; tests/scenarios/wave-queue-release-hold.sh; full wave-queue unit (542) + integration (134) + scenario (3) runs green
