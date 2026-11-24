@@ -50,9 +50,16 @@ rows:
     - spec:2026-11-24-show-me-visuals#R11
     - spec:2026-11-24-show-me-visuals#R16
     - spec:2026-11-24-show-me-visuals#R18
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pr_body_shape.py#test_the_section_is_required_after_the_out_of_scope_findings
+      - super-fr:tests/unit/test_pr_body_shape.py#test_deliver_refuses_a_missing_shape_file
+      - super-fr:tests/unit/test_pr_body_shape.py#test_an_in_flight_run_is_refused_once_and_recovers_with_the_render
+      - super-fr:tests/unit/test_lenses_review_step.py#test_the_brief_names_the_shape_file_by_its_absolute_path
+    status: unwired
+    notes: unit tests render the section's four bodies, the minimal durable render,
+      both deliver refusals, the in-flight run and the lens brief's shape key; ci once
+      this PR's CI runs them
   - id: shape-file-archived
     capability: shape file lifecycle
     acceptance: fr archive moves a run's shape file beside its archived cursor, and
