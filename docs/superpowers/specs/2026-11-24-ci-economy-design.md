@@ -191,3 +191,6 @@ gate: tester
 - post-merge — operator-driven: the next close-out or archive PR runs `scoped-tests` and no shards, with a green `ci-ok` (row `ci-light-lane`).
 
 ## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|---|---|---|---|
