@@ -105,3 +105,11 @@ amendments:
       naming that run; any other push to main runs full CI, and the release's pre-publish
       suite is unchanged
     why: spec-review s-r1-8, s-r1-9
+  - row: ci-cancelled-reads-pending
+    op: reword
+    base: 0
+    acceptance: 'The wave driver, the queue, fr pr settle, triage collect, the DevOps
+      gate and deliver''s tests: ci witness read a cancelled check as pending (superseded),
+      never as failing; timed-out, stale and failed checks stay failing, and a cancelled
+      combination check left past check_wait_minutes is a Need'
+    why: spec-review s-r1-4, s-r1-5
