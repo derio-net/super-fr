@@ -15,3 +15,8 @@ Spec 2026-10-14-exit-gates R22 gave bootstrap.sh the channels (default = newest 
 ### e19657cf647a · decision · Operator: every install path gets the latest stable by default; RC/main only via an explicit --version
 
 Operator decisions (2026-11-24): (1) install.sh on main with no --version delegates to bootstrap's channel resolution: it installs the newest stable tag from bootstrap's managed checkout and leaves the clone untouched. `--version` takes bootstrap's values, and `--version main` installs the checkout itself. (2) The wave driver's post_merge becomes `./scripts/install.sh --version main` (it keeps dogfooding main, explicitly). (3) bootstrap.sh with no installable stable refuses instead of falling back to main. This amends exit-gates R22/R23.
+
+<!-- fr:journal kind=finding scope=debug id=install-release-installs-main created=2026-11-24T13:23:24+00:00 state=fixed -->
+### install-release-installs-main · finding [fixed] · A fourth path: the cloud driver's self-update installed main, not the release it named
+
+`triage_drive_cmd._install_release(release)` checked that origin/main contained the release tag, then ran install.sh on main. So a reinstall of the latest stable release installed main HEAD, which is an RC while a gate is pending. Fixed: it runs origin/main's bootstrap.sh `--version <release>` from memory against the managed clone, which installs exactly that tag. The "tag must be on main" refusal existed only because install.sh installed nothing but main; bootstrap's own refusal (unknown or unmarked tag) replaces it. Pinned by tests/unit/test_triage_drift.py::test_install_release_installs_the_release_not_mains_newer_head.
