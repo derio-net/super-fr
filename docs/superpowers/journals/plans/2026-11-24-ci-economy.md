@@ -575,3 +575,106 @@ Same trust boundary as p4-s6: entries are approved before the queue runs them, a
 ### p4-r6-resolved · finding [out-of-scope] · resolves p4-r6: Mirror timeout is per command, output is uncapped, killpg after reap has a pid-reuse window (phase 4)
 
 R11 fixes the timeout per command; the pid-reuse window needs the whole group gone and the id recycled between wait and killpg, and output size is bounded by the declared repo scripts.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-24T21:56:01+00:00 -->
+### lens-review-1 · review · Lens review (security, errors, tests, docs-accuracy) of the whole ci-economy diff
+
+Four lens reviewers read the feature diff from merge base ec7d198296a6. Twelve findings in
+scope (eleven fixed, one partly refuted and fixed for the case that is real); the out-of-scope
+parts are filed at deliver. Fixes: commits 8f6736b1a and 1775a6258.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-24T21:56:01+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · A mirror could write a path with a .git component that matches a generated glob, and git add --all ran over it
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-24T21:56:01+00:00 state=open review_scope=in -->
+### l-security-r2 · finding [open] (reviewer: in scope) · The new lane jobs had no permissions block and kept checkout credentials; GH_TOKEN reached the PR's own ci_lane.py
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3 created=2026-11-24T21:56:01+00:00 state=open review_scope=in -->
+### l-security-r3 · finding [open] (reviewer: in scope) · landed_run trusted the API's head_sha filter without re-checking each run
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-24T21:56:01+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · ci_lane fell back to the full lane silently on gh, git and parse failures
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-24T21:56:01+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · settle reported a stranded cancelled check as still running, naming neither it nor the re-run
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-24T21:56:01+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · The ops gate collapsed a cancelled, unreplaced check into pending
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-24T21:56:01+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · verify_ci could wait on a gate holding a cancelled and a successful check with nothing running
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-24T21:56:01+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · Workflow if: conditions were pinned by substring, so `<full> || true` passed
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-24T21:56:01+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · verdict was not tested with failed or cancelled shard jobs or scoped-tests
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-24T21:56:01+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · landed_run was not tested against cancelled/skipped conclusions or another sha
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-24T21:56:01+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · Pages said the early conflict probe uses the merge's own rules; it resolves only version and lock files
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-24T21:56:01+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · Two places said mirrors run in the combination's worktree; they run in a git-less copy
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-24T21:56:01+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: A mirror could write a path with a .git component that matches a generated glob, and git add --all ran over it
+
+_regenerate hands back any changed path with a .git or .. component or an absolute path before the glob checks; snapshot_export no longer lets ignore rules hide a .git path. Integration test with and without a .gitignore entry (1775a6258).
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-24T21:56:01+00:00 state=fixed resolves=l-security-r2 -->
+### l-security-r2-resolved · finding [fixed] · resolves l-security-r2: The new lane jobs had no permissions block and kept checkout credentials; GH_TOKEN reached the PR's own ci_lane.py
+
+classify, scoped-tests and ci-ok hold read-only permissions and check out with persist-credentials false; GH_TOKEN is set only for a push to main (8f6736b1a, test_the_lane_jobs_keep_no_credential_in_their_checkout). A workflow-level permissions block for the older jobs predates this change and is filed at deliver.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved created=2026-11-24T21:56:01+00:00 state=fixed resolves=l-security-r3 -->
+### l-security-r3-resolved · finding [fixed] · resolves l-security-r3: landed_run trusted the API's head_sha filter without re-checking each run
+
+landed_run takes the sha and requires run.head_sha == sha; tested with another sha. Runs come from this repo's own actions/runs endpoint, so head_repository adds nothing.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-24T21:56:01+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: ci_lane fell back to the full lane silently on gh, git and parse failures
+
+Every fallback prints `ci_lane: <cause>; taking the full lane` to stderr; a landed miss names the sha. Tests read stderr for the gh and git cases.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-24T21:56:01+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: settle reported a stranded cancelled check as still running, naming neither it nor the re-run
+
+settle has a (ci, cancelled) hint naming the cancelled checks and the re-run; verdict stays pending (1775a6258).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-24T21:56:01+00:00 state=fixed resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [fixed] · resolves l-errors-r3: The ops gate collapsed a cancelled, unreplaced check into pending
+
+_checks_green raises 'checks were cancelled with no newer run: <names>; re-run the workflow' when every waiting check is cancelled (1775a6258).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-24T21:56:01+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: verify_ci could wait on a gate holding a cancelled and a successful check with nothing running
+
+The real client already keeps the latest check per (workflow, name), so the duplicate shape is refuted for that path; the real case, one gate name across two workflows, now uses _unreplaced and a gate with an unreplaced cancelled check is stranded and refused once nothing runs (1775a6258).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-24T21:56:01+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: Workflow if: conditions were pinned by substring, so `<full> || true` passed
+
+Shard and other jobs' if: are asserted equal to the whole expression (8f6736b1a).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-24T21:56:01+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: verdict was not tested with failed or cancelled shard jobs or scoped-tests
+
+Shard jobs are tested skipped, failure and cancelled in the full lane, and scoped-tests skipped, failure and cancelled in the light lane.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-24T21:56:01+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: landed_run was not tested against cancelled/skipped conclusions or another sha
+
+cancelled, skipped, neutral and timed_out conclusions and a different head_sha are near-miss cases of test_no_other_run_is_trusted.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-24T21:56:01+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: Pages said the early conflict probe uses the merge's own rules; it resolves only version and lock files
+
+fr-wave-driver.md and the fr-triage skill (mirrors synced) now say the probe uses only the version and lock file rules and a stamp or generated conflict still counts there. Teaching the probe the new rules is filed at deliver.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-24T21:56:01+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: Two places said mirrors run in the combination's worktree; they run in a git-less copy
+
+.fr/triage.yaml and the skill say the mirrors run on a copy of the combination's tracked files with no git directory.
