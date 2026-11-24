@@ -1,0 +1,22 @@
+schema_version: 12
+run: 2026-11-24-feat-ci-economy
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+  - {kind: finding, id: p2-r1, phase: 2, review_scope: in, title: "test_validate_artifacts_runs_in_every_lane does not pin the strict step's if", body: "tests/unit/test_ci_lanes_workflow.py: dropping or inverting the strict step's condition would leave main with only --allow-migratable, all green."}
+  - {kind: finding, id: p2-r2, phase: 2, review_scope: in, title: "landed_run's exact path match is unverified for real fr-queue runs", body: "scripts/ci_lane.py: a path with an @ref suffix would silently disable the landed skip (fails safe)."}
+  - {kind: finding, id: p2-r3, phase: 2, review_scope: in, title: "classify installs uv and Python 3.14 at the head of every run's critical path", body: "Every job waits on classify; a stdlib-only script needs no install."}
+  - {kind: finding, id: p2-r4, phase: 2, review_scope: out, title: "a manual re-run of an older run in a PR's concurrency group cancels the newer in-progress run", body: "GitHub concurrency semantics of R1's per-ref group; the head's ci-ok then reads cancelled (pending in fr's readers). Not a defect of this diff."}
+  - {kind: finding, id: p2-r5, phase: 2, review_scope: out, title: "light-lane soundness for docs-only PRs depends on R19/R20 (a later phase)", body: "Phase 3 ships own_artifacts selection."}
+  - {kind: review, id: p2-review-1, phase: 2, title: "phase 2 review: no critical findings; 3 in-scope fixed, 2 out of scope", body: "Independent reviewer checked concurrency, ci-ok always()/toJSON(needs), skip propagation, light classification (HEAD^2, merge base, renames), landed match and token, strict validation on main, scoped-tests env, verdict vs R17; raised p2-r1..p2-r5. Fixes in the commit 'fix(ci): pin validate-artifacts' step conditions...': both validate steps' if pinned; landed_run ignores an @ref suffix (test); classify runs on the runner's python3 with no uv, ci_lane.py made Python-3.10-parseable (two except clauses) and pinned by a test."}
+resolves:
+  - {id: p2-r1, state: fixed, body: "test_validate_artifacts_runs_in_every_lane asserts both steps' if strings."}
+  - {id: p2-r2, state: fixed, body: "landed_run compares path.split('@')[0]; test_a_path_with_a_ref_suffix_still_names_the_ci_workflow."}
+  - {id: p2-r3, state: fixed, body: "classify drops setup-uv and runs python3 scripts/ci_lane.py; test_classify_runs_on_the_runners_own_python and a Python 3.10 parse test."}
+  - {id: p2-r4, state: out-of-scope, body: "A GitHub concurrency behaviour on a rare manual re-run of an old run; this diff did not cause it, and fr reads the cancelled ci-ok as pending, not red."}
+  - {id: p2-r5, state: refuted, body: "Not a defect: phase 3 of this same PR ships R19/R20 (own_artifacts selection) before delivery; the PR is never delivered with phase 2 alone."}
+evidence:
+  review: p2-review-1
+  reviewer: a12a3820200531803
+  model: claude-opus-5-5
