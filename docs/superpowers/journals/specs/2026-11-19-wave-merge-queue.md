@@ -552,3 +552,10 @@ lowered: []
 Step: Fake forge plus a real bare git remote: a wave of three approved green PRs; depth 2. One pass builds main+a and main+a+b on `slot-1` and `slot-2`; no PR branch moves; once both are green, one atomic push lands them and `main` equals the tested tip. (R1, R4, R8, R9, R10)
 
 Evidence: 2026-11-24: tests/integration/test_queue_build.py, test_queue_land.py (real bare git remote, slot branches, atomic push) pass; 134 integration + 542 unit tests green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-11-24T12:40:30+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: The same wave under `squash`: after landing, each PR's head is its squashed commit, every commit's subject is `<title> (#n)`, and the fake forge, reading reachability, reports all three merged. Under `merge` the subjects are `Merge pull request #n …` and the heads are unchanged. (R5, R10)
+
+Evidence: 2026-11-24: tests/integration/test_queue_land.py, test_queue_resume.py (squash/merge subjects and reachability); full wave-queue unit (542) + integration (134) + scenario (3) runs green
