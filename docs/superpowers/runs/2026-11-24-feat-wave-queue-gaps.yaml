@@ -1,0 +1,27 @@
+schema_version: 12
+run: 2026-11-24-feat-wave-queue-gaps
+workflow: fr-goal@1
+branch: feat/wave-queue-gaps
+started: '2026-11-24T22:23:24+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  lens-review:
+    state: pending
+  deliver:
+    state: pending
+fr_version: 9.0.0rc6
