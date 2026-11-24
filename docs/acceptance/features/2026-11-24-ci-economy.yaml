@@ -15,9 +15,13 @@ rows:
     origin:
     - spec:2026-11-24-ci-economy#R1
     - spec:2026-11-24-ci-economy#R2
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_lanes_workflow.py#test_pull_request_runs_share_a_group_and_cancel_only_there
+      - super-fr:tests/unit/test_ci_lanes_workflow.py#test_ci_ok_always_runs_and_asks_the_verdict
+    status: walk-owed
+    notes: Workflow shape unit-pinned in CI; only GitHub cancels a run in a concurrency
+      group, so the live walk is owed post-merge (gate tester)
     verify: live
   - id: ci-landed-skip
     capability: ci
