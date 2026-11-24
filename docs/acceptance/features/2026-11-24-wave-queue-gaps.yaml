@@ -18,9 +18,19 @@ rows:
     - spec:2026-11-24-wave-queue-gaps#R2
     - spec:2026-11-24-wave-queue-gaps#R3
     - spec:2026-11-24-wave-queue-gaps#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_queue_handback.py#test_the_slot_brief_fetches_the_slot_and_merges_its_sha
+      - super-fr:tests/unit/test_queue_handback.py#test_reissues_spend_no_handback
+      - super-fr:tests/unit/test_wave_queue_handback_planner.py#test_a_conflict_ejection_names_the_last_standing_combination_and_its_slot
+      - super-fr:tests/unit/test_wave_queue_handback_planner.py#test_an_ejected_entry_whose_onto_no_longer_leads_is_reissued_once_on_the_new_target
+      - super-fr:tests/unit/test_wave_queue_handback_planner.py#test_an_ejected_non_batch_entry_need_names_the_commit_to_merge
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_slot_hand_back_names_the_slot_and_records_its_onto
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_reissue_sends_one_brief_on_the_new_target_and_spends_no_budget
+    status: ci
+    notes: 'wave-queue-gaps phase 1: the planner aims a conflict eject at the stack
+      target and re-issues free (pure), the slot brief, and the driver''s slot and re-issue
+      hand-backs over a fake forge'
     verify: none
   - id: wave-queue-handback-carry
     capability: Wave merge queue hand-backs
