@@ -1,0 +1,89 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-24-ci-economy
+repo: derio-net/super-fr
+rows:
+  - id: ci-superseded-runs
+    capability: ci
+    acceptance: A pull-request CI run superseded by a newer push to the same pull request
+      is cancelled and leaves no failing ci-ok; pushes to main and fr-queue/** and merge
+      groups are never cancelled
+    origin:
+    - spec:2026-11-24-ci-economy#R1
+    - spec:2026-11-24-ci-economy#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: ci-landed-skip
+    capability: ci
+    acceptance: A push to main of a sha that already carries a successful ci-ok from
+      its fr-queue run runs no suite and reports a green ci-ok naming that run; any
+      other push to main runs full CI, and the release's pre-publish suite is unchanged
+    origin:
+    - spec:2026-11-24-ci-economy#R5
+    - spec:2026-11-24-ci-economy#R6
+    - spec:2026-11-24-ci-economy#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: ci-light-lane
+    capability: ci
+    acceptance: A pull request that changes only non-installable paths outside tests/
+      and .github/ runs the light lane (no shards, collect, split-check or coverage,
+      plus scoped tests) and ci-ok reads the skipped jobs as passing only for that lane
+    origin:
+    - spec:2026-11-24-ci-economy#R15
+    - spec:2026-11-24-ci-economy#R16
+    - spec:2026-11-24-ci-economy#R17
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: own-artifacts-tests-selected
+    capability: ci
+    acceptance: Tests that read this repo's own artifacts carry the own_artifacts marker
+      and --fr-scope selects them whenever docs/, .fr/ or .changes/ change; a tripwire
+      fails an unmarked reader
+    origin:
+    - spec:2026-11-24-ci-economy#R18
+    - spec:2026-11-24-ci-economy#R19
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: ci-cancelled-reads-pending
+    capability: triage-queue
+    acceptance: The wave driver, the queue, fr pr settle and triage collect read a cancelled
+      check as pending (superseded), never as failing; timed-out and failed checks stay
+      failing
+    origin:
+    - spec:2026-11-24-ci-economy#R3
+    - spec:2026-11-24-ci-economy#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: queue-regenerates-generated
+    capability: triage-queue
+    acceptance: A queue combination whose only conflicts are declared generated files
+      or docs reviewed stamps is built by regenerating the files and taking the newer
+      stamp, and is tested like any entry; a real conflict, a failing mirror command
+      or one that writes outside the generated globs still hands the entry back
+    origin:
+    - spec:2026-11-24-ci-economy#R8
+    - spec:2026-11-24-ci-economy#R9
+    - spec:2026-11-24-ci-economy#R10
+    - spec:2026-11-24-ci-economy#R11
+    - spec:2026-11-24-ci-economy#R12
+    - spec:2026-11-24-ci-economy#R13
+    - spec:2026-11-24-ci-economy#R14
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
