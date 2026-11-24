@@ -273,50 +273,7 @@ resolves:
   state: fixed
   body: Background cites batch_merge.py:42 for MergeConflictError, queue_exec.py:152 for its builder,
     and triage_batch_cmd.py:6315 for _conflict.
-acceptance:
-- row: wave-queue-handback-slot
-  op: reword
-  why: spec-review renumbered the requirements
-  origin:
-  - spec:2026-11-24-wave-queue-gaps#R1
-  - spec:2026-11-24-wave-queue-gaps#R2
-  - spec:2026-11-24-wave-queue-gaps#R3
-  - spec:2026-11-24-wave-queue-gaps#R6
-- row: wave-queue-handback-carry
-  op: reword
-  why: spec-review renumbered the requirements
-  origin:
-  - spec:2026-11-24-wave-queue-gaps#R4
-  - spec:2026-11-24-wave-queue-gaps#R5
-- row: wave-queue-overlap-report
-  op: reword
-  why: spec-review renumbered the requirements
-  origin:
-  - spec:2026-11-24-wave-queue-gaps#R7
-  - spec:2026-11-24-wave-queue-gaps#R8
-  - spec:2026-11-24-wave-queue-gaps#R9
-  - spec:2026-11-24-wave-queue-gaps#R10
-- row: wave-queue-operator-entry
-  op: reword
-  why: spec-review renumbered the requirements
-  origin:
-  - spec:2026-11-24-wave-queue-gaps#R11
-  - spec:2026-11-24-wave-queue-gaps#R12
-  - spec:2026-11-24-wave-queue-gaps#R14
-  - spec:2026-11-24-wave-queue-gaps#R15
-  - spec:2026-11-24-wave-queue-gaps#R16
-- row: wave-queue-operator-preapproval
-  op: reword
-  why: spec-review renumbered the requirements
-  origin:
-  - spec:2026-11-24-wave-queue-gaps#R13
-- row: wave-queue-gaps-live
-  op: reword
-  why: spec-review renumbered the requirements
-  origin:
-  - spec:2026-11-24-wave-queue-gaps#R1
-  - spec:2026-11-24-wave-queue-gaps#R14
-  - spec:2026-11-24-wave-queue-gaps#R15
+acceptance: []
 evidence:
   review: spec-review-1
   reviewer: aba551fe1cfef7e4a
