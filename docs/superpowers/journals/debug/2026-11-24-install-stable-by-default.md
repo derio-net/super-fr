@@ -10,3 +10,8 @@ Operator ran `scripts/install.sh` in the base clone on `main` (HEAD `0bf258293 r
 ### 5e87812ad7fc · root-cause · Only bootstrap.sh resolves a channel; install.sh and cloud-setup.sh follow main, which the release bot makes an RC
 
 Spec 2026-10-14-exit-gates R22 gave bootstrap.sh the channels (default = newest installable vX.Y.Z). R23 kept install.sh installing "the checkout it runs from" (main in sync with origin/main, or a detached v* tag). release.py commits `release: vX.Y.Z-rc.N` straight onto main while a gate is pending, so main HEAD is the RC. Any installer that follows main follows RCs: install.sh run in a clone on main, and cloud-setup.sh, which hard-codes main. bootstrap.sh also falls back to origin/main when no stable tag is installable.
+
+<!-- fr:journal kind=decision scope=debug id=e19657cf647a created=2026-11-24T13:16:09+00:00 -->
+### e19657cf647a · decision · Operator: every install path gets the latest stable by default; RC/main only via an explicit --version
+
+Operator decisions (2026-11-24): (1) install.sh on main with no --version delegates to bootstrap's channel resolution: it installs the newest stable tag from bootstrap's managed checkout and leaves the clone untouched. `--version` takes bootstrap's values, and `--version main` installs the checkout itself. (2) The wave driver's post_merge becomes `./scripts/install.sh --version main` (it keeps dogfooding main, explicitly). (3) bootstrap.sh with no installable stable refuses instead of falling back to main. This amends exit-gates R22/R23.
