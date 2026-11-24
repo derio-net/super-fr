@@ -59,11 +59,12 @@ rows:
   - id: s1-shipped-defaults
     capability: workflows
     acceptance: super-fr's default workflows, verification strategies and lenses are
-      resolved from one shipped defaults tree, a repo's .fr/ entry of the same name
-      wins, and one environment variable redirects the tree
+      resolved from one shipped defaults tree, a repo's .fr/workflows or .fr/verifications
+      entry of the same name wins, lenses keep .fr/lenses.yaml as their only override,
+      and one environment variable redirects the tree
     origin:
-    - spec:2026-11-19-event-driven-a-la-carte#R10
-    - spec:2026-11-19-event-driven-a-la-carte#R11
+    - spec:2026-11-19-event-driven-a-la-carte#R15
+    - spec:2026-11-19-event-driven-a-la-carte#R16
     levels: {}
     status: not-implemented
     notes: ''
