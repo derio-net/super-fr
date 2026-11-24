@@ -105,3 +105,53 @@ def test_fr_skills_lists_it(capsys: pytest.CaptureFixture[str]) -> None:
     skills_cmd.skills()
     out = capsys.readouterr().out
     assert re.search(r"^\s*fr-show-me\b", out, re.MULTILINE), out
+
+
+# Review p2-r2: the skill's examples are claims about fr, so pin them to the code.
+
+_FENCED = re.compile(r"^( *)(```|~~~)[^\n]*\n.*?^\1\2[ \t]*$", re.MULTILINE | re.DOTALL)
+_NONE_EXAMPLE = re.compile(r"`(none — [^`]+)`")
+
+
+def _example_blocks() -> list[str]:
+    blocks = [m.group(0) for m in _FENCED.finditer(_body())]
+    assert len(blocks) >= 4, "the views section shows at least four fenced examples"
+    return blocks
+
+
+def test_every_fenced_example_is_a_shape_block() -> None:
+    from fr.shape import shape_block_problem
+
+    for block in _example_blocks():
+        dedented = "\n".join(line.removeprefix("   ") for line in block.splitlines())
+        assert shape_block_problem(dedented) is None, block
+
+
+def test_the_inline_none_example_is_a_shape_block() -> None:
+    from fr.shape import shape_block_problem
+
+    examples = [m.group(1) for m in _NONE_EXAMPLE.finditer(_body()) if "<reason>" not in m.group(1)]
+    assert examples, "the skill gives a concrete `none — <reason>` example"
+    for example in examples:
+        assert shape_block_problem(example) is None, example
+
+
+def test_the_call_tree_example_names_functions_that_exist() -> None:
+    tree = next(b for b in _example_blocks() if "_deliver_pr_gate" in b)
+    names = re.findall(r"^\s+([A-Za-z_]\w+)\b(?!\s+--)", tree, re.MULTILINE)
+    assert names, tree
+    source = "\n".join(p.read_text() for p in (REPO / "packages" / "fr" / "src").rglob("*.py"))
+    for name in names:
+        assert re.search(rf"^\s*def {name}\(", source, re.MULTILINE), name
+
+
+@pytest.mark.parametrize(
+    "page", [SKILL, REPO / "docs" / "explainers" / "fr-show-me.md"], ids=["skill", "explainer"]
+)
+def test_the_shape_file_timing_matches_the_lens_brief(page: Path) -> None:
+    """Review p2-r1: `lens_review_brief` reads the shape file when the brief is built,
+    which is the last review-phase resolve, not the lens dispatch."""
+    text = " ".join(page.read_text().split())
+    assert "last `review-phase` resolve" in text
+    assert "before the lens reviewers are dispatched" not in text
+    assert "before it sends out the lens reviewers" not in text

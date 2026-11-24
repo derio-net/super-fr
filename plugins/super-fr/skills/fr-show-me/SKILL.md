@@ -92,11 +92,11 @@ required, and an empty section or prose alone is refused.
   Design section describes: usually an annotated file tree as a structure-diff, plus a
   mermaid sequence when the order of events is the point. The spec reviewer checks every
   name in it against the codebase and the Design text.
-- **A run's shape file, `<run-id>.shape.md`**, beside the run's cursor. Write it after
-  implementation and commit it before the lens reviewers are dispatched: each lens
-  reviewer reads it and reports where it contradicts the diff. Draw what was delivered,
-  not what was planned. `deliver` renders it as the PR's `## Shape of the change` and
-  refuses while it is missing or not a shape block.
+- **A run's shape file, `<run-id>.shape.md`**, beside the run's cursor. Commit it before
+  the last `review-phase` resolve, which builds the lens brief: `shape: null` there means
+  it was absent. Each lens reviewer reads it and reports where it contradicts the diff.
+  Draw what was delivered, not what was planned. `deliver` renders it as the PR's
+  `## Shape of the change` and refuses while it is missing or not a shape block.
 - **On demand.** When the operator asks to see the current topic, answer with the
   smallest view, then one or two sentences on what it shows.
 

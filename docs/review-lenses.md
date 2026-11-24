@@ -124,7 +124,7 @@ and the rule that its reviewer must return by.
 
 Beside a non-empty set the brief also gives
 `shape`, the absolute path of the run's shape file (see [fr-show-me](explainers/fr-show-me.md)),
-or `null` when there is none. Each reviewer reads that file and reports, as a finding of
+or `null` when the file did not exist when the brief was built. Each reviewer reads that file and reports, as a finding of
 its own lens, any way the shape contradicts the diff. The shape file is not a changed file
 of the feature, so the reviewer does not list it under `examined`.
 

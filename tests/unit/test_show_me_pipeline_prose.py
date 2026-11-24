@@ -74,3 +74,11 @@ def test_spec_reviewer_checks_the_design_shape(needle: str) -> None:
     text = SPEC_REVIEWER.read_text()
     at = text.index("## Design shape")
     assert needle in text[at - 200 : at + 900]
+
+
+def test_goal_names_when_the_brief_reads_the_shape_file() -> None:
+    """Review p2-r2: pin §7a's timing to `lens_review_brief`, which gives `shape: null`
+    when the file is absent at brief build (the last review-phase resolve)."""
+    text = " ".join(_section(GOAL, "### 7a. lens-review").split())
+    assert "before the last `review-phase` resolve" in text
+    assert "did not exist when the" in text

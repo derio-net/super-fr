@@ -63,8 +63,8 @@ Design section: a name that does not exist, or a drawing that the text contradic
 finding.
 
 **The run's shape file, `<run-id>.shape.md`.** It sits beside the run's cursor and shows
-what the run delivered, not what the plan said. fr-goal writes and commits it before it
-sends out the lens reviewers. Each lens reviewer gets the file's path in its brief, reads it, and
+what the run delivered, not what the plan said. fr-goal writes and commits it before the last `review-phase` resolve, because that
+resolve builds the lens reviewers' brief and reads the file then. Each lens reviewer gets the file's path in its brief, reads it, and
 reports any place where it contradicts the diff. At `deliver`, fr renders the file into the
 PR body as `## Shape of the change`, and refuses to deliver while the file is missing or is
 not a shape block. A run that started before design shapes existed shows "This run predates
