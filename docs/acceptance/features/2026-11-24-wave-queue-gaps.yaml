@@ -29,6 +29,7 @@ rows:
       merge the new commit.
     origin:
     - spec:2026-11-24-wave-queue-gaps#R4
+    - spec:2026-11-24-wave-queue-gaps#R5
     levels: {}
     status: not-implemented
     notes: ''
