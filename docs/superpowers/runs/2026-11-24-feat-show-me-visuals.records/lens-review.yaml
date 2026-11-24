@@ -92,7 +92,4 @@ resolves:
   body: 'Shape file corrected: hop under agents_kind.py, agents/__init__.py and skills_cmd.py listed.'
 evidence:
   review: lens-review-r1
-  reviewer:
-    docs-accuracy: a783c2646898c1d3d
-    security: a12da626c46e67347
-    tests: a96f2ab957e9adc99
+  reviewer: docs-accuracy=a783c2646898c1d3d,security=a12da626c46e67347,tests=a96f2ab957e9adc99
