@@ -9185,6 +9185,11 @@ batches:
     - super-fr#1496
     - super-fr#1497
     - super-fr#1569
+  - kind: closeout
+    at: '2026-11-24T23:15:40.652825Z'
+    runner: herdr
+    handle: w3V:p3
+    archive: chore/closeout-2026-11-24-2
 - id: hook-hardening
   title: 'Hook and install hardening: deny without jq, no cwd imports in the parser, pinned spawns, locked
     installs'
@@ -10271,6 +10276,13 @@ closeouts:
   handle: w3V:p3
   planned:
   - closeout-truth
+  pr: 1681
+  head: 6340021d281107bf1928237dc714263ae1c9565c
+  members:
+  - closeout-truth
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-22-batch-closeout-truth.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-22-batch-closeout-truth.md"
 queues:
 - repo: derio-net/super-fr
   wave: 22
