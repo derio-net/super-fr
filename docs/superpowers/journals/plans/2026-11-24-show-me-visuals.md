@@ -48,3 +48,43 @@ every `## <Keyword>` spec reader (fr.shape.DESIGN_SHAPE_HEADING is one) to the
 repair's stop set, so demoting a misplaced Test Plan region never pushes the
 design shape below level two where `design_shape_section` would stop finding it.
 Repair logic only; no artifact's shape moves, so no stamp.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-24T19:05:18+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · fr.shape's path display duplicated run_cmd._shown_path without resolving (phase 1)
+
+`shape.py` `_shown` took `relative_to` on unresolved paths, unlike `run_cmd._shown_path`, so on a
+symlinked checkout (macOS /var) the deliver shape refusal could print an absolute path while the
+PR-body refusal printed a relative one.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-24T19:05:18+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · test_fr_shape_imports only asserted the module imports (phase 1)
+
+Every other test in tests/unit/test_shape.py already imports fr.shape; the smoke test added nothing once they existed.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-24T19:05:18+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · an already-archived cursor left its live shape file behind (phase 1)
+
+`archive_run_cursor`'s early-return branch (cursor archived, usage file live) moved only the usage
+file, so a re-run after a partial archive left `<run-id>.shape.md` (and `.pr-body.md`) in runs/.
+
+<!-- fr:journal kind=review scope=plan id=p1-review-r1 created=2026-11-24T19:05:18+00:00 phase=1 -->
+### p1-review-r1 · review · phase 1 review: 3 findings in scope, all fixed (phase 1)
+
+An independent reviewer read the phase 1 diff against R6–R12, R16–R18. It found no correctness bug in
+the requirement surfaces and three low-severity findings, all in scope and fixed in one commit.
+No lens suggested.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-24T19:05:18+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: fr.shape's path display duplicated run_cmd._shown_path without resolving (phase 1)
+
+`fr.shape.shown_path` resolves both sides and is the one helper; `run_cmd._shown_path` aliases it.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-24T19:05:18+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: test_fr_shape_imports only asserted the module imports (phase 1)
+
+Deleted the import-only test; the rest of the file still exercises the module.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-24T19:05:18+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: an already-archived cursor left its live shape file behind (phase 1)
+
+The early-return branch also moves the PR body render and the shape file; tests/unit/test_archive_cmd.py::test_an_already_archived_cursor_carries_its_live_shape_file (red without the fix).
