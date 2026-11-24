@@ -1,0 +1,322 @@
+schema_version: 12
+run: 2026-11-24-feat-wave-queue-gaps
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: s-r1
+  review_scope: in
+  title: Lineage is exact-sha membership, so a combination that landed in the middle of a push reads as
+    stale and triggers R4's forced reset
+  body: 'evidence: spec §A lineage; queue_exec.py:497,522 (land_push records main = the LAST landing''s
+    commit only); wave_queue.py:638-651 (replay drops every landed combo)
+
+    When slot-1 and slot-2 land in one push, queue_land.main is slot-2''s sha and slot-1 is neither base,
+    standing nor a recorded main, so an entry that merged slot-1 gets held and told to force-push. A fresh-commit
+    rebuild (queue_exec.py:257-267) has the same effect. Define "leads to main" by ancestry, or include
+    every combination of each landed chain.
+
+    '
+- kind: finding
+  id: s-r2
+  review_scope: in
+  title: 'Under queue.land: merge the slot commit never becomes main, so R1''s brief is wrong and R4 fires
+    on every merged slot'
+  body: 'evidence: model.py:550; queue_exec.py:530-570 (land_merge: forge merges each PR''s head)
+
+    Under land: merge main is a forge merge commit, never the slot sha; a PR that merged a slot commit
+    carries a commit never reachable from main. State R1/R4 per land mode.
+
+    '
+- kind: finding
+  id: s-r3
+  review_scope: in
+  title: Under method rebase, merging the slot commit does not stop the second conflict R1 promises to
+    avoid
+  body: 'evidence: queue_exec.py:192-206 (rebase replays the non-merge commits), :222-245 (p3-r9 ejection)
+
+    Rebase cherry-picks the PR''s original conflicting commits; the session''s merge resolution is not
+    replayed. Scope R1 to merge/squash or say what a rebase repo''s brief says.
+
+    '
+- kind: finding
+  id: s-r4
+  review_scope: in
+  title: R1 names slot-(k-1), but the ejected entry re-enters behind the entries that were behind it
+  body: 'evidence: wave_queue.py:457-470 (_by_readiness with ejection floor); approval.py:10-29
+
+    Entries k+1.. are rebuilt on slot-(k-1) and k comes back later, so slot-(k-1) is not what main becomes
+    ahead of it; R1 and R2 name different targets. Name R2''s stack target in R1 too, or pin the re-entry
+    position.
+
+    '
+- kind: finding
+  id: s-r5
+  review_scope: in
+  title: R4's reset to the last hand-back head can discard work, and does not remove a stale commit carried
+    from an earlier hand-back
+  body: 'evidence: spec R4; decision q1-stale-slot
+
+    (a) commits after the hand-back are thrown away silently; (b) a second hand-back at a head that already
+    carries a stale combination makes the reset target keep it, repeating forever. Target the newest hand-back
+    head that reaches no stale combination and tell the session to cherry-pick its later non-merge commits.
+
+    '
+- kind: finding
+  id: s-r6
+  review_scope: in
+  title: The stale-carry check reads only the current record's queue_built shas, so a requeued or deferred
+    batch carries an ejected change out undetected
+  body: 'evidence: spec §A; wave_queue.py:282-289 (effective_wave), :668-680 (slot_leases walks every
+    record)
+
+    Compute carried over every queue_built sha of this scope''s records for the repo.
+
+    '
+- kind: finding
+  id: s-r7
+  review_scope: in
+  title: The carry ancestry read is quadratic per pass and does not say what happens when git cannot read
+    it
+  body: 'evidence: spec §A; queue_exec.py:327-334
+
+    entries × every built sha is-ancestor calls per pass, growing; filter and cache, or one rev-list per
+    head. A missing object must hold the entry, never read as not carried.
+
+    '
+- kind: finding
+  id: s-r8
+  review_scope: in
+  title: The brief's `git fetch origin <onto_ref>` cannot fetch the sha once the slot was rebuilt
+  body: 'evidence: spec §A; queue_exec.py:309-333 (slots rebuilt in place)
+
+    Say what to do when the fetched ref no longer holds the sha: stop and wait for the re-issued brief.
+
+    '
+- kind: finding
+  id: s-r9
+  review_scope: in
+  title: R9 tells the second batch the queue builds it after the first, but queue order is readiness order,
+    not dispatch order
+  body: 'evidence: wave_queue.py:439-470 (readiness order); batch_drive.py:1574 (_dispatch_key)
+
+    Say "whichever lands second gets the conflict hand-back", or order overlapping entries by dispatch
+    order.
+
+    '
+- kind: finding
+  id: s-r10
+  review_scope: in
+  title: A preapproved batch PR (or an R32 entry's PR) becomes a second, operator-kind entry
+  body: 'evidence: spec R10, §C, R12, R15; model.py:1109; triage_batch_cmd.py:7241-7296
+
+    added() returns a preapproved batch PR, so it is admitted twice; R10 never refuses an R32 entry PR.
+    Exclude existing entries, say where a batch PR''s driver-made approval is recorded, and whether remove
+    withdraws a batch PR''s preapproval.
+
+    '
+- kind: finding
+  id: s-r11
+  review_scope: in
+  title: Preapproval re-approves every future head and trusts a self-reported login; the spec should bound
+    it
+  body: 'evidence: decision q5; spec R10, R13; approval.py:10-29; batch.py:250-263
+
+    Any push to a preapproved branch by anyone with write access is approved and landed once green, cancelling
+    the patch-id pin; the trust root moves to the `by` field in the state file. At minimum check `by`
+    against the allowed authors at use; consider bounding re-approval; state the consequence.
+
+    '
+- kind: finding
+  id: s-r12
+  review_scope: in
+  title: R15 on a between-waves queue lets one unready added PR block the next wave and every release
+  body: 'evidence: spec R14, R15, §C; wave_queue.py:531-563, :1043-1078
+
+    A between-waves queue held open by an ejected or red added PR keeps the hold open and the next wave
+    closed. Exclude those for between-waves queues; measure the stall from when the drain would otherwise
+    fire, not the add time.
+
+    '
+- kind: finding
+  id: s-r13
+  review_scope: in
+  title: 'Schema 14: `_EVENT_SCHEMAS` never sees a top-level `queue_requests`, and the writer stamps unconditionally'
+  body: 'evidence: model.py:1598-1628, :104, :1494; batch.py:533
+
+    Add explicit refusals below 14 for queue_requests and ConflictEvent onto/reissue; JUDGEMENTS_SCHEMA
+    moves to 14 and the read literal widens; update AGENTS.md.
+
+    '
+- kind: finding
+  id: s-r14
+  review_scope: in
+  title: batch_drive.py has 4 lines of budget; the design needs more than the one step-3 loop there
+  body: 'evidence: tests/unit/test_tripwire_module_budget.py:25; batch_drive.py:433-435, :461, :934, :1783,
+    :2106-2109
+
+    Snapshot fields, Admitted kind, QueueSnapshot wiring and conflict_decision''s skip rule all live in
+    batch_drive.py. Name the move, or plan the budget bump with its reason.
+
+    '
+- kind: finding
+  id: s-r15
+  review_scope: in
+  title: '`queue add|remove` does not say how it resolves the scope and its state, or how it coexists
+    with a running driver'
+  body: 'evidence: spec R10/R11, §C; batch.py:505-542
+
+    The verb needs the scope arguments, the state ref sync, and a stated behaviour for a refused write.
+
+    '
+- kind: finding
+  id: s-r16
+  review_scope: in
+  title: The Test Plan has one live line and no case for the five CI-proven rows
+  body: 'evidence: spec ## Verification vs ## Test Plan; issue #1677 "Tests per ask"
+
+    Number the CI cases and cite the R''s so each row''s evidence is checkable.
+
+    '
+- kind: finding
+  id: s-r17
+  review_scope: in
+  title: 'Small citation errors: MergeConflictError''s home and `_conflict`''s line'
+  body: 'evidence: batch_merge.py:42-49; queue_exec.py:152-158; triage_batch_cmd.py:6315, :6979
+
+    Cite both places; the rebuilt exception in _queue_hand_back must carry the new fields too.
+
+    '
+- kind: review
+  id: spec-review-1
+  title: 'independent spec review: 17 findings'
+  body: 'Findings s-r1..s-r17, all in scope; heaviest: lineage and land modes (s-r1..s-r3), re-entry position
+    (s-r4), the R4 reset target (s-r5..s-r7), preapproval trust (s-r11), drain liveness (s-r12), schema
+    14 (s-r13). Decisions q1-q7 are each reflected. Verified citations listed by the reviewer (queue_exec.py:270,
+    :1258-1275; batch_merge.py:42; wave_queue.py:175, :868, :896-906, :243-265, :206, :613, :439, :531,
+    :1043, :668; batch_dispatch.py:279; batch_drive.py:891, :919, :934, :2106-2109, :453, :1574; triage_batch_cmd.py:914,
+    :964, :6315, :6602, :6966, :7241; approval.py:318; batch.py:250, :352, :770, :775, :780, :845; model.py:1109,
+    :1164, :866, :1362, :550, :555, :395; ghclient.py:469, :303). PR #1669''s generated/regen/Regen not
+    verifiable read-only. Suggested lenses: security, errors.
+
+    '
+- kind: lens
+  lens: security
+  title: R13 lets the driver apply approved-fr itself and R4 briefs a force-push
+- kind: lens
+  lens: errors
+  title: the carry and lineage reads must fail closed on unreadable git state
+resolves:
+- id: s-r1
+  state: fixed
+  body: 'Lineage is now ancestry (R2): a commit leads to main when it is an ancestor of the last standing
+    combination or the base; a mid-push landed or fresh-rebuilt combination stays in lineage.'
+- id: s-r2
+  state: fixed
+  body: 'R1/R4 scoped to queue.land: push; under land: merge the brief names origin/<default> as today
+    and no carry check applies.'
+- id: s-r3
+  state: fixed
+  body: R1/R4 scoped to methods merge and squash; under rebase the brief names origin/<default>.
+- id: s-r4
+  state: fixed
+  body: R1 and R2 name one target, the stack target computed after the ejection (last standing combination,
+    else base).
+- id: s-r5
+  state: fixed
+  body: R4 resets to the newest hand-back head that reaches no stale combination and re-applies later
+    non-merge commits by cherry-pick; none free → held with a Need.
+- id: s-r6
+  state: fixed
+  body: carries reads every queue_built sha of this scope's records for the repo (R4, §A).
+- id: s-r7
+  state: fixed
+  body: One `git rev-list <head> ^<target>` per entry, intersected with the built set, cached per (head,
+    target); unreadable holds the entry (R5).
+- id: s-r8
+  state: fixed
+  body: 'R1''s brief: fetch the ref; if it no longer contains the sha, stop and wait for the re-issued
+    brief.'
+- id: s-r9
+  state: fixed
+  body: R10 now says whichever of the two lands second gets the hand-back.
+- id: s-r10
+  state: fixed
+  body: R11 refuses R32 entry PRs; added() excludes PRs that are already entries; a batch PR's preapproval
+    records only the preapproval, the driver adds the label and the batch's own settle records the ApprovalEvent;
+    remove withdraws it.
+- id: s-r11
+  state: fixed
+  body: 'R13 bounded and stated: the adder must be an allowed author at use time, each auto-approval comments
+    head and patch-id on the PR, and the widening is stated with queue remove as its end.'
+- id: s-r12
+  state: fixed
+  body: R15 applies to wave queues only; a between-waves queue drains by its existing rule; the stall
+    counts from the later of the add and the last landing.
+- id: s-r13
+  state: fixed
+  body: '§D: JUDGEMENTS_SCHEMA moves to 14, read literal 1–14, explicit refusals for queue_requests and
+    conflict onto/reissue below 14, AGENTS.md line updated.'
+- id: s-r14
+  state: fixed
+  body: '§E: conflict_decision/handbacks_since/red_decision move to fr.triage.handback_rules and _housekeeping_reads
+    to fr.triage.operator_entries; no budget raised.'
+- id: s-r15
+  state: fixed
+  body: 'R11: the verbs take the scope options and write through _load_state/_write and the state sync;
+    a refused write exits 2 and says to re-run.'
+- id: s-r16
+  state: fixed
+  body: §F lists the CI cases per requirement and the Verification rows cite them; the Test Plan keeps
+    only the post-merge row, as fr-goal prescribes.
+- id: s-r17
+  state: fixed
+  body: Background cites batch_merge.py:42 for MergeConflictError, queue_exec.py:152 for its builder,
+    and triage_batch_cmd.py:6315 for _conflict.
+acceptance:
+- row: wave-queue-handback-slot
+  op: reword
+  why: spec-review renumbered the requirements
+  origin:
+  - spec:2026-11-24-wave-queue-gaps#R1
+  - spec:2026-11-24-wave-queue-gaps#R2
+  - spec:2026-11-24-wave-queue-gaps#R3
+  - spec:2026-11-24-wave-queue-gaps#R6
+- row: wave-queue-handback-carry
+  op: reword
+  why: spec-review renumbered the requirements
+  origin:
+  - spec:2026-11-24-wave-queue-gaps#R4
+  - spec:2026-11-24-wave-queue-gaps#R5
+- row: wave-queue-overlap-report
+  op: reword
+  why: spec-review renumbered the requirements
+  origin:
+  - spec:2026-11-24-wave-queue-gaps#R7
+  - spec:2026-11-24-wave-queue-gaps#R8
+  - spec:2026-11-24-wave-queue-gaps#R9
+  - spec:2026-11-24-wave-queue-gaps#R10
+- row: wave-queue-operator-entry
+  op: reword
+  why: spec-review renumbered the requirements
+  origin:
+  - spec:2026-11-24-wave-queue-gaps#R11
+  - spec:2026-11-24-wave-queue-gaps#R12
+  - spec:2026-11-24-wave-queue-gaps#R14
+  - spec:2026-11-24-wave-queue-gaps#R15
+  - spec:2026-11-24-wave-queue-gaps#R16
+- row: wave-queue-operator-preapproval
+  op: reword
+  why: spec-review renumbered the requirements
+  origin:
+  - spec:2026-11-24-wave-queue-gaps#R13
+- row: wave-queue-gaps-live
+  op: reword
+  why: spec-review renumbered the requirements
+  origin:
+  - spec:2026-11-24-wave-queue-gaps#R1
+  - spec:2026-11-24-wave-queue-gaps#R14
+  - spec:2026-11-24-wave-queue-gaps#R15
+evidence:
+  review: spec-review-1
+  reviewer: aba551fe1cfef7e4a
