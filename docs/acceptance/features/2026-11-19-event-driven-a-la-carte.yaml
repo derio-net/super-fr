@@ -102,5 +102,6 @@ rows:
     - spec:2026-11-19-event-driven-a-la-carte#R21
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: candidate walk scenario, built in plan phase 7
     verify: candidate
+    scenario: tests/scenarios/config-homes.sh
