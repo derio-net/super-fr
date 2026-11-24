@@ -32,7 +32,8 @@ export:
 # forbids only force-push and deletion), and the release workflow cuts the wave's release.
 queue:
   ci: push
-  depth: 2
+  # Up to three combinations in CI at once: a wave's non-overlapping entries stack and land together.
+  depth: 3
   land: push
   release: workflow
   # No `release_workflow:` on purpose: release.yml already runs on the drained `fr-hold/**` push.
