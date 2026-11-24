@@ -678,3 +678,10 @@ Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py, test_wave_queue_dri
 Step: Gates: a `gate:devops` PR enters only after `fr-queue:release` is settled to `queue_release`, lands alone, and nothing lands behind it until `queue_postmerge_done`; `_merged` reads only the forge, so stage 3 waits for the merge; a combination behind it is tested meanwhile. A `gate:tester` batch lands, is left out of the wave close-out, and its own close-out queues between waves after `fr gate pass`. (R15, R26)
 
 Evidence: 2026-11-24: tests/unit/test_wave_queue_barrier.py, test_queue_gate_labels.py (devops barrier, tester close-out); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-20 created=2026-11-24T12:41:00+00:00 -->
+### test-plan-step-20 · discovery · Test Plan step 20: ran
+
+Step: Broken hold: a deleted or cleared `open` hold is re-armed with one Need; an expired one the same; a release commit landing mid-queue fails the next lease and the queue rebuilds; no case lands an untested tree or moves a PR branch. (R27)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py, tests/integration/test_queue_hold.py (re-armed hold, one Need, lease failure rebuilds); full wave-queue unit (542) + integration (134) + scenario (3) runs green
