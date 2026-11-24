@@ -545,3 +545,10 @@ after: kinds ['candidate', 'live'], gates ['tester']
 answered_by: operator
 lowered: []
 ```
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-24T12:40:12+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: Fake forge plus a real bare git remote: a wave of three approved green PRs; depth 2. One pass builds main+a and main+a+b on `slot-1` and `slot-2`; no PR branch moves; once both are green, one atomic push lands them and `main` equals the tested tip. (R1, R4, R8, R9, R10)
+
+Evidence: 2026-11-24: tests/integration/test_queue_build.py, test_queue_land.py (real bare git remote, slot branches, atomic push) pass; 134 integration + 542 unit tests green
