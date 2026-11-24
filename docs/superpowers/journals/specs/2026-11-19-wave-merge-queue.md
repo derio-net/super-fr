@@ -629,3 +629,10 @@ Evidence: 2026-11-24: tests/integration/test_queue_hold.py, tests/unit/test_rele
 Step: `queue.ci: none` lands each built entry with no CI wait; `queue.ci: none` is refused where services report CI. (R7, R20)
 
 Evidence: 2026-11-24: tests/unit/test_wave_queue_phase5_fixes.py, test_triage_queue_model.py (queue.ci none, refused where CI reported); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-13 created=2026-11-24T12:40:49+00:00 -->
+### test-plan-step-13 · discovery · Test Plan step 13: ran
+
+Step: `fr validate artifacts --allow-migratable` passes a stale movable stamp and fails a refusing one; `ci.yml` uses it on PRs and on `fr-queue/**`. (R21)
+
+Evidence: 2026-11-24: tests/unit/test_validate_allow_migratable.py, test_queue_ci_triggers.py; tests/scenarios/wave-queue-migratable-validation.sh; full wave-queue unit (542) + integration (134) + scenario (3) runs green
