@@ -580,3 +580,10 @@ Evidence: 2026-11-24: tests/unit/test_triage_batch_merge.py, tests/integration/t
 Step: Approval by content: approved at H; the session merges `main` (same patch-id) and the approval holds; an empty commit holds it; a code edit, a whitespace-only edit and a binary edit each void it and remove the label; an old event with no patch-id follows `reaches()` until a pass records its id; a clean merge of `main` after an fr update holds it; a `main` newer than the clone's copy holds it after the refetch; a host's diff configuration (textconv, external diff, prefixes) never moves the id; a moved identical hunk, a hand-edited merge resolution and a rewrite of the branch each void it (the succession check); an unreadable patch-id holds it without voiding. (R12)
 
 Evidence: 2026-11-24: tests/unit/test_merge_train_approval.py, test_triage_approval.py, test_gitseam_patch_id.py (patch-id approval, textconv, void cases); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-6 created=2026-11-24T12:40:37+00:00 -->
+### test-plan-step-6 · discovery · Test Plan step 6: ran
+
+Step: Red combination: main+a+b fails twice while main+a is green; a lands, b is ejected and handed back with the combination sha; c is rebuilt on main+a; a single failure followed by a green rebuild ejects nothing. (R13)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py (first red rebuilt, second red ejects, rebuild behind); full wave-queue unit (542) + integration (134) + scenario (3) runs green
