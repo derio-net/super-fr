@@ -720,3 +720,11 @@ Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py other-entry tests, t
 Step: `post_merge` runs once per landing at the landed `main`, records every batch it covered, gates the next landing, and a failure pauses landings with a Need. A landed PR the forge still shows open pauses the queue with a Need. (R33, R35)
 
 Evidence: 2026-11-24: tests/unit/test_queue_exec.py, test_wave_queue_planner.py (post_merge per landing, pausing Need); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-26 created=2026-11-24T12:41:11+00:00 -->
+### test-plan-step-26 · owed · Test Plan step 26 owed
+
+what: Post-merge, live: the next wave on this repo drains through the queue; record the number of PR updates (expected 0), CI cycles per PR, approvals per PR (expected 1), and releases cut (expected 1 for the wave). (all; row `wave-queue-live-wave`)
+why: live post-merge walk on the next real wave (row wave-queue-live-wave): needs a real wave drained through the queue; not runnable now
+how: fr journal resolve --scope spec --slug 2026-11-19-wave-merge-queue --id test-plan-step-26 --state fixed --note "<evidence>"
+owed_key: spec:2026-11-19-wave-merge-queue#step26
