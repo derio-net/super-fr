@@ -601,3 +601,10 @@ Evidence: 2026-11-24: tests/integration/test_queue_build.py::test_a_version_only
 Step: Foreign push to `main`: every combination is rebuilt on the new base, no PR branch moves, the approvals hold, and the move is reported once. (R14)
 
 Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py foreign base move tests (rebuild, report once); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-9 created=2026-11-24T12:40:42+00:00 -->
+### test-plan-step-9 · discovery · Test Plan step 9: ran
+
+Step: Wave order: an approved green PR of wave N+1 waits while wave N's queue is open, and also while wave N has unfinished batches but nothing ready; a no-wave batch waits for an open wave; later waves' waiting PRs do not count against `max_inflight`. (R2, R3, R36)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py, test_wave_queue_drive.py (wave order, later waves take no in-flight slot); full wave-queue unit (542) + integration (134) + scenario (3) runs green
