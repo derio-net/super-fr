@@ -268,3 +268,34 @@ root_readers was restructured for speed and precision before the RED commit (per
 ### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
 
 touches_own_artifacts and the keep_item flag were written in their final shape; the conftest wiring is two lines
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-11-24T20:32:58+00:00 phase=3 -->
+### review-p3 · review · Phase 3 review (own_artifacts marker, fr-scope selection, tripwire) (phase 3)
+
+Independent reviewer read d73314be3..e858898c6 against R19/R20. touches_own_artifacts, the
+conftest wiring (scenario always dropped) and the pytestmark mass edit are correct. Three
+tripwire findings: p3-r1 fixed, p3-r2 fixed in part, p3-r3 refuted.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-24T20:32:58+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · _is_marked counted a mark on one test as marking the whole module (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-24T20:32:58+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · _climbs missed a name holding .parents then indexed, negative indexes and ../.. joins (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-24T20:32:58+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · ROOT_ALIASES is a hand-kept list (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-24T20:32:58+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: _is_marked counted a mark on one test as marking the whole module (phase 3)
+
+_is_marked now reads only a module-level pytestmark assignment. test_a_mark_on_one_test_does_not_cover_the_module pins that a module with one marked test and one unmarked root reader is flagged. No module in tests/ relied on a per-test mark, and the real-repo tripwire stays green.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-24T20:32:58+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: _climbs missed a name holding .parents then indexed, negative indexes and ../.. joins (phase 3)
+
+_climbs treats X.parents as one above X, so a name holding .parents and indexed later counts (test_a_name_holding_parents_then_indexed_is_flagged). parents[-1] is the filesystem root, not the checkout, so it is correctly not a root climb. No test module in tests/ joins "../..", and the docstring already says the tripwire is not sound against every spelling.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-24T20:32:58+00:00 phase=3 state=refuted resolves=p3-r3 -->
+### p3-r3-resolved · finding [refuted] · resolves p3-r3: ROOT_ALIASES is a hand-kept list (phase 3)
+
+The alias list only covers names a module uses without binding them (star imports from conftest). A new alias a helper defines by climbing from __file__ is caught through the helper-import path whatever its name, and an alias a module binds is judged by what it is bound to. A new unbound name would need a new star-imported constant in conftest, which is the case the dated list documents.
