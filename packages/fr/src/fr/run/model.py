@@ -21,13 +21,17 @@ Design mirrors `fr.journal.model` / `fr.workflow.model`:
 
 from __future__ import annotations
 
+import contextlib
+import os
 import re
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
 
+from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.paths import KIND_DIRS, artifact_root
 
 StepState = Literal["pending", "running", "done", "failed", "blocked"]
@@ -610,12 +614,101 @@ def _refuse_a_newer_cursor(raw: dict[str, Any]) -> None:
     )
 
 
+class RunStateConflictError(RunStateError):
+    """The cursor changed on disk after this process read it (super-fr#1511).
+
+    Two `fr run` commands on one run each load the cursor, change it and save
+    it; without a check the later save silently drops the earlier one's
+    update. The save refuses instead, and writes nothing."""
+
+
+_OBSERVED: dict[Path, str | None] = {}
+"""Per process: the digest of the cursor bytes this process last read or wrote
+at each path (`None`: it saw the file absent). The save compares the file on
+disk against it — optimistic concurrency, so nothing is held across a command,
+and a command that re-enters `fr run resolve` in process (a step record's
+apply) sees its own inner write as its own. The CLI clears it per invocation
+(`forget_observed_run_states`), so it means "since this command read it"."""
+
+
+def _observed_key(path: Path) -> Path:
+    return Path(path).resolve()
+
+
+def _digest(text: str | None) -> str | None:
+    import hashlib
+
+    return None if text is None else hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def forget_observed_run_states() -> None:
+    """Start a new command: nothing read yet."""
+    _OBSERVED.clear()
+
+
+@contextlib.contextmanager
+def _runs_dir_lock(directory: Path) -> Iterator[None]:
+    """Serialise the compare-and-replace between processes: an advisory
+    `flock` on the runs directory itself, so no lock file sits beside the
+    cursors. A filesystem that cannot lock (some container bind mounts) still
+    gets the compare, only with its tiny window unguarded."""
+    import fcntl
+
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        yield
+        return
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        except OSError:
+            yield
+            return
+        try:
+            yield
+        finally:
+            with contextlib.suppress(OSError):
+                fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
 def save_run_state(repo_root: Path, state: RunState) -> Path:
-    """Write `state` to its canonical path, creating parent dirs as needed."""
+    """Write `state` to its canonical path, creating parent dirs as needed.
+
+    Refuses with `RunStateConflictError`, writing nothing, when this process
+    read the cursor and another has changed (or removed) it since. A cursor
+    this process never read is written unchecked, as a new run's is."""
     path = run_path(repo_root, state.run)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(dump_run_state(state))
+    text = dump_run_state(state)
+    key = _observed_key(path)
+    with _runs_dir_lock(path.parent):
+        if key in _OBSERVED:
+            try:
+                current: str | None = path.read_text()
+            except FileNotFoundError:
+                current = None
+            if _digest(current) != _OBSERVED[key]:
+                what = "was removed" if current is None else "changed on disk"
+                raise RunStateConflictError(
+                    f"run {state.run}: the cursor {what} after this command read it — "
+                    "another fr command wrote it. Nothing was written; run this command "
+                    "again to act on the current cursor."
+                )
+        write_text_atomic(path, text)
+    _OBSERVED[key] = _digest(text)
     return path
+
+
+def read_run_state(path: Path) -> RunState:
+    """Read + parse the cursor at `path`, noting what was read for the save's
+    lost-update check. Every reader that may lead to a save uses this."""
+    text = Path(path).read_text()
+    state = parse_run_state(text)
+    _OBSERVED[_observed_key(path)] = _digest(text)
+    return state
 
 
 def load_run_state(repo_root: Path, run_id: str) -> RunState:
@@ -623,4 +716,4 @@ def load_run_state(repo_root: Path, run_id: str) -> RunState:
     path = run_path(repo_root, run_id)
     if not path.is_file():
         raise RunStateError(f"no run state at {path}")
-    return parse_run_state(path.read_text())
+    return read_run_state(path)

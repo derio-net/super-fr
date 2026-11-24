@@ -31,7 +31,7 @@ def _gh_available() -> bool:
             capture_output=True,
             timeout=10,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except OSError, subprocess.TimeoutExpired:
         return False
     return result.returncode == 0
 

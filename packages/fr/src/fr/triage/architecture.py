@@ -121,7 +121,7 @@ def _measure(checkout: Checkout, ref: str, globs: Sequence[str]) -> Measure | No
         return None
     try:
         counts = checkout.text_line_counts(ref)
-    except (GitError, UnicodeError):
+    except GitError, UnicodeError:
         return None  # a figure git could not give us exactly is a dash, never a guess
     matched = [n for n in counts if _matches(n, globs)]
     if not matched:

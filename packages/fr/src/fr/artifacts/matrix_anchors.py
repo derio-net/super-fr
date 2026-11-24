@@ -67,7 +67,7 @@ def conversions(path: Path) -> dict[str, str]:
     try:
         matrix = parse_matrix_v5_body(text)
         own = resolve_identity(Matrix(org=matrix.org, repo=matrix.repo), root)[1]
-    except (MatrixV5Error, AcceptanceError, OSError, ValueError):
+    except MatrixV5Error, AcceptanceError, OSError, ValueError:
         return {}
     out: dict[str, str] = {}
     sources: dict[str, str | None] = {}
@@ -84,7 +84,7 @@ def conversions(path: Path) -> dict[str, str]:
             if rel not in sources:
                 try:
                     sources[rel] = (root / rel).read_text()
-                except (OSError, UnicodeDecodeError):
+                except OSError, UnicodeDecodeError:
                     sources[rel] = None
             source = sources[rel]
             name = collected_node_at(source, line) if source is not None else None

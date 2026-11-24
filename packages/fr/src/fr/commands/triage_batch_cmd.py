@@ -7156,7 +7156,7 @@ class _Driver:
         for repo in sorted(set(repos.values()) - set(skip)):
             try:
                 out[repo] = str(load_settings(self._fetched_reader(repo).path).settings.placement)
-            except (GitError, TriageError, SettingsError):
+            except GitError, TriageError, SettingsError:
                 continue
         return out
 
@@ -7933,7 +7933,7 @@ def _cursors(root: Path) -> list[object]:
     for path in sorted(below(root, "run").glob("*.yaml")):
         try:
             out.append(yaml.safe_load(path.read_text(encoding="utf-8")))
-        except (OSError, yaml.YAMLError):
+        except OSError, yaml.YAMLError:
             continue
     return out
 

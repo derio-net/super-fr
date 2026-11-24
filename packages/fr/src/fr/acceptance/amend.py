@@ -42,7 +42,7 @@ def _branch_run_specs(repo_root: Path, branch: str) -> set[str]:
     for path in sorted(runs.glob("*.yaml")):
         try:
             state = parse_run_state(path.read_text())
-        except (RunStateError, OSError, UnicodeDecodeError):
+        except RunStateError, OSError, UnicodeDecodeError:
             continue
         if state.branch == branch and (spec := run_spec(state)) is not None:
             specs.add(spec)

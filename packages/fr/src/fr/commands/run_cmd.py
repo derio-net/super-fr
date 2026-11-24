@@ -19,13 +19,13 @@ forking the done/failed cursor asymmetry a second time.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
 import functools
 import json
 import os
 import re
 import shlex
-import subprocess
 from collections.abc import Callable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -85,6 +85,7 @@ from fr.records_commit import commit_records
 from fr.run import liveness as _liveness
 from fr.run import units
 from fr.run.adopt import MANUAL_ITEM, AdoptError, Superseded, adopt_run, plan_phase_tags
+from fr.run.cli_step import run_step
 from fr.run.historical import (
     HISTORICAL_HEADING,
     HISTORICAL_REVIEWER,
@@ -102,12 +103,14 @@ from fr.run.model import (
     AnsweredBy,
     DispatchOutcome,
     RunState,
+    RunStateConflictError,
     RunStateError,
     StepRecord,
     current_run_schema_version,
     existing_run_id_colliding_with,
     load_run_state,
     parse_run_state,
+    read_run_state,
     run_path,
     save_run_state,
     validate_run_id,
@@ -369,7 +372,11 @@ def _remember(path: Path) -> None:
 def _save_run_state(repo_root: Path, state: RunState) -> Path:
     """`save_run_state`, noted for the command's closing commit."""
     _remember(run_path(repo_root, state.run))
-    path = save_run_state(repo_root, state)
+    try:
+        path = save_run_state(repo_root, state)
+    except RunStateConflictError as e:  # super-fr#1511: a refusal; nothing was written
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
     _note_record_write(repo_root, path, state)
     return path
 
@@ -817,7 +824,7 @@ def _phase_tier(repo_root: Path, state: RunState, phase_n: int) -> str | None:
 
     try:
         plan = parse(emitted_path(repo_root, plan_rel))
-    except (PlanSchemaError, OSError):
+    except PlanSchemaError, OSError:
         return None
     return next((p.phase.tier for p in plan.phases if p.phase.number == phase_n), None)
 
@@ -1695,6 +1702,7 @@ _VERIFIABLE_EVIDENCE = (
     "single-phase",
     "walk",
     "lenses",
+    "settle",
 )
 # `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
 # `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
@@ -1740,6 +1748,7 @@ _DERIVED_FROM = {
     "lenses": "from the feature's lens set at this resolve and each lens reviewer's return: "
     "per lens, the changed files it examined and the findings it raised (`none` for an "
     "empty set)",
+    "settle": "from the PR's conflict and CI states under `git.settle` (fr.settle.witness)",
 }
 
 
@@ -2521,7 +2530,7 @@ def _proportionality_base(repo_root: Path) -> tuple[str | None, str | None]:
         head = git_answer(repo_root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
         try:
             recorded = load_state(repo_root, head)
-        except (OSError, ValueError):
+        except OSError, ValueError:
             recorded = None
         if recorded is not None and recorded.base_sha:
             ok = git_answer(repo_root, "cat-file", "-e", f"{recorded.base_sha}^{{commit}}")
@@ -3937,7 +3946,7 @@ def _unevidenced_units(repo_root: Path, state: RunState) -> dict[tuple[str, str]
         # evidence" unanswerable, and the caller (`status`/`check`) warns about
         # the drift itself (spec 2026-10-05-run-upgrade-midflight §B).
         manifest = _resolve_manifest_checked_schema(repo_root, state)
-    except (RunStateError, WorkflowError, AdoptError, OSError):
+    except RunStateError, WorkflowError, AdoptError, OSError:
         return {}
     out: dict[tuple[str, str], tuple[str, ...]] = {}
     for step_id, declaring in _evidence_owed(manifest).items():
@@ -4055,7 +4064,16 @@ def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
         **_gated_binding_keys(step),
         **_lens_review_brief(step, state),
         **_tests_brief(resolve_repo_root(), step),
+        **_settle_brief(step),
     }
+
+
+def _settle_brief(step: Step) -> dict[str, str]:
+    """`settle`, the settle loop's one instruction line, for a step that derives
+    `settle` evidence (`deliver`; spec 2026-11-23-pr-readiness-wait R9, R10)."""
+    from fr.settle.instructions import DELIVER_LINE
+
+    return {"settle": DELIVER_LINE} if "settle" in step.evidence else {}
 
 
 def commit_templates_brief(repo_root: Path, issue: int | None) -> dict[str, Any]:
@@ -5372,8 +5390,8 @@ def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> s
         return None
     for candidate in sorted(runs_dir.glob("*.yaml")):
         try:
-            state = parse_run_state(candidate.read_text())
-        except (RunStateError, OSError):
+            state = read_run_state(candidate)
+        except RunStateError, OSError:
             continue  # a broken run file is a different problem
         if state.workflow.split("@", 1)[0] == workflow and state.branch == branch:
             return state.run
@@ -5820,7 +5838,7 @@ def _is_tracked(repo_root: Path, path: Path) -> bool:
     try:
         rel = path.resolve().relative_to(repo_root.resolve()).as_posix()
         return git_answer(repo_root, "ls-files", "--error-unmatch", "--", rel).returncode == 0
-    except (ValueError, GitUnavailableError):
+    except ValueError, GitUnavailableError:
         return False
 
 
@@ -5900,7 +5918,7 @@ def adopt_cmd(
             dry_run=not yes,
             superseded=effects,
         )
-    except AdoptError as e:
+    except (AdoptError, RunStateConflictError) as e:
         err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(2) from e
     if effects.old and not effects.written_new:
@@ -6181,7 +6199,7 @@ def _cost_cursor(repo_root: Path, run_id: str) -> RunState | None:
     same fallback `load_run_usage` makes for the usage file (review p2-r1), so
     a closed-out run keeps its per-phase table. `None` when neither reads: an
     archived cursor older than the live model prints the step table only."""
-    from fr.run.model import archived_run_path, parse_run_state
+    from fr.run.model import archived_run_path
 
     try:
         return load_run_state(repo_root, run_id)
@@ -6190,7 +6208,7 @@ def _cost_cursor(repo_root: Path, run_id: str) -> RunState | None:
     archived = archived_run_path(repo_root, run_id)
     try:
         return parse_run_state(archived.read_text()) if archived.is_file() else None
-    except (OSError, RunStateError):
+    except OSError, RunStateError:
         return None
 
 
@@ -6635,26 +6653,23 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
         )
         raise typer.Exit(2)
 
-    proc = subprocess.run(  # noqa: S602 — manifest is operator-authored; values are shlex-quoted
-        command, shell=True, cwd=repo_root, capture_output=True, text=True
+    try:
+        returncode, stdout, failure = run_step(command, repo_root, step.id)
+    except ValueError as e:  # super-fr#1507: a bad timeout is refused, never defaulted
+        err_console.print(f"[red]{escape(str(e))}[/red]")
+        raise typer.Exit(2) from None
+    status: Literal["done", "failed"] = "failed" if failure else "done"
+    new_state = _complete_step(
+        state, manifest, state.cursor, status, exit_code=returncode, stdout=stdout
     )
-    if proc.returncode == 0:
-        new_state = _complete_step(
-            state, manifest, state.cursor, "done", exit_code=0, stdout=proc.stdout
-        )
-        _save_run_state(repo_root, new_state)
+    _save_run_state(repo_root, new_state)
+    if failure is None:
         console.print(f"{step.id}: done (exit 0)")
         return "cli-done"
-    else:
-        new_state = _complete_step(
-            state, manifest, state.cursor, "failed", exit_code=proc.returncode, stdout=proc.stdout
-        )
-        _save_run_state(repo_root, new_state)
-        err_console.print(f"{step.id}: failed (exit {proc.returncode})")
-        # A return value, not `typer.Exit(1)`: only this branch knows a step
-        # ran and failed, so only it may say so (review r1-1). Every
-        # `typer.Exit` raised under `_advance_step` is a refusal.
-        return "cli-failed"
+    err_console.print(failure)
+    # A return value, not `typer.Exit(1)`: only this branch knows a step ran and failed, so only
+    # it may say so (review r1-1). Every `typer.Exit` raised under `_advance_step` is a refusal.
+    return "cli-failed"
 
 
 def _resolve_member(
@@ -7007,7 +7022,7 @@ def _repo_relative(value: str) -> str:
     try:
         root = resolve_repo_root().resolve()
         return str(Path(value).resolve().relative_to(root)) if Path(value).is_absolute() else value
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return value
 
 
@@ -7081,7 +7096,7 @@ def _warn_ops_gap(repo_root: Path, state: RunState) -> None:
     except TestPlanHeadingError as e:  # never silent: it hides every step (#1315)
         err_console.print(f"warning: {e}", markup=False, soft_wrap=True)
         return
-    except (ValueError, OSError, AcceptanceError, OpsLoadError):
+    except ValueError, OSError, AcceptanceError, OpsLoadError:
         return
     if gap:
         message = gap_message(gap, has_plan=plan_dir is not None)
@@ -7232,6 +7247,7 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     from fr.record.pr_body import (
         PR_BODY_NAME,
         REQUIRED_SECTIONS,
+        PrBodyRefused,
         durable_pr_body_path,
         fr_markers,
         missing_sections,
@@ -7248,7 +7264,11 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
     else:
         body_path = records_dir(repo_root, state.run) / PR_BODY_NAME
     body_path.parent.mkdir(parents=True, exist_ok=True)
-    write_text_atomic(body_path, render_pr_body(repo_root, state))
+    try:
+        write_text_atomic(body_path, render_pr_body(repo_root, state))
+    except PrBodyRefused as e:  # l-errors-r8
+        err_console.print(f"refused: {e}", markup=False, soft_wrap=True)
+        raise typer.Exit(2) from e
     # Under quiet and stealth the render is under the artifact root, outside the checkout:
     # named by its full path there (lens-pr-body-quiet), committed by the same seam.
     rel = _shown_path(body_path, repo_root)
@@ -7487,10 +7507,7 @@ def _refuse_premature_closes(repo_root: Path, state: RunState, live: str) -> Non
     raise typer.Exit(2)
 
 
-_T_JOURNALS = TypeVar("_T_JOURNALS")
-
-
-def _gate_journals(read: Callable[[], _T_JOURNALS]) -> _T_JOURNALS:
+def _gate_journals[T_JOURNALS](read: Callable[[], T_JOURNALS]) -> T_JOURNALS:
     """Run a `deliver` gate's journal read; a journal that does not parse
     refuses, naming it (review p3-r4) — never a gate judging a run with one
     of its journals silently dropped."""
@@ -8068,6 +8085,13 @@ def _resolve_body(
         )
         _deliver_pr_gate(repo_root, state, pr)
         _deliver_exit_guard(repo_root, state)
+        if "settle" in step.evidence:  # R8: after every hard gate, before the forge write
+            from fr.settle.witness import deliver_witness
+
+            settled = {"settle": deliver_witness(flat_key, repo_root, state, err_console)}
+            state = _with_step(
+                state, step_id, units.with_evidence(state.steps[step_id], flat_key, settled)
+            )
         _deliver_label_sync(repo_root, state, pr, run_id)
     if state_value == "done":
         # gh#587: after `deliver`'s PR gate, which renders the body a first
@@ -8143,14 +8167,14 @@ def _next_unit(
         state = load_run_state(repo_root, run_id)
         manifest = _resolve_manifest_for_state(repo_root, state)
         _step, parent = _find_step(manifest, step_id)
-    except (RunStateError, WorkflowError, AdoptError):
+    except RunStateError, WorkflowError, AdoptError:
         return None
     if parent is not None:
         grec = state.steps.get(parent.id)
         if grec is not None and grec.state != "done":
             try:
                 agentic, _manual = _group_phases(repo_root, state)
-            except (RunStateError, AdoptError):
+            except RunStateError, AdoptError:
                 return parent.id
             items = units.unit_states(grec)
             for key in _expected_group_items(parent, agentic):
@@ -8194,7 +8218,6 @@ def resolve_in_process(
     same names: `answered_by` (who answered the step's operator gate) and
     `agent`/`harness`/`model` (the late identity of the unit's holder).
     """
-    import contextlib
     import io
     import sys
 
@@ -8804,8 +8827,8 @@ def _runs_on_this_branch(repo_root: Path) -> list[RunState]:
     found: list[RunState] = []
     for candidate in sorted(runs_dir.glob("*.yaml")):
         try:
-            state = parse_run_state(candidate.read_text())
-        except (RunStateError, OSError):
+            state = read_run_state(candidate)
+        except RunStateError, OSError:
             continue
         if state.branch == branch:
             found.append(state)
@@ -8958,7 +8981,7 @@ def check_cmd(
     state = _load_or_exit(repo_root, run_id)
     try:
         _resolve_manifest_for_read(repo_root, state)  # warns once on a drifted cursor
-    except (RunStateError, WorkflowError):
+    except RunStateError, WorkflowError:
         pass  # check's verdict never depended on the manifest resolving
 
     record = state.steps.get(state.cursor)

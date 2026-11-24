@@ -1,0 +1,135 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-23-pr-readiness-wait
+repo: derio-net/super-fr
+rows:
+  - id: pr-settle-setting
+    capability: Repo-level PR settle policy
+    acceptance: A repo sets git.settle.conflicts and git.settle.ci (off|report|fix,
+      default fix) in .fr/settings.yaml, and fr settings show and init document them.
+    origin:
+    - spec:2026-11-23-pr-readiness-wait#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_settings_settle.py#test_both_settle_keys_default_to_fix
+      - super-fr:tests/unit/test_settings_settle.py#test_any_other_settle_value_is_refused_naming_the_key
+      - super-fr:tests/unit/test_settings_settle.py#test_show_json_lists_both_settle_keys_at_their_default
+      - super-fr:tests/unit/test_settings_settle.py#test_init_documents_both_settle_keys_with_their_allowed_values
+    status: ci
+    notes: git.settle parses, defaults, refuses and shows in fr settings show and init
+      (phase 1)
+    verify: none
+  - id: pr-settle-verb
+    capability: Settle a delivered draft PR
+    acceptance: fr pr settle reports a PR's conflict and CI state, polls within a bounded
+      wait, and exits 0, 4 or 75 by the effective modes without ever writing the forge.
+    origin:
+    - spec:2026-11-23-pr-readiness-wait#R2
+    - spec:2026-11-23-pr-readiness-wait#R3
+    - spec:2026-11-23-pr-readiness-wait#R4
+    - spec:2026-11-23-pr-readiness-wait#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_settle_evaluate.py#test_the_conflict_concern_decides_the_code_only_under_fix
+      - super-fr:tests/unit/test_settle_evaluate.py#test_the_ci_concern_decides_the_code_only_under_fix
+      - super-fr:tests/unit/test_settle_poll.py#test_the_poll_makes_only_reads
+      - super-fr:tests/unit/test_settle_poll.py#test_the_wait_has_a_default_and_a_ceiling_below_600
+      - super-fr:tests/unit/test_pr_settle_cmd.py#test_an_unsupported_read_is_unsupported_and_exits_0
+      - super-fr:tests/unit/test_pr_settle_cmd.py#test_a_transient_forge_failure_exits_75
+      - super-fr:tests/unit/test_pr_settle_cmd.py#test_no_open_pr_exits_2
+    status: ci
+    notes: every mode x state cell, the bounded poll and the verb over a read-only fake
+      forge (phase 1)
+    verify: none
+  - id: pr-settle-managed
+    capability: Wave-driver PRs are left to the queue
+    acceptance: On a driver-owned branch fr pr settle reads nothing and defers to the
+      wave driver's queue and hand-backs, and dispatch briefs say so.
+    origin:
+    - spec:2026-11-23-pr-readiness-wait#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_settle_managed.py#test_a_driver_branch_is_managed
+      - super-fr:tests/unit/test_settle_managed.py#test_every_driver_brief_carries_the_managed_sentence
+      - super-fr:tests/unit/test_pr_settle_cmd.py#test_a_managed_branch_reads_nothing_and_exits_0
+    status: ci
+    notes: managed branches read nothing and exit 0; every driver brief carries the
+      managed sentence (phase 1)
+    verify: none
+  - id: pr-settle-override
+    capability: Per-feature and per-bug settle override
+    acceptance: A spec Verification line or a debug-journal decision overrides either
+      key with a required reason, and the PR body lists every override.
+    origin:
+    - spec:2026-11-23-pr-readiness-wait#R6
+    - spec:2026-11-23-pr-readiness-wait#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_spec_section_settle.py#test_settle_lines_parse_into_the_section
+      - super-fr:tests/unit/test_spec_section_settle.py#test_a_malformed_settle_line_is_an_error_naming_the_line
+      - super-fr:tests/unit/test_settle_modes.py#test_a_spec_settle_line_overrides_the_setting
+      - super-fr:tests/unit/test_settle_modes.py#test_with_no_spec_a_debug_journal_decision_overrides
+      - super-fr:tests/unit/test_settle_modes.py#test_a_bad_journal_decision_refuses_naming_the_entry
+      - super-fr:tests/unit/test_pr_body_settle.py#test_an_override_is_named_with_its_source_and_reason
+      - super-fr:tests/unit/test_pr_body_settle.py#test_the_heading_is_required_and_a_body_without_it_is_refused
+      - super-fr:tests/unit/test_pr_body_settle.py#test_under_minimal_the_section_is_in_the_durable_render
+    status: ci
+    notes: the settle grammar, override precedence and the required PR settle section
+      over the CI suite (phase 2)
+    verify: none
+  - id: pr-settle-deliver
+    capability: Delivery waits for a settled PR
+    acceptance: fr-goal's deliver refuses a conflicting or red PR under fix, holds while
+      pending, and records the settle state; fr-debugging settles its PR as its last
+      step, fixing by merge, never rebase, within three rounds.
+    origin:
+    - spec:2026-11-23-pr-readiness-wait#R8
+    - spec:2026-11-23-pr-readiness-wait#R9
+    - spec:2026-11-23-pr-readiness-wait#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_settle_witness.py#test_fix_refuses_a_conflicting_or_red_pr_naming_settle
+      - super-fr:tests/unit/test_run_settle_witness.py#test_a_pending_pr_exits_75_records_nothing_and_leaves_the_cursor
+      - super-fr:tests/unit/test_run_settle_witness.py#test_report_records_the_states
+      - super-fr:tests/unit/test_run_settle_witness.py#test_both_keys_off_records_off_and_reads_nothing
+      - super-fr:tests/unit/test_run_settle_witness.py#test_a_managed_branch_records_managed
+      - super-fr:tests/unit/test_run_settle_witness.py#test_unsupported_is_recorded_and_refuses_nothing
+      - super-fr:tests/unit/test_run_settle_witness.py#test_a_passed_settle_value_is_refused
+      - super-fr:tests/unit/test_run_settle_witness.py#test_another_derived_refusal_is_reported_before_the_settle_hold
+      - super-fr:tests/unit/test_run_settle_witness.py#test_tests_ci_still_refuses_a_conflicting_pr_with_conflicts_off
+      - super-fr:tests/unit/test_tripwire_pr_settle_wording.py
+    status: ci
+    notes: the settle witness through fr run resolve (Test Plan 7); its R9/R10 skill
+      text is pinned by the settle wording tripwire
+    verify: none
+  - id: pr-settle-live
+    capability: Settle against a real forge
+    acceptance: On a real GitHub draft PR, fr pr settle reports a conflict, then a red
+      check, then clean and green as each is fixed.
+    origin:
+    - spec:2026-11-23-pr-readiness-wait#R2
+    - spec:2026-11-23-pr-readiness-wait#R4
+    - spec:2026-11-23-pr-readiness-wait#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+  - id: pr-settle-skills
+    capability: Delivering skills settle their PR
+    acceptance: fr-goal, fr-debugging and the hand-run close-out brief run fr pr settle
+      after opening the PR, fix conflicts by merging the base (never rebase) and red
+      checks by commits, within three rounds.
+    origin:
+    - spec:2026-11-23-pr-readiness-wait#R9
+    - spec:2026-11-23-pr-readiness-wait#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_pr_settle_wording.py
+    status: ci
+    notes: tripwire pins the settle loop and fix rules in fr-goal, fr-debugging, the
+      deliver brief and the close-out brief (Test Plan 9)
+    verify: none

@@ -245,7 +245,7 @@ def _text(elem: ET.Element | None) -> str:
 def _java_from_pom(path: Path) -> tuple[str, str] | None:
     try:
         root = ET.parse(path).getroot()
-    except (ET.ParseError, OSError):
+    except ET.ParseError, OSError:
         return None
     props_elem = _child(root, "properties")
     props = {_local(c.tag): _text(c) for c in props_elem} if props_elem is not None else {}
@@ -295,7 +295,7 @@ def detect_java_version(repo_root: Path) -> tuple[str, str] | None:
     for name, parse in JAVA_VERSION_FILES:
         try:
             text = (repo_root / name).read_text()
-        except (OSError, UnicodeDecodeError):
+        except OSError, UnicodeDecodeError:
             continue
         major = parse(text)
         if major:
