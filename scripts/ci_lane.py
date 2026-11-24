@@ -46,7 +46,7 @@ LANDED = "landed"
 # CI runs it (R15): a light lane over them would skip the very tests they change.
 FULL_PREFIXES = ("tests/", ".github/")
 
-Runner = Callable[..., subprocess.CompletedProcess[bytes]]
+Runner = Callable[..., subprocess.CompletedProcess[Any]]
 
 
 def lane_for(paths: Sequence[str]) -> str:
@@ -88,12 +88,61 @@ def pull_request_lane(
         except subprocess.CalledProcessError:
             head = "HEAD"
         merge_base = _git(["merge-base", f"origin/{base}", head], cwd, env).decode().strip()
-        diff = _git(
-            ["diff", "--no-renames", "--name-only", "-z", merge_base, head, "--"], cwd, env
-        )
-    except (subprocess.CalledProcessError, OSError):
+        diff = _git(["diff", "--no-renames", "--name-only", "-z", merge_base, head, "--"], cwd, env)
+    except subprocess.CalledProcessError, OSError:
         return FULL
     return lane_for([os.fsdecode(p) for p in diff.split(b"\0") if p])
+
+
+CI_WORKFLOW = ".github/workflows/ci.yml"
+QUEUE_BRANCH_PREFIX = "fr-queue/"
+
+
+def landed_run(runs_json: object, this_run: int | str) -> int | None:
+    """The id of a run that already proved this sha, or None (R5).
+
+    *runs_json* is a `GET repos/{repo}/actions/runs` payload. A run qualifies when it is
+    this CI workflow (by `path`, which a workflow cannot rename), triggered by a push
+    (`event`) to an `fr-queue/` branch (`head_branch`), finished `success` (every job,
+    `ci-ok` included, succeeded or skipped by its own condition), and is not this run.
+    A payload of any other shape trusts nothing.
+    """
+    runs = runs_json.get("workflow_runs") if isinstance(runs_json, dict) else None
+    if not isinstance(runs, list):
+        return None
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        if (
+            run.get("path") == CI_WORKFLOW
+            and run.get("event") == "push"
+            and str(run.get("head_branch") or "").startswith(QUEUE_BRANCH_PREFIX)
+            and run.get("conclusion") == "success"
+            and isinstance(run.get("id"), int)
+            and str(run["id"]) != str(this_run)
+        ):
+            return int(run["id"])
+    return None
+
+
+def landed_lane(sha: str, this_run: str, repo: str, *, runner: Runner) -> dict[str, str]:
+    """`lane=landed` and the run it trusts, or `lane=full` when none qualifies or the
+    forge cannot be read: a skip needs proof, and no answer is no proof."""
+    argv = ["gh", "api", f"repos/{repo}/actions/runs?head_sha={sha}&event=push&per_page=100"]
+    try:
+        proc = runner(argv, capture_output=True, text=True, check=False)
+    except OSError:
+        return {"lane": FULL}
+    if proc.returncode != 0:
+        return {"lane": FULL}
+    try:
+        payload = json.loads(proc.stdout)
+    except ValueError, TypeError:
+        return {"lane": FULL}
+    trusted = landed_run(payload, this_run)
+    if trusted is None:
+        return {"lane": FULL}
+    return {"lane": LANDED, "trusted_run": str(trusted)}
 
 
 def _emit(pairs: Mapping[str, str], env: Mapping[str, str]) -> None:
@@ -110,16 +159,24 @@ def main(
     *,
     cwd: Path | None = None,
     env: Mapping[str, str] | None = None,
+    runner: Runner = subprocess.run,
 ) -> int:
     parser = argparse.ArgumentParser(prog="ci_lane.py")
     sub = parser.add_subparsers(dest="command", required=True)
     classify = sub.add_parser("classify", help="the lane of a pull request")
     classify.add_argument("--base", required=True)
+    landed = sub.add_parser("landed", help="whether a push to main already landed green")
+    landed.add_argument("--sha", required=True)
+    landed.add_argument("--run", required=True)
+    landed.add_argument("--repo", required=True)
     args = parser.parse_args(argv)
     environ: Mapping[str, Any] = os.environ if env is None else env
 
     if args.command == "classify":
         _emit({"lane": pull_request_lane(args.base, cwd=cwd, env=env)}, environ)
+        return 0
+    if args.command == "landed":
+        _emit(landed_lane(args.sha, args.run, args.repo, runner=runner), environ)
         return 0
     return 2  # pragma: no cover - argparse refuses an unknown command first
 

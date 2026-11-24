@@ -7,6 +7,7 @@ The fixture repos live under `tmp_path`; the forge payloads are captures
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -147,3 +148,119 @@ def test_classify_is_full_outside_a_git_repo(isolated_git: Path) -> None:
     out = isolated_git / "github_output"
     ci_lane.main(["classify", "--base", "main"], cwd=isolated_git, env={"GITHUB_OUTPUT": str(out)})
     assert _outputs(out) == {"lane": "full"}
+
+
+# ── Task 2: landed (R5) ───────────────────────────────────────────────────
+
+FIXTURES = REPO / "tests" / "fixtures" / "ci_lane"
+SHA = "d52f788b0821c2350c9736e5429bc7eca3e07cdd"
+THIS_RUN = 99999999999
+
+
+def _main_push_runs() -> dict:
+    return json.loads((FIXTURES / "runs_main_push.json").read_text())
+
+
+def _captured_ci_run(**changes: object) -> dict:
+    runs = _main_push_runs()["workflow_runs"]
+    run = next(r for r in runs if r["path"] == ".github/workflows/ci.yml")
+    return {**run, **changes}
+
+
+def _payload(*runs: dict) -> dict:
+    return {"total_count": len(runs), "workflow_runs": list(runs)}
+
+
+def test_a_successful_ci_push_run_on_an_fr_queue_branch_is_trusted() -> None:
+    queue_run = _captured_ci_run(head_branch="fr-queue/s/slot-1", id=45430000001)
+    payload = _payload(*_main_push_runs()["workflow_runs"], queue_run)
+    assert ci_lane.landed_run(payload, THIS_RUN) == 45430000001
+
+
+@pytest.mark.parametrize(
+    "run",
+    [
+        pytest.param(
+            json.loads((FIXTURES / "run_pull_request.json").read_text())
+            | {"head_branch": "fr-queue/s/slot-1"},
+            id="a pull_request run",
+        ),
+        pytest.param(_captured_ci_run(), id="the main push run"),
+        pytest.param(
+            _captured_ci_run(head_branch="fr-queue/s/slot-1", path=".github/workflows/release.yml"),
+            id="another workflow's path",
+        ),
+        pytest.param(
+            _captured_ci_run(head_branch="fr-queue/s/slot-1", conclusion="failure"), id="a failure"
+        ),
+        pytest.param(
+            _captured_ci_run(
+                head_branch="fr-queue/s/slot-1", conclusion=None, status="in_progress"
+            ),
+            id="still running",
+        ),
+        pytest.param(
+            _captured_ci_run(head_branch="fr-queue/s/slot-1", id=THIS_RUN), id="this run itself"
+        ),
+        pytest.param(
+            _captured_ci_run(head_branch="feat/fr-queue/x"), id="fr-queue/ not at the start"
+        ),
+    ],
+)
+def test_no_other_run_is_trusted(run: dict) -> None:
+    assert ci_lane.landed_run(_payload(run), THIS_RUN) is None
+
+
+@pytest.mark.parametrize("payload", [{}, [], "x", {"workflow_runs": "x"}, {"workflow_runs": [1]}])
+def test_a_payload_of_the_wrong_shape_trusts_nothing(payload: object) -> None:
+    assert ci_lane.landed_run(payload, THIS_RUN) is None
+
+
+class _Gh:
+    def __init__(self, stdout: str = "", returncode: int = 0, raises: bool = False) -> None:
+        self.stdout, self.returncode, self.raises = stdout, returncode, raises
+        self.calls: list[list[str]] = []
+
+    def __call__(self, argv: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        self.calls.append(argv)
+        if self.raises:
+            raise FileNotFoundError("gh")
+        return subprocess.CompletedProcess(argv, self.returncode, self.stdout, "err")
+
+
+def _landed(tmp_path: Path, gh: _Gh) -> dict[str, str]:
+    out = tmp_path / "github_output"
+    out.touch()
+    code = ci_lane.main(
+        ["landed", "--sha", SHA, "--run", str(THIS_RUN), "--repo", "derio-net/super-fr"],
+        env={"GITHUB_OUTPUT": str(out)},
+        runner=gh,
+    )
+    assert code == 0
+    return _outputs(out)
+
+
+def test_landed_names_the_trusted_run(tmp_path: Path) -> None:
+    queue_run = _captured_ci_run(head_branch="fr-queue/s/slot-1", id=45430000001)
+    gh = _Gh(json.dumps(_payload(queue_run)))
+    assert _landed(tmp_path, gh) == {"lane": "landed", "trusted_run": "45430000001"}
+    assert gh.calls == [
+        [
+            "gh",
+            "api",
+            f"repos/derio-net/super-fr/actions/runs?head_sha={SHA}&event=push&per_page=100",
+        ]
+    ]
+
+
+def test_landed_is_full_when_no_run_qualifies(tmp_path: Path) -> None:
+    assert _landed(tmp_path, _Gh(json.dumps(_main_push_runs()))) == {"lane": "full"}
+
+
+@pytest.mark.parametrize(
+    "gh",
+    [_Gh("", returncode=1), _Gh("not json"), _Gh(raises=True)],
+    ids=["gh fails", "non-JSON", "no gh"],
+)
+def test_landed_is_full_when_the_forge_cannot_be_read(tmp_path: Path, gh: _Gh) -> None:
+    assert _landed(tmp_path, gh) == {"lane": "full"}
