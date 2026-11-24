@@ -1,0 +1,23 @@
+schema_version: 12
+run: 2026-11-24-feat-ci-economy
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - {kind: finding, id: p1-r1, phase: 1, review_scope: in, title: "verify_ci waits forever (exit 75) on a cancelled gate nothing replaces", body: "ci_evidence.py: a cancelled gate with no unfinished check raised CiPending with a 'when CI finishes' message; before this change it refused clearly."}
+  - {kind: finding, id: p1-r2, phase: 1, review_scope: in, title: "settle/evaluate.py still compared bucket == 'pending' for `running`", body: "A cancelled check was not counted as running while a gate was absent; missed reader."}
+  - {kind: finding, id: p1-r3, phase: 1, review_scope: in, title: "the check-state tripwire only paired cancel with fail/failure and skipped lists", body: "A set like {CANCELLED, TIMED_OUT} or a list escaped it."}
+  - {kind: finding, id: p1-r4, phase: 1, review_scope: in, title: "queue_exec._unreplaced keyed on name alone", body: "commit_checks de-duplicates per (workflow, name), so another workflow's same-named run wrongly replaced a cancel."}
+  - {kind: finding, id: p1-r5, phase: 1, review_scope: out, title: "real_glabclient._CI_FAIL still treats canceled as failing", body: "The spec exempts GitLab (gh#611); not caused by this change."}
+  - {kind: review, id: p1-review-1, phase: 1, title: "phase 1 review: 4 in-scope findings fixed, 1 out of scope", body: "Independent reviewer read spec, plan and the phase diff; every reader conversion verified correct; raised p1-r1..p1-r5. All in-scope findings fixed in 669a5e7e7 with tests (test_run_ci_evidence: stranded cancelled gate refused, running cancel waits; test_settle_evaluate: cancelled counts as running; test_queue_exec: per-workflow replacement; tripwire widened). Spec R3 amended for p1-r1."}
+  - {kind: lens, lens: errors, title: "every new pending path (verify_ci, queue, settle) must bound its wait and say who is told"}
+resolves:
+  - {id: p1-r1, state: fixed, body: "verify_ci refuses a cancelled gate once nothing on the sha runs, naming the gate and the re-run (669a5e7e7); pending only while a run is in flight; spec R3 amended."}
+  - {id: p1-r2, state: fixed, body: "settle/evaluate.py:151 reads through bucket_verdict; test_a_cancelled_check_counts_as_running_while_a_gate_is_absent."}
+  - {id: p1-r3, state: fixed, body: "Tripwire pairs any cancelled spelling with any FAILED_STATES member or 'fail', and scans list literals."}
+  - {id: p1-r4, state: fixed, body: "_unreplaced keys on (workflow, name); late lists a required name with any unreplaced cancel; test added."}
+  - {id: p1-r5, state: out-of-scope, body: "GitLab's reader is outside the queue and exempt by the spec (Design §A, gh#611); this change did not touch it."}
+evidence:
+  review: p1-review-1
+  reviewer: ac57a364f92412dcc
+  model: claude-opus-5-5
