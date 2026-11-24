@@ -289,3 +289,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-wave-queue-gaps-p2 created=2026-11-24T22:52:30+00:00 -->
 ### phase-split-2026-11-24-wave-queue-gaps-p2 · decision · ask: ask 3, operator queue entries (R11-R16)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-wave-queue-gaps-p3 created=2026-11-24T22:52:33+00:00 -->
+### phase-split-2026-11-24-wave-queue-gaps-p3 · decision · ask: ask 2, overlap-aware waves (R7-R10), last because it needs PR #1669
