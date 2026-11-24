@@ -248,3 +248,6 @@ run_kind: none
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-ci-economy-p4 created=2026-11-24T15:00:07+00:00 -->
 ### phase-split-2026-11-24-ci-economy-p4 · decision · ask: ask 3 — the queue combination builder resolves generated files and stamps
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-24-ci-economy-p2 created=2026-11-24T15:00:09+00:00 -->
+### tier-2026-11-24-ci-economy-p2 · decision · hard: phase 2 changes ci-ok, the one required check of main, and the lane rules every PR and landing relies on
