@@ -156,3 +156,31 @@ the agent edit is one numbered check; `fr validate artifacts` is clean and test_
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 pages edited where the change made them incomplete, re-stamped where still true; the writing-standard check reports no FAIL and no warning on the added text
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-24T20:39:28+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · fr-show-me and its explainer put the shape file's deadline at the lens dispatch (phase 2)
+
+The lens brief reads the shape file when it is built, at the last review-phase resolve
+(journal-check chains), so a file written after that and before dispatch gives `shape: null`.
+fr-goal §7a had it right; the skill, docs/explainers/fr-show-me.md and docs/review-lenses.md did not.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-24T20:39:28+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · the skill's examples were not checked against fr.shape or the code (phase 2)
+
+Tests pinned string presence only; nothing proved the fenced examples and the `none —` example are shape blocks or that the call-tree names exist.
+
+<!-- fr:journal kind=review scope=plan id=p2-review-r1 created=2026-11-24T20:39:28+00:00 phase=2 -->
+### p2-review-r1 · review · phase 2 review: 2 findings in scope, both fixed (phase 2)
+
+An independent reviewer checked the skill, pipeline prose, spec reviewer, agents bump and pages
+against phase 1's code. Every behavioural claim but the shape file's deadline held. No lens suggested.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-24T20:39:28+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: fr-show-me and its explainer put the shape file's deadline at the lens dispatch (phase 2)
+
+The skill, the explainer and review-lenses.md now name the last `review-phase` resolve and say what a null `shape` means; tests/unit/test_show_me_skill.py::test_the_shape_file_timing_matches_the_lens_brief (red before).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-24T20:39:28+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: the skill's examples were not checked against fr.shape or the code (phase 2)
+
+test_every_fenced_example_is_a_shape_block, test_the_inline_none_example_is_a_shape_block, test_the_call_tree_example_names_functions_that_exist, and test_show_me_pipeline_prose.py::test_goal_names_when_the_brief_reads_the_shape_file.
