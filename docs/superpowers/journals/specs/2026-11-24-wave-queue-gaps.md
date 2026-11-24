@@ -295,3 +295,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-24-wave-queue-gaps-p1 created=2026-11-24T22:52:35+00:00 -->
 ### tier-2026-11-24-wave-queue-gaps-p1 · decision · hard: changes the queue's conflict gate and a safety hold every landing relies on (git ancestry, force-push brief)
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-24-wave-queue-gaps-p2 created=2026-11-24T22:52:38+00:00 -->
+### tier-2026-11-24-wave-queue-gaps-p2 · decision · hard: a new trust path (preapproval adds approved-fr) and drain liveness rules
