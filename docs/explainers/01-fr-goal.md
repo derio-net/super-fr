@@ -28,7 +28,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-23 the settle check is the last deliver check, after the description read-back; a merged PR settles and a closed one is refused (lens review); the agent settles the PR before and after deliver, three fix rounds at most (R9, R10); deliver checks that the draft PR has settled, merges cleanly and has finished CI, under git.settle (pr-readiness-wait); 2026-11-21 a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
+reviewed: 2026-11-24 the spec carries a design shape, the lens reviewers read the run shape file, and the PR shows it as Shape of the change (show-me-visuals); 2026-11-23 the settle check is the last deliver check, after the description read-back; a merged PR settles and a closed one is refused (lens review); the agent settles the PR before and after deliver, three fix rounds at most (R9, R10); deliver checks that the draft PR has settled, merges cleanly and has finished CI, under git.settle (pr-readiness-wait); 2026-11-21 a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
 ---
 
 ## What does fr-goal do?
@@ -747,6 +747,10 @@ design under it, is what the questions settled. From here on it is the
 contract: nothing after this step goes back to your original words. The run
 does not build a requirement the specification does not state. If the
 specification turns out to be wrong, the fix goes into the specification.
+The specification also carries a **Design shape**: a small picture of the change,
+such as an annotated file tree or a sequence diagram, drawn with
+[fr-show-me](fr-show-me.md), or one line `none — <reason>` when no picture helps.
+fr refuses a specification without one.
 
 The agent that wrote the specification does not check it. An author who
 re-reads their own document finds what they meant to write, not what they
@@ -755,8 +759,9 @@ wrote. So `spec-review` dispatches a separate, read-only reviewer,
 
 The reviewer checks the specification against the decisions you gave. It cites a file and
 line for every name the document relies on, and it looks for sections that
-disagree with each other. It hands back a list of findings and changes nothing
-itself.
+disagree with each other. It checks every name in the design shape against the code
+and the drawing against the design text. It hands back a list of findings and changes
+nothing itself.
 
 Nobody can mark the step done without that review on record. The record
 needs three things:
@@ -1091,9 +1096,11 @@ can require one for the paths it names in `.fr/lenses.yaml`. So the change that
 touches your authentication code always gets the security lens, whether or not
 anybody thought to ask.
 
-This step dispatches one reviewer per lens in that set. Each reviewer gets only
-its own lens and the feature's whole diff, and ends its return with the files
-it examined and its findings. The step will not close while a lens has no
+Before it, the agent draws what it delivered into the run's shape file,
+`<run-id>.shape.md`, and commits it. This step dispatches one reviewer per lens in that
+set. Each reviewer gets only its own lens, the feature's whole diff and the shape file,
+and reports any place where the shape contradicts the diff. It ends its return with the
+files it examined and its findings. The step will not close while a lens has no
 reviewer, while a reviewer names a file the change never touched, or while a
 finding is still open. The step reads the set again when it closes, so the step
 also owes a lens that someone added during the review.
@@ -1121,7 +1128,9 @@ push guard and a check of the merged content now protect that transition
 
 The final PR discloses the spec and plan, the review findings and fixes, the
 refuted findings, unfinished manual work, the operator-driven Test Plan and the
-remaining acceptance debt. Because fr commits the run's record on the same
+remaining acceptance debt. Its **Shape of the change** section is the run's shape file;
+`deliver` refuses while that file is missing or holds no picture and no `none — <reason>`
+line. Because fr commits the run's record on the same
 branch, the PR also shows the sequence of steps that produced all of it. Findings
 come from both journals, the specification's and the plan's. The out-of-scope
 ones get a section of their own, each naming the issue it went to. The
