@@ -264,3 +264,142 @@ def test_landed_is_full_when_no_run_qualifies(tmp_path: Path) -> None:
 )
 def test_landed_is_full_when_the_forge_cannot_be_read(tmp_path: Path, gh: _Gh) -> None:
     assert _landed(tmp_path, gh) == {"lane": "full"}
+
+
+# ── Task 3: verdict (R17) ─────────────────────────────────────────────────
+
+JOBS = (
+    "classify",
+    "lint",
+    "typecheck",
+    "plan",
+    "collect",
+    "test",
+    "split-check",
+    "coverage",
+    "scoped-tests",
+    "validate-artifacts",
+    "opencode-plugin-test",
+    "version-sync",
+    "change-fragment",
+    "docs-check",
+    "site-build",
+)
+SHARDS = ("plan", "collect", "test", "split-check", "coverage")
+
+
+def _needs(default: str, **results: str) -> dict[str, dict[str, object]]:
+    out: dict[str, dict[str, object]] = {}
+    for job in JOBS:
+        result = results.get(job.replace("-", "_"), default)
+        out[job] = {"result": result, "outputs": {}}
+    return out
+
+
+def _full(**results: str) -> dict[str, dict[str, object]]:
+    return _needs("success", **{"scoped_tests": "skipped", **results})
+
+
+def _light(**results: str) -> dict[str, dict[str, object]]:
+    shards = {job.replace("-", "_"): "skipped" for job in SHARDS}
+    return _needs("success", **{**shards, **results})
+
+
+def _landed_needs(**results: str) -> dict[str, dict[str, object]]:
+    return _needs("skipped", **{"classify": "success", "validate_artifacts": "success", **results})
+
+
+@pytest.mark.parametrize(
+    ("lane", "needs"),
+    [
+        ("full", _full()),
+        ("full", _full(change_fragment="skipped")),  # skipped by its own condition off a PR
+        ("full", _full(scoped_tests="success")),
+        ("light", _light()),
+        ("landed", _landed_needs()),
+    ],
+)
+def test_a_lane_whose_jobs_did_what_it_asks_passes(lane: str, needs: dict) -> None:
+    ok, _ = ci_lane.verdict(lane, needs)
+    assert ok
+
+
+@pytest.mark.parametrize("bad", ["failure", "cancelled"])
+@pytest.mark.parametrize("lane", ["full", "light", "landed"])
+@pytest.mark.parametrize("job", ["lint", "validate-artifacts", "classify"])
+def test_a_failed_or_cancelled_job_fails_every_lane(lane: str, job: str, bad: str) -> None:
+    needs = {"full": _full, "light": _light, "landed": _landed_needs}[lane]()
+    needs[job]["result"] = bad
+    ok, reason = ci_lane.verdict(lane, needs)
+    assert not ok
+    assert job in reason
+
+
+@pytest.mark.parametrize("job", ["collect", "test", "split-check", "coverage"])
+def test_full_needs_the_shards_to_have_run(job: str) -> None:
+    needs = _full()
+    needs[job]["result"] = "skipped"
+    ok, reason = ci_lane.verdict("full", needs)
+    assert not ok
+    assert job in reason
+
+
+def test_light_needs_the_scoped_tests_to_have_run() -> None:
+    ok, reason = ci_lane.verdict("light", _light(scoped_tests="skipped"))
+    assert not ok
+    assert "scoped-tests" in reason
+
+
+@pytest.mark.parametrize("job", ["lint", "typecheck", "docs-check", "change-fragment", "classify"])
+def test_light_skips_only_the_shard_jobs(job: str) -> None:
+    needs = _light()
+    needs[job]["result"] = "skipped"
+    ok, reason = ci_lane.verdict("light", needs)
+    assert not ok
+    assert job in reason
+
+
+@pytest.mark.parametrize("job", ["validate-artifacts", "classify"])
+def test_landed_needs_the_classifier_and_the_strict_validation(job: str) -> None:
+    needs = _landed_needs()
+    needs[job]["result"] = "skipped"
+    ok, reason = ci_lane.verdict("landed", needs)
+    assert not ok
+    assert job in reason
+
+
+@pytest.mark.parametrize("lane", ["", "fast", None])
+def test_a_missing_or_unknown_lane_fails(lane: str | None) -> None:
+    ok, reason = ci_lane.verdict(lane, _full())
+    assert not ok
+    assert "lane" in reason
+
+
+def test_an_unknown_result_fails() -> None:
+    ok, reason = ci_lane.verdict("full", _full(lint="timed_out"))
+    assert not ok
+    assert "lint" in reason
+
+
+def test_verdict_reads_its_inputs_from_the_environment(capsys: pytest.CaptureFixture[str]) -> None:
+    env = {"LANE": "landed", "NEEDS": json.dumps(_landed_needs()), "TRUSTED_RUN": "45430000001"}
+    assert ci_lane.main(["verdict"], env=env) == 0
+    line = capsys.readouterr().out.strip()
+    assert len(line.splitlines()) == 1
+    assert "landed" in line and "45430000001" in line
+
+
+@pytest.mark.parametrize(
+    "env",
+    [
+        {"LANE": "full", "NEEDS": json.dumps(_full(test="failure"))},
+        {"LANE": "full"},
+        {"LANE": "full", "NEEDS": "not json"},
+        {"LANE": "full", "NEEDS": "[]"},
+        {"NEEDS": json.dumps(_full())},
+    ],
+    ids=["a failed job", "no NEEDS", "non-JSON NEEDS", "NEEDS not a mapping", "no LANE"],
+)
+def test_verdict_exits_one_with_one_line(env: dict, capsys: pytest.CaptureFixture[str]) -> None:
+    assert ci_lane.main(["verdict"], env=env) == 1
+    assert len(capsys.readouterr().out.strip().splitlines()) == 1

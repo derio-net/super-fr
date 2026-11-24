@@ -145,6 +145,58 @@ def landed_lane(sha: str, this_run: str, repo: str, *, runner: Runner) -> dict[s
     return {"lane": LANDED, "trusted_run": str(trusted)}
 
 
+# R17. The shard jobs the `full` lane must have run, and the only jobs the `light` lane
+# may skip. The classifier must succeed in every lane: without it there is no lane.
+FULL_REQUIRED = ("collect", "test", "split-check", "coverage")
+LIGHT_SKIPPABLE = frozenset({"plan", "collect", "test", "split-check", "coverage"})
+LIGHT_REQUIRED = ("scoped-tests",)
+LANDED_REQUIRED = ("validate-artifacts",)
+CLASSIFIER = "classify"
+
+
+def verdict(lane: str | None, needs: Mapping[str, Any]) -> tuple[bool, str]:
+    """Whether `ci-ok` passes: (ok, one-line reason).
+
+    *needs* is `toJSON(needs)`: `{job: {"result": ..., "outputs": {...}}}`. A failed or
+    cancelled job fails every lane, and so does any result but success and skipped.
+    Then each lane names the jobs that must have succeeded and the jobs that may be
+    skipped: `full` any job by its own condition, `light` only the shard jobs, `landed`
+    every job but the classifier and `validate-artifacts`.
+    """
+    if lane not in (FULL, LIGHT, LANDED):
+        return False, f"no known lane ({lane!r}): the classify job did not choose one"
+    results = {job: str((v or {}).get("result")) for job, v in needs.items()}
+    bad = sorted(job for job, r in results.items() if r not in ("success", "skipped"))
+    if bad:
+        detail = ", ".join(f"{job}={results[job]}" for job in bad)
+        return False, f"lane {lane}: {detail}"
+    required = {FULL: FULL_REQUIRED, LIGHT: LIGHT_REQUIRED, LANDED: LANDED_REQUIRED}[lane]
+    missing = [job for job in (CLASSIFIER, *required) if results.get(job) != "success"]
+    if lane == LIGHT:
+        missing += sorted(
+            job
+            for job, r in results.items()
+            if r == "skipped" and job not in LIGHT_SKIPPABLE and job not in missing
+        )
+    if missing:
+        return False, f"lane {lane}: did not run: {', '.join(missing)}"
+    return True, f"lane {lane}: every needed job did what the lane asks"
+
+
+def _verdict_from_env(env: Mapping[str, str]) -> tuple[bool, str]:
+    try:
+        needs = json.loads(env.get("NEEDS", ""))
+    except ValueError:
+        return False, "NEEDS is not JSON"
+    if not isinstance(needs, dict):
+        return False, "NEEDS is not a mapping of job results"
+    ok, reason = verdict(env.get("LANE"), needs)
+    trusted = env.get("TRUSTED_RUN")
+    if ok and env.get("LANE") == LANDED and trusted:
+        reason += f"; trusts run {trusted}"
+    return ok, reason
+
+
 def _emit(pairs: Mapping[str, str], env: Mapping[str, str]) -> None:
     lines = "".join(f"{key}={value}\n" for key, value in pairs.items())
     target = env.get("GITHUB_OUTPUT")
@@ -169,6 +221,7 @@ def main(
     landed.add_argument("--sha", required=True)
     landed.add_argument("--run", required=True)
     landed.add_argument("--repo", required=True)
+    sub.add_parser("verdict", help="whether ci-ok passes (reads LANE, NEEDS, TRUSTED_RUN)")
     args = parser.parse_args(argv)
     environ: Mapping[str, Any] = os.environ if env is None else env
 
@@ -178,6 +231,10 @@ def main(
     if args.command == "landed":
         _emit(landed_lane(args.sha, args.run, args.repo, runner=runner), environ)
         return 0
+    if args.command == "verdict":
+        ok, reason = _verdict_from_env(environ)
+        print(("ci-ok: pass: " if ok else "ci-ok: FAIL: ") + reason)
+        return 0 if ok else 1
     return 2  # pragma: no cover - argparse refuses an unknown command first
 
 
