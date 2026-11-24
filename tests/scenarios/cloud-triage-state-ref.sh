@@ -33,7 +33,8 @@ printf 'schema: 6\ntiers: [{n: 1, title: Now}]\nissues:\n  "super-fr#1": {tier: 
 printf 'schema: 2\n' > "$state/origins.yaml"
 printf 'subsystems: []\n' > "$state/subsystems.yaml"
 for d in board origins architecture history; do printf 'fragments: []\n' > "$state/$d/manifest.yaml"; done
-printf '{}\n' > "$state/snapshots/2026-10-08.json"
+printf '{"schema_version": 2, "batches": {}, "issues": {}, "prs": {}, "figures": {}}\n' \
+  > "$state/snapshots/2026-10-08.json"
 printf '# notes\n' > "$state/authored-src/notes.md"
 printf '{"stops": []}\n' > "$state/merge-stops.json"
 for f in lease requests sessions rehomes; do printf '%s: []\n' "$f" > "$state/$f.yaml"; done

@@ -49,8 +49,49 @@ def test_a_trusted_association_is_eligible() -> None:
         assert intake_reason("bob", assoc, [], TRUSTED) is None
 
 
-def test_the_ready_fr_label_admits() -> None:
-    assert intake_reason("bob", "NONE", ["bug", "ready-fr"], TRUSTED) is None
+D1 = "sha256:" + "1" * 64
+D2 = "sha256:" + "2" * 64
+
+
+def test_the_ready_fr_label_admits_only_with_a_marker_matching_the_content() -> None:
+    def reason(**kw: Any) -> str | None:
+        return intake_reason("bob", "NONE", ["bug", "ready-fr"], TRUSTED, key="o/r#5", **kw)
+
+    assert reason(content_digest=D1, admit_digest=D1, admit_read=True) is None
+    assert reason(content_digest=D1, admit_digest=D2, admit_read=True) == (
+        "edited after admission: run fr triage admit o/r#5 again"
+    )
+    assert reason(content_digest=D1, admit_read=True) == (
+        "labelled ready-fr without a trusted admit marker: run fr triage admit o/r#5"
+    )
+    assert reason(content_digest=D1) == (
+        "labelled ready-fr, comments not read: run fr triage collect again"
+    )
+
+
+def test_an_unread_comment_list_never_admits_even_with_a_stored_digest() -> None:
+    got = intake_reason(
+        "bob", "NONE", ["ready-fr"], TRUSTED, content_digest=D1, admit_digest=D1, admit_read=False
+    )
+    assert got is not None and "comments not read" in got
+
+
+def test_a_forge_that_cannot_list_comments_is_named_in_the_reason() -> None:
+    from fr.triage.intake import ADMIT_UNSUPPORTED
+
+    got = intake_reason("bob", "NONE", ["ready-fr"], TRUSTED, admit_unread=ADMIT_UNSUPPORTED)
+    assert got == (
+        "labelled ready-fr, but this forge cannot list comments, so an admit marker cannot be read"
+    )
+
+
+def test_the_admit_read_is_needed_only_when_no_other_clause_admits() -> None:
+    from fr.triage.intake import needs_admit_read
+
+    assert needs_admit_read("bob", "NONE", ["ready-fr"], TRUSTED)
+    assert not needs_admit_read("bob", "MEMBER", ["ready-fr"], TRUSTED)
+    assert not needs_admit_read("alice", None, ["ready-fr"], TRUSTED)
+    assert not needs_admit_read("bob", "NONE", [], TRUSTED)
 
 
 def test_an_outside_author_is_ineligible_with_a_reason_naming_author_and_association() -> None:
@@ -111,7 +152,10 @@ def test_untrusted_issues_lists_open_ineligible_ones_only() -> None:
         _issue(4, author="operator"),
         viewer="operator",
     )
-    assert [(i.number, r) for i, r in untrusted_issues(facts)] == [(1, "author eve is NONE")]
+    assert [(i.number, r) for i, r in untrusted_issues(facts)] == [
+        (1, "author eve is NONE"),
+        (3, "labelled ready-fr, comments not read: run fr triage collect again"),
+    ]
 
 
 def test_the_debt_workflows_bot_is_admitted_so_its_digest_body_survives() -> None:
@@ -122,7 +166,10 @@ def test_the_debt_workflows_bot_is_admitted_so_its_digest_body_survives() -> Non
 
 
 def test_the_ready_fr_label_is_compared_case_insensitively() -> None:
-    assert intake_reason("bob", "NONE", ["Ready-FR"], TRUSTED) is None
+    got = intake_reason(
+        "bob", "NONE", ["Ready-FR"], TRUSTED, content_digest=D1, admit_digest=D1, admit_read=True
+    )
+    assert got is None
 
 
 def test_the_bot_is_admitted_only_with_the_digest_marker() -> None:
@@ -142,7 +189,7 @@ def test_a_bot_issue_without_the_marker_is_ineligible_in_facts() -> None:
     assert issue_reason(facts.issues[0], facts) is not None
 
 
-def test_a_pre_15_facts_file_loads_with_ineligible_bodies_withheld(tmp_path: Any) -> None:
+def test_a_pre_15_facts_file_loads_with_ineligible_text_withheld(tmp_path: Any) -> None:
     import json
 
     from fr.debt.render import MARKER
@@ -158,7 +205,14 @@ def test_a_pre_15_facts_file_loads_with_ineligible_bodies_withheld(tmp_path: Any
     path = tmp_path / "facts.json"
     path.write_text(json.dumps(facts.to_json()))
     loaded = {i.number: i for i in load_facts(path).issues}
-    assert loaded[1].body == "" and loaded[1].title == "issue 1"
-    assert loaded[2].body == "trusted text"
+    assert (loaded[1].title, loaded[1].body) == ("", "")
+    assert loaded[2].body == "trusted text" and loaded[2].title == "issue 2"
     assert loaded[3].body == f"intro\n{MARKER}\nmore"
-    assert loaded[4].body == "admitted"
+    assert (loaded[4].title, loaded[4].body) == ("", "")  # the label alone no longer admits
+
+
+def test_the_rejection_line_names_the_admit_verb_not_the_label() -> None:
+    from fr.triage.intake import rejection_line
+
+    line = rejection_line([("super-fr#1", "author eve is NONE")])
+    assert "fr triage admit <key>" in line and "labelling" not in line

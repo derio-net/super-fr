@@ -56,6 +56,8 @@ GATED: dict[str, str] = {
     "fr/src/fr/commands/undispatch_cmd.py::undispatch_command":
         "require_forge(issues); forge_allows(comments) for the close comment",
     # -- triage: the batch's repo ----------------------------------------------------------
+    "fr/src/fr/commands/triage_admit_cmd.py::admit_command":
+        "remote_policy(client, repo).first_block(labels, comments) before the first write",
     "fr/src/fr/commands/triage_batch_cmd.py::batch_cancel_command":
         "_tracking_gate: require_forge(labels), require_forge(comments) on the batch's clone",
     "fr/src/fr/commands/triage_batch_cmd.py::_forge_writes":
