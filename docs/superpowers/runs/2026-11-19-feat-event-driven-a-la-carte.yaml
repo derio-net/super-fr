@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-19-event-driven-a-la-carte-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-11-24T20:06:46+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-24T20:06:46+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: claude-opus-5-5
+          session: eff5ea4a-9355-4349-88a2-473612f38e60
   plan:
     state: pending
   plan-review:
