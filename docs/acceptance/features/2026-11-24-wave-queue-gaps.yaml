@@ -52,10 +52,10 @@ rows:
       in one wave whose expected change sets overlap outside generated and version files,
       with both remedies, and the later batch's dispatch brief names the overlap.
     origin:
-    - spec:2026-11-24-wave-queue-gaps#R6
     - spec:2026-11-24-wave-queue-gaps#R7
     - spec:2026-11-24-wave-queue-gaps#R8
     - spec:2026-11-24-wave-queue-gaps#R9
+    - spec:2026-11-24-wave-queue-gaps#R10
     levels: {}
     status: not-implemented
     notes: ''
