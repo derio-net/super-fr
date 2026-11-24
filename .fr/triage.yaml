@@ -37,7 +37,8 @@ queue:
 # The commands that regenerate this repo's generated files, and the globs of the files they
 # write in whole (spec 2026-11-24-ci-economy R13). The wave merge queue takes the combination's
 # side of a conflicted generated file (and of a conflicted `<!-- generated:NAME -->` block) and
-# runs these, in order, in the combination's worktree; a conflict brief names them too. Each
+# runs these, in order, in a copy of the combination's tracked files with no git directory;
+# a conflict brief names them too. Each
 # runs through `uv run --frozen`, so the combination's own fr is imported and uv.lock is never
 # rewritten. README.md and docs/reference/cli.md are not listed: sync-readme.py writes only
 # their generated blocks, which the queue resolves by block.

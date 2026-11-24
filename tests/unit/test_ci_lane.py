@@ -176,7 +176,7 @@ def _payload(*runs: dict) -> dict:
 def test_a_successful_ci_push_run_on_an_fr_queue_branch_is_trusted() -> None:
     queue_run = _captured_ci_run(head_branch="fr-queue/s/slot-1", id=45430000001)
     payload = _payload(*_main_push_runs()["workflow_runs"], queue_run)
-    assert ci_lane.landed_run(payload, THIS_RUN) == 45430000001
+    assert ci_lane.landed_run(payload, THIS_RUN, SHA) == 45430000001
 
 
 @pytest.mark.parametrize(
@@ -207,15 +207,25 @@ def test_a_successful_ci_push_run_on_an_fr_queue_branch_is_trusted() -> None:
         pytest.param(
             _captured_ci_run(head_branch="feat/fr-queue/x"), id="fr-queue/ not at the start"
         ),
+        *(
+            pytest.param(
+                _captured_ci_run(head_branch="fr-queue/s/slot-1", conclusion=c), id=f"a {c} run"
+            )
+            for c in ("cancelled", "skipped", "neutral", "timed_out")
+        ),
+        pytest.param(
+            _captured_ci_run(head_branch="fr-queue/s/slot-1", head_sha="0" * 40),
+            id="another sha than the one asked about",
+        ),
     ],
 )
 def test_no_other_run_is_trusted(run: dict) -> None:
-    assert ci_lane.landed_run(_payload(run), THIS_RUN) is None
+    assert ci_lane.landed_run(_payload(run), THIS_RUN, SHA) is None
 
 
 @pytest.mark.parametrize("payload", [{}, [], "x", {"workflow_runs": "x"}, {"workflow_runs": [1]}])
 def test_a_payload_of_the_wrong_shape_trusts_nothing(payload: object) -> None:
-    assert ci_lane.landed_run(payload, THIS_RUN) is None
+    assert ci_lane.landed_run(payload, THIS_RUN, SHA) is None
 
 
 class _Gh:
@@ -264,8 +274,19 @@ def test_landed_is_full_when_no_run_qualifies(tmp_path: Path) -> None:
     [_Gh("", returncode=1), _Gh("not json"), _Gh(raises=True)],
     ids=["gh fails", "non-JSON", "no gh"],
 )
-def test_landed_is_full_when_the_forge_cannot_be_read(tmp_path: Path, gh: _Gh) -> None:
+def test_landed_is_full_when_the_forge_cannot_be_read(
+    tmp_path: Path, gh: _Gh, capsys: pytest.CaptureFixture[str]
+) -> None:
     assert _landed(tmp_path, gh) == {"lane": "full"}
+    # The job log says why (lens review l-errors-r1): a degraded lookup is not a choice.
+    assert "taking the full lane" in capsys.readouterr().err
+
+
+def test_classify_says_why_when_git_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert ci_lane.pull_request_lane("main", cwd=tmp_path) == "full"  # not a repository
+    assert "taking the full lane" in capsys.readouterr().err
 
 
 # ── Task 3: verdict (R17) ─────────────────────────────────────────────────
@@ -337,17 +358,19 @@ def test_a_failed_or_cancelled_job_fails_every_lane(lane: str, job: str, bad: st
     assert job in reason
 
 
+@pytest.mark.parametrize("bad", ["skipped", "failure", "cancelled"])
 @pytest.mark.parametrize("job", ["collect", "test", "split-check", "coverage"])
-def test_full_needs_the_shards_to_have_run(job: str) -> None:
+def test_full_needs_the_shards_to_have_run(job: str, bad: str) -> None:
     needs = _full()
-    needs[job]["result"] = "skipped"
+    needs[job]["result"] = bad
     ok, reason = ci_lane.verdict("full", needs)
     assert not ok
     assert job in reason
 
 
-def test_light_needs_the_scoped_tests_to_have_run() -> None:
-    ok, reason = ci_lane.verdict("light", _light(scoped_tests="skipped"))
+@pytest.mark.parametrize("bad", ["skipped", "failure", "cancelled"])
+def test_light_needs_the_scoped_tests_to_have_run(bad: str) -> None:
+    ok, reason = ci_lane.verdict("light", _light(scoped_tests=bad))
     assert not ok
     assert "scoped-tests" in reason
 
@@ -415,8 +438,9 @@ def test_a_path_with_a_ref_suffix_still_names_the_ci_workflow() -> None:
         "event": "push",
         "head_branch": "fr-queue/s/slot-1",
         "conclusion": "success",
+        "head_sha": SHA,
     }
-    assert ci_lane.landed_run({"workflow_runs": [run]}, 8) == 7
+    assert ci_lane.landed_run({"workflow_runs": [run]}, 8, SHA) == 7
 
 
 def test_the_script_parses_on_the_runners_older_python() -> None:

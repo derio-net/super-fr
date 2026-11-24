@@ -89,25 +89,33 @@ def pull_request_lane(
             head = "HEAD"
         merge_base = _git(["merge-base", f"origin/{base}", head], cwd, env).decode().strip()
         diff = _git(["diff", "--no-renames", "--name-only", "-z", merge_base, head, "--"], cwd, env)
-    except subprocess.CalledProcessError:
-        return FULL
-    except OSError:
-        return FULL
+    except subprocess.CalledProcessError as exc:
+        return _fallback(f"git {' '.join(map(str, exc.cmd[1:3]))} failed (exit {exc.returncode})")
+    except OSError as exc:
+        return _fallback(f"git could not run: {exc}")
     return lane_for([os.fsdecode(p) for p in diff.split(b"\0") if p])
+
+
+def _fallback(cause: str) -> str:
+    """The full lane, saying why on stderr: a fallback the job log does not name reads
+    as a lane that was chosen (lens review l-errors-r1)."""
+    print(f"ci_lane: {cause}; taking the full lane", file=sys.stderr)
+    return FULL
 
 
 CI_WORKFLOW = ".github/workflows/ci.yml"
 QUEUE_BRANCH_PREFIX = "fr-queue/"
 
 
-def landed_run(runs_json: object, this_run: int | str) -> int | None:
+def landed_run(runs_json: object, this_run: int | str, sha: str) -> int | None:
     """The id of a run that already proved this sha, or None (R5).
 
     *runs_json* is a `GET repos/{repo}/actions/runs` payload. A run qualifies when it is
     this CI workflow (by `path`, which a workflow cannot rename; an `@<ref>` suffix, should
     GitHub ever report one, is ignored: review p2-r2), triggered by a push
     (`event`) to an `fr-queue/` branch (`head_branch`), finished `success` (every job,
-    `ci-ok` included, succeeded or skipped by its own condition), and is not this run.
+    `ci-ok` included, succeeded or skipped by its own condition), ran on *sha* itself
+    (`head_sha`, never trusting the query's filter alone), and is not this run.
     A payload of any other shape trusts nothing.
     """
     runs = runs_json.get("workflow_runs") if isinstance(runs_json, dict) else None
@@ -121,6 +129,7 @@ def landed_run(runs_json: object, this_run: int | str) -> int | None:
             and run.get("event") == "push"
             and str(run.get("head_branch") or "").startswith(QUEUE_BRANCH_PREFIX)
             and run.get("conclusion") == "success"
+            and run.get("head_sha") == sha
             and isinstance(run.get("id"), int)
             and str(run["id"]) != str(this_run)
         ):
@@ -134,18 +143,25 @@ def landed_lane(sha: str, this_run: str, repo: str, *, runner: Runner) -> dict[s
     argv = ["gh", "api", f"repos/{repo}/actions/runs?head_sha={sha}&event=push&per_page=100"]
     try:
         proc = runner(argv, capture_output=True, text=True, check=False)
-    except OSError:
-        return {"lane": FULL}
+    except OSError as exc:
+        return {"lane": _fallback(f"gh could not run: {exc}")}
     if proc.returncode != 0:
-        return {"lane": FULL}
+        err = (proc.stderr or "").strip().splitlines()
+        return {
+            "lane": _fallback(f"gh api exit {proc.returncode}: {err[-1] if err else 'no output'}")
+        }
     try:
         payload = json.loads(proc.stdout)
     except ValueError:
-        return {"lane": FULL}
+        return {"lane": _fallback("gh api returned no JSON")}
     except TypeError:
-        return {"lane": FULL}
-    trusted = landed_run(payload, this_run)
+        return {"lane": _fallback("gh api returned no JSON")}
+    trusted = landed_run(payload, this_run, sha)
     if trusted is None:
+        print(
+            f"ci_lane: no successful fr-queue push run of {CI_WORKFLOW} on {sha}; full lane",
+            file=sys.stderr,
+        )
         return {"lane": FULL}
     return {"lane": LANDED, "trusted_run": str(trusted)}
 

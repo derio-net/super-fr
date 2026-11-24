@@ -72,7 +72,11 @@ def test_classify_chooses_the_subcommand_by_event() -> None:
     run = step["run"]
     assert step["env"]["EVENT"] == "${{ github.event_name }}"
     assert step["env"]["REF"] == "${{ github.ref }}"
-    assert step["env"]["GH_TOKEN"] == "${{ github.token }}"
+    # Only the push-to-main branch reads the forge (lens review l-security-r2).
+    assert step["env"]["GH_TOKEN"] == (
+        "${{ github.event_name == 'push' && github.ref == 'refs/heads/main'"
+        " && github.token || '' }}"
+    )
     push_main = run.index('"$EVENT" = push') < run.index("ci_lane.py landed")
     assert push_main and "refs/heads/main" in run
     assert 'ci_lane.py landed --sha "$GITHUB_SHA" --run "$GITHUB_RUN_ID"' in run
@@ -87,7 +91,7 @@ def test_classify_chooses_the_subcommand_by_event() -> None:
 @pytest.mark.parametrize("job", SHARD_JOBS)
 def test_the_shard_jobs_run_only_in_the_full_lane(job: str) -> None:
     assert "classify" in _needs(job)
-    assert FULL in JOBS[job]["if"]
+    assert JOBS[job]["if"] == FULL  # the whole expression: `<full> || true` must fail
 
 
 def test_the_shard_jobs_keep_their_own_needs() -> None:
@@ -113,7 +117,8 @@ def test_scoped_tests_runs_the_fr_scope_tier_in_the_light_lane() -> None:
 )
 def test_every_other_job_needs_classify_and_skips_in_the_landed_lane(job: str) -> None:
     assert "classify" in _needs(job)
-    assert NOT_LANDED in JOBS[job]["if"]
+    expected = {"change-fragment": f"github.event_name == 'pull_request' && {NOT_LANDED}"}
+    assert JOBS[job]["if"] == expected.get(job, NOT_LANDED)
 
 
 def test_validate_artifacts_runs_in_every_lane() -> None:
@@ -166,3 +171,12 @@ def test_split_check_saves_the_plan_on_main_as_before() -> None:
         if "actions/cache/save" in str(s.get("uses", ""))
     ]
     assert caches == [saves[1]]
+
+
+# Lens review l-security-r2: the jobs this feature added hold read-only tokens and keep
+# no credential in the checkout that runs a pull request's code.
+@pytest.mark.parametrize("job", ["classify", "scoped-tests", "ci-ok"])
+def test_the_lane_jobs_keep_no_credential_in_their_checkout(job: str) -> None:
+    assert _checkout(job)["with"]["persist-credentials"] is False
+    assert JOBS[job]["permissions"].get("contents") == "read"
+    assert set(JOBS[job]["permissions"].values()) == {"read"}

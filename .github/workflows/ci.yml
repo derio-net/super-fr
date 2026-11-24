@@ -47,6 +47,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       # No uv and no Python install: ci_lane.py is stdlib only, so the runner's own python3
       # runs it, and every job waits on this one (review p2-r3).
       - name: Choose this run's lane
@@ -56,7 +57,8 @@ jobs:
           REF: ${{ github.ref }}
           BASE_REF: ${{ github.base_ref }}
           REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ github.token }}
+          # Only `landed` reads the forge: a pull request's own ci_lane.py gets no token.
+          GH_TOKEN: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.token || '' }}
         run: |
           if [ "$EVENT" = push ] && [ "$REF" = refs/heads/main ]; then
             python3 scripts/ci_lane.py landed --sha "$GITHUB_SHA" --run "$GITHUB_RUN_ID" --repo "$REPO"
@@ -271,10 +273,13 @@ jobs:
     if: needs.classify.outputs.lane == 'light'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - run: uv sync
       - name: The tests this change reaches
@@ -451,8 +456,12 @@ jobs:
             change-fragment, docs-check, site-build]
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - name: Every CI job did what this run's lane asks
         env:
