@@ -266,6 +266,7 @@ def _repo_file(settings: Settings) -> Settings:
     return settings
 
 
+# The switch moves onto the configuration space (`fr.config.space`) in S1's second phase.
 def _quiet(root: Path) -> EffectiveSettings | None:
     """R2 under quiet: the policy is the `fr` branch's root settings.yaml, read from
     `origin/fr` by commit. A `.fr/settings.yaml` on the default branch is ignored, and
@@ -292,6 +293,7 @@ def _quiet(root: Path) -> EffectiveSettings | None:
 _STEALTH_NOTICED: set[str] = set()
 
 
+# The switch moves onto the configuration space (`fr.config.space`) in S1's second phase.
 def _stealth(root: Path) -> EffectiveSettings | None:
     """R2 under stealth: the policy is `<target-dir>/settings.yaml` on the tracking ref,
     read by commit in the tracking worktree; a target's `.fr/settings.yaml` is ignored
