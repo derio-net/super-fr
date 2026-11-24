@@ -105,7 +105,7 @@ def _entries(path: Path) -> list[JournalEntry]:
         return []
     try:
         return parse_journal(path.read_text())
-    except (JournalParseError, OSError):
+    except JournalParseError, OSError:
         return []
 
 
@@ -463,7 +463,7 @@ def _matrix_identity(repo_root: Path) -> str | None:
     for path in sorted(folder.glob("*.yaml")) if folder.is_dir() else ():
         try:
             data = yaml.safe_load(path.read_text())
-        except (OSError, yaml.YAMLError):
+        except OSError, yaml.YAMLError:
             continue
         if isinstance(data, dict) and isinstance(data.get("repo"), str) and data["repo"]:
             return str(data["repo"])

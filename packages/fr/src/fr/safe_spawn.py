@@ -41,7 +41,7 @@ def process_start(pid: int) -> str | None:
             capture_output=True, text=True, timeout=5, check=False,
             env={**os.environ, "LC_ALL": "C"},
         )  # fmt: skip
-    except (OSError, subprocess.SubprocessError):
+    except OSError, subprocess.SubprocessError:
         return None
     text = " ".join(out.stdout.split())
     return text if out.returncode == 0 and text else None

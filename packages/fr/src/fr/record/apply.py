@@ -294,7 +294,7 @@ def _repo_identity(repo_root: Path) -> tuple[str, str] | None:
 
     try:
         return resolve_identity(load_effective(repo_root), repo_root)
-    except (AcceptanceError, OSError):
+    except AcceptanceError, OSError:
         return None
 
 

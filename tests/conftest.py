@@ -41,7 +41,7 @@ def _operator_git_identity() -> dict[str, str]:
                 check=False,
                 timeout=10,
             )
-        except (OSError, subprocess.SubprocessError):
+        except OSError, subprocess.SubprocessError:
             continue
         if got.returncode == 0 and got.stdout.strip():
             found[key] = got.stdout.strip()
@@ -520,6 +520,54 @@ def _no_ambient_session(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
     monkeypatch.delenv("FR_OPENCODE_SESSION_ID", raising=False)
+
+
+class SettledForge:
+    """A read-only forge whose one open PR merges cleanly and has green CI: what `deliver`'s
+    `settle` witness reads in a unit test (spec 2026-11-23-pr-readiness-wait R8). Any
+    method but these four is a write, and fails the test."""
+
+    HEAD = "c" * 40
+
+    def open_pr_for_head(self, repo: str, branch: str) -> dict[str, object] | None:
+        return {"number": 1, "url": f"https://github.com/{repo}/pull/1"}
+
+    def pr_view(self, repo: str, number: int) -> dict[str, object]:
+        return {
+            "state": "OPEN",
+            "head_oid": self.HEAD,
+            "base_ref": "main",
+            "mergeable": "MERGEABLE",
+            "merge_state": "CLEAN",
+        }
+
+    def pr_checks(self, repo: str, number: int) -> list[dict[str, object]]:
+        return [{"name": "ci-ok", "bucket": "pass"}]
+
+    def required_check_names(self, repo: str, base: str) -> list[str]:
+        return []
+
+    def __getattr__(self, name: str) -> object:
+        if name.startswith("__"):
+            raise AttributeError(name)
+        raise AssertionError(f"the settle witness called {name}: it may only read")
+
+
+@pytest.fixture(autouse=True)
+def _settle_witness_reads_no_forge(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`deliver` derives a `settle` witness from the live PR (R8); a unit test's clone has
+    no forge. Only the witness's forge seams are replaced (review p2-r4), so its ordering,
+    managed and mode logic runs in every `deliver` test; a test replaces them again to
+    serve another PR."""
+    from fr.settle import witness
+
+    monkeypatch.setattr(witness, "client_for", lambda _root: SettledForge())
+    monkeypatch.setattr(witness, "origin_slug", lambda _root: "derio-net/fixture")
+    # A unit test's origin is a local bare repository, which names no forge (R11): every
+    # settle read sees a GitHub origin unless a test serves another.
+    monkeypatch.setattr(
+        "fr.settle.read.origin_url", lambda _root: "https://github.com/derio-net/fixture.git"
+    )
 
 
 @pytest.fixture

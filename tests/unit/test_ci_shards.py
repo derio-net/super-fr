@@ -3,8 +3,8 @@ ci-time-budget §3.A, Test Plan §7.1/§7.8).
 
 (a) `.github/workflows/ci.yml` shape: the `test` job is a 6-way matrix with
 `fail-fast: false`, its pytest step clears `addopts` and re-adds
-`--strict-markers`, coverage options come per leg (`matrix.cov_args`, measured
-on 3.14 only — spec 2026-11-01-ci-speed R7), and a `coverage` job (`needs: test`) combines the
+`--strict-markers`, every shard measures coverage (`--cov --cov-report=`,
+one leg on 3.14, #1589), and a `coverage` job (`needs: test`) combines the
 shards and gates at 75.
 
 (b) Partition: pytest-split's `least_duration` grouping must place every

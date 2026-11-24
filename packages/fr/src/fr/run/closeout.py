@@ -406,8 +406,10 @@ def branch_closeout_brief(
         f"'{_commit_message(branch, plan_path)}' && git push -u origin {housekeeping_branch}"
     )
     from fr.hostclient import pr_command  # the forge's own CLI, never `gh` (gh#742)
+    from fr.settle.instructions import CLOSEOUT_LINE
 
     lines.append(f"  open the housekeeping PR (e.g. `{pr_command(repo_root, 'fill')}`)")
+    lines.append(CLOSEOUT_LINE)  # spec 2026-11-23-pr-readiness-wait R10
     lines.append(f"  fr isolation down --branch {branch}")
     # gh#825: the brief brought the housekeeping workspace up, so it takes it
     # down too — after that PR merges, since `down` refuses unlanded work.
@@ -432,7 +434,7 @@ def _effective_strategy_of(repo_root: Path, state: RunState) -> Callable[[Row], 
     if spec_rel is not None:
         try:
             verification = spec_verification(repo_root, spec_rel, shape_default(repo_root, state))
-        except (SectionError, OSError):
+        except SectionError, OSError:
             verification = None
 
     def strategy_of(row: Row) -> str:
@@ -628,7 +630,7 @@ def devops_gated(repo_root: Path, state: RunState) -> bool:
 
     try:
         return "devops" in run_exit(repo_root, state).gates
-    except (AcceptanceError, OpsLoadError, SectionError, OSError):
+    except AcceptanceError, OpsLoadError, SectionError, OSError:
         plan_dir = run_plan_dir(repo_root, state)
         return plan_dir is not None and plan_has_ops(repo_root, plan_dir)
 

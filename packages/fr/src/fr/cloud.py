@@ -270,7 +270,7 @@ def _configured_merge_method(repo_root: Path) -> str | None:
 
     try:
         data = yaml.safe_load((repo_root / TRIAGE_CONFIG_PATH).read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError):
+    except OSError, yaml.YAMLError:
         return None
     value = data.get("merge_method") if isinstance(data, dict) else None
     return str(value) if value else None

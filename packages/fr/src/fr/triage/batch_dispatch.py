@@ -16,6 +16,7 @@ from collections.abc import Iterable, Sequence
 import yaml
 from pydantic import ValidationError
 
+from fr.settle.managed import MANAGED_SENTENCE
 from fr.triage.batch import (
     batch_branch,
     batch_repo,
@@ -278,6 +279,7 @@ def render_brief(
     lines += [
         "- Do not name any member issue as a phase `tracking_issue` in the plan: the "
         "bridge would then own that issue's `fr:` labels.",
+        f"- {MANAGED_SENTENCE}",
     ]
     if debug:
         lines += [
@@ -313,6 +315,7 @@ def red_brief(batch: Batch, *, pr_url: str, head: str, checks: Sequence[str]) ->
                 "Fix it on the PR's own branch: commit the fix and push. Do not force-push "
                 "and do not rebase: the PR's history stays as it is.",
                 "Leave the PR's draft or ready state and its labels alone.",
+                MANAGED_SENTENCE,
                 NO_APPROVAL_LINE,
             ]
         )
@@ -358,6 +361,7 @@ def conflict_brief(
             "5. Run the test suite, and fix what the merge broke.",
             f"6. Commit the merge and `git push origin {branch}`. The driver merges the PR "
             "once its checks are green.",
+            MANAGED_SENTENCE,
             NO_APPROVAL_LINE,
         ]
     )
@@ -380,6 +384,7 @@ def archive_conflict_brief(batch: Batch, *, pr: int, head: str, branch: str, bas
             "conflicts. Do not rebase and do not force-push.",
             f"3. Commit the merge and `git push origin {branch}`. The driver merges the "
             "archive PR once it is mergeable and its checks are green.",
+            MANAGED_SENTENCE,
             NO_APPROVAL_LINE,
         ]
     )

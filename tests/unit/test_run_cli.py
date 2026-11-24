@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 from fr.cli import app
-from fr.run import units
+from fr.run import cli_step, units
 from fr.run.model import load_run_state
 from fr.version_floor import CEILING_VERSION
 from fr_dispatch.work_item import run_item_id
@@ -538,6 +538,14 @@ def _boom_but_git(message: str):
     return run
 
 
+def _forbid_execution(monkeypatch, run_cmd, boom) -> None:
+    """Refuse every process but git: `subprocess.run` (a model invocation
+    above all) and the cli-step executor, which runs its shell through
+    `Popen` in `fr.run.cli_step` (super-fr#1507), out of reach of the first."""
+    monkeypatch.setattr(subprocess, "run", boom)
+    monkeypatch.setattr(cli_step, "run_cli_command", boom)
+
+
 def test_advance_agent_step_never_invokes_a_model(tmp_path: Path, monkeypatch) -> None:
     """The structural half of no-claude-p-batch: assert nothing is executed."""
     import fr.commands.run_cmd as run_cmd
@@ -551,7 +559,7 @@ def test_advance_agent_step_never_invokes_a_model(tmp_path: Path, monkeypatch) -
     # Installed AFTER `start`: `start` legitimately shells out to git to verify
     # the isolation marker's `mode` (review r5-e3). The claim under test is
     # about `advance`, and it is unchanged.
-    monkeypatch.setattr(run_cmd.subprocess, "run", _boom)
+    _forbid_execution(monkeypatch, run_cmd, _boom)
     result = runner_cli.invoke(
         app,
         ["run", "advance", "r1"],
@@ -595,7 +603,7 @@ def test_advance_onto_a_still_held_agent_step_refuses_and_still_executes_nothing
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "agentic", _AGENT_SHAPE)
     _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
-    monkeypatch.setattr(run_cmd.subprocess, "run", _boom)  # see the test above
+    _forbid_execution(monkeypatch, run_cmd, _boom)  # see the test above
     _invoke(repo, shipped, ["run", "advance", "r1"])
     before = load_run_state(repo, "r1")
 
@@ -707,7 +715,7 @@ def test_resolve_never_invokes_a_model_either(tmp_path: Path, monkeypatch) -> No
     _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
     (repo / "docs" / "superpowers" / "plans" / "p").mkdir(parents=True)
-    monkeypatch.setattr(run_cmd.subprocess, "run", _boom)  # see the advance tests
+    _forbid_execution(monkeypatch, run_cmd, _boom)  # see the advance tests
     result = _invoke(repo, shipped, [*_PLAN_DONE, "--emitted", "plan=docs/superpowers/plans/p"])
     assert result.exit_code == 0, result.output
 
@@ -5788,7 +5796,7 @@ def test_advance_refusing_a_running_agent_step_executes_and_writes_nothing(
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "agentic", _AGENT_SHAPE)
     _invoke(repo, shipped, ["run", "start", "agentic", "--branch", "b", "--run-id", "r1"])
-    monkeypatch.setattr(run_cmd.subprocess, "run", _boom)  # see the test above
+    _forbid_execution(monkeypatch, run_cmd, _boom)  # see the test above
     _invoke(repo, shipped, ["run", "advance", "r1"])
     before = (repo / "docs" / "superpowers" / "runs" / "r1.yaml").read_text()
 

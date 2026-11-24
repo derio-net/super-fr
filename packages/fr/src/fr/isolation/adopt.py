@@ -48,7 +48,7 @@ def workspace_path(repo_root: Path, branch: str) -> Path:
     recorded worktree, else where `up` puts a new one. For the plan, before any write."""
     try:
         state = load_state(repo_root, branch)
-    except (ValueError, OSError):
+    except ValueError, OSError:
         state = None
     return Path(state.worktree) if state is not None else default_worktree_path(repo_root, branch)
 
@@ -74,7 +74,7 @@ def reusable_workspace(
     silently reused."""
     try:
         state = load_state(repo_root, branch)
-    except (ValueError, OSError):
+    except ValueError, OSError:
         return None
     if state is None or not Path(state.worktree).is_dir():
         return None
@@ -96,7 +96,7 @@ def workspace_containing(repo_root: Path, path: Path) -> Path | None:
     """The worktree of the fr workspace of *repo_root* that contains *path*."""
     try:
         states = list_states(repo_root)
-    except (IsolationError, OSError, ValueError):
+    except IsolationError, OSError, ValueError:
         return None
     where = path.resolve()
     for state in states:

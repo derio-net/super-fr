@@ -124,7 +124,7 @@ def row_reconcile(root: Path) -> list[str]:
 
     try:
         matrix = load_effective(root)
-    except (AcceptanceError, OSError):
+    except AcceptanceError, OSError:
         return []
     out = []
     for r in matrix.rows:

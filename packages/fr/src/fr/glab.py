@@ -33,13 +33,11 @@ import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
 from fr.forge_body import not_json_reason
 from fr.ghclient import HostRefusedError
 from fr.labels import LabelDef
-
-T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +89,7 @@ def known_hosts() -> frozenset[str]:
         return frozenset()
     try:
         data = yaml.safe_load(path.read_text())
-    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+    except OSError, UnicodeDecodeError, yaml.YAMLError:
         return frozenset()
     hosts = data.get("hosts") if isinstance(data, dict) else None
     if not isinstance(hosts, dict):
@@ -506,7 +504,7 @@ def is_not_found(err: GlabError) -> bool:
     return any(p in _haystack(err) for p in _NOT_FOUND_PATTERNS)
 
 
-def with_retry(
+def with_retry[T](
     op: Callable[[], T],
     *,
     max_attempts: int = 3,

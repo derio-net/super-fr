@@ -114,7 +114,7 @@ def referenced_files(texts: Iterable[str], repo_root: Path) -> list[str]:
                 path = (root / token).resolve()
                 if path.is_file() and path.is_relative_to(root):
                     found.add(path.relative_to(root).as_posix())
-            except (OSError, ValueError):
+            except OSError, ValueError:
                 continue
     return sorted(found)
 
@@ -327,7 +327,7 @@ def load_trust(repo_root: Path, plan_slug: str) -> Trusted | None:
             granted=str(data["granted"]),
             tree=dict(data.get("tree") or {}),
         )
-    except (OSError, ValueError, KeyError, TypeError):
+    except OSError, ValueError, KeyError, TypeError:
         return None
 
 

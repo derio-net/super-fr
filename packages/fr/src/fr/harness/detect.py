@@ -66,7 +66,7 @@ def process_ancestry() -> list[int]:
             timeout=5,
             check=True,
         ).stdout
-    except (OSError, subprocess.SubprocessError):
+    except OSError, subprocess.SubprocessError:
         return []
     parents: dict[int, int] = {}
     for line in listing.splitlines():

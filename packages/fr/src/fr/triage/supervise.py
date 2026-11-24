@@ -135,7 +135,7 @@ class Supervisor:
         (R22)."""
         try:
             print(f"{kind}: {line}", file=sys.stderr, flush=True)
-        except (OSError, ValueError):
+        except OSError, ValueError:
             pass
         try:
             self.log.append(kind, line, self.now())
