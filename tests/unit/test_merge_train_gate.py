@@ -16,10 +16,18 @@ from fr.labels import APPROVED_FR
 from fr.triage.approval import Approved, First, Unlabelled, Void, settle_approvals
 from fr.triage.batch import QueueEntry
 from fr.triage.batch_drive import LivePr, Pass, Snapshot, drive_pass
-from fr.triage.model import ApprovalEvent, Batch, BatchEvent, PullRequest, UpdateEvent
+from fr.triage.model import (
+    ApprovalEvent,
+    Batch,
+    BatchEvent,
+    CursorPosition,
+    PullRequest,
+    UpdateEvent,
+)
 from fr.triage.wave_queue import QueueConfig
 
 REPO = "derio-net/super-fr"
+DELIVERED = CursorPosition(run="r", step="deliver", kind="deliver-done")
 NOW = datetime(2026, 10, 11, 12, 0, tzinfo=UTC)
 LABEL = APPROVED_FR.name
 
@@ -191,6 +199,7 @@ def _walk(
         now=NOW,
         approvals=approvals,
         wave_queues={REPO: QueueConfig()},
+        cursors={bid: (p.head, DELIVERED, "read") for bid, p in live.items()},
     )
     plan = drive_pass(snap)
     (queue_plan,) = plan.queues
