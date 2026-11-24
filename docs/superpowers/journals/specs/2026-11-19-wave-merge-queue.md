@@ -657,3 +657,10 @@ Evidence: 2026-11-24: tests/integration/test_queue_drive_cmd.py, tests/unit/test
 Step: A driver killed after `queue_built` and after the land push resumes from events and the forge without landing twice; the slot branches are reused, never multiplied. (R4, R24)
 
 Evidence: 2026-11-24: tests/integration/test_queue_resume.py (resume after queue_built and after land push, slots reused); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-17 created=2026-11-24T12:40:55+00:00 -->
+### test-plan-step-17 · discovery · Test Plan step 17: ran
+
+Step: The pass line, the board and the Batches page show the queue line; a queued, approved PR is never "awaiting approval". (R25)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_operator_view.py (queue line, board, Batches page, never awaiting approval); full wave-queue unit (542) + integration (134) + scenario (3) runs green
