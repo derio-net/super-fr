@@ -83,14 +83,15 @@ def test_clones_and_delegates_with_forwarded_args(tmp_path: Path) -> None:
     src = tmp_path / "src"
     marker = tmp_path / "marker.txt"
 
-    res = _run_bootstrap(tmp_path, origin, src, marker, "--uninstall")
+    # The fixture has no release tag, so the default channel refuses; main is asked for.
+    res = _run_bootstrap(tmp_path, origin, src, marker, "--version", "main", "--uninstall")
 
     assert res.returncode == 0, f"stdout={res.stdout}\nstderr={res.stderr}"
     # Source was cloned into FR_SRC_DIR.
     assert (src / ".git").exists()
     assert (src / "scripts" / "install.sh").exists()
-    # Stub install.sh ran with the forwarded arg.
-    assert marker.read_text().strip() == "--uninstall"
+    # Stub install.sh ran with the forwarded arg (and main's own `--version main`).
+    assert marker.read_text().split() == ["--version", "main", "--uninstall"]
 
 
 def test_rerun_is_idempotent_and_updates_source(tmp_path: Path) -> None:
@@ -98,7 +99,7 @@ def test_rerun_is_idempotent_and_updates_source(tmp_path: Path) -> None:
     src = tmp_path / "src"
     marker = tmp_path / "marker.txt"
 
-    first = _run_bootstrap(tmp_path, origin, src, marker)
+    first = _run_bootstrap(tmp_path, origin, src, marker, "--version", "main")
     assert first.returncode == 0, f"stdout={first.stdout}\nstderr={first.stderr}"
 
     # New commit upstream; a re-run must fetch + reset --hard to pick it up.
@@ -106,7 +107,7 @@ def test_rerun_is_idempotent_and_updates_source(tmp_path: Path) -> None:
     _run(["git", "add", "-A"], origin)
     _run(["git", "commit", "-q", "-m", "v2"], origin)
 
-    second = _run_bootstrap(tmp_path, origin, src, marker)
+    second = _run_bootstrap(tmp_path, origin, src, marker, "--version", "main")
     assert second.returncode == 0, f"stdout={second.stdout}\nstderr={second.stderr}"
     assert (src / "NEWFILE").exists(), "re-run did not update the managed source checkout"
 

@@ -8,9 +8,11 @@ defaults:
 # Run by `fr triage batch drive` once per merged batch, before its close-out, from
 # the base clone fast-forwarded to origin/main (wave-driver spec R14), so later
 # batches run on the merged plugin, hooks and fr. An argument list, never a shell
-# string. install.sh refuses a base clone that is off main or has stray files;
-# that holds the close-out and warns each pass until the clone is clean.
-post_merge: ["./scripts/install.sh"]
+# string. `--version main` is what makes it install the merged checkout: with no
+# --version, install.sh installs the newest stable release instead. install.sh refuses
+# a base clone that is off main or has stray files; that holds the close-out and warns
+# each pass until the clone is clean.
+post_merge: ["./scripts/install.sh", "--version", "main"]
 # After a pass in which post_merge succeeded, the driver restarts the idle sessions of the
 # runner once (driver-sessions spec R6), so they load the plugins, hooks and fr it installed.
 # The driver's own pane is never restarted. `none` turns it off.
@@ -30,7 +32,8 @@ export:
 # forbids only force-push and deletion), and the release workflow cuts the wave's release.
 queue:
   ci: push
-  depth: 2
+  # Up to three combinations in CI at once: a wave's non-overlapping entries stack and land together.
+  depth: 3
   land: push
   release: workflow
   # No `release_workflow:` on purpose: release.yml already runs on the drained `fr-hold/**` push.

@@ -19,13 +19,13 @@ forking the done/failed cursor asymmetry a second time.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
 import functools
 import json
 import os
 import re
 import shlex
-import subprocess
 from collections.abc import Callable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -85,6 +85,7 @@ from fr.records_commit import commit_records
 from fr.run import liveness as _liveness
 from fr.run import units
 from fr.run.adopt import MANUAL_ITEM, AdoptError, Superseded, adopt_run, plan_phase_tags
+from fr.run.cli_step import run_step
 from fr.run.historical import (
     HISTORICAL_HEADING,
     HISTORICAL_REVIEWER,
@@ -102,12 +103,14 @@ from fr.run.model import (
     AnsweredBy,
     DispatchOutcome,
     RunState,
+    RunStateConflictError,
     RunStateError,
     StepRecord,
     current_run_schema_version,
     existing_run_id_colliding_with,
     load_run_state,
     parse_run_state,
+    read_run_state,
     run_path,
     save_run_state,
     validate_run_id,
@@ -369,7 +372,11 @@ def _remember(path: Path) -> None:
 def _save_run_state(repo_root: Path, state: RunState) -> Path:
     """`save_run_state`, noted for the command's closing commit."""
     _remember(run_path(repo_root, state.run))
-    path = save_run_state(repo_root, state)
+    try:
+        path = save_run_state(repo_root, state)
+    except RunStateConflictError as e:  # super-fr#1511: a refusal; nothing was written
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
     _note_record_write(repo_root, path, state)
     return path
 
@@ -5383,7 +5390,7 @@ def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> s
         return None
     for candidate in sorted(runs_dir.glob("*.yaml")):
         try:
-            state = parse_run_state(candidate.read_text())
+            state = read_run_state(candidate)
         except RunStateError, OSError:
             continue  # a broken run file is a different problem
         if state.workflow.split("@", 1)[0] == workflow and state.branch == branch:
@@ -5911,7 +5918,7 @@ def adopt_cmd(
             dry_run=not yes,
             superseded=effects,
         )
-    except AdoptError as e:
+    except (AdoptError, RunStateConflictError) as e:
         err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(2) from e
     if effects.old and not effects.written_new:
@@ -6192,7 +6199,7 @@ def _cost_cursor(repo_root: Path, run_id: str) -> RunState | None:
     same fallback `load_run_usage` makes for the usage file (review p2-r1), so
     a closed-out run keeps its per-phase table. `None` when neither reads: an
     archived cursor older than the live model prints the step table only."""
-    from fr.run.model import archived_run_path, parse_run_state
+    from fr.run.model import archived_run_path
 
     try:
         return load_run_state(repo_root, run_id)
@@ -6646,26 +6653,23 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
         )
         raise typer.Exit(2)
 
-    proc = subprocess.run(  # noqa: S602 — manifest is operator-authored; values are shlex-quoted
-        command, shell=True, cwd=repo_root, capture_output=True, text=True
+    try:
+        returncode, stdout, failure = run_step(command, repo_root, step.id)
+    except ValueError as e:  # super-fr#1507: a bad timeout is refused, never defaulted
+        err_console.print(f"[red]{escape(str(e))}[/red]")
+        raise typer.Exit(2) from None
+    status: Literal["done", "failed"] = "failed" if failure else "done"
+    new_state = _complete_step(
+        state, manifest, state.cursor, status, exit_code=returncode, stdout=stdout
     )
-    if proc.returncode == 0:
-        new_state = _complete_step(
-            state, manifest, state.cursor, "done", exit_code=0, stdout=proc.stdout
-        )
-        _save_run_state(repo_root, new_state)
+    _save_run_state(repo_root, new_state)
+    if failure is None:
         console.print(f"{step.id}: done (exit 0)")
         return "cli-done"
-    else:
-        new_state = _complete_step(
-            state, manifest, state.cursor, "failed", exit_code=proc.returncode, stdout=proc.stdout
-        )
-        _save_run_state(repo_root, new_state)
-        err_console.print(f"{step.id}: failed (exit {proc.returncode})")
-        # A return value, not `typer.Exit(1)`: only this branch knows a step
-        # ran and failed, so only it may say so (review r1-1). Every
-        # `typer.Exit` raised under `_advance_step` is a refusal.
-        return "cli-failed"
+    err_console.print(failure)
+    # A return value, not `typer.Exit(1)`: only this branch knows a step ran and failed, so only
+    # it may say so (review r1-1). Every `typer.Exit` raised under `_advance_step` is a refusal.
+    return "cli-failed"
 
 
 def _resolve_member(
@@ -8214,7 +8218,6 @@ def resolve_in_process(
     same names: `answered_by` (who answered the step's operator gate) and
     `agent`/`harness`/`model` (the late identity of the unit's holder).
     """
-    import contextlib
     import io
     import sys
 
@@ -8824,7 +8827,7 @@ def _runs_on_this_branch(repo_root: Path) -> list[RunState]:
     found: list[RunState] = []
     for candidate in sorted(runs_dir.glob("*.yaml")):
         try:
-            state = parse_run_state(candidate.read_text())
+            state = read_run_state(candidate)
         except RunStateError, OSError:
             continue
         if state.branch == branch:

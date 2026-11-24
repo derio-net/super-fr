@@ -27,7 +27,7 @@ from fr.artifacts.paths import KIND_DIRS
 from fr.checkstate import bucket_verdict
 from fr.labels import awaiting_devops, held_gates, pre_merge_held
 from fr.settle.managed import MANAGED_SENTENCE
-from fr.triage.approval import ApprovalVerdict, is_approved
+from fr.triage.approval import ApprovalVerdict, Approved, is_approved
 from fr.triage.batch import (
     UNSATISFIABLE,
     BatchStage,
@@ -439,6 +439,14 @@ class Snapshot:
     head_changed: Mapping[str, datetime] = field(default_factory=dict)
     session_status: Mapping[str, str] = field(default_factory=dict)
 
+    # marker item -> its open PR's approval verdict (gh#1497), settled as a `closeout`
+    # queue entry's (R32): what admits a PR `review_reasons` holds. None is never approved.
+    collected_approvals: Mapping[str, ApprovalVerdict] = field(default_factory=dict)
+    # repo -> an artifact on its default branch a migration has yet to move and the
+    # close-out's own R16 migration does not (gh#1569): `fr archive` would be refused, so
+    # none starts until then.
+    closeout_waits: Mapping[str, str] = field(default_factory=dict)
+
 
 @dataclass(frozen=True)
 class Admitted:
@@ -765,6 +773,16 @@ def closeout_of(batch: Batch, closeouts: Iterable[CollectedCloseout]) -> Closeou
         return event
     marker = marker_of(event.archive or "", closeouts)
     return None if marker is not None and marker.closed and not marker.merged else event
+
+
+def _collected_marker_of(
+    batch: Batch, closeouts: Iterable[CollectedCloseout]
+) -> CollectedCloseout | None:
+    """The start marker of the collected close-out *batch*'s close-out event names."""
+    event = closeout_event(batch)
+    if event is None or collected_name(event.archive or "") is None:
+        return None
+    return marker_of(event.archive or "", closeouts)
 
 
 def closeout_hold(batch: Batch) -> CloseoutHoldEvent | None:
@@ -1214,9 +1232,25 @@ def _collected_step(
                       f"it back to {marker.item}", pr=pr.number, head=pr.head, items=members,
                       key=marker.item, checks=checks), "closing"  # fmt: skip
     if why := review_reasons(marker, pr, snap):
-        return Action("closeout-needs-review", first, f"close-out PR #{pr.number} is never "
-                      f"merged without approved-fr: {'; '.join(why)}", pr=pr.number,
-                      items=members, key=marker.item), "blocked"  # fmt: skip
+        # gh#1497: the operator's approved-fr admits it to the queue. Only a RECORDED
+        # approval (`Approved`, which a `--yes` pass settles) does: a `First` nobody
+        # recorded never admits a held PR.
+        # The queue entry's own rule (R12) binds it: pinned to the patch-id, voided by a push
+        # that changes the diff; the queue builds the live head it judged.
+        verdict = snap.collected_approvals.get(marker.item)
+        approved = isinstance(verdict, Approved) and bool(pr.head)
+        # what it closes stays the verb's record even when approved: a body edited after
+        # the approval would otherwise close any issue at merge
+        unchecked = ("its body's Closes lines", "its members' narrowing decisions")
+        if any(w.startswith(unchecked) for w in why):  # a Closes set not proven the record
+            approved = False
+        if not approved:
+            moved = pr.head != marker.head  # gh#1496: its session can re-record the head
+            again = (f"; or re-record its head: `fr triage batch closeout --branch "
+                     f"{marker.branch} --yes`") if moved else ""  # fmt: skip
+            return Action("closeout-needs-review", first, f"close-out PR #{pr.number} is "
+                          f"never merged without approved-fr: {'; '.join(why)}{again}",
+                          pr=pr.number, items=members, key=marker.item), "blocked"  # fmt: skip
     if pr.checks == "green" and pr.mergeable == "MERGEABLE":
         from fr.triage.wave_queue import effective_wave
 
@@ -1950,8 +1984,17 @@ def drive_pass(snap: Snapshot) -> Pass:
         name, item_id = next_collected_item(repo, snap)
         if repo in started or _collected_under_way(repo, snap) or item_id in snap.existing:
             continue  # one at a time; a live session of this item is not started twice
-        started.add(repo)
         taking = tuple(collecting[(repo, group)])
+        if (migrating := snap.closeout_waits.get(repo)) is not None:  # gh#1569: owed, not held
+            # retried every pass, but a Need: nothing may migrate it unless someone does
+            closing -= len(taking)
+            closeouts_held += 1
+            actions.append(Action("blocked", taking[0], f"close-out of {', '.join(taking)} "
+                                  f"waits for a migration of {migrating}, which it does not "
+                                  "archive: a release migrates it, or `fr migrate artifacts "
+                                  "--yes` on a branch"))  # fmt: skip
+            continue
+        started.add(repo)
         actions.append(
             Action("closeout", taking[0], f"start {collected_item_id(repo, name)} for "
                    f"{', '.join(taking)}", items=taking, key=name)
@@ -1965,7 +2008,7 @@ def drive_pass(snap: Snapshot) -> Pass:
             key = f"reopened\0{marker.item}\0{reopened.number}"
             if key not in snap.warned:
                 said = (f"close-out PR #{reopened.number} was closed and reopened: the driver "
-                        "never merges it; it needs approved-fr like any PR")  # fmt: skip
+                        "never merges it: merge or close it by hand")  # fmt: skip
                 actions.append(Action("closeout-reopened", (marker.planned or [""])[0], said,
                                       pr=reopened.number, key=marker.item, head=key))  # fmt: skip
             continue
@@ -2136,16 +2179,30 @@ def drive_pass(snap: Snapshot) -> Pass:
     # 5. Close the sessions of finished batches. Never work remaining (R10): the
     # summary does not see it.
     if snap.close_sessions:
+        by_id = {b.id: b for b in snap.batches}
+
+        def finished(bid: str) -> bool:
+            b = by_id.get(bid)
+            repo = snap.repos.get(bid, "")
+            return b is not None and is_finished(
+                b, stages.get(bid, "proposed"), snap.archives.get(repo, ())
+            )
+
+        collected_done: set[str] = set()  # gh#1494: each collected session closes once
         for batch in chosen:
             repo = snap.repos.get(batch.id, "")
-            if not is_finished(
-                batch, stages.get(batch.id, "proposed"), snap.archives.get(repo, ())
-            ):
+            if not finished(batch.id):
                 continue
-            live = tuple(
-                i for i in (batch_item_id(repo, batch.id), closeout_item_id(repo, batch.id))
-                if i in snap.sessions
-            )  # fmt: skip
+            items = [batch_item_id(repo, batch.id), closeout_item_id(repo, batch.id)]
+            # gh#1494: the collected close-out's session, once its PR merged and every
+            # batch it planned or carried is finished (a held one keeps it open).
+            carrier = _collected_marker_of(batch, snap.closeouts)
+            carried = {*carrier.planned, *carrier.members} if carrier is not None else set()
+            if (carrier is not None and carrier.merged and carrier.item not in collected_done
+                    and all(finished(b) for b in carried)):  # fmt: skip
+                collected_done.add(carrier.item)
+                items.append(carrier.item)
+            live = tuple(i for i in items if i in snap.sessions)
             if live:
                 actions.append(Action("close", batch.id, f"sessions {', '.join(live)}", items=live))
 

@@ -462,7 +462,7 @@ class TestWorktreeRemove:
 TRACE_PS4 = "+ ${BASHPID} ${EPOCHREALTIME:-} "
 STUB_TRACE = (
     r"""printf '%s ppid=%s t=%s lock-holder=%s\n' "$1" "$PPID" "${EPOCHREALTIME:-}" """
-    r""""$(cat "$HOME"/.cache/fr/locks/*/pid 2>/dev/null | tr '\n' ,)" >> "$FR_STUB_LOG.trace"
+    r""""$(cat "$HOME"/.cache/fr/locks/* 2>/dev/null | tr '\n' ,)" >> "$FR_STUB_LOG.trace"
 """
 )
 
@@ -536,8 +536,8 @@ def _hung_race_evidence(
     parts.append("--- ps:\n" + ps.stdout)
     locks = Path(env["HOME"]) / ".cache" / "fr" / "locks"
     for lock in sorted(locks.glob("*")) if locks.is_dir() else []:
-        pid = lock / "pid"
-        held = pid.read_text().strip() if pid.exists() else "(none)"
+        # The lock is a file holding its holder's pid (an empty one is mid-acquire).
+        held = (lock.read_text().strip() or "(empty)") if lock.is_file() else "(not a file)"
         parts.append(f"--- lock {lock.name}: pid={held}")
     for i, (proc, out_path, err_path) in enumerate(procs):
         if proc.poll() is None:
@@ -635,6 +635,33 @@ def test_two_concurrent_invocations_do_not_overlap(repo: Path, stub_fr: dict[str
     assert "OVERLAP" not in logged(stub_fr), "two fr isolation up runs overlapped\n" + evidence
     paths = {r.out.strip().splitlines()[-1] for r in runs}
     assert len(paths) == 1, f"the two invocations disagree on the worktree: {paths}\n{evidence}"
+
+
+# The hooks' lock must not rest on an external `mkdir` being atomic: on Linux CI both
+# copies have been seen to succeed at `mkdir <lock>` on one path, microseconds apart,
+# and then both ran inside the critical section (gh#1463; PR #1584's run). This `mkdir`
+# says yes to every lock path without making it, the worst a `mkdir` could do.
+LYING_MKDIR = r"""#!/bin/bash
+case "$*" in *worktree-*) exit 0 ;; esac
+exec "$REAL_MKDIR" "$@"
+"""
+
+
+def test_the_lock_does_not_depend_on_an_external_mkdir_being_atomic(
+    repo: Path, stub_fr: dict[str, str]
+) -> None:
+    bin_dir = Path(stub_fr["PATH"].split(":")[0])
+    (bin_dir / "fr").write_text(SLOW_STUB)
+    mkdir = bin_dir / "mkdir"
+    mkdir.write_text(LYING_MKDIR)
+    mkdir.chmod(0o755)
+    env = {**stub_fr, "REAL_MKDIR": shutil.which("mkdir") or "/bin/mkdir"}
+    payload = Path(stub_fr["HOME"]) / "payload.json"
+    payload.write_text(json.dumps(create_payload("twice", repo)))
+    runs = run_twice(CREATE, payload, env)
+    evidence = race_evidence(runs, stub_fr)
+    assert all(r.code == 0 for r in runs), evidence
+    assert "OVERLAP" not in logged(stub_fr), "two fr isolation up runs overlapped\n" + evidence
 
 
 SLOW_DOWN_STUB = (
