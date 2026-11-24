@@ -622,3 +622,10 @@ Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py closeout-last tests;
 Step: Hold: `open` from queue open; the driver's push after the last landing moves it to `drained`; only the release run (or `release: none`) clears it, by a leased push; `fr release status --from-json` with a fresh `open` hold says held, with one older than 24 h warns and ignores it; `release.py` cuts nothing while `open`, including a `--version` run; a superseded run clears nothing; the workflow is dispatched on drain, and a failed dispatch only warns. (R17, R18, R19)
 
 Evidence: 2026-11-24: tests/integration/test_queue_hold.py, tests/unit/test_release_status.py, test_release_script.py; tests/scenarios/wave-queue-release-hold.sh; full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-12 created=2026-11-24T12:40:47+00:00 -->
+### test-plan-step-12 · discovery · Test Plan step 12: ran
+
+Step: `queue.ci: none` lands each built entry with no CI wait; `queue.ci: none` is refused where services report CI. (R7, R20)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_phase5_fixes.py, test_triage_queue_model.py (queue.ci none, refused where CI reported); full wave-queue unit (542) + integration (134) + scenario (3) runs green
