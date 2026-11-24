@@ -191,3 +191,10 @@ Filed at deliver as derio-net/super-fr#1600; still owed until discharged.
 Step: pre-merge — CI: `tests/unit/test_ci_python_floor.py` (`test_ci_pins_the_requires_python_floor`, `test_release_suite_runs_on_the_requires_python_floor`) and `tests/unit/test_ops_isolated_python.py::test_the_python_floor_has_safe_path` pin R1/R6, and CI's `lint`/`typecheck` jobs run at the new targets (R2) (row `ci-floor-python-3-14`).
 
 Evidence: PR #1593 CI green on the single leg: lint, typecheck and all 7 test shards pass at Python 3.14; the floor tests (test_ci_python_floor.py, test_ops_isolated_python.py) ran inside them.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-11-24T13:29:33+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: pre-merge — CI: `test_ci_python_floor.py` (`test_ci_tests_one_python_the_floor`, `test_every_shard_feeds_coverage`), `tests/unit/test_ci_split_workflow.py` and `tests/unit/test_ci_shards.py` pin R3-R5/R7, and this PR's own CI run is the one-leg layout running (row `ci-single-leg`; amended rows `ci-coverage-newest-leg`, `ci-shards-complete`).
+
+Evidence: PR #1593 CI run shows one-leg layout: test (1)..(7) with no per-version matrix, split-check and coverage pass.
