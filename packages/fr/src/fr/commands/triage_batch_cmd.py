@@ -134,7 +134,6 @@ from fr.triage.approval import (
     PatchIdOf,
     ensure_approval_label,
     facts_without_label,
-    is_approved,
     judge_approval,
     read_release_marker,
     settle_approvals,
@@ -198,7 +197,6 @@ from fr.triage.batch_drive import (
     DEFAULT_MAX_INFLIGHT,
     DEFAULT_WORKSPACE_PREFIX,
     EXPORT_KINDS,
-    HOUSEKEEPING_PREFIX,
     STALE_CLOSEOUT,
     Action,
     Admitted,
@@ -332,6 +330,7 @@ from fr.triage.model import (
     normalize_key,
 )
 from fr.triage.operation_lock import replacement_scope_lock
+from fr.triage.operator_entries import housekeeping_reads
 from fr.triage.pacing import Pacer
 from fr.triage.privacy import VisibilityUnreadable, guard_write
 from fr.triage.probe import PassPlan
@@ -7241,59 +7240,7 @@ class _Driver:
     def _housekeeping_reads(
         self, facts: Facts, judgements: Judgements, repos: Mapping[str, str], skip: Iterable[str]
     ) -> dict[str, tuple[tuple[LivePr, datetime | None], ...]]:
-        """R32: each repo's open housekeeping PRs (a DevOps stage's `chore/ops-<slug>` branch,
-        from the repo itself by an allowed author) whose `approved-fr` is valid, settled on
-        the queue's own events: recorded as an `approval` at its head and patch-id, voided
-        (label off) when a push changes its diff (R12). Only such a PR is admitted, with the
-        time its approval was recorded, which orders it. Nothing is written without --yes."""
-        out: dict[str, tuple[tuple[LivePr, datetime | None], ...]] = {}
-        scope = scope_id(self.scope)
-        for repo in sorted(set(repos.values()) - set(skip)):
-            allowed = allowed_authors(repo, facts)
-            mine = [
-                p for p in facts.prs
-                if p.repo == repo and p.state == "OPEN"
-                and p.head_ref.startswith(HOUSEKEEPING_PREFIX)
-                and distrust(p.author, p.cross_repo, allowed) is None
-            ]  # fmt: skip
-            if not mine:
-                continue
-            client = self.client(facts, repo)
-            events = [e for q in judgements.queues if q.repo == repo and q.scope == scope
-                      for e in q.events if isinstance(e, QueueApprovalEvent)]  # fmt: skip
-            found: list[tuple[LivePr, datetime | None]] = []
-            for pr in mine:
-                view = client.pr_view(repo, pr.number)
-                head = str(view.get("head_oid") or "")
-                if view.get("state") != "OPEN" or not head:
-                    continue
-
-                def record(event: QueueApprovalEvent, repo: str = repo) -> None:
-                    checkout = self._fetched_reader(repo)
-                    base = checkout.rev_parse(f"origin/{checkout.default_branch()}")
-                    queue_writer(self.target, repo, scope)(event, base=base)
-                    events.append(event)
-
-                verdict, at = settle_entry_approval(
-                    client, record, repo, QueueEntryRef(pr=pr.number, kind="housekeeping"),
-                    events, view, _say, now=_now(), dry_run=not self.yes,
-                    patch_id_of=self._patch_id_of(facts, repo),
-                )  # fmt: skip
-                if not is_approved(verdict):
-                    continue
-                checks, failing = checks_verdict(
-                    client.pr_required_checks(repo, pr.number), pr.checks or {},
-                    ci_none=self._ci_none(repo),
-                )  # fmt: skip
-                found.append((LivePr(
-                    number=pr.number, state="OPEN", draft=bool(view.get("draft")), head=head,
-                    checks=checks, failing=failing, head_ref=pr.head_ref, trusted=True,
-                    base=str(view.get("base_ref") or ""),
-                    labels=tuple(str(n) for n in view.get("labels") or ()),
-                ), at))  # fmt: skip
-            if found:
-                out[repo] = tuple(found)
-        return out
+        return housekeeping_reads(self, facts, judgements, repos, skip)
 
     def _queue_gate(self, qplan: QueuePlan, facts: Facts) -> QueuePlan:
         """The pass's own word on a queue plan: a repo that cannot run the queue is held
