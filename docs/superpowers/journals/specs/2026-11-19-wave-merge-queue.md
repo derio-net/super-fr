@@ -699,3 +699,10 @@ Evidence: 2026-11-24: tests/unit/test_wave_queue_operator_view.py, test_wave_rep
 Step: Leaving: `defer` takes a batch out of the drain, so the wave drains and its close-out leaves it out; `requeue --wave N+1` puts it in N+1's queue; `requeue` alone puts it in the lowest wave whose queue has not opened, else makes it a between-waves entry; a stall past `stall_hours`, or a spent budget, gives one Need with both commands and never an automatic deferral. (R29, R30)
 
 Evidence: 2026-11-24: tests/unit/test_triage_batch_leave_wave.py, test_triage_queue_model.py, test_wave_queue_planner.py (defer, requeue, stall Need); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-23 created=2026-11-24T12:41:06+00:00 -->
+### test-plan-step-23 · discovery · Test Plan step 23: ran
+
+Step: Two scopes containing one repo: the second driver's hold lease fails, it opens nothing, lands nothing and reports the holding scope. (R31)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_drive.py, test_wave_queue_planner.py (another scope's hold is held, nothing opened or landed); full wave-queue unit (542) + integration (134) + scenario (3) runs green
