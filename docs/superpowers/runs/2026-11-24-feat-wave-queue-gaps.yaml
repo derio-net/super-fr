@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-24-wave-queue-gaps-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-11-24T22:39:43+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-24T22:39:43+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: claude-opus-5-5
+          session: e4ba8d5a-76b8-46bb-aa9a-81b12b1286eb
   plan:
     state: pending
   plan-review:
