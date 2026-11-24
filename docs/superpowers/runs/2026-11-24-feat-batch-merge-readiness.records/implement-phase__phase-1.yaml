@@ -1,0 +1,11 @@
+schema_version: 12
+run: 2026-11-24-feat-batch-merge-readiness
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1]
+refactor:
+  P1.T1: "a smoke task: one docstring module, one test and a fragment, nothing to clean"
+journal: []
+resolves: []
+evidence: {}
