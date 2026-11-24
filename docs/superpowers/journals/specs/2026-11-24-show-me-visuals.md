@@ -58,3 +58,118 @@ Unit tests pin renderer, gates and skill text; one live row (a real fr-goal run 
 ### q5-accuracy · decision · Accuracy: fr-spec-reviewer checks the spec shape; lens reviewers see the run shape file
 
 No dedicated lens; the shape file is committed before lens-review so every lens reviewer sees it in the diff.
+
+<!-- fr:journal kind=finding scope=spec id=s1 created=2026-11-24T13:57:41+00:00 state=open review_scope=in -->
+### s1 · finding [open] (reviewer: in scope) · Committing the shape file does not put it in the lens reviewers' diff (q5, R14)
+
+Raised by the independent spec reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s2 created=2026-11-24T13:57:41+00:00 state=open review_scope=in -->
+### s2 · finding [open] (reviewer: in scope) · fr run adopt --supersede leaves <old-id>.shape.md behind
+
+Raised by the independent spec reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s3 created=2026-11-24T13:57:41+00:00 state=open review_scope=in -->
+### s3 · finding [open] (reviewer: in scope) · R10/R11 leave minimal body, no spec and unreadable spec undecided
+
+Raised by the independent spec reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s4 created=2026-11-24T13:57:41+00:00 state=open review_scope=in -->
+### s4 · finding [open] (reviewer: in scope) · A required section's effect on in-flight runs with an open PR is unstated
+
+Raised by the independent spec reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s5 created=2026-11-24T13:57:41+00:00 state=open review_scope=in -->
+### s5 · finding [open] (reviewer: in scope) · R8 and the Test Plan name spec-review but not spec-plan-review
+
+Raised by the independent spec reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s6 created=2026-11-24T13:57:41+00:00 state=open review_scope=in -->
+### s6 · finding [open] (reviewer: in scope) · §B names the wrong locator for the durable PR body
+
+Raised by the independent spec reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s7 created=2026-11-24T13:57:41+00:00 state=open review_scope=in -->
+### s7 · finding [open] (reviewer: in scope) · The spec's own Design shape omits the agents kind bump, generated mirrors and the explainer
+
+Raised by the independent spec reviewer.
+
+<!-- fr:journal kind=finding scope=spec id=s8 created=2026-11-24T13:57:41+00:00 state=open review_scope=in -->
+### s8 · finding [open] (reviewer: in scope) · R14's skill prose has no pre-merge test
+
+Raised by the independent spec reviewer.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-r1 created=2026-11-24T13:57:41+00:00 -->
+### spec-review-r1 · review · Independent spec review: 8 findings, all in scope, all fixed
+
+fr-spec-reviewer checked the spec against decisions q1-q5, the codebase (file:line verified for every named helper) and itself; 8 in-scope findings s1-s8.
+
+<!-- fr:journal kind=lens scope=spec id=lens-security-1 created=2026-11-24T13:57:41+00:00 lens=security step=spec-review -->
+### lens-security-1 · lens · R12 adds an agent-written path to the ops trust exclusion list
+
+<!-- fr:journal kind=lens scope=spec id=lens-tests-1 created=2026-11-24T13:57:41+00:00 lens=tests step=spec-review -->
+### lens-tests-1 · lens · New refusals at three resolve points plus archive/adopt moves; in-flight and light-path cases are easy to miss
+
+<!-- fr:journal kind=finding scope=spec id=s1-resolved created=2026-11-24T13:57:41+00:00 state=fixed resolves=s1 -->
+### s1-resolved · finding [fixed] · resolves s1: Committing the shape file does not put it in the lens reviewers' diff (q5, R14)
+
+Added R16 and §D2: the lens_review brief carries `shape: <path>` and the return rule tells reviewers to check it without listing it under examined; R14, the mermaid and the Test Plan corrected.
+
+<!-- fr:journal kind=finding scope=spec id=s2-resolved created=2026-11-24T13:57:41+00:00 state=fixed resolves=s2 -->
+### s2-resolved · finding [fixed] · resolves s2: fr run adopt --supersede leaves <old-id>.shape.md behind
+
+Added R17 and §D3: supersede moves the shape file beside _usage_move, refusing before any write when the destination exists; tested under shape-file-archived.
+
+<!-- fr:journal kind=finding scope=spec id=s3-resolved created=2026-11-24T13:57:41+00:00 state=fixed resolves=s3 -->
+### s3-resolved · finding [fixed] · resolves s3: R10/R11 leave minimal body, no spec and unreadable spec undecided
+
+R10 now names four bodies (no spec, predates, content, none written) and says the section lives in the durable render under minimal; R11 refuses an unreadable spec and never a run with no spec.
+
+<!-- fr:journal kind=finding scope=spec id=s4-resolved created=2026-11-24T13:57:41+00:00 state=fixed resolves=s4 -->
+### s4-resolved · finding [fixed] · resolves s4: A required section's effect on in-flight runs with an open PR is unstated
+
+Added R18 and §D text: one deliver refusal whose printed edit command is the recovery; a test drives an in-flight run with no spec section.
+
+<!-- fr:journal kind=finding scope=spec id=s5-resolved created=2026-11-24T13:57:41+00:00 state=fixed resolves=s5 -->
+### s5-resolved · finding [fixed] · resolves s5: R8 and the Test Plan name spec-review but not spec-plan-review
+
+R8 names every spec-reviewing step, including spec-plan-review on fr-goal-light; the Test Plan tests the light shape.
+
+<!-- fr:journal kind=finding scope=spec id=s6-resolved created=2026-11-24T13:57:41+00:00 state=fixed resolves=s6 -->
+### s6-resolved · finding [fixed] · resolves s6: §B names the wrong locator for the durable PR body
+
+§B now defines shape_path as run_path(...).with_name(f'{run_id}.shape.md'), the locator durable_pr_body_path uses.
+
+<!-- fr:journal kind=finding scope=spec id=s7-resolved created=2026-11-24T13:57:41+00:00 state=fixed resolves=s7 -->
+### s7-resolved · finding [fixed] · resolves s7: The spec's own Design shape omits the agents kind bump, generated mirrors and the explainer
+
+The shape tree now shows registry.py, agents/__init__.py, lenses/review.py, run/adopt.py, one line of generated mirrors and the explainer; the mermaid shows the lens brief carrying the shape.
+
+<!-- fr:journal kind=finding scope=spec id=s8-resolved created=2026-11-24T13:57:41+00:00 state=fixed resolves=s8 -->
+### s8-resolved · finding [fixed] · resolves s8: R14's skill prose has no pre-merge test
+
+The Test Plan adds a text test pinning the fr-goal and fr-brainstorming instructions under row show-me-skill.
+
+<!-- fr:journal kind=decision scope=spec id=exit-baseline created=2026-11-24T13:57:42+00:00 -->
+### exit-baseline · decision · exit when spec-review resolved
+
+The exit when spec-review resolved; `fr verification set` and `deliver` compare against it.
+
+```yaml
+row_gates:
+  pr-shape-section: none
+  shape-file-archived: none
+  show-me-live-run: tester
+  show-me-skill: none
+  spec-design-shape-gate: none
+  spec-reviewer-checks-shape: none
+row_kinds:
+  pr-shape-section: none
+  shape-file-archived: none
+  show-me-live-run: live
+  show-me-skill: none
+  spec-design-shape-gate: none
+  spec-reviewer-checks-shape: none
+run_gate: developer
+run_kind: none
+```
