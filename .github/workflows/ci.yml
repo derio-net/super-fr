@@ -47,7 +47,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      # No uv and no Python install: ci_lane.py is stdlib only, so the runner's own python3
+      # runs it, and every job waits on this one (review p2-r3).
       - name: Choose this run's lane
         id: lane
         env:
@@ -58,9 +59,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$EVENT" = push ] && [ "$REF" = refs/heads/main ]; then
-            uv run --no-project python scripts/ci_lane.py landed --sha "$GITHUB_SHA" --run "$GITHUB_RUN_ID" --repo "$REPO"
+            python3 scripts/ci_lane.py landed --sha "$GITHUB_SHA" --run "$GITHUB_RUN_ID" --repo "$REPO"
           elif [ "$EVENT" = pull_request ]; then
-            uv run --no-project python scripts/ci_lane.py classify --base "$BASE_REF"
+            python3 scripts/ci_lane.py classify --base "$BASE_REF"
           else
             echo "lane=full" >> "$GITHUB_OUTPUT"
           fi

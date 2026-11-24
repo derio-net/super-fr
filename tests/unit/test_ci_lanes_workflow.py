@@ -120,6 +120,29 @@ def test_validate_artifacts_runs_in_every_lane() -> None:
     assert "if" not in job
     strict = [s for s in job["steps"] if s.get("run") == "fr validate artifacts"]
     assert len(strict) == 1
+    # Review p2-r1: the strict step must run on a push to main (the landed lane's guarantee,
+    # R5) and the lenient one only on a pull request or a queue push.
+    assert strict[0]["if"] == (
+        "github.event_name != 'pull_request' && !startsWith(github.ref, 'refs/heads/fr-queue/')"
+    )
+    lenient = [
+        s for s in job["steps"] if s.get("run") == "fr validate artifacts --allow-migratable"
+    ]
+    assert len(lenient) == 1
+    assert lenient[0]["if"] == (
+        "github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/fr-queue/')"
+    )
+
+
+def test_classify_runs_on_the_runners_own_python() -> None:
+    """Review p2-r3: every job waits on `classify`, so it installs nothing; the stdlib-only
+    script runs on the runner's python3."""
+    steps = JOBS["classify"]["steps"]
+    assert not any("setup-uv" in str(s.get("uses", "")) for s in steps)
+    script = next(s["run"] for s in steps if s.get("id") == "lane")
+    assert "python3 scripts/ci_lane.py landed" in script
+    assert "python3 scripts/ci_lane.py classify" in script
+    assert "uv run" not in script
 
 
 def test_change_fragment_keeps_its_own_condition() -> None:

@@ -403,3 +403,26 @@ def test_verdict_reads_its_inputs_from_the_environment(capsys: pytest.CaptureFix
 def test_verdict_exits_one_with_one_line(env: dict, capsys: pytest.CaptureFixture[str]) -> None:
     assert ci_lane.main(["verdict"], env=env) == 1
     assert len(capsys.readouterr().out.strip().splitlines()) == 1
+
+
+def test_a_path_with_a_ref_suffix_still_names_the_ci_workflow() -> None:
+    """Review p2-r2: should GitHub report `path` as `<file>@<ref>`, the match still holds."""
+    run = {
+        "id": 7,
+        "path": ".github/workflows/ci.yml@refs/heads/fr-queue/s/slot-1",
+        "event": "push",
+        "head_branch": "fr-queue/s/slot-1",
+        "conclusion": "success",
+    }
+    assert ci_lane.landed_run({"workflow_runs": [run]}, 8) == 7
+
+
+def test_the_script_parses_on_the_runners_older_python() -> None:
+    """Review p2-r3: `classify` runs this script on ubuntu-latest's own python3, which is
+    older than the repo's 3.14 floor, so it must parse as Python 3.10."""
+    import ast
+    from pathlib import Path
+
+    for name in ("ci_lane.py", "installable.py"):
+        source = (Path(__file__).resolve().parents[2] / "scripts" / name).read_text()
+        ast.parse(source, feature_version=(3, 10))

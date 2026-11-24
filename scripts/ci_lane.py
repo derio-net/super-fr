@@ -89,7 +89,9 @@ def pull_request_lane(
             head = "HEAD"
         merge_base = _git(["merge-base", f"origin/{base}", head], cwd, env).decode().strip()
         diff = _git(["diff", "--no-renames", "--name-only", "-z", merge_base, head, "--"], cwd, env)
-    except subprocess.CalledProcessError, OSError:
+    except subprocess.CalledProcessError:
+        return FULL
+    except OSError:
         return FULL
     return lane_for([os.fsdecode(p) for p in diff.split(b"\0") if p])
 
@@ -102,7 +104,8 @@ def landed_run(runs_json: object, this_run: int | str) -> int | None:
     """The id of a run that already proved this sha, or None (R5).
 
     *runs_json* is a `GET repos/{repo}/actions/runs` payload. A run qualifies when it is
-    this CI workflow (by `path`, which a workflow cannot rename), triggered by a push
+    this CI workflow (by `path`, which a workflow cannot rename; an `@<ref>` suffix, should
+    GitHub ever report one, is ignored: review p2-r2), triggered by a push
     (`event`) to an `fr-queue/` branch (`head_branch`), finished `success` (every job,
     `ci-ok` included, succeeded or skipped by its own condition), and is not this run.
     A payload of any other shape trusts nothing.
@@ -114,7 +117,7 @@ def landed_run(runs_json: object, this_run: int | str) -> int | None:
         if not isinstance(run, dict):
             continue
         if (
-            run.get("path") == CI_WORKFLOW
+            str(run.get("path") or "").split("@", 1)[0] == CI_WORKFLOW
             and run.get("event") == "push"
             and str(run.get("head_branch") or "").startswith(QUEUE_BRANCH_PREFIX)
             and run.get("conclusion") == "success"
@@ -137,7 +140,9 @@ def landed_lane(sha: str, this_run: str, repo: str, *, runner: Runner) -> dict[s
         return {"lane": FULL}
     try:
         payload = json.loads(proc.stdout)
-    except ValueError, TypeError:
+    except ValueError:
+        return {"lane": FULL}
+    except TypeError:
         return {"lane": FULL}
     trusted = landed_run(payload, this_run)
     if trusted is None:
