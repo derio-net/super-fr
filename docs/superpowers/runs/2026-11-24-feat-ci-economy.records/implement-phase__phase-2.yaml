@@ -1,0 +1,53 @@
+schema_version: 12
+run: 2026-11-24-feat-ci-economy
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T4.S1, P2.T4.S2, P2.T4.S3]
+refactor:
+  P2.T1: "lane_for and pull_request_lane were written green in final shape; the only cleanup (ruff format) landed in the task's commit"
+  P2.T2: "landed_run is one filter and landed_lane one fallible read; the long test lines were wrapped in the same commit"
+  P2.T3: "verdict is one table of required and skippable jobs per lane; the test helper name clash was fixed before the commit"
+journal:
+  - kind: decision
+    id: p2-verdict-needs-classify
+    phase: 2
+    title: ci_lane verdict requires classify to succeed in every lane
+    body: |
+      R17 names the classifier only for the landed lane. A failed classify leaves no lane
+      (and the lane check already fails), but the verdict also lists `classify` among each
+      lane's required jobs, so a reason names it directly. Any result but success or
+      skipped (an unknown one included) fails like failure and cancelled.
+  - kind: decision
+    id: p2-landed-strict-match
+    phase: 2
+    title: landed_run matches path, event, head_branch prefix, conclusion and a different id exactly
+    body: |
+      `path` must equal `.github/workflows/ci.yml` (the captured payloads carry no `@ref`
+      suffix), `event` push, `head_branch` start with `fr-queue/`, `conclusion` success
+      and an integer id other than this run's. Any other payload shape, a non-zero `gh`
+      exit, non-JSON or a missing `gh` reads `full`. The fixtures are captures of this
+      repo's own runs (tests/fixtures/ci_lane/README.md); no fr-queue run existed yet, so
+      the queue case changes only `head_branch` on the captured CI run.
+  - kind: discovery
+    id: p2-pinned-tests-moved
+    phase: 2
+    title: Five workflow-shape tests pinned what the lanes change
+    body: |
+      test_ci_shards (ci-ok's old RESULTS case script; now runs ci_lane.py verdict as a
+      subprocess), test_ci_merge_group (change-fragment keeps its condition, lane rule
+      appended; a skipped change-fragment passes the full-lane verdict),
+      test_ci_split_workflow (split-check needs classify), test_pages_workflow and
+      test_docs_currency_flows (site-build and docs-check skip only in the landed lane,
+      where the fr-queue run on the same sha already ran them). ci-ok now checks out the
+      repo and sets up uv to run the verdict script.
+  - kind: discovery
+    id: p2-docs-currency
+    phase: 2
+    title: fr docs check names no page for ci.yml or scripts/ci_lane.py
+    body: |
+      `uv run fr docs check --base origin/main` reports 32 pages current: no page covers
+      .github/workflows/ci.yml or scripts/. AGENTS.md's CI job list and a CI lanes
+      paragraph after Tiers were updated.
+resolves: []
+evidence: {}
