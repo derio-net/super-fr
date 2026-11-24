@@ -18,6 +18,11 @@ def artifacts_cmd(
         "--kind",
         help="Validate only this artifact kind (plan, journal, run, matrix, spec).",
     ),
+    allow_migratable: bool = typer.Option(
+        False,
+        "--allow-migratable",
+        help="Pass a stale artifact that a registered migration moves (`stale, migratable`).",
+    ),
 ) -> None:
     """Structurally validate every live artifact against the version this fr writes.
 
@@ -26,6 +31,12 @@ def artifacts_cmd(
     and — for specs — the duplicated section blocks and mid-sentence headings a
     bad splice produces. Archived artifacts under `implemented/` are never
     checked; they record what shipped.
+
+    `--allow-migratable` accepts an artifact that is stale but that a registered migration
+    moves, and lists it as `stale, migratable`. It still fails one whose migration refuses
+    it, one that no migration reaches, and one newer than this fr. The migrations are tried
+    on a scratch copy; the checkout is never written. A branch's CI uses it on pull requests
+    and on the merge queue's pushes, never on the default branch.
 
     Exit 0 when everything is valid, 1 when any artifact is not, 2 for an
     unknown `--kind`. Read-only: nothing here writes.
@@ -43,14 +54,22 @@ def artifacts_cmd(
         raise typer.Exit(2) from e
     require_migrated_layout(repo_root)
     try:
-        report = validate_repo(repo_root, kind_name=kind)
+        report = validate_repo(repo_root, kind_name=kind, allow_migratable=allow_migratable)
     except UnknownArtifactKindError as e:
         typer.echo(f"validation error: {e}", err=True)
         raise typer.Exit(2) from e
 
     scope = f" of kind `{kind}`" if kind else ""
+    for note in report.migratable:
+        typer.echo(f"  {note.rendered(repo_root)}")
     if report.ok:
         # Plain echo, not rich: rich soft-wraps and splits long paths.
+        if report.migratable:
+            typer.echo(
+                f"{report.checked} artifact(s){scope} checked — all structurally valid except "
+                f"{len(report.migratable)} stale, migratable."
+            )
+            return
         typer.echo(f"{report.checked} artifact(s){scope} checked — all structurally valid.")
         return
 

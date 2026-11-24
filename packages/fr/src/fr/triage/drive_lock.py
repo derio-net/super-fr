@@ -40,7 +40,7 @@ def lock_pid(text: str) -> int | None:
     """The pid a lock names, or None when it is not (yet) a whole lock."""
     try:
         return int(json.loads(text)["pid"])
-    except (ValueError, KeyError, TypeError):
+    except ValueError, KeyError, TypeError:
         return None
 
 

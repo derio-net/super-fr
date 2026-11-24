@@ -1,8 +1,8 @@
 [project]
 name = "fr-herdr"
-version = "8.3.0rc6"
+version = "9.0.0rc2"
 description = "super-fr herdr adapter: the first runner that accepts run-unit work (a triage batch launched as one /fr-goal)"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = ["fr", "fr-dispatch"]
 
 [project.scripts]

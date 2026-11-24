@@ -160,7 +160,9 @@ def _loop(
     monkeypatch.setattr(triage_batch_cmd, "_pace_forge", lambda: meter)
     driver = driver or StubDriver(tmp_path)
     pacer = triage_batch_cmd.make_pacer(tmp_path, quota_floor=None, interval_s=interval)
-    assert triage_batch_cmd._host_loop(driver, once=False, interval=interval, pacer=pacer) is None  # type: ignore[arg-type]
+    assert triage_batch_cmd._host_loop(driver, once=False, interval=interval, pacer=pacer) == (  # type: ignore[arg-type]
+        triage_batch_cmd.LoopEnd(0)
+    )
     return driver
 
 

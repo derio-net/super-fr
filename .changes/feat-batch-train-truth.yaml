@@ -1,0 +1,2 @@
+bump: minor
+summary: "triage drive: a looping driver survives its own transient failures, records and files every refusal by cause, runs session-bound under --supervise with a live activity log (fr triage drive status|failures|log), and hands red or conflicting draft batch PRs back before approval"

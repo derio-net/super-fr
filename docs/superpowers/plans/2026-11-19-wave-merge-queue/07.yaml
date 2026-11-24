@@ -1,0 +1,120 @@
+schema_version: 2
+phase:
+  number: 7
+  title: The operator's view — queue line, Needs, PR comment, wave report, defer and
+    requeue (R25, R28, R29)
+  tag: agentic
+  depends_on:
+  - 6
+  tracking_issue: null
+  acceptance:
+  - wave-queue-visible
+  - wave-queue-operator-loop
+  - wave-queue-leave-wave
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/wave_queue.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/triage/kanban*.py
+  - packages/fr/src/fr/triage/components.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/**
+  - .hermes/**
+  - README.md
+  - docs/reference/cli.md
+  - docs/explainers/*.md
+  - docs/*.md
+  - .fr/triage.yaml
+  - tests/**/*.py
+  - docs/acceptance/features/2026-11-19-wave-merge-queue.yaml
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: Defer and requeue
+  steps:
+  - id: P7.T1.S1
+    text: |-
+      RED:
+      - `fr triage batch defer <id>` writes a `deferred` event naming the wave and keeps the PR open. The planner reads the batch as terminal for the drain, and the close-out leaves it out.
+      - `requeue <id> --wave N` (refused while wave N's queue is open) and plain `requeue` (the next queue, as a between-waves entry) write `requeued`.
+      - Both print what they changed (R29).
+  - id: P7.T1.S2
+    text: |-
+      GREEN: add both subcommands next to `edit`/`cancel` in `triage_batch_cmd.py`, writing through the one judgements writer.
+- number: 2
+  title: Queue line, Needs and the board
+  steps:
+  - id: P7.T2.S1
+    text: |-
+      RED:
+      - `queue_line(queue)` renders the wave, the base, each entry's state (building, testing, green, ejected, waiting, barrier), what landed and the hold state. The pass prints it per repo.
+      - `views.needs_you` lists every Need of R28 with its paste command.
+      - The Batches page shows the queue line, and a queued, approved PR never reads "awaiting approval" (R25, R28).
+  - id: P7.T2.S2
+    text: |-
+      GREEN: implement `queue_line` in `wave_queue.py` in place of `train_line`, the Need kinds in `views.py`, and the Batches page section in the renderer.
+- number: 3
+  title: PR marker comment and the wave report
+  steps:
+  - id: P7.T3.S1
+    text: |-
+      RED:
+      - One `<!-- fr-queue -->` comment per queued PR is created once and edited in place as it moves through queued, testing, ejected and landed. None is written under `forge.comments: off`.
+      - `wave_report(records)` (pure) lists the landed, ejected and deferred PRs with CI cycles, wall time and approvals per PR, and the release asked for. It is written into the close-out PR body, under a section `review_reasons` ignores, and onto the Batches page (R28).
+  - id: P7.T3.S2
+    text: |-
+      GREEN: implement the comment upsert through `GhClient.list_issue_comments`, `edit_issue_comment` and `comment_pr`; implement `wave_report` and its two destinations.
+- number: 4
+  title: Docs, skill and this repo's config
+  steps:
+  - id: P7.T4.S1
+    text: |-
+      Update the docs, the skill and this repo's config:
+      - `plugins/super-fr/skills/fr-triage/SKILL.md` ("The driver"): the queue, the hold, defer/requeue and the channels. Then run `scripts/sync-opencode.py`, `scripts/sync-hermes.py` and `scripts/sync-readme.py`.
+      - `docs/explainers/fr-wave-driver.md`, and any other page `fr docs check` names, with their `reviewed` stamps.
+      - `.fr/triage.yaml`: add the `queue:` block (`ci: push`, `depth: 2`, `land: push`, `release: workflow`, `release_workflow: release.yml`).
+      `fr docs check --base origin/main` and the writing-standards check must pass.
+  - id: P7.T4.S2
+    text: |-
+      REFACTOR: record the three rows' level refs; full suite, ruff, mypy and `scripts/sync-opencode.py --check`, `scripts/sync-hermes.py --check`, `scripts/sync-readme.py --check` green.
+state:
+  steps:
+    P7.T1.S1:
+      state: x
+      ticked_at: '2026-11-21T02:50:37+00:00'
+      note: null
+    P7.T1.S2:
+      state: x
+      ticked_at: '2026-11-21T02:50:37+00:00'
+      note: null
+    P7.T2.S1:
+      state: x
+      ticked_at: '2026-11-21T02:50:37+00:00'
+      note: null
+    P7.T2.S2:
+      state: x
+      ticked_at: '2026-11-21T02:50:37+00:00'
+      note: null
+    P7.T3.S1:
+      state: x
+      ticked_at: '2026-11-21T02:50:37+00:00'
+      note: null
+    P7.T3.S2:
+      state: x
+      ticked_at: '2026-11-21T02:50:37+00:00'
+      note: null
+    P7.T4.S1:
+      state: x
+      ticked_at: '2026-11-21T02:50:37+00:00'
+      note: null
+    P7.T4.S2:
+      state: x
+      ticked_at: '2026-11-21T02:50:37+00:00'
+      note: null
+  completion:
+    at: '2026-11-21T02:50:37+00:00'
+    note: null
+    observed_prs: []

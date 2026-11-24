@@ -444,3 +444,50 @@ def test_the_host_refuses_an_archive_member_outside_its_tree(
     with pytest.raises(gitseam.GitError, match="outside the tree"):
         HostCheckout(repo).materialise(head, ["docs/superpowers/specs"])
     assert not (tmp_path / "escaped.txt").exists()
+
+
+def _origin_with(tmp_path: Path, triage: str | None) -> Path:
+    """A clone whose `origin/main` carries `.fr/triage.yaml` = *triage* (None: no file)."""
+
+    def git(cwd: Path, *args: str) -> None:
+        subprocess.run(
+            ["git", "-C", str(cwd), "-c", "user.email=t@t", "-c", "user.name=t", *args],
+            check=True, capture_output=True, text=True,
+        )  # fmt: skip
+
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True)
+    seed = tmp_path / "seed"
+    subprocess.run(["git", "clone", "-q", str(origin), str(seed)], check=True,
+                   capture_output=True)  # fmt: skip
+    git(seed, "checkout", "-qb", "main")
+    (seed / "README").write_text("x\n")
+    if triage is not None:
+        (seed / ".fr").mkdir()
+        (seed / ".fr" / "triage.yaml").write_text(triage)
+    git(seed, "add", "-A")
+    git(seed, "commit", "-qm", "seed")
+    git(seed, "push", "-q", "origin", "main")
+    clone = tmp_path / "clone"
+    subprocess.run(["git", "clone", "-q", str(origin), str(clone)], check=True,
+                   capture_output=True)  # fmt: skip
+    return clone
+
+
+def test_queue_configured_is_true_false_or_a_read_error(tmp_path: Path) -> None:
+    """l-errors-r5: a config that cannot be read stops stage 2, never reads as "no queue"."""
+    from fr.commands.ops_gate_cmd import HostCheckout
+    from fr.ops.gate import StageFailed
+
+    assert HostCheckout(_origin_with(tmp_path / "a", "queue:\n  ci: push\n")).queue_configured(
+        "main") is True  # fmt: skip
+    assert HostCheckout(_origin_with(tmp_path / "b", None)).queue_configured("main") is False
+    assert HostCheckout(_origin_with(tmp_path / "c", "post_merge: []\n")).queue_configured(
+        "main") is False  # fmt: skip
+    with pytest.raises(StageFailed, match="cannot read .fr/triage.yaml"):
+        HostCheckout(_origin_with(tmp_path / "d", "queue: [unclosed\n")).queue_configured("main")
+    broken = _origin_with(tmp_path / "e", "queue:\n  ci: push\n")
+    subprocess.run(["git", "-C", str(broken), "remote", "set-url", "origin",
+                    str(tmp_path / "nowhere.git")], check=True)  # fmt: skip
+    with pytest.raises(StageFailed, match="nothing released"):
+        HostCheckout(broken).queue_configured("main")  # the fetch fails: not "merge by hand"

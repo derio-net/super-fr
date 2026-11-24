@@ -21,10 +21,10 @@ import subprocess
 import urllib.parse
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any, Concatenate, Literal, ParamSpec, TypeVar, cast
+from typing import Any, Concatenate, Literal, cast
 
 from fr import gh as _gh
-from fr.ghclient import MERGE_METHODS, BaseRules, CommandRunner, QueueState, run_cli
+from fr.ghclient import MERGE_METHODS, BaseRules, CommandRunner, run_cli
 from fr.labels import LabelDef
 
 # Re-exported for `fr.triage.collect`, which reads the forge only through the
@@ -50,19 +50,15 @@ def workflow_run_args(repo: str, workflow: str, inputs: dict[str, str]) -> list[
     return argv
 
 
-_P = ParamSpec("_P")
-_R = TypeVar("_R")
-
-
-def _hosted(
-    method: Callable[Concatenate[RealGhClient, _P], _R],
-) -> Callable[Concatenate[RealGhClient, _P], _R]:
+def _hosted[**P, R](
+    method: Callable[Concatenate[RealGhClient, P], R],
+) -> Callable[Concatenate[RealGhClient, P], R]:
     """Run `method`'s `gh` calls against the client's host (`fr.gh.host_scope`,
     spec 2026-10-06-forge-remainder §4.E). Every method that reaches `fr.gh`
     carries it; `test_every_gh_method_is_hosted` keeps it that way."""
 
     @functools.wraps(method)
-    def wrapper(self: RealGhClient, /, *args: _P.args, **kwargs: _P.kwargs) -> _R:
+    def wrapper(self: RealGhClient, /, *args: P.args, **kwargs: P.kwargs) -> R:
         with _gh.host_scope(self._host):
             # The trust gate runs BEFORE the body: a soft-fail method catches
             # `GhError` and would turn a refused host into "no PR" / "no
@@ -534,43 +530,6 @@ class RealGhClient:
         )
 
     @_hosted
-    def pr_enqueue(self, repo: str, number: int, *, head_sha: str, method: str) -> None:
-        if method not in MERGE_METHODS:
-            raise ValueError(f"merge method must be one of {sorted(MERGE_METHODS)}, got {method!r}")
-        # `--auto` on a queue-protected base enqueues; never `--admin`.
-        _gh._run_gh(
-            ["pr", "merge", str(number), "--repo", repo, "--auto",
-             "--match-head-commit", head_sha, f"--{method}"]
-        )  # fmt: skip
-
-    @_hosted
-    def pr_queue_state(self, repo: str, number: int) -> QueueState:
-        """`gh pr view --json` exposes neither field, so GraphQL (§D)."""
-        owner, _, name = repo.partition("/")
-        query = (
-            "query($owner: String!, $name: String!, $number: Int!) {"
-            " repository(owner: $owner, name: $name) {"
-            " pullRequest(number: $number) { state merged isInMergeQueue"
-            " autoMergeRequest { enabledAt } } } }"
-        )
-        out = _gh._run_gh(
-            ["api", "graphql", "-f", f"query={query}", "-F", f"owner={owner}",
-             "-F", f"name={name}", "-F", f"number={number}"]
-        )  # fmt: skip
-        pr = (
-            ((json.loads(out).get("data") or {}).get("repository") or {}).get("pullRequest")
-        ) or {}
-        return QueueState(
-            in_queue=bool(pr.get("isInMergeQueue")),
-            auto_merge=bool(pr.get("autoMergeRequest")),
-            open=pr.get("state") == "OPEN" and not pr.get("merged"),
-        )
-
-    @_hosted
-    def pr_dequeue(self, repo: str, number: int) -> None:
-        _gh._run_gh(["pr", "merge", str(number), "--repo", repo, "--disable-auto"])
-
-    @_hosted
     def pr_create(self, repo: str, *, head: str, base: str, title: str, body: str) -> int:
         # Never `--draft`: the driver merges it once green (pages-goal R13).
         made = self.create_pr(repo, head=head, base=base, title=title, body=body, draft=False)
@@ -624,7 +583,7 @@ class RealGhClient:
 
         try:
             return from_github(json.loads(_gh._run_gh(["api", f"repos/{repo}/pages"])))
-        except (_gh.GhError, ValueError, OSError):
+        except _gh.GhError, ValueError, OSError:
             return UNKNOWN
 
     @_hosted
@@ -767,7 +726,7 @@ class RealGhClient:
             return None
         try:
             raw = json.loads(_gh._run_gh(["repo", "view", repo, "--json", "hasIssuesEnabled"]))
-        except (_gh.GhError, ValueError, OSError):
+        except _gh.GhError, ValueError, OSError:
             return None
         value = raw.get("hasIssuesEnabled") if isinstance(raw, dict) else None
         return value if isinstance(value, bool) else None

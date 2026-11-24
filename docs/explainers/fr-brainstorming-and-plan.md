@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/skills/fr-execute/SKILL.md
   - packages/fr/src/fr/commands/plan_cmd.py
   - packages/fr/src/fr/commands/pickup_cmd.py
-reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-14 still true after VK support was removed; fr-execute's PR-format note names runners, not VK
+reviewed: 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-14 still true after VK support was removed; fr-execute's PR-format note names runners, not VK
 ---
 
 ## Why write the idea down twice?

@@ -11,9 +11,8 @@ from __future__ import annotations
 
 import fnmatch
 import re
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
 from itertools import permutations
 from pathlib import Path
 from typing import Literal
@@ -38,6 +37,7 @@ from fr.triage.model import (
     Judgements,
     Launch,
     PullRequest,
+    QueueRecord,
     ReplacementEvent,
     TriageConfig,
     _check_schema,
@@ -46,6 +46,7 @@ from fr.triage.model import (
     trusted_logins,
     withdrawn_marker,
 )
+from fr.triage.timestamps import parse_aware
 
 BatchStage = Literal[
     "proposed", "cancelled", "dispatched", "pr-open", "merged", "partial", "abandoned"
@@ -219,17 +220,6 @@ def _members(batch: Batch, facts: Facts) -> list[Issue]:
     return [found[k] for k in batch.ids if k in found]
 
 
-def _parse_time(stamp: str | None) -> datetime | None:
-    """An aware datetime from a forge timestamp; None when absent or unreadable."""
-    if not stamp:
-        return None
-    try:
-        parsed = datetime.fromisoformat(stamp)
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo is not None else None
-
-
 def of_dispatch(pr: PullRequest, event: DispatchEvent) -> bool:
     """Whether *pr* can belong to the dispatch *event* (review r2p-f1).
 
@@ -238,7 +228,7 @@ def of_dispatch(pr: PullRequest, event: DispatchEvent) -> bool:
     is unknown (facts collected before `createdAt` was read) is kept: it cannot
     be shown to predate the dispatch.
     """
-    created = _parse_time(pr.created_at)
+    created = parse_aware(pr.created_at)
     return created is None or created >= event.at
 
 
@@ -612,6 +602,16 @@ def save_closeouts(
     )
 
 
+def save_queues(
+    path: Path, queues: Sequence[QueueRecord], *, read: Sequence[QueueRecord]
+) -> Judgements:
+    """Write *queues* as `path`'s `queues:` section (spec 2026-11-19-wave-merge-queue R24):
+    the sibling of `save_closeouts`, under the same refuse-or-write discipline."""
+    docs = [q.model_dump(mode="json", exclude_defaults=True) for q in queues]
+    block = yaml.safe_dump({"queues": docs}, sort_keys=False, allow_unicode=True, width=100)
+    return _rewrite(path, "queues", block, unchanged=lambda now: list(now.queues) == list(read))
+
+
 # ------------------------------------------------------------------ launch
 
 HARNESS_ALIASES: dict[str, str] = {"claude": "claude-code"}
@@ -886,9 +886,15 @@ def lowest_tier(batch: Batch, issues: Mapping[str, Judgement]) -> int:
 
 
 def pr_open_queue(
-    batches: Sequence[Batch], facts: Facts, issues: Mapping[str, Judgement]
+    batches: Sequence[Batch],
+    facts: Facts,
+    issues: Mapping[str, Judgement],
+    *,
+    landed: Collection[str] = frozenset(),
 ) -> list[QueueEntry]:
-    """Every `pr-open` batch with its PR, in batch-file order.
+    """Every `pr-open` batch with its PR, in batch-file order, but those the wave merge
+    queue landed (*landed*): a PR the forge has not marked merged yet is no open PR to
+    judge, approve or merge (wave-merge-queue R12, R35).
 
     Files matching the repo's declared `version.files` are left out of the
     overlap and the forecast: every batch PR bumps them, and merge resolves
@@ -896,6 +902,8 @@ def pr_open_queue(
     """
     out: list[QueueEntry] = []
     for b in batches:
+        if b.id in landed:
+            continue
         if derive_batch_stage(b, facts) != "pr-open" or (pr := batch_pr(b, facts)) is None:
             continue
         version = facts.config_for(pr.repo).version

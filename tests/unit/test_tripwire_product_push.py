@@ -41,7 +41,18 @@ FR_OWNED_BOT_BRANCH_PUSHERS = {
     ("fr.triage.gitseam", "Checkout.publish_branch"),
     ("fr.triage.gitseam", "Worktree.push"),
 }
-ALLOWED = PRODUCT_PUSHER | FR_BRANCH_PUSHERS | TRACKING_REPO_PUSHERS | FR_OWNED_BOT_BRANCH_PUSHERS
+QUEUE_PUSHERS = {
+    # the wave merge queue (spec 2026-11-19-wave-merge-queue R4, R10): its fr-owned slot
+    # branches, and its landing, ONE atomic push leased on the base and every built-from
+    # head that moves the default branch to a tested combination of approved PRs. That
+    # is the forge merge's job done by push, not a write of fr's own files, so it is not
+    # the placement's product pusher (which scans what fr adds to a product branch).
+    ("fr.triage.gitseam", "Checkout.push_leased"),
+}
+ALLOWED = (
+    PRODUCT_PUSHER | FR_BRANCH_PUSHERS | TRACKING_REPO_PUSHERS | FR_OWNED_BOT_BRANCH_PUSHERS
+    | QUEUE_PUSHERS
+)  # fmt: skip
 
 
 def _module(path: Path) -> str:
@@ -140,3 +151,64 @@ def test_the_scanner_sees_a_raw_push() -> None:
     visitor.visit(ast.parse('def h():\n    subprocess.run(["git", "push"])\n'))
     visitor.visit(ast.parse('def i():\n    stored(git_dir, "push", branch)\n'))
     assert visitor.found == {"f", "g", "h"}
+
+
+QUEUE_LEASED_PUSH_CALLERS = {
+    # the slot pushes (R4) and the one atomic landing (R10): the queue's executor alone
+    ("fr.triage.queue_exec", "build"),
+    ("fr.triage.queue_exec", "land_push"),
+    ("fr.triage.queue_exec", "QueueExecutor.resume"),
+    # the hold's one push (R17): a bare ref `refs/heads/fr-hold/queue` over a commit of the
+    # base's own tree, every state change leased; carries no PR or product content
+    ("fr.triage.queue_exec", "push_hold"),
+}
+QUEUE_ATOMIC_PUSH_CALLERS = {("fr.triage.queue_exec", "land_push")}
+
+
+class _LeasedCalls(_Sites):
+    """Every call of a `push_leased` attribute, with its `atomic=` keyword."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.leased: list[tuple[str, ast.Call]] = []
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if isinstance(node.func, ast.Attribute) and node.func.attr == "push_leased":
+            self.leased.append((self._here(), node))
+        super().visit_Call(node)
+
+
+def _leased_calls() -> list[tuple[str, str, ast.Call]]:
+    out: list[tuple[str, str, ast.Call]] = []
+    for path in sorted((REPO / "packages").glob("*/src/**/*.py")):
+        visitor = _LeasedCalls()
+        visitor.visit(ast.parse(path.read_text(), filename=str(path)))
+        out += [(_module(path), where, call) for where, call in visitor.leased]
+    return out
+
+
+def test_only_the_queue_executor_calls_the_leased_push() -> None:
+    """p3-r6: `Checkout.push_leased` moves the default branch and PR branches by a leased
+    push (R10), which no placement scan sees; pinned by caller, so any new one fails until
+    it is argued into this list. Only the landing asks for `--atomic`; every other caller
+    passes the literal `atomic=False`."""
+    calls = _leased_calls()
+    callers = {(module, where) for module, where, _ in calls}
+    assert callers == QUEUE_LEASED_PUSH_CALLERS, (
+        f"Checkout.push_leased callers changed: {sorted(callers ^ QUEUE_LEASED_PUSH_CALLERS)}. "
+        "Only the wave merge queue's executor pushes leased; argue a new caller here"
+    )
+    for module, where, call in calls:
+        atomic = next((k.value for k in call.keywords if k.arg == "atomic"), None)
+        if (module, where) in QUEUE_ATOMIC_PUSH_CALLERS:
+            assert isinstance(atomic, ast.Constant) and atomic.value is True
+        else:
+            assert isinstance(atomic, ast.Constant) and atomic.value is False, (
+                f"{module}.{where} pushes leased without the literal atomic=False"
+            )
+
+
+def test_the_leased_push_scanner_sees_a_call() -> None:
+    visitor = _LeasedCalls()
+    visitor.visit(ast.parse("def f():\n    c.push_leased([], {}, atomic=True)\n"))
+    assert [where for where, _ in visitor.leased] == ["f"]

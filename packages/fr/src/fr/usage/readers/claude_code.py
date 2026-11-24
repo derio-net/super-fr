@@ -119,7 +119,7 @@ def _agent_type(stream: Path) -> str:
     meta = stream.with_name(stream.name[: -len(".jsonl")] + ".meta.json")
     try:
         data = json.loads(meta.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return "subagent"
     kind = data.get("agentType") if isinstance(data, dict) else None
     return kind if isinstance(kind, str) and kind else "subagent"
@@ -153,7 +153,7 @@ def _tool_use_id(stream: Path) -> str | None:
     meta = stream.with_name(stream.name[: -len(".jsonl")] + ".meta.json")
     try:
         data = json.loads(meta.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
     tool_use = data.get("toolUseId") if isinstance(data, dict) else None
     return tool_use if isinstance(tool_use, str) else None

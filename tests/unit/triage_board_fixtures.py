@@ -123,7 +123,7 @@ def busy() -> tuple[Facts, Judgements]:
     f = facts(
         issues,
         prs=[draft_pr, red_pr],
-        config={REPO: {"post_merge": ["make", "deploy"]}},
+        config={REPO: {"post_merge": ["make", "deploy"], "queue": {"ci": "push"}}},
     )
     judged = {
         "widgets#1": j(1, cx="S", kind="defect"),

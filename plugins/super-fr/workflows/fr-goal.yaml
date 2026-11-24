@@ -255,4 +255,6 @@ steps:
     # during delivery, on the delivered branch.
     # `walk` (2026-10-06-verification-strategies §C): the log `fr verification walk`
     # wrote on this code tree; owed only when the spec asks for a pre-merge walk.
-    evidence: [tests, proportionality, docs, visual, walk]
+    # `settle` (2026-11-23-pr-readiness-wait R8) is DERIVED, last: the PR's conflict
+    # and CI states under `git.settle`, read with no wait; exit 75 while pending.
+    evidence: [tests, proportionality, docs, visual, walk, settle]
