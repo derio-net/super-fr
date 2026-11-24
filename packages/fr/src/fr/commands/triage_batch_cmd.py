@@ -223,7 +223,6 @@ from fr.triage.batch_drive import (
     collected_item_id,
     collected_name,
     collected_used,
-    conflict_decision,
     conflict_item_id,
     default_selection,
     drive_pass,
@@ -240,7 +239,6 @@ from fr.triage.batch_drive import (
     is_archived,
     is_finished,
     marker_of,
-    red_decision,
     settle,
     summary_line,
     unfinished_waves,
@@ -275,6 +273,7 @@ from fr.triage.drive_lock import lock_text as _lock_text
 from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout, GitError
+from fr.triage.handback_rules import ConflictDecision, conflict_decision, red_decision
 from fr.triage.intake import (
     NOT_COLLECTED,
     rejected_by_batch,
@@ -330,7 +329,7 @@ from fr.triage.model import (
     normalize_key,
 )
 from fr.triage.operation_lock import replacement_scope_lock
-from fr.triage.operator_entries import housekeeping_reads
+from fr.triage.operator_entries import carry_hand_back, housekeeping_reads, lineage_reads
 from fr.triage.pacing import Pacer
 from fr.triage.privacy import VisibilityUnreadable, guard_write
 from fr.triage.probe import PassPlan
@@ -350,6 +349,7 @@ from fr.triage.queue_exec import (
     read_slots,
     required_names,
 )
+from fr.triage.queue_handback import handback_onto
 from fr.triage.quota import Pace
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
@@ -4604,6 +4604,9 @@ class _Driver:
                 facts, judgements, repos, queue, live, {*unread, *carried}
             )
             queue_reads["queue_released"], queue_reads["queue_runs"] = gated_in, gated_runs
+            queue_reads.update(lineage_reads(
+                self, facts, judgements, repos, live, queue_reads["bases"], {*unread, *carried}
+            ))  # fmt: skip
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         done_waves = finished_waves(judgements.batches, stages)
@@ -6328,7 +6331,11 @@ class _Driver:
         reports itself."""
         stopped = self._stopped_line(batch, action, exc, failed=False)
         earlier = self._conflicts.setdefault(repo, [])
-        decision = conflict_decision(batch.events, exc.head, exc.paths, tuple(earlier))
+        decision = (
+            ConflictDecision("handback")
+            if exc.reissue  # R3: free, never skipped
+            else conflict_decision(batch.events, exc.head, exc.paths, tuple(earlier))
+        )
         earlier.append((batch.id, exc.paths))
         if decision.kind == "skip":
             return stopped, False
@@ -6555,7 +6562,8 @@ class _Driver:
     ) -> ConflictEvent:
         return ConflictEvent(
             kind="conflict", at=_now_after(batch), head=exc.head, paths=list(exc.paths),
-            delivered=delivered, handle=handle,  # type: ignore[arg-type]
+            delivered=delivered, handle=handle, onto=exc.onto or None,  # type: ignore[arg-type]
+            reissue=exc.reissue,
         )  # fmt: skip
 
     def _hand_back_target(self, facts: Facts, batch: Batch, repo: str) -> tuple[str, Any, Launch]:
@@ -6607,18 +6615,21 @@ class _Driver:
         judgements: Judgements,
         batch: Batch,
         repo: str,
+        brief: str = "",
     ) -> tuple[str, bool]:
-        """Deliver the brief: to the target's idle session, else nothing while it is
-        working or blocked, else to a fresh conflict session (R20, R23)."""
+        """Deliver the brief (*brief*, else the conflict brief): to the target's idle session,
+        else nothing while it is working or blocked, else to a fresh conflict session (R20,
+        R23)."""
         last = last_dispatch(batch)
         name, target, launch = self._hand_back_target(facts, batch, repo)
         branch = last.branch if last else batch_branch(batch)
         ctx = self._ctx_or_hold(facts, repo)
         if ctx is None:  # R13
             return f"{stopped}; held: default branch unknown", False
-        brief = conflict_brief(
+        brief = brief or conflict_brief(
             batch, pr=action.pr, head=exc.head, paths=exc.paths, branch=branch,
-            base=ctx.main, mirrors=facts.config_for(repo).mirrors,
+            base=ctx.main, mirrors=facts.config_for(repo).mirrors, onto=exc.onto,
+            onto_ref=exc.onto_ref,
         )  # fmt: skip
         if not self.adapter.carries(name):  # p4-o2: another driver's session
             return (
@@ -6972,10 +6983,23 @@ class _Driver:
             return self._queue_hand_back_other(action, facts, judgements, repo, live)
         if batch is None or live is None:
             return "no batch session to hand it back to"
+        if action.kind == "queue-carry":  # wave-queue-gaps R4
+            return carry_hand_back(self, action, facts, judgements, batch, live, repo)
         if action.reason == "conflict":
             why = action.detail.removeprefix(f"eject {batch.id}: ")
             said = why if why.startswith("PR #") else f"PR #{live.number} (batch {batch.id}): {why}"
-            exc = MergeConflictError(said, batch=batch.id, head=action.head, paths=action.paths)
+            onto, ref = handback_onto(
+                action, scope_id(self.scope), self.checkout(repo).default_branch()
+            )
+            exc = MergeConflictError(
+                said,
+                batch=batch.id,
+                head=action.head,
+                paths=action.paths,
+                onto=onto,
+                onto_ref=ref,
+                reissue=action.decision == "reissue",
+            )
             merge = Action("warn", batch.id, action.detail, pr=live.number, head=action.head)
             line, _ = self._conflict(exc, merge, facts, judgements, batch, repo)
             return line

@@ -321,9 +321,16 @@ class DriveCheckout:
         self.trials = 0  # scratch merges made
         self.removed: list[Path] = []  # scratch worktrees removed
         self.fetches = 0  # `git fetch` calls
+        self.carries: dict[str, tuple[str, ...]] = {}  # head -> the dead combinations it carries
 
     def origin_repo(self) -> str | None:
         return REPO
+
+    def carried(self, head: str, target: str, built: Any) -> tuple[str, ...]:
+        return self.carries.get(head, ())
+
+    def leads(self, onto: str, target: str) -> bool:
+        return True
 
     def main_worktree(self) -> Path:
         return self.path
@@ -537,6 +544,11 @@ class RecordingQueue:
                     self.ports.landed(
                         [Landing(f"archive#{number}", ref, number, "", "", "tip", "base")]
                     )
+                continue
+            if isinstance(error, QueueAction):  # a planned hand-back (wave-queue-gaps §A)
+                assert self.ports.hand_back is not None
+                lines.append(f"{error.kind} {error.repo}: {error.detail}: "
+                             f"{self.ports.hand_back(error)}")  # fmt: skip
                 continue
             if not isinstance(error, MergeConflictError):
                 continue
@@ -5829,3 +5841,105 @@ def test_a_probe_git_error_is_said_once_and_retried_uncached(
     lines = [x for x in result.output.splitlines() if "the conflict probe could not run" in x]
     assert len(lines) == 1 and len(attempts) >= 2, result.output  # said once, tried each pass
     assert _conflicts(tmp_path) == [] and messenger.messages == []
+
+
+# ------------------------------------- hand-backs onto the stack target (wave-queue-gaps §A)
+
+SLOT_SHA = "5" * 40
+NEW_SHA = "6" * 40
+
+
+def _queue_action(kind: str, **kw: Any) -> Any:
+    from fr.triage.wave_queue import QueueAction
+
+    kw.setdefault("paths", ("src/a.py",))
+    return QueueAction(kind, REPO, "eject b1: PR #101 (batch b1) conflicts in src/a.py",
+                       entries=("b1",), reason="conflict", batch="b1", head="sha-101",
+                       **kw)  # fmt: skip
+
+
+def _at_14(tmp_path: Path) -> None:
+    path = tmp_path / "judgements.yaml"
+    text = path.read_text("utf-8")
+    path.write_text(
+        text.replace("schema: 5\n", "schema: 14\n").replace("schema: 3\n", "schema: 14\n"), "utf-8"
+    )
+
+
+def test_a_slot_hand_back_names_the_slot_and_records_its_onto(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: type[RecordingQueue],
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    train.script[101] = _queue_action("queue-eject", base=SLOT_SHA, slots=(2,),
+                                      decision="handback")  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")
+    ((target, text),) = messenger.messages
+    assert target == BATCH_ITEM_B1, out
+    assert "/slot-2" in text and f"git merge {SLOT_SHA}" in text and "fr-queue/" in text
+    assert "git merge origin/main" not in text
+    (event,) = _conflicts(tmp_path)
+    assert (event.onto, event.reissue, event.delivered) == (SLOT_SHA, False, "session")
+
+
+def test_a_reissue_sends_one_brief_on_the_new_target_and_spends_no_budget(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: type[RecordingQueue],
+) -> None:  # fmt: skip
+    from fr.triage.handback_rules import handbacks_since, spends_handback
+
+    _one_conflicted(world, tmp_path, events=(
+        "      - {kind: conflict, at: '2026-10-01T11:00:00Z', head: sha-101, paths: [src/a.py], "
+        f"delivered: session, handle: h, onto: '{SLOT_SHA}'}}\n"))  # fmt: skip
+    _at_14(tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    train.script[101] = _queue_action("queue-reissue", base=NEW_SHA, slots=(1,),
+                                      decision="reissue")  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")
+    ((_, text),) = messenger.messages
+    assert f"git merge {NEW_SHA}" in text and "/slot-1" in text, out
+    first, again = _conflicts(tmp_path)
+    assert (again.head, again.onto, again.reissue) == ("sha-101", NEW_SHA, True)
+    batch = next(b for b in load_judgements(tmp_path / "judgements.yaml").batches if b.id == "b1")
+    assert handbacks_since(batch.events, spends_handback) == 1
+
+
+def test_a_carrying_head_gets_one_carry_brief_naming_the_reset_head(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: type[RecordingQueue],
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path, events=(
+        "      - {kind: conflict, at: '2026-10-01T11:00:00Z', head: sha-100, paths: [src/a.py], "
+        f"delivered: session, handle: h, onto: '{SLOT_SHA}'}}\n"))  # fmt: skip
+    _at_14(tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    train.script[101] = _queue_action("queue-carry", base=NEW_SHA, slots=(), paths=(),
+                                      carried=(SLOT_SHA,))  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")
+    ((_, text),) = messenger.messages
+    assert text.startswith("Merge queue carry on batch b1"), out
+    assert "git reset --hard sha-100" in text and "cherry-pick" in text
+    assert f"git merge {NEW_SHA}" in text and "--force-with-lease" in text
+    assert SLOT_SHA in text
+    _, carry = _conflicts(tmp_path)
+    assert (carry.head, carry.onto, carry.reissue) == ("sha-101", NEW_SHA, True)
+
+
+def test_a_carrying_head_with_no_clean_hand_back_head_is_held(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: type[RecordingQueue],
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path, events=(
+        "      - {kind: conflict, at: '2026-10-01T11:00:00Z', head: sha-100, paths: [src/a.py], "
+        f"delivered: session, handle: h, onto: '{SLOT_SHA}'}}\n"))  # fmt: skip
+    _at_14(tmp_path)
+    checkout.carries["sha-100"] = (SLOT_SHA,)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    train.script[101] = _queue_action("queue-carry", base=NEW_SHA, carried=(SLOT_SHA,))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == []
+    (line,) = _lines(out, "queue-carry")
+    assert "held" in line and "needs you" in line
+    _, held = _conflicts(tmp_path)
+    assert (held.head, held.delivered) == ("sha-101", "held")

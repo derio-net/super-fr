@@ -1243,6 +1243,9 @@ class QueueExecutor:
                 lines.append(f"{line}: {said}")
             elif action.kind == "queue-eject" and record is not None:
                 lines.append(f"{line}: {self._eject(action, record)}")
+            elif action.kind in ("queue-reissue", "queue-carry"):  # wave-queue-gaps R2, R4
+                said = self.ports.hand_back(action) if self.ports.hand_back else "no hand-back"
+                lines.append(f"{line}: {said}")
             elif action.kind == "queue-drain":
                 again = record is not None and any(
                     isinstance(e, QueueDrainEvent) for e in record.events)  # fmt: skip

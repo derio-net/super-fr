@@ -22,16 +22,16 @@ from typing import Literal
 from fr.labels import pre_merge_held
 from fr.triage.approval import ApprovalVerdict, is_approved
 from fr.triage.batch import BatchStage
-from fr.triage.batch_drive import (
+from fr.triage.batch_drive import LivePr
+from fr.triage.handback_rules import (
     HANDBACKS_PER_DISPATCH,
     RED_HANDBACKS_PER_DISPATCH,
-    LivePr,
     conflict_decision,
     handbacks_since,
     held_conflict,
     red_decision,
+    spends_handback,
 )
-from fr.triage.handback_rules import spends_handback
 from fr.triage.model import (
     ApprovalEvent,
     Batch,

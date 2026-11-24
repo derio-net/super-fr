@@ -248,3 +248,59 @@ def merge_clause(qs: QueueSnapshot, target: tuple[str, tuple[int, ...]]) -> str:
     """R6's words for a non-batch entry: the commit to merge, and where to fetch it."""
     sha, slots = target
     return f"merge `{sha}` (`git fetch origin {target_ref(qs, slots)}`) into its branch"
+
+
+# ------------------------------------------------------------ the driver's part (R1-R4)
+
+
+def handback_onto(action: QueueAction, scope: str, default: str) -> tuple[str, str]:
+    """The commit a hand-back of *action* names and the ref to fetch it from: its slot, or
+    the default branch (R1). ("", "") for an action that names no target."""
+    if not action.base:
+        return "", ""
+    ref = slot_name(scope, action.slots[0]) if action.slots else f"origin/{default}"
+    return action.base, ref
+
+
+def carry_brief(
+    batch: Batch,
+    *,
+    pr: int | None,
+    head: str,
+    reset: str,
+    carried: Sequence[str],
+    onto: str,
+    onto_ref: str,
+    branch: str,
+) -> str:
+    """R4's brief: *head* carries *carried*, combinations the queue built that no longer
+    lead to `main`. Reset to *reset* (the newest hand-back head free of them), cherry-pick
+    the branch's own commits since it, merge the stack target, push with a lease. The one
+    brief that allows a force-push."""
+    from fr.triage.batch_dispatch import NO_APPROVAL_LINE, title_block
+
+    where = f"PR #{pr}" if pr is not None else "its PR"
+    dead = ", ".join(carried)
+    return "\n".join(
+        [
+            f"Merge queue carry on batch {batch.id}: {where} on {branch}, at head {head}, "
+            f"carries {dead}, a combination the merge queue built that no longer leads to "
+            "`main` (an entry it was stacked on left the queue). The queue will not build "
+            f"{where} while its branch holds that commit.",
+            *title_block(batch),
+            f"Rebuild {branch} without it, in these six steps:",
+            f"1. Enter the batch's workspace first: `fr isolation up --branch {branch}`. "
+            "Every later step runs in the workspace.",
+            f"2. `git fetch origin {branch} {onto_ref}`, then list the branch's own commits "
+            f"since {reset}: `git rev-list --no-merges --reverse {reset}..origin/{branch}`.",
+            f"3. `git reset --hard {reset}`: the newest head the queue handed back that holds "
+            "no such commit.",
+            "4. Re-apply each commit step 2 listed, oldest first, with `git cherry-pick`.",
+            f"5. `git merge {onto}` ({onto_ref}, the commit `main` becomes when the entries "
+            "ahead land), resolve what conflicts, and run the test suite.",
+            f"6. `git push --force-with-lease origin {branch}`. This is the one hand-back "
+            "that allows a force-push: the commit it drops must not reach `main`.",
+            MANAGED_SENTENCE,
+            NO_APPROVAL_LINE,
+        ]
+    )

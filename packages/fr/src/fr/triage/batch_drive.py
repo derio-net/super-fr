@@ -39,7 +39,7 @@ from fr.triage.batch import (
 )
 from fr.triage.batch_dispatch import title_block
 from fr.triage.claims import Claim, held_line, held_members
-from fr.triage.handback_rules import (  # noqa: F401  re-exported (wave-queue-gaps §E)
+from fr.triage.handback_rules import (  # noqa: F401 - re-exported, wave-queue-gaps §E
     HANDBACKS_PER_DISPATCH,
     RED_HANDBACKS_PER_DISPATCH,
     ConflictDecision,
@@ -448,6 +448,11 @@ class Snapshot:
     # now, and the run id of each landed barrier still open (for its Need)
     queue_released: frozenset[str] = frozenset()
     queue_runs: Mapping[str, str] = field(default_factory=dict)
+    # wave-queue-gaps §A: repo -> its merge method, and repo -> entry -> its hand-back's
+    # lineage: whether its `onto` still leads, the dead combinations its head carries
+    queue_methods: Mapping[str, str] = field(default_factory=dict)
+    queue_leads: Mapping[str, Mapping[str, bool | None]] = field(default_factory=dict)
+    queue_carries: Mapping[str, Mapping[str, tuple[str, ...] | None]] = field(default_factory=dict)
     head_changed: Mapping[str, datetime] = field(default_factory=dict)
     session_status: Mapping[str, str] = field(default_factory=dict)
 
@@ -1689,6 +1694,8 @@ def queue_snapshot(
         others=tuple(OtherEntry(a.key, a.kind, a.pr.number, a.wave, a.at, a.batch) for a in mine),
         warned=snap.warned, scope_args=snap.scope_args,
         released=snap.queue_released, runs=snap.queue_runs,
+        method=snap.queue_methods.get(repo, ""), leads=snap.queue_leads.get(repo, {}),
+        carries=snap.queue_carries.get(repo, {}),
     )  # fmt: skip
 
 
