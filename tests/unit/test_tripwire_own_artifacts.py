@@ -60,15 +60,19 @@ def _climbs(node: ast.expr, env: Mapping[str, int]) -> int | None:
     if isinstance(node, ast.Attribute) and node.attr == "parent":
         inner = _climbs(node.value, env)
         return None if inner is None else inner + 1
+    if isinstance(node, ast.Attribute) and node.attr == "parents":
+        # `X.parents` stands one above X: `parents[k]` adds k more, and a name
+        # holding `X.parents` keeps that count through the env.
+        inner = _climbs(node.value, env)
+        return None if inner is None else inner + 1
     if (
         isinstance(node, ast.Subscript)
-        and isinstance(node.value, ast.Attribute)
-        and node.value.attr == "parents"
         and isinstance(node.slice, ast.Constant)
         and isinstance(node.slice.value, int)
+        and node.slice.value >= 0  # parents[-1] is the filesystem root, not the checkout
     ):
-        inner = _climbs(node.value.value, env)
-        return None if inner is None else inner + node.slice.value + 1
+        inner = _climbs(node.value, env)
+        return None if inner is None else inner + node.slice.value
     return None
 
 
@@ -80,13 +84,26 @@ def _module_of(path: str) -> str:
 
 
 def _is_marked(tree: ast.Module) -> bool:
-    return any(
-        isinstance(n, ast.Attribute)
-        and n.attr == MARK
-        and isinstance(n.value, ast.Attribute)
-        and n.value.attr == "mark"
-        for n in ast.walk(tree)
-    )
+    """The module-level `pytestmark` carries the mark. A mark on one test or class
+    keeps only that item under `--fr-scope`, so it does not cover the module."""
+    for stmt in tree.body:
+        if isinstance(stmt, ast.Assign):
+            targets, value = stmt.targets, stmt.value
+        elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
+            targets, value = [stmt.target], stmt.value
+        else:
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "pytestmark" for t in targets):
+            continue
+        if any(
+            isinstance(n, ast.Attribute)
+            and n.attr == MARK
+            and isinstance(n.value, ast.Attribute)
+            and n.value.attr == "mark"
+            for n in ast.walk(value)
+        ):
+            return True
+    return False
 
 
 def _bound_names(tree: ast.Module) -> set[str]:
@@ -378,9 +395,24 @@ def test_a_mark_inside_a_pytestmark_list_counts() -> None:
     assert root_readers({"tests/unit/test_a.py": src}) == []
 
 
-def test_a_mark_on_a_test_counts() -> None:
-    src = UNMARKED + "@pytest.mark.own_artifacts\ndef test_x():\n    assert REPO_ROOT\n"
-    assert root_readers({"tests/unit/test_a.py": src}) == []
+def test_a_mark_on_one_test_does_not_cover_the_module() -> None:
+    # --fr-scope keeps only the marked item; test_y would be skipped silently.
+    src = (
+        UNMARKED
+        + "from pathlib import Path\n\nTOP = Path(__file__).parents[2]\n\n"
+        + "@pytest.mark.own_artifacts\ndef test_x():\n    assert TOP\n\n"
+        + "def test_y():\n    assert TOP\n"
+    )
+    assert root_readers({"tests/unit/test_a.py": src}) == ["tests/unit/test_a.py"]
+
+
+def test_a_name_holding_parents_then_indexed_is_flagged() -> None:
+    src = (
+        UNMARKED
+        + "from pathlib import Path\n\nP = Path(__file__).resolve().parents\n"
+        + "TOP = P[2]\n\ndef test_x():\n    assert TOP\n"
+    )
+    assert root_readers({"tests/unit/test_a.py": src}) == ["tests/unit/test_a.py"]
 
 
 def test_a_module_that_reads_nothing_of_the_checkout_is_not_flagged() -> None:
