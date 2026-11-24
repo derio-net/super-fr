@@ -1,0 +1,28 @@
+schema_version: 12
+run: 2026-11-24-feat-ci-economy
+workflow: fr-goal@1
+branch: feat/ci-economy
+started: '2026-11-24T14:10:34+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  lens-review:
+    state: pending
+  deliver:
+    state: pending
+fr_version: 9.0.0rc2
+issue: 1647
