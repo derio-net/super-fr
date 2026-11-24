@@ -9,7 +9,6 @@ runs a process or calls a forge.
 
 from __future__ import annotations
 
-import shlex
 from collections.abc import Iterable, Sequence
 
 import yaml
@@ -33,6 +32,7 @@ from fr.triage.model import (
     batch_marker,
     parse_triage_config,
 )
+from fr.triage.queue_handback import conflict_brief as conflict_brief  # wave-queue-gaps §A
 
 # Stages whose reservation still stands: the run was briefed with it and has
 # not merged or been given up (§3.D "every live reservation").
@@ -273,50 +273,6 @@ def red_brief(batch: Batch, *, pr_url: str, head: str, checks: Sequence[str]) ->
             ]
         )
         + "\n"
-    )
-
-
-def conflict_brief(
-    batch: Batch,
-    *,
-    pr: int | None,
-    head: str,
-    paths: Sequence[str],
-    branch: str,
-    base: str,
-    mirrors: Sequence[Sequence[str]],
-) -> str:
-    """The conflict hand-back brief (spec 2026-10-06-verification-strategies §G, R20):
-    the batch, its PR, the head and the paths merge refused, then the six steps. The
-    repo's `.fr/triage.yaml` `mirrors:` commands, when declared, are step 4's."""
-    where = f"PR #{pr}" if pr is not None else "its PR"
-    regenerate = "4. Regenerate generated mirrors instead of hand-resolving them"
-    if mirrors:
-        commands = "; ".join(f"`{shlex.join(argv)}`" for argv in mirrors)
-        regenerate += f": run {commands}, then stage what they wrote."
-    else:
-        regenerate += " (rerun whatever generates them), then stage what they wrote."
-    return "\n".join(
-        [
-            f"Merge conflict on batch {batch.id}: {where} on {branch}, at "
-            f"head {head}, conflicts with {base} in a change the wave driver will not "
-            f"resolve: {', '.join(paths)}.",
-            *title_block(batch),
-            f"Resolve it on {branch} itself, in these six steps:",
-            f"1. Enter the batch's workspace first: `fr isolation up --branch {branch}`. "
-            f"{branch} is checked out there, not in the clone you may have started in; "
-            "on an existing workspace the command resumes it, and a session already in "
-            "that workspace has nothing to do. Every later step runs in the workspace.",
-            f"2. `git fetch origin && git merge {base}` into {branch}. Do not rebase and "
-            "do not force-push: the PR's history stays as it is.",
-            f"3. Resolve the conflicted paths: {', '.join(paths)}.",
-            regenerate,
-            "5. Run the test suite, and fix what the merge broke.",
-            f"6. Commit the merge and `git push origin {branch}`. The driver merges the PR "
-            "once its checks are green.",
-            MANAGED_SENTENCE,
-            NO_APPROVAL_LINE,
-        ]
     )
 
 

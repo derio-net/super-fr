@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from fr.triage.model import Batch, ConflictEvent, DispatchEvent, RedHandbackEvent
+from fr.triage.queue_handback import reissue_due
 
 # ------------------------------------------------- conflict hand-back (§G)
 
@@ -34,7 +35,13 @@ def handbacks_since(
     return n
 
 
-ConflictKind = Literal["skip", "wait-behind", "held", "handback"]
+def spends_handback(event: object) -> bool:
+    """A conflict hand-back that spends the budget (R22): delivered, and not a re-issue
+    (spec 2026-11-24-wave-queue-gaps R3)."""
+    return isinstance(event, ConflictEvent) and event.delivered != "held" and not event.reissue
+
+
+ConflictKind = Literal["skip", "reissue", "wait-behind", "held", "handback"]
 
 
 @dataclass(frozen=True)
@@ -51,6 +58,7 @@ def conflict_decision(
     head: str,
     paths: Sequence[str],
     earlier_in_pass: Sequence[tuple[str, Sequence[str]]],
+    leads: bool | None = None,
 ) -> ConflictDecision:
     """The pure decision on a conflict at *head* refusing *paths* (R21, R22).
 
@@ -60,16 +68,18 @@ def conflict_decision(
     train order), which is fixed first. `held`: two `session|fresh` hand-backs were
     made since the batch's latest `dispatch` event (held ones never count). Else
     `handback`.
+
+    `reissue` (spec 2026-11-24-wave-queue-gaps R2, R3): the head's latest `conflict` event
+    named a commit (`onto`) that no longer leads to `main` (*leads* False): the brief goes
+    out again, free. Any other head with a `conflict` event is a `skip`.
     """
     if any(isinstance(e, ConflictEvent) and e.head == head for e in events):
-        return ConflictDecision("skip")
+        return ConflictDecision("reissue" if reissue_due(events, head, leads) else "skip")
     mine = set(paths)
     for batch_id, theirs in earlier_in_pass:
         if mine.intersection(theirs):
             return ConflictDecision("wait-behind", behind=batch_id)
-    handed = handbacks_since(
-        events, lambda e: isinstance(e, ConflictEvent) and e.delivered != "held"
-    )
+    handed = handbacks_since(events, spends_handback)
     if handed >= HANDBACKS_PER_DISPATCH:
         return ConflictDecision("held")
     return ConflictDecision("handback")

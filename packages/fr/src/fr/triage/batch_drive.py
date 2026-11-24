@@ -49,6 +49,7 @@ from fr.triage.handback_rules import (  # noqa: F401  re-exported (wave-queue-ga
     handbacks_since,
     held_conflict,
     red_decision,
+    spends_handback,
 )
 from fr.triage.mergeability import conflicting
 from fr.triage.model import (

@@ -31,6 +31,7 @@ from fr.triage.batch_drive import (
     held_conflict,
     red_decision,
 )
+from fr.triage.handback_rules import spends_handback
 from fr.triage.model import (
     ApprovalEvent,
     Batch,
@@ -1083,9 +1084,7 @@ def _budget_spent(batch: Batch) -> bool:
     red = handbacks_since(
         batch.events, lambda e: isinstance(e, RedHandbackEvent) and e.delivered == "session"
     )
-    conflicts = handbacks_since(
-        batch.events, lambda e: isinstance(e, ConflictEvent) and e.delivered != "held"
-    )
+    conflicts = handbacks_since(batch.events, spends_handback)
     return (red >= RED_HANDBACKS_PER_DISPATCH or conflicts >= HANDBACKS_PER_DISPATCH
             or held_conflict(batch) is not None)  # fmt: skip
 
