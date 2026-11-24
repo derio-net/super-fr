@@ -184,3 +184,10 @@ On the first push to main after merge: ci.yml's split-check merges the durations
 ### owed-main-push-walk-resolved · finding [filed → derio-net/super-fr#1600] · resolves owed-main-push-walk: Walk ci-single-leg-main-push after #1593 merges
 
 Filed at deliver as derio-net/super-fr#1600; still owed until discharged.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-24T13:29:30+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: pre-merge — CI: `tests/unit/test_ci_python_floor.py` (`test_ci_pins_the_requires_python_floor`, `test_release_suite_runs_on_the_requires_python_floor`) and `tests/unit/test_ops_isolated_python.py::test_the_python_floor_has_safe_path` pin R1/R6, and CI's `lint`/`typecheck` jobs run at the new targets (R2) (row `ci-floor-python-3-14`).
+
+Evidence: PR #1593 CI green on the single leg: lint, typecheck and all 7 test shards pass at Python 3.14; the floor tests (test_ci_python_floor.py, test_ops_isolated_python.py) ran inside them.
