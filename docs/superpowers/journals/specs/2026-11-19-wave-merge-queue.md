@@ -685,3 +685,10 @@ Evidence: 2026-11-24: tests/unit/test_wave_queue_barrier.py, test_queue_gate_lab
 Step: Broken hold: a deleted or cleared `open` hold is re-armed with one Need; an expired one the same; a release commit landing mid-queue fails the next lease and the queue rebuilds; no case lands an untested tree or moves a PR branch. (R27)
 
 Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py, tests/integration/test_queue_hold.py (re-armed hold, one Need, lease failure rebuilds); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-21 created=2026-11-24T12:41:02+00:00 -->
+### test-plan-step-21 · discovery · Test Plan step 21: ran
+
+Step: Channels: each Need of R28 appears with its command; the PR marker comment is edited in place through queued, testing, ejected and landed (and is absent under `forge.comments: off`); the wave report lists landed, ejected and deferred PRs with their cycles and approvals. (R28)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_operator_view.py, test_wave_report_text.py (Needs, marker comment edited in place, wave report); full wave-queue unit (542) + integration (134) + scenario (3) runs green
