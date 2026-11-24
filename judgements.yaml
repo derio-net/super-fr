@@ -10436,3 +10436,14 @@ queues:
     entries:
     - pr: 1681
       kind: closeout
+  - kind: queue_built
+    at: '2026-11-24T23:46:39.495391Z'
+    slot: 1
+    sha: 4b1f8bf3081ccea7c2fbeddf9bdff72d777ce80a
+    entry:
+      pr: 1683
+      kind: closeout
+    head: b253b095062f3e4a23ea1e897098ce10359045c1
+    patch_id: c9fc8e1e3be06f02c1b5eb3726f39db539f323f9
+    base: b24df489646f55d774cb3d470fea328f1c0be701
+    parent: b24df489646f55d774cb3d470fea328f1c0be701
