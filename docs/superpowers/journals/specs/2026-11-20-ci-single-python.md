@@ -205,3 +205,10 @@ Evidence: PR #1593 CI run shows one-leg layout: test (1)..(7) with no per-versio
 Step: pre-merge — CI: `tests/unit/test_acceptance_scaffold_publish.py` and `tests/unit/test_acceptance_services.py` read the scaffold golden fixtures, which name `python:3.14` (R8) (row `ci-scaffold-python-3-14`).
 
 Evidence: PR #1593 CI: collect and all test shards pass, including the scaffold golden-fixture tests naming python:3.14.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-11-24T13:48:26+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: post-merge — operator-driven: on the first push to `main` after merge, `ci.yml`'s `split-check` merges and saves `test-durations-<run_id>` from the `durations-shard-*` files, and the Release workflow's shards run green on Python 3.14 (row `ci-single-leg-main-push`).
+
+Evidence: Release run 45403054399 on main 34e88d2c1 (contains #1593): all 6 shards green on Python 3.14, published release: v9.0.0-rc.3. The first Release run on 978db9ffe had one red shard (test_two_concurrent_invocations_do_not_overlap, a timing flake in a stubbed hook test, unrelated to the Python floor). CI split-check on main passed.
