@@ -122,7 +122,7 @@ def _store(git_dir: Path, kind: RequestKind, branch: str) -> Path:
 def _load(path: Path) -> RemoteWriteRequest | None:
     try:
         return RemoteWriteRequest(**json.loads(path.read_text()))
-    except (OSError, ValueError, TypeError):
+    except OSError, ValueError, TypeError:
         return None
 
 

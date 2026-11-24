@@ -1189,7 +1189,7 @@ def _refuse_vk_profile(config: Path) -> None:
     up`'s to report."""
     try:
         text = config.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+    except OSError, UnicodeDecodeError:
         return
     if _VK_PROFILE_NEEDLE in text:
         raise StaleProfileError(
@@ -3043,7 +3043,7 @@ class LocalWorktreeDevcontainerTarget:
         """
         try:
             run_args = json.loads(config.read_text()).get("runArgs", [])
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        except OSError, UnicodeDecodeError, json.JSONDecodeError:
             return
         for flag, value in zip(run_args, run_args[1:]):
             if flag != "--env-file":

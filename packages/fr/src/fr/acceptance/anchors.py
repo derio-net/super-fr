@@ -57,7 +57,7 @@ def line_anchor_error(ref: str) -> str | None:
 def _parse(source: str) -> ast.Module | None:
     try:
         return ast.parse(source)
-    except (SyntaxError, ValueError):
+    except SyntaxError, ValueError:
         return None
 
 

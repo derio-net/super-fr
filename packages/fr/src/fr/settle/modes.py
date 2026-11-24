@@ -66,7 +66,7 @@ def journal_settle_ids(journal: Path) -> list[str]:
 
     try:
         entries = parse_journal(journal.read_text())
-    except (OSError, UnicodeDecodeError, JournalParseError):
+    except OSError, UnicodeDecodeError, JournalParseError:
         return []
     return [e.id for e in entries if e.kind == "decision" and e.id.startswith("settle-")]
 

@@ -1,9 +1,13 @@
-"""CI tests the Python floor it declares, plus the newest Python, once per push.
+"""CI tests one Python, the floor it declares (#1589); the whole base is on 3.14.
 
 gh#940: no workflow pinned an interpreter, so `uv sync` took whatever the
 runner had (3.12) and the declared `requires-python` floor (3.11) was never
 exercised. The pin is `UV_PYTHON` in the workflow env, not a committed
 `.python-version`, so it does not also pin an operator's local runs.
+
+gh#1589: the second leg (3.11 and 3.14) doubled the PR test cost for a
+version-specific break that no longer exists once the floor is 3.14. CI has one
+leg, inheriting the workflow's `UV_PYTHON`, and every shard feeds coverage.
 
 gh#941: `on: [push, pull_request]` ran every check twice on a PR push. A
 workflow that gates PRs triggers on `push` to `main` only.
@@ -16,6 +20,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 REPO = Path(__file__).resolve().parents[2]
@@ -37,10 +42,6 @@ def _workflow(name: str) -> dict[str, Any]:
     return doc
 
 
-def _version(v: str) -> tuple[int, ...]:
-    return tuple(int(p) for p in v.split("."))
-
-
 def test_ci_pins_the_requires_python_floor() -> None:
     assert _workflow("ci.yml").get("env", {}).get("UV_PYTHON") == _floor()
 
@@ -51,34 +52,48 @@ def test_release_suite_runs_on_the_requires_python_floor() -> None:
     assert _workflow("release.yml").get("env", {}).get("UV_PYTHON") == _floor()
 
 
-def test_ci_tests_the_floor_and_a_newer_python() -> None:
-    job = _workflow("ci.yml")["jobs"]["test"]
-    pythons = [str(p) for p in job["strategy"]["matrix"]["python"]]
-    assert _floor() in pythons
-    assert any(_version(p) > _version(_floor()) for p in pythons), pythons
-    # The matrix value only matters if it reaches uv.
-    assert job.get("env", {}).get("UV_PYTHON") == "${{ matrix.python }}"
+@pytest.mark.parametrize(
+    ("workflow", "suite_jobs"), [("ci.yml", {"test", "collect"}), ("release.yml", {"test"})]
+)
+def test_one_python_the_floor(workflow: str, suite_jobs: set[str]) -> None:
+    # R3/R6: no job picks another interpreter, so every job inherits the
+    # workflow's floor (#1589). setup-uv's `with: python-version` is the
+    # override this repo's own setup action offers, so it is refused too.
+    jobs = _workflow(workflow)["jobs"]
+    assert suite_jobs <= set(jobs)
+    for name, job in jobs.items():
+        assert "python" not in (job.get("strategy") or {}).get("matrix", {}), name
+        assert "UV_PYTHON" not in (job.get("env") or {}), name
+        for step in job.get("steps", []):
+            assert "setup-python" not in str(step.get("uses", "")), name
+            assert "UV_PYTHON" not in (step.get("env") or {}), name
+            assert "python-version" not in (step.get("with") or {}), name
 
 
-def test_only_the_newest_leg_feeds_coverage() -> None:
-    # Two legs uploading coverage-shard-N would collide on the artifact name;
-    # the newest leg carries the gate (spec 2026-11-01-ci-speed R7).
+def test_every_shard_feeds_coverage() -> None:
     job = _workflow("ci.yml")["jobs"]["test"]
-    pythons = [str(p) for p in job["strategy"]["matrix"]["python"]]
-    newest = max(pythons, key=_version)
     upload = next(
         s
         for s in job["steps"]
         if "upload-artifact" in str(s.get("uses", ""))
         and str(s.get("with", {}).get("name", "")).startswith("coverage-shard-")
     )
-    assert upload.get("if") == f"matrix.python == '{newest}'"
-    # The cov options reach the pytest step through the matrix `include:` entries.
-    cov = {str(i["python"]): i["cov_args"] for i in job["strategy"]["matrix"]["include"]}
-    assert cov[_floor()] == "--no-cov"
-    assert cov[newest].split()[0] == "--cov"
+    assert "if" not in upload
     pytest_step = next(s for s in job["steps"] if "uv run pytest" in str(s.get("run", "")))
-    assert "matrix.cov_args" in str(pytest_step.get("env", {})) + pytest_step["run"]
+    assert "--cov --cov-report=" in pytest_step["run"]
+    assert "cov_args" not in yaml.safe_dump(job)
+
+
+def test_the_floor_is_3_14_everywhere() -> None:
+    assert _floor() == "3.14"
+    root = tomllib.loads((REPO / "pyproject.toml").read_text())
+    assert root["tool"]["ruff"]["target-version"] == "py314"
+    assert root["tool"]["mypy"]["python_version"] == "3.14"
+    members = sorted((REPO / "packages").glob("*/pyproject.toml"))
+    assert members
+    for path in members:
+        spec = tomllib.loads(path.read_text())["project"]["requires-python"]
+        assert spec == f">={_floor()}", path
 
 
 def test_pr_gating_workflows_run_once_per_pr_push() -> None:

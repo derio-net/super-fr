@@ -56,7 +56,7 @@ def budget_from_json(data: dict[str, Any] | None) -> Budget | None:
         # a hand-edited record may be naive (read as UTC) or carry an offset (converted)
         reset = reset.replace(tzinfo=UTC) if reset.tzinfo is None else reset.astimezone(UTC)
         return Budget(str(data["resource"]), int(data["remaining"]), int(data["limit"]), reset)
-    except (AssertionError, KeyError, TypeError, ValueError):
+    except AssertionError, KeyError, TypeError, ValueError:
         return None
 
 
@@ -88,7 +88,7 @@ def budget_from_rate_limit(raw: dict[str, Any], api: str) -> Budget:
             if limit > 0:
                 reset = datetime.fromtimestamp(int(entry["reset"]), UTC)
                 found.append(Budget(name, int(entry["remaining"]), limit, reset))
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             continue
     if not found:
         raise ValueError(f"rate_limit: no usable {'/'.join(_RESOURCES.get(api, ()))} resource")

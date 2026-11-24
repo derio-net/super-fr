@@ -145,7 +145,7 @@ def parse_data(raw: object) -> Mapping[str, Any] | None:
     not read, never silently a row that holds nothing (R14, p4-r2)."""
     try:
         data = json.loads(raw) if isinstance(raw, str | bytes) else None
-    except (json.JSONDecodeError, UnicodeDecodeError):
+    except json.JSONDecodeError, UnicodeDecodeError:
         return None
     return data if isinstance(data, Mapping) else None
 

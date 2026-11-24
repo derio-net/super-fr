@@ -853,7 +853,7 @@ def _archive_usage(repo_root: Path, cursor: Path, run_id: str) -> None:
         return
     try:
         state = parse_run_state(cursor.read_text())
-    except (OSError, RunStateError):
+    except OSError, RunStateError:
         state = None
     if state is not None:
         written = capture(repo_root, state, "closeout", os.environ, ambient=False)
@@ -1019,7 +1019,7 @@ def recorded_outcomes(journal: Path) -> set[str]:
         return set()
     try:
         entries = parse_journal(journal.read_text())
-    except (JournalParseError, OSError):
+    except JournalParseError, OSError:
         return set()
     return {e.id for e in entries if e.resolves is None and e.id.startswith(OUTCOME_PREFIX)}
 

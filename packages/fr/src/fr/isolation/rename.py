@@ -100,7 +100,7 @@ def _marker(wt: Path) -> dict[str, object] | None:
     JSON object whose `toplevel` is this worktree (p1-r5)."""
     try:
         data = json.loads((wt / MARKER).read_text())
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
     if not isinstance(data, dict):
         return None

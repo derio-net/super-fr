@@ -118,7 +118,7 @@ def _fetch(repo_root: Path, sha: str) -> bool:
             check=False,
             timeout=30,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except OSError, subprocess.TimeoutExpired:
         return False
     return done.returncode == 0
 

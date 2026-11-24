@@ -51,8 +51,14 @@ def test_every_python_m_fr_in_the_source_is_safe_path() -> None:
 
 
 def test_the_python_floor_has_safe_path() -> None:
-    text = (SRC / "fr" / "pyproject.toml").read_text()
-    assert 'requires-python = ">=3.11"' in text
+    import tomllib
+
+    spec = tomllib.loads((SRC / "fr" / "pyproject.toml").read_text())["project"]["requires-python"]
+    m = re.fullmatch(r">=\s*(\d+)\.(\d+)", spec.strip())
+    assert m, spec
+    assert (int(m.group(1)), int(m.group(2))) >= (3, 11)  # -P exists from 3.11
+    root = tomllib.loads((SRC.parent / "pyproject.toml").read_text())["project"]
+    assert root["requires-python"] == spec
 
 
 # --- p4-r7 (addendum): a relative or empty PYTHONPATH entry is the cwd again ----------
