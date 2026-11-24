@@ -301,3 +301,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-s1-configuration-homes-p6 created=2026-11-24T20:41:19+00:00 -->
 ### phase-split-2026-11-24-s1-configuration-homes-p6 · decision · ask: triage state in a host-cache repository, its move and default state repo (R17-R21)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-s1-configuration-homes-p7 created=2026-11-24T20:41:21+00:00 -->
+### phase-split-2026-11-24-s1-configuration-homes-p7 · decision · ask: the candidate walk scenario every S1 row owes and the pages and mirrors section H lists
