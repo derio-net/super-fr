@@ -41,9 +41,9 @@ rows:
       - super-fr:tests/unit/test_spec_design_shape_gate.py#test_spec_review_refuses_a_spec_that_lost_its_design_shape
       - super-fr:tests/unit/test_spec_design_shape_gate.py#test_spec_plan_review_on_the_light_shape_refuses_the_same_way
       - super-fr:tests/unit/test_shape.py#test_valid_shape_blocks
-    status: unwired
-    notes: unit tests drive the brainstorm, spec-review and light spec-plan-review resolves
-      over specs with and without a valid design shape; ci once this PR's CI runs them
+    status: ci
+    notes: 'its unit tests run in CI''s sharded test job on every PR (feat/show-me-visuals,
+      #1641)'
   - id: pr-shape-section
     capability: PR shape section
     acceptance: Every rendered PR body carries `## Shape of the change` from the run's
