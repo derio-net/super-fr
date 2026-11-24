@@ -299,3 +299,223 @@ _climbs treats X.parents as one above X, so a name holding .parents and indexed 
 ### p3-r3-resolved · finding [refuted] · resolves p3-r3: ROOT_ALIASES is a hand-kept list (phase 3)
 
 The alias list only covers names a module uses without binding them (star imports from conftest). A new alias a helper defines by climbing from __file__ is caught through the helper-import path whatever its name, and an alias a module binds is judged by what it is bound to. A new unbound name would need a new star-imported constant in conftest, which is the case the dated list documents.
+
+<!-- fr:journal kind=decision scope=plan id=p4-regen-value created=2026-11-24T21:40:00+00:00 phase=4 -->
+### p4-regen-value · decision · The builder takes one Regen value; QueuePorts keeps mirrors and generated as the spec names them (phase 4)
+
+`QueuePorts` gains `mirrors` and `generated` (spec §C); `_build` folds them into a frozen
+`queue_exec.Regen(mirrors, generated, timeout=600)` that `build` threads to `_resolve`, so the
+signatures grow by one argument rather than three. A failed mirror raises
+`MirrorFailedError(MergeConflictError)`, whose words become the BuildConflict's reason, so the
+hand-back names the command (R11).
+
+<!-- fr:journal kind=decision scope=plan id=p4-stamp-needs-no-mirror created=2026-11-24T21:40:00+00:00 phase=4 -->
+### p4-stamp-needs-no-mirror · decision · A stamp-only conflict resolves with no mirrors; a generated conflict with none is real (phase 4)
+
+R11's "a repo that declares no mirrors treats every such path as a real conflict" is read as
+the generated kinds only (whole generated paths and generated-block hunks): a `reviewed:`
+stamp hunk needs no command, and the plan's case (c) builds it with no mirrors declared.
+`Classified.regenerate` names the hunk paths that took a generated block.
+
+<!-- fr:journal kind=decision scope=plan id=p4-mirror-sandbox-scope created=2026-11-24T21:40:00+00:00 phase=4 -->
+### p4-mirror-sandbox-scope · decision · The mirror hardening is defence in depth, not a sandbox (phase 4)
+
+The queue admits only entries the operator approved or a trust rule attributed, and CI runs
+the same combination, so the PR code a mirror runs has passed the operator's trust gate.
+What is added is proportionate on the driver host (p4-mirror-export); a container or VM is
+out of scope (p4-s6). Nothing in the spec's wording blocked any of it.
+
+<!-- fr:journal kind=decision scope=plan id=p4-mirror-export created=2026-11-24T21:40:00+00:00 phase=4 -->
+### p4-mirror-export · decision · The mirrors never see a git directory; they run in a git-less export of the combination (phase 4)
+
+Three security rounds showed that guarding the scratch worktree's git dir piecemeal (a
+snapshot/restore of config and hooks, hardened git flags) does not converge: the gitdir can
+be redirected through `.git`/`commondir`, the restore followed symlinks in `hooks/`, and a
+background child could write after the comparison. The guard is replaced by a structural
+invariant. `_regenerate` exports the resolved worktree's tracked files
+(`Worktree.export_tracked`: regular files with their mode, symlinks recreated, never
+followed) into a fresh temp dir with no `.git`; each `mirrors:` argv runs there
+(`gitseam.run_mirror`: `mirror_env` as the whole environment, an empty temp HOME and XDG
+config/data dirs, uv's cache and Python dirs resolved from the parent env first, the
+explicit UV_* list, `start_new_session=True`, and `os.killpg` of the group once it exits or
+times out). `snapshot_export` diffs the export before and after (new paths the repo ignores,
+like `.venv` and `__pycache__`, asked of the scratch worktree's rules, are no change); a
+change outside the `generated:` globs and blocks, a changed path that is not a regular file,
+or markers left hand the entry back. Only the changed generated paths are copied back
+(`Worktree.take_generated`: each parent lstat-checked, `O_NOFOLLOW`). The git-state guard,
+`HARDENED_GIT` and the cached dirs are deleted, and `GIT_CONFIG_GLOBAL`/`NOSYSTEM` are out of
+the env. Checked live: super-fr's five mirrors run in a git-less export of this worktree
+(sync-readme 6.5 s, the rest under 0.5 s) and change nothing outside the globs.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-facts-not-an-artifact created=2026-11-24T21:40:00+00:00 phase=4 -->
+### p4-facts-not-an-artifact · discovery · facts.json is not a registered artifact kind; FACTS_READS derives from FACTS_SCHEMA (phase 4)
+
+facts.json lives in the triage state directory, not under an artifact locator, so the bump to
+17 needs no migration. `FACTS_READS = range(3, FACTS_SCHEMA + 1)`, so 16 still loads; the one
+pin in test_triage_model.py moved, the refused-stamp case moved from 17 to 18, and a schema-16
+file with a `mirrors`-only config now reads `generated == []`.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-docs-currency created=2026-11-24T21:40:00+00:00 phase=4 -->
+### p4-docs-currency · discovery · fr docs check named cli.md; the wave-driver explainer gained the queue's conflict rules (phase 4)
+
+`fr docs check --base origin/main` named only docs/reference/cli.md (triage_batch_cmd.py moved,
+no help text did: stamp bumped). docs/explainers/fr-wave-driver.md now says which conflicts the
+queue settles, that the mirrors are the base's while the scripts are the PRs', and what the
+hardening does and does not do. The fr-triage skill says the same; both mirrors re-synced.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-fast-tier-scope created=2026-11-24T21:40:00+00:00 phase=4 -->
+### p4-fast-tier-scope · discovery · The declared fast tier selects 18,452 of 18,599 tests on this branch; a neighbour run stood in (phase 4)
+
+`uv run pytest --fr-scope origin/main -n 2` reaches nearly the whole suite on this branch
+(phase 3 touched 250 test modules and the conftest; the facts model is imported everywhere),
+and on a host at load ~18 it ran at about 3% per quarter hour, so it was stopped. Scoped to
+this phase's base (`--fr-scope 1fdc627f7`) it still selects 9,756. Instead the touched tests
+and their neighbours ran (`tests/unit/test_triage*.py`, `test_queue*`, `test_wave_queue*`,
+`tests/integration/test_queue*.py`, every `test_tripwire_*`, the smoke, settings, validate and
+import-direction tests): 4,413 passed, 4 failed, the four committed scenario facts fixtures
+generated at schema 16. Regenerated with their own generators (schema 17), the fixture tests
+and `tests/integration/test_scenarios.py` (`-m ""`) then passed, 95 tests. CI is this repo's
+suite evidence (`tests: ci`).
+
+<!-- fr:journal kind=finding scope=plan id=p4-s1 created=2026-11-24T21:40:00+00:00 phase=4 state=open review_scope=in -->
+### p4-s1 · finding [open] (reviewer: in scope) · A conflicted path with no marker hunk, or not two regular blobs, counted as hunk-resolved (phase 4)
+
+Security review: classify_conflicts resolved any text it could read, so a modify/delete, a
+binary add/add, a type change or a marker-less file was "resolved" as it stood. Reproduced red
+by test_a_stamp_page_one_entry_deleted_is_a_real_conflict and
+test_a_binary_add_add_conflict_is_a_real_conflict (both built without raising).
+
+<!-- fr:journal kind=finding scope=plan id=p4-s2 created=2026-11-24T21:40:00+00:00 phase=4 state=open review_scope=in -->
+### p4-s2 · finding [open] (reviewer: in scope) · Mirrors run PR-controlled code with the driver's whole environment (phase 4)
+
+Security review: run_argv inherited every variable (GH_TOKEN, FR_*, SSH_AUTH_SOCK). Red:
+test_a_mirror_runs_with_no_forge_credential_or_ssh_agent saw all of them.
+
+<!-- fr:journal kind=finding scope=plan id=p4-s3 created=2026-11-24T21:40:00+00:00 phase=4 state=open review_scope=in -->
+### p4-s3 · finding [open] (reviewer: in scope) · A mirror could write the common git dir's hooks or config, which later git calls run (phase 4)
+
+Security review (HIGH): the scratch worktree is linked, so its common dir is the clone's
+`.git`. Red: the planted hook and core.fsmonitor stayed and the build pushed; a clone's
+post-commit hook ran for the rebase commit made after the mirrors.
+
+<!-- fr:journal kind=finding scope=plan id=p4-s4 created=2026-11-24T21:40:00+00:00 phase=4 state=open review_scope=in -->
+### p4-s4 · finding [open] (reviewer: in scope) · Mirrors inherited the operator's HOME, reaching ~/.config/gh, ~/.ssh, ~/.netrc (phase 4)
+
+Security review (MEDIUM).
+
+<!-- fr:journal kind=finding scope=plan id=p4-s5 created=2026-11-24T21:40:00+00:00 phase=4 state=open review_scope=in -->
+### p4-s5 · finding [open] (reviewer: in scope) · Mirrors kept every UV_* not named like a credential, index URLs included (phase 4)
+
+Security review (MEDIUM).
+
+<!-- fr:journal kind=finding scope=plan id=p4-s7 created=2026-11-24T21:40:00+00:00 phase=4 state=open review_scope=in -->
+### p4-s7 · finding [open] (reviewer: in scope) · The git-state guard's cached dirs could be redirected through `.git` or `commondir` (phase 4)
+
+Security review, round three.
+
+<!-- fr:journal kind=finding scope=plan id=p4-s8 created=2026-11-24T21:40:00+00:00 phase=4 state=open review_scope=in -->
+### p4-s8 · finding [open] (reviewer: in scope) · The git-state restore followed symlinks in hooks/ (phase 4)
+
+Security review, round three.
+
+<!-- fr:journal kind=finding scope=plan id=p4-s9 created=2026-11-24T21:40:00+00:00 phase=4 state=open review_scope=in -->
+### p4-s9 · finding [open] (reviewer: in scope) · A background child of a mirror could write after the comparison (TOCTOU) (phase 4)
+
+Security review, round three.
+
+<!-- fr:journal kind=finding scope=plan id=p4-s6 created=2026-11-24T21:40:00+00:00 phase=4 state=open review_scope=out -->
+### p4-s6 · finding [open] (reviewer: out of scope) · Mirrors run as the driver's user on its host; no container or VM isolates them (phase 4)
+
+A container or VM sandbox for mirror commands is out of scope for this feature (operator's
+direction): the entries have passed the queue's trust gate and CI runs the same code. The
+in-process hardening (p4-s2..p4-s5) is defence in depth only.
+
+<!-- fr:journal kind=finding scope=plan id=p4-acceptance-anchor created=2026-11-24T21:40:00+00:00 phase=4 state=open review_scope=in -->
+### p4-acceptance-anchor · finding [open] (reviewer: in scope) · ci-cancelled-reads-pending cited a test the phase 1 review renamed (phase 4)
+
+`fr acceptance check` failed on `test_run_ci_evidence.py#test_a_cancelled_gate_is_pending_never_refused`,
+renamed in 669a5e7e7 into two tests; the row is re-pointed to both.
+
+<!-- fr:journal kind=finding scope=plan id=p4-s1-resolved created=2026-11-24T21:40:00+00:00 phase=4 state=fixed resolves=p4-s1 -->
+### p4-s1-resolved · finding [fixed] · resolves p4-s1: A conflicted path with no marker hunk, or not two regular blobs, counted as hunk-resolved (phase 4)
+
+ebdc00b12: classify_conflicts takes the unmerged index stages (Worktree.unmerged_stages, `git
+ls-files -u`); a hunk path needs stages 2 and 3 as regular blobs and at least one resolved
+hunk, a whole generated path a regular stage 2; anything else is real. Unit tests for
+modify/delete both ways, a symlink type change, a submodule, no stages and no markers.
+
+<!-- fr:journal kind=finding scope=plan id=p4-s2-resolved created=2026-11-24T21:40:00+00:00 phase=4 state=fixed resolves=p4-s2 -->
+### p4-s2-resolved · finding [fixed] · resolves p4-s2: Mirrors run PR-controlled code with the driver's whole environment (phase 4)
+
+Superseded by the export design (p4-mirror-export): `gitseam.run_mirror` passes `mirror_env`
+as the WHOLE environment, in a git-less export. `mirrors:` come from the collected base
+config, pinned by test_the_mirrors_are_the_bases_never_a_queued_prs (a PR rewriting them
+changes nothing). Tests: test_a_mirror_runs_with_no_forge_credential_or_ssh_agent. The trust
+boundary is in regen.py's docstring, the fr-triage skill and the wave-driver explainer.
+
+<!-- fr:journal kind=finding scope=plan id=p4-s3-resolved created=2026-11-24T21:40:00+00:00 phase=4 state=fixed resolves=p4-s3 -->
+### p4-s3-resolved · finding [fixed] · resolves p4-s3: A mirror could write the common git dir's hooks or config, which later git calls run (phase 4)
+
+Superseded by the export design (p4-mirror-export): the mirror runs in a temp copy with no
+`.git` and no link to any git dir, so it cannot reach hooks, config or a commondir, and its
+process group is killed when it ends. Tests: test_a_mirror_sees_no_git_directory,
+test_git_itself_finds_no_repository_where_a_mirror_runs,
+test_a_background_child_of_a_mirror_is_killed (red with killpg disabled),
+test_a_generated_path_turned_into_a_symlink_hands_back,
+test_only_the_generated_changes_are_copied_back,
+test_a_mirror_writing_outside_the_generated_files_hands_the_entry_back.
+
+<!-- fr:journal kind=finding scope=plan id=p4-s4-resolved created=2026-11-24T21:40:00+00:00 phase=4 state=fixed resolves=p4-s4 -->
+### p4-s4-resolved · finding [fixed] · resolves p4-s4: Mirrors inherited the operator's HOME, reaching ~/.config/gh, ~/.ssh, ~/.netrc (phase 4)
+
+Export design (p4-mirror-export): HOME, XDG_CONFIG_HOME and XDG_DATA_HOME point into a
+fresh temp dir; UV_CACHE_DIR and UV_PYTHON_INSTALL_DIR are resolved from the parent env
+first (uv's own defaults). uv checked to run the real sync scripts this way. Pinned by
+test_mirror_env_names_its_variables_and_swaps_home.
+
+<!-- fr:journal kind=finding scope=plan id=p4-s5-resolved created=2026-11-24T21:40:00+00:00 phase=4 state=fixed resolves=p4-s5 -->
+### p4-s5-resolved · finding [fixed] · resolves p4-s5: Mirrors kept every UV_* not named like a credential, index URLs included (phase 4)
+
+Export design (p4-mirror-export): MIRROR_UV_NAMES is the explicit list UV_CACHE_DIR,
+UV_PYTHON_INSTALL_DIR, UV_PYTHON, UV_NO_PROGRESS, UV_OFFLINE, UV_FROZEN; UV_INDEX_URL and
+UV_EXTRA_INDEX_URL are dropped (same test).
+
+<!-- fr:journal kind=finding scope=plan id=p4-s7-resolved created=2026-11-24T21:40:00+00:00 phase=4 state=fixed resolves=p4-s7 -->
+### p4-s7-resolved · finding [fixed] · resolves p4-s7: The git-state guard's cached dirs could be redirected through `.git` or `commondir` (phase 4)
+
+Export design (p4-mirror-export) - the mirror sees no git dir, and the guard and its cached dirs are deleted.
+
+<!-- fr:journal kind=finding scope=plan id=p4-s8-resolved created=2026-11-24T21:40:00+00:00 phase=4 state=fixed resolves=p4-s8 -->
+### p4-s8-resolved · finding [fixed] · resolves p4-s8: The git-state restore followed symlinks in hooks/ (phase 4)
+
+Export design (p4-mirror-export) - nothing is restored any more; copy-back is lstat-checked per component and O_NOFOLLOW.
+
+<!-- fr:journal kind=finding scope=plan id=p4-s9-resolved created=2026-11-24T21:40:00+00:00 phase=4 state=fixed resolves=p4-s9 -->
+### p4-s9-resolved · finding [fixed] · resolves p4-s9: A background child of a mirror could write after the comparison (TOCTOU) (phase 4)
+
+Export design (p4-mirror-export) - each mirror runs in its own session and its process group is killed once it ends; test_a_background_child_of_a_mirror_is_killed.
+
+<!-- fr:journal kind=finding scope=plan id=p4-s6-resolved created=2026-11-24T21:40:00+00:00 phase=4 state=open resolves=p4-s6 out_of_scope=true -->
+### p4-s6-resolved · finding [out-of-scope] · resolves p4-s6: Mirrors run as the driver's user on its host; no container or VM isolates them (phase 4)
+
+A sandboxing container/VM for mirrors is outside this feature by the operator's direction.
+
+<!-- fr:journal kind=finding scope=plan id=p4-acceptance-anchor-resolved created=2026-11-24T21:40:00+00:00 phase=4 state=fixed resolves=p4-acceptance-anchor -->
+### p4-acceptance-anchor-resolved · finding [fixed] · resolves p4-acceptance-anchor: ci-cancelled-reads-pending cited a test the phase 1 review renamed (phase 4)
+
+Row re-pointed with fr acceptance set-status (--drop-level/--level).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-11-24T21:40:00+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+two additive lines (a defaulted list field and the stamp with its comment); nothing to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-11-24T21:40:00+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+regen.py was written in its final shape, one private _resolve behind resolve_hunks and classify_conflicts; the only cleanup (a long test line) landed in the same commit
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t3 created=2026-11-24T21:40:00+00:00 phase=4 -->
+### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
+
+the regen inputs travel as one frozen Regen value through build/_combine/_merged_tree/_keeps_merge_content/_resolve, so no further extraction was owed
