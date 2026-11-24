@@ -109,10 +109,10 @@ rows:
       - super-fr:tests/integration/test_queue_drive_cmd.py#test_the_drive_regenerates_a_generated_file_both_entries_changed
     status: ci
     notes: 'ci-economy phase 4: regen.py resolves reviewed stamps and generated blocks
-      (two regular blobs with marker hunks only), the builder regenerates through the
-      base''s mirrors in a named environment with git-dir tampering undone, super-fr
-      declares its mirrors and generated globs; tested over real bare repos for squash,
-      rebase and merge'
+      (two regular blobs with marker hunks only); the builder runs the base''s mirrors
+      in a git-less export of the combination with a named environment, kills their
+      process group, and copies back only generated changes; super-fr declares its mirrors
+      and generated globs; tested over real bare repos for squash, rebase and merge'
     verify: none
 amendments:
   - row: ci-superseded-runs
