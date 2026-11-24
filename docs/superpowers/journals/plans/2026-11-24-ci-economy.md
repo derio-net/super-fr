@@ -114,3 +114,54 @@ _unreplaced keys on (workflow, name); late lists a required name with any unrepl
 ### p1-r5-resolved · finding [out-of-scope] · resolves p1-r5: real_glabclient._CI_FAIL still treats canceled as failing (phase 1)
 
 GitLab's reader is outside the queue and exempt by the spec (Design §A, gh#611); this change did not touch it.
+
+<!-- fr:journal kind=decision scope=plan id=p2-verdict-needs-classify created=2026-11-24T18:08:41+00:00 phase=2 -->
+### p2-verdict-needs-classify · decision · ci_lane verdict requires classify to succeed in every lane (phase 2)
+
+R17 names the classifier only for the landed lane. A failed classify leaves no lane
+(and the lane check already fails), but the verdict also lists `classify` among each
+lane's required jobs, so a reason names it directly. Any result but success or
+skipped (an unknown one included) fails like failure and cancelled.
+
+<!-- fr:journal kind=decision scope=plan id=p2-landed-strict-match created=2026-11-24T18:08:41+00:00 phase=2 -->
+### p2-landed-strict-match · decision · landed_run matches path, event, head_branch prefix, conclusion and a different id exactly (phase 2)
+
+`path` must equal `.github/workflows/ci.yml` (the captured payloads carry no `@ref`
+suffix), `event` push, `head_branch` start with `fr-queue/`, `conclusion` success
+and an integer id other than this run's. Any other payload shape, a non-zero `gh`
+exit, non-JSON or a missing `gh` reads `full`. The fixtures are captures of this
+repo's own runs (tests/fixtures/ci_lane/README.md); no fr-queue run existed yet, so
+the queue case changes only `head_branch` on the captured CI run.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-pinned-tests-moved created=2026-11-24T18:08:41+00:00 phase=2 -->
+### p2-pinned-tests-moved · discovery · Five workflow-shape tests pinned what the lanes change (phase 2)
+
+test_ci_shards (ci-ok's old RESULTS case script; now runs ci_lane.py verdict as a
+subprocess), test_ci_merge_group (change-fragment keeps its condition, lane rule
+appended; a skipped change-fragment passes the full-lane verdict),
+test_ci_split_workflow (split-check needs classify), test_pages_workflow and
+test_docs_currency_flows (site-build and docs-check skip only in the landed lane,
+where the fr-queue run on the same sha already ran them). ci-ok now checks out the
+repo and sets up uv to run the verdict script.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-docs-currency created=2026-11-24T18:08:41+00:00 phase=2 -->
+### p2-docs-currency · discovery · fr docs check names no page for ci.yml or scripts/ci_lane.py (phase 2)
+
+`uv run fr docs check --base origin/main` reports 32 pages current: no page covers
+.github/workflows/ci.yml or scripts/. AGENTS.md's CI job list and a CI lanes
+paragraph after Tiers were updated.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-24T18:08:41+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+lane_for and pull_request_lane were written green in final shape; the only cleanup (ruff format) landed in the task's commit
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-24T18:08:41+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+landed_run is one filter and landed_lane one fallible read; the long test lines were wrapped in the same commit
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-24T18:08:41+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+verdict is one table of required and skippable jobs per lane; the test helper name clash was fixed before the commit
