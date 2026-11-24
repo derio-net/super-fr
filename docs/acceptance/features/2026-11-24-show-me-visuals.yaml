@@ -99,6 +99,7 @@ rows:
     - spec:2026-11-24-show-me-visuals#R13
     - spec:2026-11-24-show-me-visuals#R14
     levels: {}
-    status: not-implemented
-    notes: ''
+    status: walk-owed
+    notes: the surface ships in this PR; a real fr-goal run on the released build is
+      owed post-merge (gate tester)
     verify: live
