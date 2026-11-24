@@ -1096,6 +1096,40 @@ class Worktree:
         git(["checkout", "--ours", "--", *paths], self.path)
         git(["add", "--", *paths], self.path)
 
+    def write_resolved(self, path: str, text: str) -> None:
+        """Write *path*'s resolved *text* (no conflict markers left) and stage it."""
+        (self.path / path).write_text(text, encoding="utf-8")
+        git(["add", "--", path], self.path)
+
+    def run_argv(self, argv: Sequence[str], timeout: float) -> None:
+        """Run a repo's declared `mirrors:` command, an argument list with no shell, in this
+        worktree (spec 2026-11-24-ci-economy R11). A non-zero exit, or a run past *timeout*
+        seconds, raises `GitError` naming the command."""
+        if not argv:
+            raise GitError("an empty mirrors command was declared")
+        _run(list(argv), self.path, timeout=timeout)
+
+    def stage_all(self) -> None:
+        """Stage every change and every new file git does not ignore (what a mirror wrote)."""
+        git(["add", "--all"], self.path)
+
+    def snapshot_tracked(self) -> dict[str, str | None]:
+        """Each tracked path's working-tree text (bytes that are not UTF-8 kept by
+        `surrogateescape`, a symlink as its target, a missing file None): what a mirror run
+        is compared against (R11)."""
+        out: dict[str, str | None] = {}
+        for path in git(["ls-files", "-z"], self.path).split("\0"):
+            if not path:
+                continue
+            target = self.path / path
+            if target.is_symlink():
+                out[path] = f"symlink -> {os.readlink(target)}"
+            elif target.is_file():
+                out[path] = target.read_bytes().decode("utf-8", "surrogateescape")
+            else:
+                out[path] = None
+        return out
+
     def write_tree(self) -> str:
         """The tree the index holds now."""
         return git(["write-tree"], self.path).strip()

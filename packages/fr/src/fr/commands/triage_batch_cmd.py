@@ -6737,6 +6737,7 @@ class _Driver:
             if runs_post_merge else None,
             hand_back=lambda action: self._queue_hand_back(action, facts, repo),
             landed=lambda landings: self._queue_landed(facts, repo, landings),
+            mirrors=tuple(tuple(m) for m in config.mirrors), generated=tuple(config.generated),
         )  # fmt: skip
         executor = self._queue_execs.get(repo)
         if executor is None:

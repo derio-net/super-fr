@@ -58,6 +58,7 @@ from fr.triage.model import (
     QueueSlotLostEvent,
     VersionBlock,
 )
+from fr.triage.regen import classify_conflicts, outside_generated
 from fr.triage.wave_queue import (
     HOLD_HALT,
     HOLD_REF,
@@ -150,13 +151,78 @@ def _apply_slot(wt: Worktree, version: VersionBlock | None, slot: str | None, re
         wt.run(version.relock)
 
 
+MIRROR_TIMEOUT_SECONDS = 600.0
+"""How long one `mirrors:` command may run while a combination is built (2026-11-24-ci-economy
+R11): one that runs longer hands the entry back, as a failed one does."""
+
+
+@dataclass(frozen=True)
+class Regen:
+    """What a repo declares for its generated files (spec 2026-11-24-ci-economy R8, R11): the
+    `mirrors:` argument lists that regenerate them, the `generated:` globs of the files they
+    write in whole, and the per-command *timeout*. The default declares neither."""
+
+    mirrors: tuple[tuple[str, ...], ...] = ()
+    generated: tuple[str, ...] = ()
+    timeout: float = MIRROR_TIMEOUT_SECONDS
+
+
+class MirrorFailedError(MergeConflictError):
+    """A conflict the mirrors could not settle (R11): a command failed or ran out of time,
+    a file kept conflict markers, or the commands changed a path they may not. Its words are
+    the hand-back's reason, since they name the command."""
+
+
 def _conflict(entry: EntryInput, paths: Sequence[str], where: Path) -> MergeConflictError:
     return MergeConflictError(
         f"PR #{entry.pr} ({entry.key}) conflicts with the combination ahead of it in a "
         f"change the queue will not resolve: {', '.join(paths)} (only a version file whose "
-        "PR change is the version alone is resolved)",
+        "PR change is the version alone, a generated file and a `reviewed:` stamp are "
+        "resolved)",
         batch=entry.key, head=entry.head, paths=paths,
     )  # fmt: skip
+
+
+def _conflicted_text(wt: Worktree, path: str) -> str | None:
+    try:
+        return wt.read(path)
+    except OSError, UnicodeDecodeError:
+        return None  # no text there: a real conflict
+
+
+def _mirror_failed(entry: EntryInput, paths: Sequence[str], words: str) -> MirrorFailedError:
+    return MirrorFailedError(
+        f"PR #{entry.pr} ({entry.key}): the queue could not regenerate "
+        f"{', '.join(paths)}: {words}",
+        batch=entry.key, head=entry.head, paths=paths,
+    )  # fmt: skip
+
+
+def _regenerate(
+    wt: Worktree, regen: Regen, entry: EntryInput, paths: Sequence[str], abort: Callable[[], None]
+) -> None:
+    """R11: run the mirrors over the resolved worktree and stage what they wrote; hand the
+    entry back when one fails, a file keeps conflict markers, or they changed a tracked path
+    that is neither generated nor inside a generated block."""
+    before = wt.snapshot_tracked()
+    for argv in regen.mirrors:
+        try:
+            wt.run_argv(argv, regen.timeout)
+        except GitError as exc:
+            abort()
+            raise _mirror_failed(entry, paths, str(exc)) from exc
+    wt.stage_all()
+    after = wt.snapshot_tracked()
+    marked = [p for p in paths if "\n<<<<<<< " in "\n" + (after.get(p) or "")]
+    if marked:
+        abort()
+        raise _mirror_failed(entry, marked, "conflict markers are left after the mirrors ran")
+    stray = outside_generated(before, after, regen.generated)
+    if stray:
+        abort()
+        raise _mirror_failed(
+            entry, stray, "the mirrors changed it outside the generated files and blocks"
+        )
 
 
 def _resolve(
@@ -166,16 +232,29 @@ def _resolve(
     conflicted: list[str],
     base: str,
     abort: Callable[[], None],
+    regen: Regen,
 ) -> bool:
     """R6: take the combination's side of the version files the PR changed the version
-    alone in (and of a lockfile with a relock); anything else is a `MergeConflictError`.
-    Whether a lockfile was taken (so a relock is owed)."""
+    alone in (and of a lockfile with a relock). 2026-11-24-ci-economy R9-R11: resolve each
+    `reviewed:` stamp and generated-block hunk, take the combination's side of each whole
+    generated path, and regenerate with the mirrors. Anything else is a
+    `MergeConflictError` naming only the real paths. Whether a lockfile was taken (so a
+    relock is owed)."""
     refused = unresolvable(version, wt.show, base, entry.head, conflicted)
-    if refused:
+    kinds = classify_conflicts(refused, regen.generated, lambda p: _conflicted_text(wt, p))
+    owed = [*kinds.whole, *kinds.regenerate]
+    real = [*kinds.real, *([] if regen.mirrors else owed)]
+    if real:
         abort()
-        raise _conflict(entry, refused, wt.path)
-    wt.take_ours(conflicted)
-    return any(is_lockfile(p) for p in conflicted)
+        raise _conflict(entry, real, wt.path)
+    versioned = [p for p in conflicted if p not in refused]
+    if versioned or kinds.whole:
+        wt.take_ours([*versioned, *kinds.whole])
+    for path, text in kinds.hunks.items():
+        wt.write_resolved(path, text)
+    if owed:
+        _regenerate(wt, regen, entry, owed, abort)
+    return any(is_lockfile(p) for p in versioned)
 
 
 def _combine(
@@ -185,6 +264,7 @@ def _combine(
     entry: EntryInput,
     method: Method,
     version: VersionBlock | None,
+    regen: Regen,
 ) -> tuple[str, str]:
     """The tree of *entry* on *prev*, staged in *wt*, and the parents its commit takes;
     for `rebase` the replayed tip itself is returned as the only "parent" (its tree and
@@ -196,25 +276,34 @@ def _combine(
         for sha in checkout.replayed(base, entry.head):
             conflicted = wt.cherry_pick(sha)
             if conflicted:
-                relock = _resolve(wt, version, entry, conflicted, base, wt.abort_pick)
+                relock = _resolve(wt, version, entry, conflicted, base, wt.abort_pick, regen)
                 wt.continue_pick()
                 if relock and version and version.relock:
                     wt.run(version.relock)
         _apply_slot(wt, version, slot, False)
         tip = wt.amend(files) if version and slot else wt.head()
         if checkout.has_merges(base, entry.head):
-            _keeps_merge_content(checkout, wt, prev, entry, version, slot, base, tip)
+            _keeps_merge_content(checkout, wt, prev, entry, version, slot, base, tip, regen)
         return "", tip
-    return _merged_tree(wt, entry, version, slot, base), ""
+    return _merged_tree(wt, entry, version, slot, base, regen), ""
 
 
 def _merged_tree(
-    wt: Worktree, entry: EntryInput, version: VersionBlock | None, slot: str | None, base: str
+    wt: Worktree,
+    entry: EntryInput,
+    version: VersionBlock | None,
+    slot: str | None,
+    base: str,
+    regen: Regen,
 ) -> str:
     """The tree of a plain merge of *entry* on the worktree's HEAD, R6's conflicts resolved
     and the slot version applied: what `merge` and `squash` build."""
     conflicted = wt.merge(entry.head)
-    relock = _resolve(wt, version, entry, conflicted, base, wt.abort_merge) if conflicted else False
+    relock = (
+        _resolve(wt, version, entry, conflicted, base, wt.abort_merge, regen)
+        if conflicted
+        else False
+    )
     _apply_slot(wt, version, slot, relock)
     wt.stage(version.files if version else [])
     return wt.write_tree()
@@ -229,13 +318,14 @@ def _keeps_merge_content(
     slot: str | None,
     base: str,
     tip: str,
+    regen: Regen,
 ) -> None:
     """p3-r9: `rebase` replays the branch's non-merge commits only, so what a merge commit
     of the branch adds (an evil merge, a conflict resolution) would be dropped without a
     word. The replayed tip's tree must equal a plain merge's of the PR head on *prev*;
     when it does not, the entry leaves the queue, naming the paths."""
     wt.reset_hard(prev)
-    merged = _merged_tree(wt, entry, version, slot, base)
+    merged = _merged_tree(wt, entry, version, slot, base, regen)
     dropped = checkout.diff_paths(checkout.tree_of(tip), merged)
     wt.reset_hard(tip)
     if dropped:
@@ -282,6 +372,7 @@ def build(
     record: Callable[[QueueBuiltEvent], None] | None = None,
     leases: Mapping[int, str | None] | None = None,
     now: Callable[[], datetime] | None = None,
+    regen: Regen | None = None,
 ) -> list[Built]:
     """Build *entries* in order on *base* (the queue's base, or the combination ahead),
     entry i into slot *slots*[i], in *method* (R4, R5, R6): each commit on the one before
@@ -291,7 +382,9 @@ def build(
     with no record). A slot lease that fails raises `SlotLostError`; a real conflict raises
     `MergeConflictError` after the entries ahead of it were built and pushed.
 
-    *queue_base* is the queue's `main` (default: *base*). No PR branch is touched."""
+    *queue_base* is the queue's `main` (default: *base*); *regen* the repo's generated
+    files and mirrors (2026-11-24-ci-economy R9-R11; default: none). No PR branch is
+    touched."""
     if len(slots) < len(entries):
         raise MergeStopError(f"{len(entries)} entries to build into {len(slots)} slot(s)")
     queue_base = queue_base or base
@@ -306,7 +399,7 @@ def build(
     try:
         for entry, slot in zip(entries, slots, strict=False):
             wt.reset_hard(prev)
-            tree, tip = _combine(checkout, wt, prev, entry, method, version)
+            tree, tip = _combine(checkout, wt, prev, entry, method, version, regen or Regen())
             ref = slot_ref(scope, slot)
             # R13: never the sha the slot holds on the remote either. A rebuild in the
             # same second as a build the leases do not name would otherwise be that very
@@ -901,6 +994,10 @@ class QueuePorts:
     # attributed by its files alone is not found again once it is no open PR.
     landed: Callable[[Sequence[Landing]], None] | None = None
     now: Callable[[], datetime] = _utcnow
+    # The repo's `mirrors:` and `generated:` (spec 2026-11-24-ci-economy R8-R11): a
+    # combination's generated-file conflicts are regenerated rather than handed back.
+    mirrors: tuple[tuple[str, ...], ...] = ()
+    generated: tuple[str, ...] = ()
 
 
 class QueueExecutor:
@@ -1299,9 +1396,10 @@ class QueueExecutor:
                 p.checkout, action.base, [i for i in inputs if i is not None], p.method,
                 p.version, scope=p.scope, slots=action.slots, scratch=p.scratch,
                 queue_base=queue_base, record=p.record, now=p.now, leases=dict(self._leases),
+                regen=Regen(mirrors=p.mirrors, generated=p.generated),
             )  # fmt: skip
         except MergeConflictError as exc:
-            dropped = "rebase would drop" in str(exc)
+            dropped = "rebase would drop" in str(exc) or isinstance(exc, MirrorFailedError)
             self.conflicts[exc.batch] = BuildConflict(exc.head, exc.paths,
                                                       str(exc) if dropped else "")  # fmt: skip
             if dropped:
