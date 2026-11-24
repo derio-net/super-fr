@@ -16,9 +16,14 @@ rows:
     - spec:2026-11-24-batch-merge-readiness#R1
     - spec:2026-11-24-batch-merge-readiness#R2
     - spec:2026-11-24-batch-merge-readiness#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_readiness_queue.py#test_an_approved_green_draft_still_delivering_is_no_entry
+      - super-fr:tests/unit/test_triage_readiness_queue.py#test_the_drive_never_readies_or_merges_an_approved_draft_until_it_delivered
+      - super-fr:tests/unit/test_triage_readiness.py#test_the_queue_admits_exactly_by_the_verdict
+    status: ci
+    notes: 'phase 1: batch_readiness admits only a delivered PR; plan_queue, _member_reports
+      and the drive hold an approved green draft at deliver running'
     verify: none
   - id: batch-readiness-verdict
     capability: Batches page readiness verdict per batch PR
