@@ -9176,6 +9176,8 @@ batches:
     pr: 1628
     head: 2ddb8ead0bdeeb61ffa0a5241a0dc658a38ad19b
     patch_id: 053b4b8efd81e07e220c55c712e9491e3d52d2d8
+  - kind: post_merge
+    at: '2026-11-24T22:07:33.761195Z'
 - id: hook-hardening
   title: 'Hook and install hardening: deny without jq, no cwd imports in the parser, pinned spawns, locked
     installs'
@@ -10282,3 +10284,8 @@ queues:
     patch_id: 053b4b8efd81e07e220c55c712e9491e3d52d2d8
     base: b0ea33e38dee4429bf0fa765d16034c65c8899e8
     parent: b0ea33e38dee4429bf0fa765d16034c65c8899e8
+  - kind: queue_land
+    at: '2026-11-24T22:06:55.887590Z'
+    main: 24130aa17578d13a79db3023676819dcdb9c6930
+    entries:
+    - batch: closeout-truth
