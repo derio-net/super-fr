@@ -9319,6 +9319,11 @@ batches:
     - docs/explainers/fr-devops-gate.md
     - docs/ops.md
     delivered: held
+  - kind: approval
+    at: '2026-11-24T21:24:13.416877Z'
+    pr: 1583
+    head: 32ea57d588e97e43b2e577f5013f7c2419b18654
+    patch_id: ca06ca377d637c384f203c352f625b65bec57862
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
