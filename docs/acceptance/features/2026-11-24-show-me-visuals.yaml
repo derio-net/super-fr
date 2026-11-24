@@ -23,9 +23,9 @@ rows:
       - super-fr:tests/unit/test_show_me_skill.py#test_the_body_names_every_view
       - super-fr:tests/unit/test_show_me_skill.py#test_the_skill_has_no_html_or_browser_route
       - super-fr:tests/unit/test_show_me_pipeline_prose.py#test_goal_lens_review_writes_the_shape_file_and_passes_it
-    status: unwired
-    notes: unit tests pin the skill's views, rules, credit, no HTML route, mirrors and
-      fr skills listing, and the pipeline prose (R14); CI runs them
+    status: ci
+    notes: 'its unit tests run in CI''s sharded test job on every PR (feat/show-me-visuals,
+      #1641)'
   - id: spec-design-shape-gate
     capability: spec design shape
     acceptance: The brainstorm and spec-review resolves refuse a spec with no valid
