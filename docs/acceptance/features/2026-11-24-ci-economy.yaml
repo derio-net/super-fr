@@ -32,9 +32,14 @@ rows:
     - spec:2026-11-24-ci-economy#R5
     - spec:2026-11-24-ci-economy#R6
     - spec:2026-11-24-ci-economy#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_lane.py#test_landed_names_the_trusted_run
+      - super-fr:tests/unit/test_ci_lane.py#test_no_other_run_is_trusted
+      - super-fr:tests/unit/test_ci_lanes_workflow.py#test_validate_artifacts_runs_in_every_lane
+    status: walk-owed
+    notes: ci_lane.py landed and the workflow shape are unit-tested in CI; only a real
+      queue landing on main proves the skip, owed post-merge (gate tester)
     verify: live
   - id: ci-light-lane
     capability: ci
