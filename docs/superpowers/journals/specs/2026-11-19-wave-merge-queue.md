@@ -545,3 +545,186 @@ after: kinds ['candidate', 'live'], gates ['tester']
 answered_by: operator
 lowered: []
 ```
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-24T12:40:12+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: Fake forge plus a real bare git remote: a wave of three approved green PRs; depth 2. One pass builds main+a and main+a+b on `slot-1` and `slot-2`; no PR branch moves; once both are green, one atomic push lands them and `main` equals the tested tip. (R1, R4, R8, R9, R10)
+
+Evidence: 2026-11-24: tests/integration/test_queue_build.py, test_queue_land.py (real bare git remote, slot branches, atomic push) pass; 134 integration + 542 unit tests green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-11-24T12:40:30+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: The same wave under `squash`: after landing, each PR's head is its squashed commit, every commit's subject is `<title> (#n)`, and the fake forge, reading reachability, reports all three merged. Under `merge` the subjects are `Merge pull request #n …` and the heads are unchanged. (R5, R10)
+
+Evidence: 2026-11-24: tests/integration/test_queue_land.py, test_queue_resume.py (squash/merge subjects and reachability); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-11-24T12:40:32+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: Lease failure, under both `squash` and `merge`: a session pushes to b between build and land; the atomic push lands nothing and moves no ref; the next pass rebuilds. A server that refuses `--atomic` holds the queue. (R10, R22)
+
+Evidence: 2026-11-24: tests/integration/test_queue_errors.py, test_queue_land.py (atomic push, lease failure, refused --atomic holds); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-11-24T12:40:33+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: `land: merge`: per-PR merges at pinned heads; a forced tree mismatch stops the queue with a reason. (R11)
+
+Evidence: 2026-11-24: tests/unit/test_triage_batch_merge.py, tests/integration/test_queue_land.py (land: merge, tree mismatch stops); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-5 created=2026-11-24T12:40:35+00:00 -->
+### test-plan-step-5 · discovery · Test Plan step 5: ran
+
+Step: Approval by content: approved at H; the session merges `main` (same patch-id) and the approval holds; an empty commit holds it; a code edit, a whitespace-only edit and a binary edit each void it and remove the label; an old event with no patch-id follows `reaches()` until a pass records its id; a clean merge of `main` after an fr update holds it; a `main` newer than the clone's copy holds it after the refetch; a host's diff configuration (textconv, external diff, prefixes) never moves the id; a moved identical hunk, a hand-edited merge resolution and a rewrite of the branch each void it (the succession check); an unreadable patch-id holds it without voiding. (R12)
+
+Evidence: 2026-11-24: tests/unit/test_merge_train_approval.py, test_triage_approval.py, test_gitseam_patch_id.py (patch-id approval, textconv, void cases); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-6 created=2026-11-24T12:40:37+00:00 -->
+### test-plan-step-6 · discovery · Test Plan step 6: ran
+
+Step: Red combination: main+a+b fails twice while main+a is green; a lands, b is ejected and handed back with the combination sha; c is rebuilt on main+a; a single failure followed by a green rebuild ejects nothing. (R13)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py (first red rebuilt, second red ejects, rebuild behind); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-7 created=2026-11-24T12:40:38+00:00 -->
+### test-plan-step-7 · discovery · Test Plan step 7: ran
+
+Step: Conflict during a build is handed back through `conflict_decision`; a version-file-only conflict is resolved and carries the slot. (R6)
+
+Evidence: 2026-11-24: tests/integration/test_queue_build.py::test_a_version_only_conflict_is_resolved_and_carries_the_slot, planner conflict-decision tests; full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-8 created=2026-11-24T12:40:40+00:00 -->
+### test-plan-step-8 · discovery · Test Plan step 8: ran
+
+Step: Foreign push to `main`: every combination is rebuilt on the new base, no PR branch moves, the approvals hold, and the move is reported once. (R14)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py foreign base move tests (rebuild, report once); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-9 created=2026-11-24T12:40:42+00:00 -->
+### test-plan-step-9 · discovery · Test Plan step 9: ran
+
+Step: Wave order: an approved green PR of wave N+1 waits while wave N's queue is open, and also while wave N has unfinished batches but nothing ready; a no-wave batch waits for an open wave; later waves' waiting PRs do not count against `max_inflight`. (R2, R3, R36)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py, test_wave_queue_drive.py (wave order, later waves take no in-flight slot); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-10 created=2026-11-24T12:40:44+00:00 -->
+### test-plan-step-10 · discovery · Test Plan step 10: ran
+
+Step: Close-out as last entry: the queue stays open until the close-out lands; it takes only the wave's ungated batches; a stale-but-migratable cursor is migrated on the close-out branch by `fr migrate artifacts --path`, which refuses a retiring hop, and the branch passes `review_reasons`. (R15, R16)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py closeout-last tests; tests/scenarios/wave-queue-closeout-migrates.sh; full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-11 created=2026-11-24T12:40:45+00:00 -->
+### test-plan-step-11 · discovery · Test Plan step 11: ran
+
+Step: Hold: `open` from queue open; the driver's push after the last landing moves it to `drained`; only the release run (or `release: none`) clears it, by a leased push; `fr release status --from-json` with a fresh `open` hold says held, with one older than 24 h warns and ignores it; `release.py` cuts nothing while `open`, including a `--version` run; a superseded run clears nothing; the workflow is dispatched on drain, and a failed dispatch only warns. (R17, R18, R19)
+
+Evidence: 2026-11-24: tests/integration/test_queue_hold.py, tests/unit/test_release_status.py, test_release_script.py; tests/scenarios/wave-queue-release-hold.sh; full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-12 created=2026-11-24T12:40:47+00:00 -->
+### test-plan-step-12 · discovery · Test Plan step 12: ran
+
+Step: `queue.ci: none` lands each built entry with no CI wait; `queue.ci: none` is refused where services report CI. (R7, R20)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_phase5_fixes.py, test_triage_queue_model.py (queue.ci none, refused where CI reported); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-13 created=2026-11-24T12:40:49+00:00 -->
+### test-plan-step-13 · discovery · Test Plan step 13: ran
+
+Step: `fr validate artifacts --allow-migratable` passes a stale movable stamp and fails a refusing one; `ci.yml` uses it on PRs and on `fr-queue/**`. (R21)
+
+Evidence: 2026-11-24: tests/unit/test_validate_allow_migratable.py, test_queue_ci_triggers.py; tests/scenarios/wave-queue-migratable-validation.sh; full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-14 created=2026-11-24T12:40:50+00:00 -->
+### test-plan-step-14 · discovery · Test Plan step 14: ran
+
+Step: A repo requiring a forge merge queue, refusing the push under `land: push`, or on glab/tea is held with a reason; a repo with no `queue.ci` is refused with what to add; a required check that never reports on `fr-queue/**` becomes a Need after `check_wait_minutes`; no `enqueue` or `update` event is written anywhere. (R7, R22, R34, R35)
+
+Evidence: 2026-11-24: tests/unit/test_triage_queue_model.py, test_wave_queue_phase5_fixes.py, test_queue_errors.py (held reasons, missing queue.ci, required check Need); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-15 created=2026-11-24T12:40:52+00:00 -->
+### test-plan-step-15 · discovery · Test Plan step 15: ran
+
+Step: `fr triage batch merge` drives the same engine to drain. (R23)
+
+Evidence: 2026-11-24: tests/integration/test_queue_drive_cmd.py, tests/unit/test_triage_batch_merge.py (batch merge drives the same engine); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-16 created=2026-11-24T12:40:54+00:00 -->
+### test-plan-step-16 · discovery · Test Plan step 16: ran
+
+Step: A driver killed after `queue_built` and after the land push resumes from events and the forge without landing twice; the slot branches are reused, never multiplied. (R4, R24)
+
+Evidence: 2026-11-24: tests/integration/test_queue_resume.py (resume after queue_built and after land push, slots reused); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-17 created=2026-11-24T12:40:55+00:00 -->
+### test-plan-step-17 · discovery · Test Plan step 17: ran
+
+Step: The pass line, the board and the Batches page show the queue line; a queued, approved PR is never "awaiting approval". (R25)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_operator_view.py (queue line, board, Batches page, never awaiting approval); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-18 created=2026-11-24T12:40:57+00:00 -->
+### test-plan-step-18 · discovery · Test Plan step 18: ran
+
+Step: Wave sequencing: wave N drains, the hold reads `drained`; wave N+1's approved green PRs stay waiting; the release run clears the hold (once each for an RC, a final, and "nothing installable"); the next pass opens wave N+1's queue. A wave that drains by deferral, and one landed by `land: merge`, both reach the release through the `drained` push. A failed release run leaves the hold, and after `release_wait_hours` it is a Need. (R2, R17, R18, R19, R29)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py, test_wave_queue_drive.py, test_queue_hold.py (drained hold, release clears, release_wait_hours Need); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-19 created=2026-11-24T12:40:59+00:00 -->
+### test-plan-step-19 · discovery · Test Plan step 19: ran
+
+Step: Gates: a `gate:devops` PR enters only after `fr-queue:release` is settled to `queue_release`, lands alone, and nothing lands behind it until `queue_postmerge_done`; `_merged` reads only the forge, so stage 3 waits for the merge; a combination behind it is tested meanwhile. A `gate:tester` batch lands, is left out of the wave close-out, and its own close-out queues between waves after `fr gate pass`. (R15, R26)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_barrier.py, test_queue_gate_labels.py (devops barrier, tester close-out); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-20 created=2026-11-24T12:41:00+00:00 -->
+### test-plan-step-20 · discovery · Test Plan step 20: ran
+
+Step: Broken hold: a deleted or cleared `open` hold is re-armed with one Need; an expired one the same; a release commit landing mid-queue fails the next lease and the queue rebuilds; no case lands an untested tree or moves a PR branch. (R27)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py, tests/integration/test_queue_hold.py (re-armed hold, one Need, lease failure rebuilds); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-21 created=2026-11-24T12:41:02+00:00 -->
+### test-plan-step-21 · discovery · Test Plan step 21: ran
+
+Step: Channels: each Need of R28 appears with its command; the PR marker comment is edited in place through queued, testing, ejected and landed (and is absent under `forge.comments: off`); the wave report lists landed, ejected and deferred PRs with their cycles and approvals. (R28)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_operator_view.py, test_wave_report_text.py (Needs, marker comment edited in place, wave report); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-22 created=2026-11-24T12:41:04+00:00 -->
+### test-plan-step-22 · discovery · Test Plan step 22: ran
+
+Step: Leaving: `defer` takes a batch out of the drain, so the wave drains and its close-out leaves it out; `requeue --wave N+1` puts it in N+1's queue; `requeue` alone puts it in the lowest wave whose queue has not opened, else makes it a between-waves entry; a stall past `stall_hours`, or a spent budget, gives one Need with both commands and never an automatic deferral. (R29, R30)
+
+Evidence: 2026-11-24: tests/unit/test_triage_batch_leave_wave.py, test_triage_queue_model.py, test_wave_queue_planner.py (defer, requeue, stall Need); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-23 created=2026-11-24T12:41:06+00:00 -->
+### test-plan-step-23 · discovery · Test Plan step 23: ran
+
+Step: Two scopes containing one repo: the second driver's hold lease fails, it opens nothing, lands nothing and reports the holding scope. (R31)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_drive.py, test_wave_queue_planner.py (another scope's hold is held, nothing opened or landed); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-24 created=2026-11-24T12:41:07+00:00 -->
+### test-plan-step-24 · discovery · Test Plan step 24: ran
+
+Step: Other merges: a collected close-out, an export PR and a housekeeping PR each land through the queue under their trust rule; `pr_merge` is never called outside `land: merge`. (R32)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py other-entry tests, tests/integration/test_queue_resume.py (pr_merge only under land: merge); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-25 created=2026-11-24T12:41:09+00:00 -->
+### test-plan-step-25 · discovery · Test Plan step 25: ran
+
+Step: `post_merge` runs once per landing at the landed `main`, records every batch it covered, gates the next landing, and a failure pauses landings with a Need. A landed PR the forge still shows open pauses the queue with a Need. (R33, R35)
+
+Evidence: 2026-11-24: tests/unit/test_queue_exec.py, test_wave_queue_planner.py (post_merge per landing, pausing Need); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-26 created=2026-11-24T12:41:11+00:00 -->
+### test-plan-step-26 · owed · Test Plan step 26 owed
+
+what: Post-merge, live: the next wave on this repo drains through the queue; record the number of PR updates (expected 0), CI cycles per PR, approvals per PR (expected 1), and releases cut (expected 1 for the wave). (all; row `wave-queue-live-wave`)
+why: live post-merge walk on the next real wave (row wave-queue-live-wave): needs a real wave drained through the queue; not runnable now
+how: fr journal resolve --scope spec --slug 2026-11-19-wave-merge-queue --id test-plan-step-26 --state fixed --note "<evidence>"
+owed_key: spec:2026-11-19-wave-merge-queue#step26
