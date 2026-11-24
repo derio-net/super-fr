@@ -125,3 +125,18 @@ amendments:
       green on PR #1593); shape and pure check/merge pinned by unit tests; xdist writer
       pinned by integration test.'
     why: 'one leg (#1589): the both-legs, 6-shard note is no longer true'
+  - row: ci-single-leg-main-push
+    op: set-status
+    base: 0
+    status: walked
+    notes: 'Release run 45403054399 on main 34e88d2c1: all 6 shards green on Python
+      3.14, v9.0.0-rc.3 published; CI split-check passed on the first main push.'
+    walk:
+      strategy: live
+      harness: claude-code
+      model: claude-sonnet-5-5
+      outcome: pass
+      at: '2026-11-24T13:49:25Z'
+      evidence: https://github.com/derio-net/super-fr/actions/runs/45403054399
+    why: 'Release run 45403054399 on main 34e88d2c1: all 6 shards green on Python 3.14,
+      v9.0.0-rc.3 published; CI split-check passed on the first main push.'
