@@ -519,3 +519,59 @@ regen.py was written in its final shape, one private _resolve behind resolve_hun
 ### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
 
 the regen inputs travel as one frozen Regen value through build/_combine/_merged_tree/_keeps_merge_content/_resolve, so no further extraction was owed
+
+<!-- fr:journal kind=review scope=plan id=review-p4 created=2026-11-24T21:44:36+00:00 phase=4 -->
+### review-p4 · review · Phase 4 review (generated-file and stamp conflict resolution, git-less mirror run) (phase 4)
+
+Independent reviewer read 1fdc627..HEAD against R8-R14 and decision p4-mirror-export. Ours/theirs
+per strategy, the stamp rule, block classification, index-stage checks, the mirror env allowlist,
+killpg, the copy-back and the R13 config all check out; no path pushes a bad combination unhanded.
+Four in-scope findings (three fixed, one refuted), two out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-11-24T21:44:36+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · Worktree.read/write_resolved translated CRLF to LF, rewriting a hunk-resolved CRLF file whole (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-11-24T21:44:36+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · An unclosed generated-block open marker let later hunks resolve as ours and hid the file tail from _skeleton (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-11-24T21:44:36+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · An OSError from export_tracked/snapshot_export was not caught, so no abort and no clean hand-back (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-11-24T21:44:36+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · A mirror's mode-only change is invisible to the stray check and the copy-back (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-11-24T21:44:36+00:00 phase=4 state=open review_scope=out -->
+### p4-r5 · finding [open] (reviewer: out of scope) · The mirror shares the operator's uv cache and python installs, which queued code could poison (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-11-24T21:44:36+00:00 phase=4 state=open review_scope=out -->
+### p4-r6 · finding [open] (reviewer: out of scope) · Mirror timeout is per command, output is uncapped, killpg after reap has a pid-reuse window (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-11-24T21:44:36+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: Worktree.read/write_resolved translated CRLF to LF, rewriting a hunk-resolved CRLF file whole (phase 4)
+
+read and write_resolved use newline=''; test_the_worktree_reads_and_writes_crlf_unchanged and test_a_crlf_file_keeps_its_line_endings_through_a_resolution pin it.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-11-24T21:44:36+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: An unclosed generated-block open marker let later hunks resolve as ours and hid the file tail from _skeleton (phase 4)
+
+_resolve returns None when a block is still open at EOF, and _skeleton compares an unbalanced file whole; two tests pin it.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-11-24T21:44:36+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: An OSError from export_tracked/snapshot_export was not caught, so no abort and no clean hand-back (phase 4)
+
+_regenerate catches (GitError, OSError) around the export, both snapshots, the mirror runs and the copy-back, so an I/O error aborts and hands back as MirrorFailedError.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-11-24T21:44:36+00:00 phase=4 state=refuted resolves=p4-r4 -->
+### p4-r4-resolved · finding [refuted] · resolves p4-r4: A mirror's mode-only change is invisible to the stray check and the copy-back (phase 4)
+
+Git tracks only the executable bit, the five declared mirrors write Markdown and YAML outputs and never chmod, and a mode-only change kept at the old mode loses no generated content: the combination's text is what CI tests and what lands.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-11-24T21:44:36+00:00 phase=4 state=open resolves=p4-r5 out_of_scope=true -->
+### p4-r5-resolved · finding [out-of-scope] · resolves p4-r5: The mirror shares the operator's uv cache and python installs, which queued code could poison (phase 4)
+
+Same trust boundary as p4-s6: entries are approved before the queue runs them, and the spec makes the mirror run defence in depth, not a sandbox; a private cold uv cache per run is a cost trade-off for a later issue.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-11-24T21:44:36+00:00 phase=4 state=open resolves=p4-r6 out_of_scope=true -->
+### p4-r6-resolved · finding [out-of-scope] · resolves p4-r6: Mirror timeout is per command, output is uncapped, killpg after reap has a pid-reuse window (phase 4)
+
+R11 fixes the timeout per command; the pid-reuse window needs the whole group gone and the id recycled between wait and killpg, and output size is bounded by the declared repo scripts.
