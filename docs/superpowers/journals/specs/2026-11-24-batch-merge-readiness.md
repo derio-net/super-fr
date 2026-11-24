@@ -214,3 +214,6 @@ row_kinds:
 run_gate: reviewer
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-24-batch-merge-readiness-p1 created=2026-11-24T22:40:00+00:00 -->
+### tier-2026-11-24-batch-merge-readiness-p1 · decision · hard: phase 1 changes the merge gate every queue admission and driver merge relies on, and the facts schema
