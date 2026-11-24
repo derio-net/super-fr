@@ -67,7 +67,6 @@ rows:
       one) under approved-fr pinned to its patch-id, and the wave's drain and release
       wait for it.
     origin:
-    - spec:2026-11-24-wave-queue-gaps#R10
     - spec:2026-11-24-wave-queue-gaps#R11
     - spec:2026-11-24-wave-queue-gaps#R12
     - spec:2026-11-24-wave-queue-gaps#R14
