@@ -608,3 +608,10 @@ Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py foreign base move te
 Step: Wave order: an approved green PR of wave N+1 waits while wave N's queue is open, and also while wave N has unfinished batches but nothing ready; a no-wave batch waits for an open wave; later waves' waiting PRs do not count against `max_inflight`. (R2, R3, R36)
 
 Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py, test_wave_queue_drive.py (wave order, later waves take no in-flight slot); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-10 created=2026-11-24T12:40:44+00:00 -->
+### test-plan-step-10 · discovery · Test Plan step 10: ran
+
+Step: Close-out as last entry: the queue stays open until the close-out lands; it takes only the wave's ungated batches; a stale-but-migratable cursor is migrated on the close-out branch by `fr migrate artifacts --path`, which refuses a retiring hop, and the branch passes `review_reasons`. (R15, R16)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py closeout-last tests; tests/scenarios/wave-queue-closeout-migrates.sh; full wave-queue unit (542) + integration (134) + scenario (3) runs green
