@@ -91,7 +91,11 @@ rows:
     origin:
     - spec:2026-11-24-batch-merge-readiness#R1
     - spec:2026-11-24-batch-merge-readiness#R12
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_readiness.py#test_each_verdict_in_r5_order
+      - super-fr:tests/unit/test_triage_readiness.py#test_r12_a_pr_with_no_cursor_says_how_to_merge_it
+    status: ci
+    notes: 'phase 1: each R1 reason is its own not-delivered verdict; a PR with no cursor
+      names R12''s next action'
     verify: none
