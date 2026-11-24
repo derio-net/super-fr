@@ -27,16 +27,16 @@ rows:
     verify: candidate
   - id: s1-migration
     capability: settings
-    acceptance: fr migrate artifacts --yes moves workflows, verifications, models, trackers,
-      plan-config, the profile declarations, the isolation allowlist and the placement
-      settings into .fr/ with git mv in one commit, refuses a file present at both paths,
-      and until the next minor release reads an unmigrated file with one notice
+    acceptance: fr migrate artifacts --yes moves every old configuration path into its
+      configuration space (one commit within a checkout; configuration branch first,
+      then the product, under quiet and stealth), refuses a file present at both paths,
+      and until the owed release reads an unmigrated file with one notice
     origin:
-    - spec:2026-11-19-event-driven-a-la-carte#R5
-    - spec:2026-11-19-event-driven-a-la-carte#R6
-    - spec:2026-11-19-event-driven-a-la-carte#R7
-    - spec:2026-11-19-event-driven-a-la-carte#R8
-    - spec:2026-11-19-event-driven-a-la-carte#R9
+    - spec:2026-11-19-event-driven-a-la-carte#R10
+    - spec:2026-11-19-event-driven-a-la-carte#R11
+    - spec:2026-11-19-event-driven-a-la-carte#R12
+    - spec:2026-11-19-event-driven-a-la-carte#R13
+    - spec:2026-11-19-event-driven-a-la-carte#R14
     levels: {}
     status: not-implemented
     notes: ''
