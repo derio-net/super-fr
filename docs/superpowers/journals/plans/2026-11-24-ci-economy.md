@@ -165,3 +165,58 @@ landed_run is one filter and landed_lane one fallible read; the long test lines 
 ### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
 
 verdict is one table of required and skippable jobs per lane; the test helper name clash was fixed before the commit
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-24T18:13:34+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · test_validate_artifacts_runs_in_every_lane does not pin the strict step's if (phase 2)
+
+tests/unit/test_ci_lanes_workflow.py: dropping or inverting the strict step's condition would leave main with only --allow-migratable, all green.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-24T18:13:34+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · landed_run's exact path match is unverified for real fr-queue runs (phase 2)
+
+scripts/ci_lane.py: a path with an @ref suffix would silently disable the landed skip (fails safe).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-24T18:13:34+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · classify installs uv and Python 3.14 at the head of every run's critical path (phase 2)
+
+Every job waits on classify; a stdlib-only script needs no install.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-24T18:13:34+00:00 phase=2 state=open review_scope=out -->
+### p2-r4 · finding [open] (reviewer: out of scope) · a manual re-run of an older run in a PR's concurrency group cancels the newer in-progress run (phase 2)
+
+GitHub concurrency semantics of R1's per-ref group; the head's ci-ok then reads cancelled (pending in fr's readers). Not a defect of this diff.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-24T18:13:34+00:00 phase=2 state=open review_scope=out -->
+### p2-r5 · finding [open] (reviewer: out of scope) · light-lane soundness for docs-only PRs depends on R19/R20 (a later phase) (phase 2)
+
+Phase 3 ships own_artifacts selection.
+
+<!-- fr:journal kind=review scope=plan id=p2-review-1 created=2026-11-24T18:13:34+00:00 phase=2 -->
+### p2-review-1 · review · phase 2 review: no critical findings; 3 in-scope fixed, 2 out of scope (phase 2)
+
+Independent reviewer checked concurrency, ci-ok always()/toJSON(needs), skip propagation, light classification (HEAD^2, merge base, renames), landed match and token, strict validation on main, scoped-tests env, verdict vs R17; raised p2-r1..p2-r5. Fixes in the commit 'fix(ci): pin validate-artifacts' step conditions...': both validate steps' if pinned; landed_run ignores an @ref suffix (test); classify runs on the runner's python3 with no uv, ci_lane.py made Python-3.10-parseable (two except clauses) and pinned by a test.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-24T18:13:34+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: test_validate_artifacts_runs_in_every_lane does not pin the strict step's if (phase 2)
+
+test_validate_artifacts_runs_in_every_lane asserts both steps' if strings.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-24T18:13:34+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: landed_run's exact path match is unverified for real fr-queue runs (phase 2)
+
+landed_run compares path.split('@')[0]; test_a_path_with_a_ref_suffix_still_names_the_ci_workflow.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-24T18:13:34+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: classify installs uv and Python 3.14 at the head of every run's critical path (phase 2)
+
+classify drops setup-uv and runs python3 scripts/ci_lane.py; test_classify_runs_on_the_runners_own_python and a Python 3.10 parse test.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-24T18:13:34+00:00 phase=2 state=open resolves=p2-r4 out_of_scope=true -->
+### p2-r4-resolved · finding [out-of-scope] · resolves p2-r4: a manual re-run of an older run in a PR's concurrency group cancels the newer in-progress run (phase 2)
+
+A GitHub concurrency behaviour on a rare manual re-run of an old run; this diff did not cause it, and fr reads the cancelled ci-ok as pending, not red.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-24T18:13:34+00:00 phase=2 state=refuted resolves=p2-r5 -->
+### p2-r5-resolved · finding [refuted] · resolves p2-r5: light-lane soundness for docs-only PRs depends on R19/R20 (a later phase) (phase 2)
+
+Not a defect: phase 3 of this same PR ships R19/R20 (own_artifacts selection) before delivery; the PR is never delivered with phase 2 alone.
