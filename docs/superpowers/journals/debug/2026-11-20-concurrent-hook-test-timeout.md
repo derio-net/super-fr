@@ -35,3 +35,8 @@ fr-worktree-create.sh and fr-worktree-remove.sh now create a <name>.lock file wi
 ### d8e60ded9de7 · review · self-review of the two fixes
 
 Raised, no new findings: (1) a stale dead-holder lock is still reclaimed check-then-act (rm then retry), unchanged and out of scope; (2) a leftover lock DIRECTORY from an older hook is ignored because the file lock has a new '.lock' name; harmless garbage. Not reviewed by a separate agent.
+
+<!-- fr:journal kind=finding scope=debug id=3b4dcba15039 created=2026-11-24T14:48:31+00:00 state=refuted -->
+### 3b4dcba15039 · finding [refuted] · Harness drain fix superseded by #1627
+
+#1627 (merged 2026-11-22, closed #1586) fixed cause 1 by sending each hook's output to a file; this branch takes main's harness and drops its own run_twice change and test_run_twice_drains_both_pipes_while_they_run. This PR now carries cause 2 only (the mkdir lock entered twice, gh#1463), whose test fails against main's hooks under main's harness and passes with the noclobber lock.
