@@ -86,9 +86,12 @@ rows:
       the codebase and the spec's own design, reporting a mismatch as a finding.
     origin:
     - spec:2026-11-24-show-me-visuals#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_show_me_pipeline_prose.py#test_spec_reviewer_checks_the_design_shape
+    status: unwired
+    notes: a unit test pins the reviewer's design-shape instruction; its effect on a
+      real review is show-me-live-run's
   - id: show-me-live-run
     capability: show-me end to end
     acceptance: A real fr-goal run on the released build produces a spec whose `## Design
