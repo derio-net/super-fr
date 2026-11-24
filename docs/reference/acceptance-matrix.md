@@ -189,7 +189,7 @@ scenario. The [verification strategies guide](../verification-strategies.md) cov
 - On GitHub and Gitea, no checkout keeps its token in `.git/config`
   (`persist-credentials: false`).
 
-The GitLab job image `python:3.12` is a tag, and a tag can move. `init` reads the `fr`
+The GitLab job image `python:3.14` is a tag, and a tag can move. `init` reads the `fr`
 commit with `git ls-remote`. If the read fails, `init` exits 2 and writes nothing.
 
 To move the pins, run `fr acceptance init --refresh-ci`. If the read of the tag fails, it

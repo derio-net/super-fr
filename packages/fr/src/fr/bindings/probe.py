@@ -179,7 +179,7 @@ class OpenCodeProber:
                 done = self._run(
                     ["opencode", "models", provider, "--verbose"], cwd=Path(tmp), timeout=30
                 )
-            except (OSError, subprocess.TimeoutExpired, UnicodeDecodeError):
+            except OSError, subprocess.TimeoutExpired, UnicodeDecodeError:
                 return []
         entries, _skipped = parse_catalogue(done.stdout or "")
         return entries
@@ -204,7 +204,7 @@ class ProbeCache:
     def _load(self) -> dict[str, Any]:
         try:
             raw = json.loads(self.path.read_text())
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return {}
         return raw if isinstance(raw, dict) else {}
 

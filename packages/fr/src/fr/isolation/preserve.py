@@ -287,7 +287,7 @@ def preserved_dir(repo_root: Path, branch: str) -> Path:
 def _load_json(path: Path) -> dict[str, Any] | None:
     try:
         data = json.loads(path.read_text())
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
     return data if isinstance(data, dict) else None
 

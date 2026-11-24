@@ -7,7 +7,7 @@ covers:
   - scripts/bootstrap.sh
   - scripts/install.sh
   - packages/fr-opencode-plugin/src/**
-reviewed: 2026-11-19 the OpenCode gates and the sentinel judge in the session directory (batch consumer-followups, gh#1552); install constrained to uv.lock, devcontainer CLI pinned, plugin spawns resolved bash and gh (batch hook-hardening). 2026-11-18 OpenCode gets the shipped rules; plugin handlers follow the session directory (batch consumer-delivery)
+reviewed: 2026-11-24 every install path installs the newest release by default; install.sh takes --version, and a clone on main installs the newest release unless --version main (fix/install-stable-by-default). 2026-11-19 the OpenCode gates and the sentinel judge in the session directory (batch consumer-followups, gh#1552); 2026-11-19 install constrained to uv.lock, devcontainer CLI pinned, plugin spawns resolved bash and gh (batch hook-hardening). 2026-11-18 OpenCode gets the shipped rules; plugin handlers follow the session directory (batch consumer-delivery)
 ---
 
 # Install super-fr
@@ -54,13 +54,30 @@ curl -fsSL https://raw.githubusercontent.com/derio-net/super-fr/main/scripts/boo
 
 | `--version` | Installs |
 |---|---|
-| none | the newest release `vX.Y.Z` (`origin/main` if none is installable yet) |
+| none | the newest release `vX.Y.Z`. If no release is installable, it installs nothing |
 | `RC` | the newest release candidate `vX.Y.Z-rc.N` |
 | `X.Y.Z`, `X.Y.Z-RC`, `X.Y.Z-rc.N` | that release, the newest RC of it, or exactly that RC |
 | `main` | `origin/main`, the development channel |
 
 An unknown version, or a tag from before channels existed, installs nothing and lists the
-installable ones.
+installable ones. A release candidate or `main` is installed only when `--version` names it.
+The `main` branch is a release candidate while a release waits for a gate, so the default
+never follows it.
+
+### From a clone
+
+`scripts/install.sh` takes the same `--version` values:
+
+```bash
+scripts/install.sh                   # the newest release
+scripts/install.sh --version RC      # the newest release candidate
+scripts/install.sh --version main    # this clone, which must be main and in sync with origin/main
+```
+
+Without `--version main`, the script does not install the clone. It gives the choice to
+`bootstrap.sh`, which checks the release out in the managed clone under
+`~/.cache/fr/src/super-fr`. Your clone stays as it is. A clean clone that is detached exactly
+at a release tag installs that tag.
 
 A channel switch also removes untracked files from the managed checkout, so the
 installer's preflight does not stop on them. Ignored files, such as a virtual environment, stay.

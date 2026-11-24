@@ -86,7 +86,7 @@ def origin_hostname(repo_root: Path) -> str | None:
             text=True,
             check=False,
         )
-    except (OSError, FileNotFoundError):
+    except OSError, FileNotFoundError:
         return None
     if result.returncode != 0:
         return None
@@ -117,7 +117,7 @@ def origin_slug(repo_root: Path) -> str | None:
             text=True,
             check=False,
         )
-    except (OSError, FileNotFoundError):
+    except OSError, FileNotFoundError:
         return None
     url = (result.stdout or "").strip() if result.returncode == 0 else ""
     m = _REMOTE_PATH_RE.match(url) if url else None

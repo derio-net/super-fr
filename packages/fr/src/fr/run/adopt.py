@@ -764,7 +764,7 @@ def current_branch(repo_root: Path) -> str | None:
             text=True,
             check=True,
         ).stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return None
     return out if out and out != "HEAD" else None
 

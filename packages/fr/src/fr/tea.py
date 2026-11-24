@@ -41,14 +41,12 @@ import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
 from fr import forge_body as _forge_body
 from fr.forge_body import not_json_reason
 from fr.ghclient import CommandRunner, run_cli
 from fr.labels import LabelDef
-
-T = TypeVar("T")
 
 
 class TeaError(Exception):
@@ -335,7 +333,7 @@ def is_transient(err: TeaError) -> bool:
     return any(p in text for p in _TRANSIENT_PATTERNS)
 
 
-def with_retry(
+def with_retry[T](
     op: Callable[[], T],
     *,
     max_attempts: int = 3,

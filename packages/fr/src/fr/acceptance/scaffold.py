@@ -288,7 +288,7 @@ stages:
 
 acceptance-report:
   stage: acceptance
-  image: python:3.12
+  image: python:3.14
   variables:
     GIT_DEPTH: "0" # check judges merged rows against the default branch's history
   rules:
@@ -389,7 +389,7 @@ PAGES_STEP_GITLAB = """\
 # masked CI/CD variable FR_PAGES_TOKEN with the read_api scope.
 pages:
   stage: acceptance
-  image: python:3.12
+  image: python:3.14
   needs: [acceptance-report]
   variables:
     GIT_DEPTH: "0"
@@ -546,7 +546,7 @@ DEBT_STEP_GITLAB = """\
 # line naming the variable when it is unset.
 technical-debt:
   stage: acceptance
-  image: python:3.12
+  image: python:3.14
   variables:
     GIT_DEPTH: "0"
     GITLAB_TOKEN: $FR_DEBT_TOKEN

@@ -1,8 +1,8 @@
 [project]
 name = "fr"
-version = "8.3.0rc8"
+version = "9.0.0rc5"
 description = "super-fr base: superpowers wrapper + plan-as-folder + GH tracking (render → observe → diff → apply)"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
     "typer>=0.12",
     "pyyaml>=6",
