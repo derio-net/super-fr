@@ -10213,3 +10213,14 @@ queues:
     main: 68902f6bb2d3054c43e9095ee36fcf1a398cdf02
     entries:
     - batch: run-durability
+  - kind: queue_built
+    at: '2026-11-24T20:23:47.340400Z'
+    slot: 1
+    sha: 34023f157224e7157b03e72ee3d43ead94ba53ea
+    entry:
+      pr: 1662
+      kind: closeout
+    head: 2bc464668c2928a7f3a2bef350379ad81052b37b
+    patch_id: 2ae08a4617e9e7f8d0f34afe37f1335f481fd777
+    base: 68902f6bb2d3054c43e9095ee36fcf1a398cdf02
+    parent: 68902f6bb2d3054c43e9095ee36fcf1a398cdf02
