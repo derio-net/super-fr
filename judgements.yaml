@@ -9284,6 +9284,12 @@ batches:
     pr: 1630
     head: 50f44efea052a19d34d0232006abb5c17cea3bee
     patch_id: fc09585b20cbe49c10b22add1bdea70351301255
+  - kind: approval
+    at: '2026-11-24T22:50:57.429438Z'
+    pr: 1630
+    head: 50f44efea052a19d34d0232006abb5c17cea3bee
+    voided_at: ea6ad2ff8f0ca2f9e833614643740f0787f7d095
+    patch_id: fc09585b20cbe49c10b22add1bdea70351301255
 - id: merge-readiness
   title: 'Merge only what delivered: the driver reads deliver from the cursor, and the Batches page shows
     one readiness verdict per PR'
