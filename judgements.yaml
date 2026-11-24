@@ -9280,6 +9280,13 @@ batches:
     checks:
     - ci-ok
     delivered: none
+  - kind: conflict
+    at: '2026-11-24T13:14:32.575954Z'
+    head: 08a91cf6e6e54777a80bb6210f3ebbe62ebfdc63
+    paths:
+    - docs/explainers/fr-devops-gate.md
+    - docs/ops.md
+    delivered: held
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
