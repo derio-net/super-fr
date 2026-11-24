@@ -147,7 +147,7 @@ def runs_by_head(root: Path) -> dict[str, list[str]]:
     for path in all_cursors(root):
         try:
             state = parse_run_state(path.read_text())
-        except (RunStateError, OSError):
+        except RunStateError, OSError:
             continue
         if state.branch:
             index.setdefault(state.branch, []).append(state.run)
@@ -200,7 +200,7 @@ def _journal_resolve(root: Path, key: str) -> str | None:
             for path in sorted(d.glob("*.md")):
                 try:
                     entries = parse_journal(path.read_text())
-                except (JournalParseError, OSError, UnicodeDecodeError):
+                except JournalParseError, OSError, UnicodeDecodeError:
                     continue
                 still = set(open_owed_ids(entries))
                 for e in entries:

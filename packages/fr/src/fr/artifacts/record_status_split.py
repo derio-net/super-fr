@@ -74,7 +74,7 @@ def _matrix_rows(root: Path) -> dict[str, dict[str, Any]]:
     for path in files:
         try:
             data = yaml.safe_load(path.read_text())
-        except (OSError, yaml.YAMLError):
+        except OSError, yaml.YAMLError:
             continue
         rows = data.get("rows") if isinstance(data, dict) else None
         for r in rows or ():

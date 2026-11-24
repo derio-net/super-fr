@@ -128,7 +128,7 @@ def stale_pin_warning(root: Path, running: str) -> str | None:
         path = root / rel
         try:
             text = path.read_text()
-        except (OSError, UnicodeDecodeError):
+        except OSError, UnicodeDecodeError:
             continue
         for m in PIN_RE.finditer(text):
             try:

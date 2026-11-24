@@ -62,7 +62,7 @@ class DeliveryCache:
             for path in all_cursors(root):
                 try:
                     state = parse_run_state(path.read_text())
-                except (RunStateError, OSError):
+                except RunStateError, OSError:
                     continue
                 if not state.branch:
                     continue
