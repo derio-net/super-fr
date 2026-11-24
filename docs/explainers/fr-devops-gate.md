@@ -13,7 +13,7 @@ covers:
   - packages/fr/src/fr/ops/gate.py
   - packages/fr/src/fr/commands/ops_gate_cmd.py
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-21 stage 4 needs a marker comment beside the label; 2026-11-20 stage 2 releases the PR to the merge queue by label and merges nothing, stage 4 lifts the queue's barrier (wave merge queue R26); 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
+reviewed: 2026-11-24 still true after ci-economy phase 1 (a cancelled check now reads as pending, never failing, in every check reader; no claim here names how a cancelled check is read); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-21 stage 4 needs a marker comment beside the label; 2026-11-20 stage 2 releases the PR to the merge queue by label and merges nothing, stage 4 lifts the queue's barrier (wave merge queue R26); 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
 ---
 
 ## Why can a delivered PR still have work left?
