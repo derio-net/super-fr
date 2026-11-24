@@ -51,8 +51,8 @@ rows:
       and --fr-scope selects them whenever docs/, .fr/ or .changes/ change; a tripwire
       fails an unmarked reader
     origin:
-    - spec:2026-11-24-ci-economy#R18
     - spec:2026-11-24-ci-economy#R19
+    - spec:2026-11-24-ci-economy#R20
     levels: {}
     status: not-implemented
     notes: ''
