@@ -9178,6 +9178,13 @@ batches:
     patch_id: 053b4b8efd81e07e220c55c712e9491e3d52d2d8
   - kind: post_merge
     at: '2026-11-24T22:07:33.761195Z'
+  - kind: claims_released
+    at: '2026-11-24T22:13:13.285743Z'
+    keys:
+    - super-fr#1494
+    - super-fr#1496
+    - super-fr#1497
+    - super-fr#1569
 - id: hook-hardening
   title: 'Hook and install hardening: deny without jq, no cwd imports in the parser, pinned spawns, locked
     installs'
@@ -9272,6 +9279,11 @@ batches:
     - docs/herdr-control-sessions.md
     - docs/reference/cli.md
     delivered: held
+  - kind: approval
+    at: '2026-11-24T22:11:35.625206Z'
+    pr: 1630
+    head: 50f44efea052a19d34d0232006abb5c17cea3bee
+    patch_id: fc09585b20cbe49c10b22add1bdea70351301255
 - id: merge-readiness
   title: 'Merge only what delivered: the driver reads deliver from the cursor, and the Batches page shows
     one readiness verdict per PR'
@@ -9283,6 +9295,12 @@ batches:
   wave: 24
   after:
   - closeout-truth
+  events:
+  - kind: dispatch
+    at: '2026-11-24T22:12:39.965051Z'
+    runner: herdr
+    handle: w3T:p2
+    branch: feat/batch-merge-readiness
 - id: consumer-followups
   title: 'Consumer-delivery follow-ups: plugin-dir judgement, Gitea job token, tea login error'
   ids:
