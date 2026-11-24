@@ -88,9 +88,9 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_show_me_pipeline_prose.py#test_spec_reviewer_checks_the_design_shape
-    status: unwired
-    notes: a unit test pins the reviewer's design-shape instruction; its effect on a
-      real review is show-me-live-run's
+    status: ci
+    notes: 'its unit tests run in CI''s sharded test job on every PR (feat/show-me-visuals,
+      #1641)'
   - id: show-me-live-run
     capability: show-me end to end
     acceptance: A real fr-goal run on the released build produces a spec whose `## Design
