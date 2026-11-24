@@ -97,3 +97,11 @@ amendments:
       pushes to main and fr-queue/** and merge groups are never cancelled, and ci-ok
       is never skipped
     why: 'spec-review s-r1-3: ci-ok keeps if: always()'
+  - row: ci-landed-skip
+    op: reword
+    base: 0
+    acceptance: A push to main of a sha that already has a successful CI run from an
+      fr-queue push runs only the strict artifact validation and reports a green ci-ok
+      naming that run; any other push to main runs full CI, and the release's pre-publish
+      suite is unchanged
+    why: spec-review s-r1-8, s-r1-9
