@@ -229,3 +229,4 @@ steps:
           session: 5298f630-96b9-45ed-a6d1-f7ca784f0b34
 fr_version: 9.0.0rc2
 issue: 1647
+pr: https://github.com/derio-net/super-fr/pull/1669
