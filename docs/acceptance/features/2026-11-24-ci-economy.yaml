@@ -74,12 +74,14 @@ rows:
       - super-fr:tests/unit/test_settle_evaluate.py#test_a_cancelled_check_is_pending_never_red
       - super-fr:tests/unit/test_triage_collect.py#test_collect_buckets_a_cancelled_check_as_pending
       - super-fr:tests/unit/test_queue_exec.py#test_a_cancelled_required_check_is_pending_and_late_after_the_wait
-      - super-fr:tests/unit/test_run_ci_evidence.py#test_a_cancelled_gate_is_pending_never_refused
       - super-fr:tests/unit/test_tripwire_checkstate.py#test_no_module_grows_its_own_cancelled_check_rule
+      - super-fr:tests/unit/test_run_ci_evidence.py#test_a_cancelled_gate_waits_while_a_run_is_still_going
+      - super-fr:tests/unit/test_run_ci_evidence.py#test_a_cancelled_gate_nothing_replaces_is_refused_naming_a_rerun
     status: ci
     notes: fr.checkstate is the one rule; each reader's unit test reads CANCELLED as
       pending and TIMED_OUT/STALE as failing, the check-state tripwire holds, and slot_check
-      reports a cancelled check late after wait_minutes (ci-economy phase 1)
+      reports a cancelled check late after wait_minutes (ci-economy phase 1); verify_ci's
+      ref re-pointed to the tests the phase 1 review renamed it into (phase 4)
     verify: none
   - id: queue-regenerates-generated
     capability: triage-queue
