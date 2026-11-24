@@ -220,3 +220,51 @@ A GitHub concurrency behaviour on a rare manual re-run of an old run; this diff 
 ### p2-r5-resolved · finding [refuted] · resolves p2-r5: light-lane soundness for docs-only PRs depends on R19/R20 (a later phase) (phase 2)
 
 Not a defect: phase 3 of this same PR ships R19/R20 (own_artifacts selection) before delivery; the PR is never delivered with phase 2 alone.
+
+<!-- fr:journal kind=decision scope=plan id=p3-root-climb-depth created=2026-11-24T20:27:17+00:00 phase=3 -->
+### p3-root-climb-depth · decision · The tripwire flags a __file__ climb only when it reaches the checkout root (phase 3)
+
+R20 names `Path(__file__)...parents[...]`. Read literally that flags every module
+reading `tests/fixtures` (`parents[1] / "fixtures"`), which reads nothing a
+docs/.fr/.changes change moves. `_climbs` counts the levels an expression stands
+above `__file__` (`.parent` +1, `.parents[k]` +k+1, `resolve()`/`absolute()`/`Path()`
+neutral, `os.path.dirname` +1, through module names bound in two steps) and flags
+only a climb that reaches the module's own depth, i.e. the root.
+
+<!-- fr:journal kind=decision scope=plan id=p3-alias-by-binding created=2026-11-24T20:27:17+00:00 phase=3 -->
+### p3-alias-by-binding · decision · A root alias counts by what it is bound to, not by its name (phase 3)
+
+`REPO` is the commonest alias in tests/ for the root and also the commonest name for a
+repo slug (`REPO = "example-org/demo"`); a name match flagged 130 modules that read no
+checkout file. So an alias the module binds is judged by its binding (a climb, or a
+helper import that exposes the root); an alias named without a binding (a star
+import) is flagged, and so is a test asking for conftest's `repo_root` fixture
+unless the module defines its own.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-marked-modules created=2026-11-24T20:27:17+00:00 phase=3 -->
+### p3-marked-modules · discovery · 250 test modules resolve the root; all now carry own_artifacts (phase 3)
+
+225 got a new `pytestmark = pytest.mark.own_artifacts` after their imports (88 of them
+also `import pytest`); 25 had a single-mark `pytestmark`, merged into a list. Many are
+flagged transitively: `tests/unit/record_support.py` imports
+`tests/integration/test_fr_goal_shape.py`'s helpers, which read the shipped workflow
+from the root. A plain `pytest --collect-only` selects the same 18369/18516 before and
+after.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-tripwire-blind-spots created=2026-11-24T20:27:17+00:00 phase=3 -->
+### p3-tripwire-blind-spots · discovery · What the own_artifacts tripwire cannot see (phase 3)
+
+Stated in its docstring: a test that reaches the checkout only through a subprocess
+whose cwd it does not pass, a root found at run time (`Path.cwd()`,
+`git rev-parse --show-toplevel`, a package's `__file__`), and a fixture other than
+`repo_root` that hands the root over.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-24T20:27:17+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+root_readers was restructured for speed and precision before the RED commit (per-module analysis computed once); GREEN was a mechanical marker insertion with nothing left to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-24T20:27:17+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+touches_own_artifacts and the keep_item flag were written in their final shape; the conftest wiring is two lines
