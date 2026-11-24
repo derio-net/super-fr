@@ -54,7 +54,7 @@ def is_linked_worktree(root: Path) -> bool:
             text=True,
             timeout=30,
         )
-    except (OSError, subprocess.SubprocessError):
+    except OSError, subprocess.SubprocessError:
         return False
     if out.returncode != 0:
         return False
@@ -105,7 +105,7 @@ def _read(repo_root: Path) -> dict[str, Any] | str:
         return f"no {MARKER} marker at {repo_root}"
     try:
         data = json.loads(path.read_text())
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return f"the {MARKER} marker at {repo_root} is unreadable"
     if not isinstance(data, dict):
         return f"the {MARKER} marker at {repo_root} is unreadable (not a JSON object)"

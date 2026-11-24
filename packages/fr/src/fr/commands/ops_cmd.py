@@ -59,7 +59,7 @@ def plan_of_current_branch(repo_root: Path) -> Path | None:
     for path in sorted(runs_dir.glob("*.yaml")):
         try:
             state = parse_run_state(path.read_text())
-        except (RunStateError, OSError):
+        except RunStateError, OSError:
             continue
         if state.branch != branch:
             continue

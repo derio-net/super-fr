@@ -111,7 +111,7 @@ def refusal(worktree: Path, fr_args: Sequence[str]) -> str:
 def _marker(repo_root: Path) -> dict[str, object] | None:
     try:
         data = json.loads((repo_root / ".fr-isolation").read_text())
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
     return data if isinstance(data, dict) else None
 

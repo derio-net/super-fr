@@ -96,7 +96,7 @@ def _external_marker(repo_root: Path) -> bool:
 
     try:
         data = json.loads((repo_root / ".fr-isolation").read_text())
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return False
     return isinstance(data, dict) and data.get("mode") == "external"
 
@@ -178,7 +178,7 @@ def needs_capture(repo_root: Path, state: RunState, env: Mapping[str, str]) -> b
     """True when this host has no capture of the run yet (spec §5.B.3 row 3)."""
     try:
         existing = load_usage(usage_path(repo_root, state.run))
-    except (OSError, UsageFileError):
+    except OSError, UsageFileError:
         return False
     return existing is None or existing.host(this_host(state.run, env)) is None
 

@@ -147,7 +147,7 @@ def read_baseline(entries: Iterable[JournalEntry]) -> ExitSnapshot | None:
                     {str(k): str(v) for k, v in data["row_kinds"].items()},  # type: ignore[index]
                     {str(k): str(v) for k, v in data["row_gates"].items()},  # type: ignore[index]
                 )
-            except (KeyError, TypeError, AttributeError):
+            except KeyError, TypeError, AttributeError:
                 return None
     return None
 

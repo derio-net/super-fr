@@ -5,7 +5,7 @@ tldr: |
 standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/verification/**
-reviewed: 2026-11-23 a `settle.` line in `## Verification` overrides one `git.settle` key for the PR (pr-readiness-wait R6). 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-13 placement emitted paths fix, run/ops/pickup/verification readers now resolve a run's emitted spec and plan below the artifact root; nothing this page describes changed
+reviewed: 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-23 a `settle.` line in `## Verification` overrides one `git.settle` key for the PR (pr-readiness-wait R6). 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-13 placement emitted paths fix, run/ops/pickup/verification readers now resolve a run's emitted spec and plan below the artifact root; nothing this page describes changed
 ---
 
 # Verification strategies

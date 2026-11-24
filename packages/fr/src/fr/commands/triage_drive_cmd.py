@@ -371,7 +371,7 @@ def _state_tree(target: Path) -> object:
     when it cannot be read (no clone yet), which a restore then differs from."""
     try:
         return local_tree(target)
-    except (TriageError, OSError):
+    except TriageError, OSError:
         return None
 
 
@@ -784,7 +784,7 @@ def _failures_host(target: Path, repo: str) -> str:
 
     try:
         facts = load_facts(target / "facts.json")
-    except (OSError, TriageError, ValueError):
+    except OSError, TriageError, ValueError:
         return "github.com"
     for issue in facts.issues:
         if issue.repo.lower() == repo.lower() and (host := urlparse(issue.url).hostname):
@@ -998,7 +998,7 @@ def _quiet_stdout() -> None:
     """After a broken pipe, point stdout at /dev/null so the exit flush says nothing."""
     try:
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
-    except (OSError, ValueError):
+    except OSError, ValueError:
         pass
 
 

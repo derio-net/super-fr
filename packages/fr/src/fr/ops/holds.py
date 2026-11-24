@@ -71,7 +71,7 @@ def _step_outcomes(repo_root: Path, spec: Path, exclude: Set[str] = frozenset())
         return {}
     try:
         entries = parse_journal(journal.read_text())
-    except (JournalParseError, OSError):
+    except JournalParseError, OSError:
         return {}
     return fold_step_outcomes(entries, exclude=exclude)
 
