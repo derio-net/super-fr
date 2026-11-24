@@ -636,3 +636,10 @@ Evidence: 2026-11-24: tests/unit/test_wave_queue_phase5_fixes.py, test_triage_qu
 Step: `fr validate artifacts --allow-migratable` passes a stale movable stamp and fails a refusing one; `ci.yml` uses it on PRs and on `fr-queue/**`. (R21)
 
 Evidence: 2026-11-24: tests/unit/test_validate_allow_migratable.py, test_queue_ci_triggers.py; tests/scenarios/wave-queue-migratable-validation.sh; full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-14 created=2026-11-24T12:40:50+00:00 -->
+### test-plan-step-14 · discovery · Test Plan step 14: ran
+
+Step: A repo requiring a forge merge queue, refusing the push under `land: push`, or on glab/tea is held with a reason; a repo with no `queue.ci` is refused with what to add; a required check that never reports on `fr-queue/**` becomes a Need after `check_wait_minutes`; no `enqueue` or `update` event is written anywhere. (R7, R22, R34, R35)
+
+Evidence: 2026-11-24: tests/unit/test_triage_queue_model.py, test_wave_queue_phase5_fixes.py, test_queue_errors.py (held reasons, missing queue.ci, required check Need); full wave-queue unit (542) + integration (134) + scenario (3) runs green
