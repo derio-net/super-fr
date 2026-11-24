@@ -587,3 +587,10 @@ Evidence: 2026-11-24: tests/unit/test_merge_train_approval.py, test_triage_appro
 Step: Red combination: main+a+b fails twice while main+a is green; a lands, b is ejected and handed back with the combination sha; c is rebuilt on main+a; a single failure followed by a green rebuild ejects nothing. (R13)
 
 Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py (first red rebuilt, second red ejects, rebuild behind); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-7 created=2026-11-24T12:40:38+00:00 -->
+### test-plan-step-7 · discovery · Test Plan step 7: ran
+
+Step: Conflict during a build is handed back through `conflict_decision`; a version-file-only conflict is resolved and carries the slot. (R6)
+
+Evidence: 2026-11-24: tests/integration/test_queue_build.py::test_a_version_only_conflict_is_resolved_and_carries_the_slot, planner conflict-decision tests; full wave-queue unit (542) + integration (134) + scenario (3) runs green
