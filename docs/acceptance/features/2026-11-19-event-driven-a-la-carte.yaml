@@ -56,6 +56,18 @@ rows:
     status: not-implemented
     notes: ''
     verify: candidate
+  - id: s1-executable-config-protection
+    capability: placement
+    acceptance: Under quiet and stealth fr runs or gates on executable configuration
+      (candidate-install, triage.yaml commands, ops.yaml, ci.yaml gate_checks) only
+      when the forge enforces a pull-request rule on the configuration branch, and otherwise
+      refuses with the reason and the fix
+    origin:
+    - spec:2026-11-19-event-driven-a-la-carte#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
   - id: s1-shipped-defaults
     capability: workflows
     acceptance: super-fr's default workflows, verification strategies and lenses are
