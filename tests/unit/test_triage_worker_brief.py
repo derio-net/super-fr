@@ -48,7 +48,7 @@ def test_the_preflight_comes_before_the_batch() -> None:
 def test_it_checks_fr_and_installs_super_fr_when_missing() -> None:
     step = _preflight(_brief("claude-cloud"))
     assert "`fr --version`" in step
-    assert "super-fr" in step and "scripts/install.sh" in step
+    assert "super-fr" in step and "scripts/bootstrap.sh" in step
 
 
 def test_a_stale_fr_is_updated_before_anything_else() -> None:
@@ -117,8 +117,10 @@ def test_the_setup_script_reuses_an_existing_clone_and_installs_its_dependencies
 
     body = cloud.setup_script()
     assert 'if [ -d "$src/.git" ]' in body
-    assert "checkout --quiet --force -B main origin/main" in body
-    assert "clean -fdxq" in body, "a leftover file would fail install.sh's preflight"
+    # the newest stable release through bootstrap.sh, never origin/main (an RC while a
+    # gate is pending); bootstrap.sh cleans its managed clone on a channel switch
+    assert "checkout --quiet --force -B main origin/main" not in body
+    assert "show origin/main:scripts/bootstrap.sh" in body
     for dep in ("rsync", "jq", "uv"):
         assert dep in body
 
