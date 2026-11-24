@@ -286,3 +286,6 @@ row_kinds:
 run_gate: developer
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-s1-configuration-homes-p2 created=2026-11-24T20:41:12+00:00 -->
+### phase-split-2026-11-24-s1-configuration-homes-p2 · decision · ask: the moved switch, the legacy settings copy and the edit gate on three harnesses (R5, R6, R8) are a guard change reviewed on its own
