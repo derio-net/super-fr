@@ -566,3 +566,10 @@ Evidence: 2026-11-24: tests/integration/test_queue_land.py, test_queue_resume.py
 Step: Lease failure, under both `squash` and `merge`: a session pushes to b between build and land; the atomic push lands nothing and moves no ref; the next pass rebuilds. A server that refuses `--atomic` holds the queue. (R10, R22)
 
 Evidence: 2026-11-24: tests/integration/test_queue_errors.py, test_queue_land.py (atomic push, lease failure, refused --atomic holds); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-11-24T12:40:33+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: `land: merge`: per-PR merges at pinned heads; a forced tree mismatch stops the queue with a reason. (R11)
+
+Evidence: 2026-11-24: tests/unit/test_triage_batch_merge.py, tests/integration/test_queue_land.py (land: merge, tree mismatch stops); full wave-queue unit (542) + integration (134) + scenario (3) runs green
