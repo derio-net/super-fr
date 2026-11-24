@@ -234,3 +234,79 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-23-pr-readiness-wait-p3-1 created=2026-11-23T09:02:06+00:00 -->
 ### phase-split-2026-11-23-pr-readiness-wait-p3-1 · decision · tier: the skill text, close-out brief and mirror regeneration are mechanical edits, while phase 2 is hard
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-23T22:55:58+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: `git.settle.conflicts` and `git.settle.ci` default to `fix`, accept `off`, `report` and `fix`, refuse any other value naming the key, and appear in `fr settings show --json` and in the file `fr settings init` writes. (R1)
+
+Evidence: 469 settle tests passed on merged main (0bf-after #1635), 2026-11-23: tests/unit/test_settings_settle.py (7 tests): defaults, modes, refusal naming key, settings show/init
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-11-23T22:56:01+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: Over the fake forge: `clean`, `conflicting` and `unknown`. `BLOCKED` is not a conflict. `green`, `red` with names, `pending`, `none` under `ci none`, `unrunnable` on a conflicting PR, and no reported check giving `pending` before `NO_CI_WAIT_SECONDS` and `missing` after. Checks come from `declared_gates`, else required checks, else every check, with no refusal on the third fallback. (R2)
+
+Evidence: 469 settle tests passed on merged main (0bf-after #1635), 2026-11-23: tests/unit/test_settle_read.py, test_settle_evaluate.py (25), test_settle_target.py over the fake forge
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-11-23T22:56:04+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: With an injected clock, `--wait` polls only `report` and `fix` concerns until they settle or the wait ends. An `off` concern is never read. A wait above the ceiling is refused. The verb makes no write call on the fake forge. (R3)
+
+Evidence: 469 settle tests passed on merged main (0bf-after #1635), 2026-11-23: tests/unit/test_settle_poll.py (13), test_settle_modes.py (10): injected clock, off never read, ceiling refused, no writes
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-11-23T22:56:08+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: Exit-code table over modes × states: 4 for each failing `fix` state; 75 for a pending `fix` state at the end of the wait and for a transient forge failure; 2 with no open PR; 0 otherwise. A `report` concern, pending or failing, never changes the code. (R4)
+
+Evidence: 469 settle tests passed on merged main (0bf-after #1635), 2026-11-23: tests/unit/test_pr_settle_cmd.py (45): exit-code table modes x states
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-5 created=2026-11-23T22:56:11+00:00 -->
+### test-plan-step-5 · discovery · Test Plan step 5: ran
+
+Step: Each managed name gets the managed line and exit 0 with no forge read under every mode: `feat/batch-x`, `fix/batch-x`, `chore/closeout-2026-11-23-1`, `chore/closeout-feat-batch-x`, `chore/triage-state-s-wave-2` and `chore/ops-p`. `chore/archive-p`, `chore/closeout-<run-id>` and `feat/other` are settled normally. Every driver brief named in §E carries the sentence. (R5)
+
+Evidence: 469 settle tests passed on merged main (0bf-after #1635), 2026-11-23: tests/unit/test_settle_managed.py (5), test_pr_settle_cmd.py; test_tripwire_pr_settle_wording.py pins driver briefs
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-6 created=2026-11-23T22:56:14+00:00 -->
+### test-plan-step-6 · discovery · Test Plan step 6: ran
+
+Step: A spec `settle.ci: report — <reason>` line and a debug-journal `settle-conflicts` decision each override the repo setting. A section with only settle lines is read. A `settle.` line with no reason, an unknown key or an unknown mode is an error naming the line. The rendered body's `## PR settle` names modes, sources and reasons, and a live body without the section is refused. (R6, R7)
+
+Evidence: 469 settle tests passed on merged main (0bf-after #1635), 2026-11-23: tests/unit/test_spec_section_settle.py (10), test_pr_body_settle.py (7)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-7 created=2026-11-23T22:56:17+00:00 -->
+### test-plan-step-7 · discovery · Test Plan step 7: ran
+
+Step: `fr run resolve --step deliver`: under `fix`, a conflicting or red PR is refused (2), and a pending one exits 75 with nothing recorded. `report` records the state. `off` records `off`. A managed branch records `managed`. `unsupported` is recorded and refuses nothing. A passed `settle` value is refused. Under `tests: ci` with `settle.conflicts: off`, a conflicting PR is still refused by the `tests` witness. (R8)
+
+Evidence: 469 settle tests passed on merged main (0bf-after #1635), 2026-11-23: tests/unit/test_run_settle_witness.py (23): deliver under fix/report/off/managed/unsupported
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-8 created=2026-11-23T22:56:21+00:00 -->
+### test-plan-step-8 · discovery · Test Plan step 8: ran
+
+Step: On a glab or tea client, PR discovery included, the state is `unsupported`, the exit code is 0 under every mode, and the line says so. (R11)
+
+Evidence: 469 settle tests passed on merged main (0bf-after #1635), 2026-11-23: tests/unit/test_pr_settle_cmd.py, test_settle_read.py: unsupported state, exit 0 on glab/tea
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-9 created=2026-11-23T22:56:24+00:00 -->
+### test-plan-step-9 · discovery · Test Plan step 9: ran
+
+Step: fr-goal's and fr-debugging's skill text and the close-out brief name `fr pr settle`, merge-not-rebase and the three-round limit. fr-goal names the second settle after `deliver`. A tripwire pins the wording. (R9, R10)
+
+Evidence: 469 settle tests passed on merged main (0bf-after #1635), 2026-11-23: tests/unit/test_tripwire_pr_settle_wording.py (6) pins skill text and close-out brief wording
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-10 created=2026-11-23T22:56:28+00:00 -->
+### test-plan-step-10 · owed · Test Plan step 10 owed
+
+what: Post-merge, live: in a sandbox repo of the `derio-net` org, open a draft PR through `fr pr create`, push a conflicting change to its base, and run `fr pr settle --wait 300`. It reports `conflicting` (CI `unrunnable`) and exits 4. Merge the base, push a failing test, and it reports `red` with the check name. Fix the test, and it ends `clean`/`green`, exit 0. Record the walk with `fr acceptance set-status --walk`. (R2, R3, R4, R9; row `pr-settle-live`)
+why: live post-merge walk in a derio-net sandbox repo (fr pr create, conflicting base, red check, fix) not yet performed; row pr-settle-live stays walk-owed
+how: fr journal resolve --scope spec --slug 2026-11-23-pr-readiness-wait --id test-plan-step-10 --state fixed --note "<evidence>"
+owed_key: spec:2026-11-23-pr-readiness-wait#step10
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-10-resolved created=2026-11-23T22:59:44+00:00 state=open resolves=test-plan-step-10 filed_as=derio-net/super-fr#1638 -->
+### test-plan-step-10-resolved · finding [filed → derio-net/super-fr#1638] · resolves test-plan-step-10: Test Plan step 10 owed
+
+Filed at archive as derio-net/super-fr#1638; still owed until discharged.
