@@ -15,3 +15,8 @@ A 9.0.0rc ceiling check admits '<9.0.0' (an RC sorts below the final), so valida
 ### rc-1 · root-cause · The branch's own plan carries fr_version <9.0.0; main's 9.0.0-rc release made it stale, and install.sh swallows fr's refusal
 
 docs/superpowers/plans/2026-11-19-consumer-followups/_meta.yaml: fr_version '>=4.20.0,<9.0.0'. The v9.0.0-rc.1 release's migrate widened only plans on main. On the PR merge ref the gate wants to widen this one, but the test's install.sh runs in the refuse context (detached HEAD, no CI var in its env, no TTY, no isolation marker), so `fr models apply` exits 2 and `|| true` hides it. Locally the worktree is a valid workspace, where the gate migrates silently, so the tests pass.
+
+<!-- fr:journal kind=finding scope=debug id=f-1 created=2026-11-24T18:47:21+00:00 state=fixed -->
+### f-1 · finding [fixed] · Migrated the branch plan's ceiling to <10.0.0 (commit 2e945b764)
+
+`fr migrate artifacts --yes` after merging origin/main 11c158e46, committed as its own chore(fr): migrate commit. Verified by the same repro on a detached clone of 2e945b764 merged with origin/main: rc=0, model: provider/big-model on the hard tier files.
