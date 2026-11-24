@@ -594,3 +594,10 @@ Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py (first red rebuilt, 
 Step: Conflict during a build is handed back through `conflict_decision`; a version-file-only conflict is resolved and carries the slot. (R6)
 
 Evidence: 2026-11-24: tests/integration/test_queue_build.py::test_a_version_only_conflict_is_resolved_and_carries_the_slot, planner conflict-decision tests; full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-8 created=2026-11-24T12:40:40+00:00 -->
+### test-plan-step-8 · discovery · Test Plan step 8: ran
+
+Step: Foreign push to `main`: every combination is rebuilt on the new base, no PR branch moves, the approvals hold, and the move is reported once. (R14)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py foreign base move tests (rebuild, report once); full wave-queue unit (542) + integration (134) + scenario (3) runs green
