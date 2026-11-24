@@ -817,15 +817,29 @@ def archive_run_cursor(repo_root: Path, run_id: str) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
     _git_mv(repo_root, src.relative_to(repo_root), dst.relative_to(repo_root))
     _archive_pr_body(repo_root, run_id)
+    _archive_shape(repo_root, run_id)
 
 
 def _archive_pr_body(repo_root: Path, run_id: str) -> None:
     """Carry the run's durable PR body render (`forge.pr_body: minimal`, spec
-    2026-11-04-repo-feature-settings R10) to implemented/runs/ beside its cursor. Staged
-    first, like the usage file, so an uncommitted render moves too."""
+    2026-11-04-repo-feature-settings R10) to implemented/runs/ beside its cursor."""
     from fr.record.pr_body import durable_pr_body_path
 
-    src = durable_pr_body_path(repo_root, run_id)
+    _archive_beside_cursor(repo_root, run_id, durable_pr_body_path(repo_root, run_id))
+
+
+def _archive_shape(repo_root: Path, run_id: str) -> None:
+    """Carry the run's shape file (spec 2026-11-24-show-me-visuals R12) to
+    implemented/runs/ beside its cursor."""
+    from fr.shape import shape_path
+
+    _archive_beside_cursor(repo_root, run_id, shape_path(repo_root, run_id))
+
+
+def _archive_beside_cursor(repo_root: Path, run_id: str, src: Path) -> None:
+    """Move `src`, a file kept beside the run's live cursor, beside the archived one.
+    Staged first, like the usage file, so an uncommitted file moves too; an existing
+    destination is left alone (a re-run)."""
     if not src.is_file():
         return
     dst = archived_run_path(repo_root, run_id).with_name(src.name)

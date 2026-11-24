@@ -140,3 +140,27 @@ def test_the_review_phase_brief_carries_no_lens_text(name: str) -> None:
     # lens (R4); the rest of the brief carries no lens text.
     rest = {k: v for k, v in brief.items() if k != "record"}
     assert "lens" not in json.dumps(rest, sort_keys=True)
+
+
+def test_the_brief_names_the_shape_file_by_its_absolute_path(tmp_path: Path) -> None:
+    """Spec 2026-11-24-show-me-visuals R16: the reviewers read the run's shape, which the
+    feature diff leaves out."""
+    from fr.shape import shape_path
+
+    repo, shipped, _ = at_lens_review(tmp_path, lenses=("security",))
+    out = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+    assert _brief(out.output)["lens_review"]["shape"] is None  # type: ignore[index]
+
+    path = shape_path(repo, "r1")
+    path.write_text("none — nothing to draw\n")
+    out = _invoke(repo, shipped, ["run", "advance", "r1", "--redispatch"])
+    assert out.exit_code == 0, out.output
+    shape = _brief(out.output)["lens_review"]["shape"]  # type: ignore[index]
+    assert shape == str(path.resolve()) and Path(shape).is_absolute()
+
+
+def test_the_return_rule_tells_the_reviewer_to_check_the_shape() -> None:
+    rule = " ".join(lens_review_rule("security").split())
+    assert "shape" in rule
+    assert "contradict" in rule and "finding of your lens" in rule
+    assert "do not list the shape file under `examined`" in rule

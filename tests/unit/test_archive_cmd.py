@@ -347,6 +347,8 @@ def test_archive_moves_run_state_file_alongside_its_plan(tmp_path, monkeypatch):
     # render travels with its cursor.
     body = runs_dir / f"{run_id}.pr-body.md"
     body.write_text("## Findings\n\nNone.\n")
+    shape = runs_dir / f"{run_id}.shape.md"
+    shape.write_text("none — nothing to draw\n")
     _seed(repo)
     result = _invoke(
         monkeypatch, repo, FakeGhClient(), ["archive", str(plan_dir.relative_to(repo))]
@@ -359,6 +361,17 @@ def test_archive_moves_run_state_file_alongside_its_plan(tmp_path, monkeypatch):
     assert not body.exists()
     kept = moved.with_name(f"{run_id}.pr-body.md")
     assert kept.read_text() == "## Findings\n\nNone.\n"
+    # spec 2026-11-24-show-me-visuals R12: so does the run's shape file, staged.
+    assert not shape.exists()
+    assert moved.with_name(f"{run_id}.shape.md").read_text() == "none — nothing to draw\n"
+    staged = subprocess.run(
+        ["git", "-C", str(repo), "diff", "--cached", "--name-status"],
+        check=True, capture_output=True, text=True,
+    ).stdout + subprocess.run(
+        ["git", "-C", str(repo), "show", "--name-status", "--format=", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout  # fmt: skip
+    assert f"implemented/runs/{run_id}.shape.md" in staged
 
 
 def test_archive_does_not_move_an_unrelated_run_file_of_the_same_name(tmp_path, monkeypatch):
@@ -981,3 +994,25 @@ def test_a_failed_reversal_names_every_staged_path(tmp_path, monkeypatch):
     result = _invoke(monkeypatch, repo, _RecordingGh(), ["archive", str(plan.relative_to(repo))])
     assert result.exit_code == 2, result.output
     assert "2026-05-25-bookmarks" in result.output and "could not be undone" in result.output
+
+
+def test_the_shape_file_leaves_an_existing_destination_alone(tmp_path):
+    """Spec 2026-11-24-show-me-visuals R12: like the durable PR body, a shape file
+    already archived is never overwritten; the live one stays put."""
+    from fr.archive import _archive_shape
+    from fr.run.model import archived_run_path
+    from fr.shape import shape_path
+
+    repo = _repo(tmp_path)
+    run_id = "2026-11-24-feat-x"
+    live = shape_path(repo, run_id)
+    live.parent.mkdir(parents=True, exist_ok=True)
+    live.write_text("none — new\n")
+    kept = archived_run_path(repo, run_id).with_name(f"{run_id}.shape.md")
+    kept.parent.mkdir(parents=True, exist_ok=True)
+    kept.write_text("none — archived\n")
+
+    _archive_shape(repo, run_id)
+
+    assert kept.read_text() == "none — archived\n"
+    assert live.read_text() == "none — new\n"
