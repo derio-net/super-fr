@@ -21,6 +21,7 @@ from fr.triage.gitseam import Checkout
 from fr.triage.model import (
     FACTS_SCHEMA,
     CursorPosition,
+    CursorRead,
     PullRequest,
     Scope,
     load_facts,
@@ -158,9 +159,9 @@ def test_collect_puts_the_cursor_position_on_an_open_batch_pr() -> None:
     forge = _forge([_pr(41, state="OPEN")])
     seen: list[tuple[str, str]] = []
 
-    def at(pr: PullRequest) -> CursorPosition | None:
+    def at(pr: PullRequest) -> tuple[CursorPosition | None, CursorRead]:
         seen.append((pr.head_ref, pr.head_oid))
-        return CursorPosition(run="r1", step="deliver", kind="deliver-done")
+        return CursorPosition(run="r1", step="deliver", kind="deliver-done"), "read"
 
     facts = collect_facts(
         forge, SCOPE, now=NOW, batch_branches=[("alpha", BRANCH, AT)],
@@ -199,11 +200,12 @@ def test_read_cursor_reads_the_cursor_at_the_pr_head_through_gitseam(tmp_path: P
     pr = PullRequest(repo=REPO, number=41, title="t", state="OPEN", is_draft=False, url="u",
                      head_ref=BRANCH, head_oid=head)  # fmt: skip
 
-    assert read_cursor(Checkout(repo), pr) == CursorPosition(
-        run="r1", step="brainstorm", kind="gate"
+    assert read_cursor(Checkout(repo), pr) == (
+        CursorPosition(run="r1", step="brainstorm", kind="gate"),
+        "read",
     )
     unknown = pr.model_copy(update={"head_oid": "0" * 40})
-    assert read_cursor(Checkout(repo), unknown) is None  # a head the clone cannot reach
+    assert read_cursor(Checkout(repo), unknown) == (None, "unread")  # a head it cannot reach
 
 
 def test_p4_r7_a_merged_pr_known_ungated_or_passed_is_not_read_again() -> None:

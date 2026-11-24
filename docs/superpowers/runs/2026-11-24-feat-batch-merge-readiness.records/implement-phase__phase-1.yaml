@@ -3,9 +3,24 @@ run: 2026-11-24-feat-batch-merge-readiness
 step: implement-phase
 item: phase/1
 outcome: done
-ticks: [P1.T1.S1]
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3]
 refactor:
   P1.T1: "a smoke task: one docstring module, one test and a fragment, nothing to clean"
-journal: []
+journal:
+  - kind: discovery
+    id: p1-cursor-unread-not-cached
+    phase: 1
+    title: The driver no longer caches an unread cursor head
+    body: |
+      `_Driver.cursor_at` used to cache `None` for a head the clone could not reach, so a
+      head fetched later in the same process was never read again. It now caches only a
+      `read` answer (a commit never changes); an `unread` one is asked again next pass.
+  - kind: discovery
+    id: p1-facts-fixtures-regenerated
+    phase: 1
+    title: Facts schema 17 regenerates six committed scenario fixtures
+    body: |
+      `tests/scenarios/fixtures/*-facts.json` carry the facts stamp; their generators
+      (`make_*_facts.py`) were re-run, so only the `schema` line moved.
 resolves: []
 evidence: {}

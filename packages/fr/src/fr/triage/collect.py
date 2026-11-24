@@ -1001,7 +1001,8 @@ def _ledger_reads(
             except ForgeError as exc:
                 print(f"fr triage: {pr.repo}#{pr.number}: labels not read: {exc}", file=sys.stderr)
         elif pr.state == "OPEN" and cursor_at is not None:
-            out[key] = pr.model_copy(update={"cursor": cursor_at(pr)})
+            cursor, read = cursor_at(pr)
+            out[key] = pr.model_copy(update={"cursor": cursor, "cursor_read": read})
     return out
 
 

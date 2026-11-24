@@ -85,7 +85,11 @@ from fr.triage.stage import Stage, derive_stage
 # 16 adds (2026-11-19-wave-merge-queue §Config) per-config `TriageConfig.queue`, the wave merge
 # queue's block: `to_json` dumps it, `null` included, which a closed-world schema-15 reader
 # rejects; a file below 16 reads it as None, so no repo is driven by the queue until collect.
-FACTS_SCHEMA: Final[int] = 16
+# 17 adds (2026-11-24-batch-merge-readiness §A, R1) `PullRequest.cursor_read`, whether the run
+# cursor at an open batch PR's head was read (`read`, `unread`, `no-clone`): `to_json` dumps
+# it, `null` included, which a closed-world schema-16 reader rejects; a file below 17 reads it
+# as None (never asked), so no batch PR reads as delivered until the next collect.
+FACTS_SCHEMA: Final[int] = 17
 FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
 # The version this fr WRITES: every engine write stamps 13 (the wave merge queue's
 # `queues:` list and its events, a batch's `deferred` and `requeued` events and an
@@ -324,10 +328,16 @@ class CursorPosition(_Strict):
     unit: str | None = None
 
 
-CursorReader = Callable[["PullRequest"], CursorPosition | None]
-"""The run cursor's position at an open batch PR's head (exit-gates R18): built by the
-command layer over a `gitseam.Checkout` (`fr.triage.cursor.read_cursor`), so `collect`
-itself starts no process."""
+CursorRead = Literal["read", "unread", "no-clone"]
+"""Whether the run cursor at a PR's head was read (2026-11-24-batch-merge-readiness R1):
+`read` (a position, or none naming the branch), `unread` (the head or a cursor could not be
+read) or `no-clone` (the driver has no clone of the repo)."""
+
+CursorReader = Callable[["PullRequest"], tuple[CursorPosition | None, CursorRead]]
+"""The run cursor's folded position at an open batch PR's head (exit-gates R18) and its
+read status (batch-merge-readiness R1): built by the command layer over a
+`gitseam.Checkout` (`fr.triage.cursor.read_cursor`), so `collect` itself starts no
+process."""
 
 
 class PullRequest(_Strict):
@@ -362,6 +372,9 @@ class PullRequest(_Strict):
     # The run cursor's position at this PR's head (exit-gates R18, facts schema 12): an
     # open batch PR only; None when never read or no cursor names the PR's branch.
     cursor: CursorPosition | None = None
+    # Whether that cursor was read (batch-merge-readiness R1, facts schema 17); None when
+    # never asked. The head it was read at is `head_oid`.
+    cursor_read: CursorRead | None = None
     anchor: AnchorKind = "unanchored"
     anchor_path: str | None = None
     anchor_body: str = ""

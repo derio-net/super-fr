@@ -307,6 +307,7 @@ from fr.triage.model import (
     ConflictDelivery,
     ConflictEvent,
     CursorPosition,
+    CursorRead,
     CursorReader,
     DeferredEvent,
     DispatchEvent,
@@ -4204,7 +4205,7 @@ class _Driver:
         self.pace: Pace | None = None
         # (repo, head sha) -> the run cursor's position there: a commit never changes, so
         # each open batch PR head is read once per process (exit-gates R18)
-        self._cursors: dict[tuple[str, str], CursorPosition | None] = {}
+        self._cursors: dict[tuple[str, str], tuple[CursorPosition | None, CursorRead]] = {}
         # (repo, default-branch tip, batch branch) -> its gated rows there (R13, R14): they
         # move only when the default branch does
         self._ledger_rows: dict[tuple[str, str, str], LedgerRead] = {}
@@ -4218,17 +4219,21 @@ class _Driver:
 
     # -------------------------------------------------------------- reaching out
 
-    def cursor_at(self, pr: PullRequest) -> CursorPosition | None:
-        """The run cursor's position at open batch PR *pr*'s head, read through the repo's
-        clone (`gitseam`); None with no clone, or one that cannot reach the head."""
+    def cursor_at(self, pr: PullRequest) -> tuple[CursorPosition | None, CursorRead]:
+        """The run cursor's folded position at open batch PR *pr*'s head and its read status
+        (batch-merge-readiness R1), read through the repo's clone (`gitseam`): `no-clone`
+        with none; an `unread` head is read again next pass, a read one never again."""
         key = (pr.repo, pr.head_oid)
         if key not in self._cursors:
-            if self.path_of(pr.repo) is None or not pr.head_oid:
-                return None
+            if self.path_of(pr.repo) is None:
+                return None, "no-clone"
             try:
-                self._cursors[key] = read_cursor(self._reader(pr.repo), pr)
+                got = read_cursor(self._reader(pr.repo), pr) if pr.head_oid else (None, "unread")
             except TriageError:
-                return None  # unknown this pass; read again next pass
+                return None, "unread"
+            if got[1] == "unread":
+                return got
+            self._cursors[key] = got
         return self._cursors[key]
 
     def client(self, facts: Facts, repo: str) -> GhClient:

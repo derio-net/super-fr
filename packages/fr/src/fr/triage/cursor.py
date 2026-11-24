@@ -7,11 +7,16 @@ mapping, because a cursor at a PR head may be written by an older or newer `fr` 
 this one, and the three facts it needs (a `blocked` step, a done `deliver`, a `manual`
 unit) are spelled the same in every run version that has them. `read_cursor` reaches
 the document through the git seam's `Checkout` alone: this module starts no process.
+
+Fail-closed (spec 2026-11-24-batch-merge-readiness R1): a PR's head may carry more than one
+cursor naming its branch, and its run is delivered only when EVERY one records `deliver`
+done; the fold (`fold_positions`) lives here alone. `read_cursor` also says whether it read
+at all, so "no cursor names the branch" is never mistaken for "the head could not be read".
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import yaml
@@ -19,7 +24,7 @@ import yaml
 from fr.artifacts.paths import KIND_DIRS
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout
-from fr.triage.model import CursorPosition, PullRequest
+from fr.triage.model import CursorPosition, CursorRead, PullRequest
 
 RUNS_DIR = KIND_DIRS["run"]
 DELIVER = "deliver"
@@ -58,15 +63,23 @@ def cursor_position(doc: object, branch: str) -> CursorPosition | None:
     return CursorPosition(run=run, step=cursor, kind="none")
 
 
-def read_cursor(checkout: Checkout, pr: PullRequest) -> CursorPosition | None:
-    """The cursor position at *pr*'s head, read through *checkout*: every
-    `docs/superpowers/runs/*.yaml` at the head commit, the first naming the PR's branch.
-    None when the clone cannot reach the head, no cursor names the branch, or the read
-    fails: unknown, never a guess."""
+def fold_positions(found: Sequence[CursorPosition]) -> CursorPosition | None:
+    """One position for every cursor naming a branch (batch-merge-readiness R1): `deliver`
+    done only when every one is, otherwise the first that is not; None for none."""
+    return next((p for p in found if p.kind != "deliver-done"), found[0] if found else None)
+
+
+def read_cursor(checkout: Checkout, pr: PullRequest) -> tuple[CursorPosition | None, CursorRead]:
+    """The folded cursor position at *pr*'s head, read through *checkout*, and whether it
+    was read: every `docs/superpowers/runs/*.yaml` at the head commit naming the PR's
+    branch, folded by `fold_positions`. `(None, "read")` when none names the branch;
+    `(None, "unread")` when the clone cannot reach the head or the read fails: unknown,
+    never a guess. A file that is not YAML names no branch, so it is skipped."""
+    found: list[CursorPosition] = []
     try:
         if not checkout.reach_commit(pr.head_oid, pr.head_ref):
-            return None
-        for name in checkout.list_dir(pr.head_oid, RUNS_DIR):
+            return None, "unread"
+        for name in sorted(checkout.list_dir(pr.head_oid, RUNS_DIR)):
             if not name.endswith(".yaml"):
                 continue
             text = checkout.show(pr.head_oid, f"{RUNS_DIR}/{name}")
@@ -76,9 +89,9 @@ def read_cursor(checkout: Checkout, pr: PullRequest) -> CursorPosition | None:
                 doc = yaml.safe_load(text)
             except yaml.YAMLError:
                 continue
-            found = cursor_position(doc, pr.head_ref)
-            if found is not None:
-                return found
+            position = cursor_position(doc, pr.head_ref)
+            if position is not None:
+                found.append(position)
     except TriageError:
-        return None
-    return None
+        return None, "unread"
+    return fold_positions(found), "read"
