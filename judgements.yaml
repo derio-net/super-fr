@@ -8927,6 +8927,12 @@ batches:
     runner: herdr
     handle: w3P:pB
     archive: chore/closeout-2026-11-24-1
+  - kind: closeout
+    at: '2026-11-24T20:35:54.791672Z'
+    runner: herdr
+    handle: w3P:pB
+    archive: chore/closeout-2026-11-24-1
+    archived: 1662
 - id: dispatch-safety
   title: 'Dispatch safety: no submission past a failed dedup, no symlinked content in cncd payloads'
   ids:
@@ -10184,6 +10190,7 @@ closeouts:
   planned:
   - run-durability
   pr: 1662
+  merged: true
   head: 2bc464668c2928a7f3a2bef350379ad81052b37b
   members:
   - run-durability
@@ -10230,3 +10237,6 @@ queues:
     entries:
     - pr: 1662
       kind: closeout
+  - kind: queue_drain
+    at: '2026-11-24T20:35:45.452819Z'
+    main: 34023f157224e7157b03e72ee3d43ead94ba53ea
