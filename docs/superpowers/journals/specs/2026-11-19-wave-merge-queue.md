@@ -713,3 +713,10 @@ Evidence: 2026-11-24: tests/unit/test_wave_queue_drive.py, test_wave_queue_plann
 Step: Other merges: a collected close-out, an export PR and a housekeeping PR each land through the queue under their trust rule; `pr_merge` is never called outside `land: merge`. (R32)
 
 Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py other-entry tests, tests/integration/test_queue_resume.py (pr_merge only under land: merge); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-25 created=2026-11-24T12:41:09+00:00 -->
+### test-plan-step-25 · discovery · Test Plan step 25: ran
+
+Step: `post_merge` runs once per landing at the landed `main`, records every batch it covered, gates the next landing, and a failure pauses landings with a Need. A landed PR the forge still shows open pauses the queue with a Need. (R33, R35)
+
+Evidence: 2026-11-24: tests/unit/test_queue_exec.py, test_wave_queue_planner.py (post_merge per landing, pausing Need); full wave-queue unit (542) + integration (134) + scenario (3) runs green
