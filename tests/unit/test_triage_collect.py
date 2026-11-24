@@ -1295,6 +1295,8 @@ def test_collect_buckets_a_cancelled_check_as_pending(check: dict[str, Any], buc
     from fr.triage.collect import _bucket
 
     assert _bucket(check) == bucket
+
+
 # ------------------------------- withheld titles, pinned admission (2026-11-22 R1, R4, R5, R7)
 
 
