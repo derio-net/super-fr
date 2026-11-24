@@ -9,15 +9,18 @@ repo: derio-net/super-fr
 rows:
   - id: s1-config-root
     capability: settings
-    acceptance: fr reads every repo-configuration file from .fr/ at the root of the
-      run's space (product checkout, fr branch, stealth tracking target dir) through
-      one resolver, and says once per command when a product checkout's own .fr/ is
-      ignored
+    acceptance: fr reads repo configuration from .fr/ in the run's configuration space
+      (the product checkout under repo, the fr-config branch under quiet, the tracking
+      repo's config branch under stealth) through one resolver, a feature branch cannot
+      change it under quiet or stealth, and fr says once per command when a product
+      checkout's own .fr/ is ignored
     origin:
     - spec:2026-11-19-event-driven-a-la-carte#R1
     - spec:2026-11-19-event-driven-a-la-carte#R2
+    - spec:2026-11-19-event-driven-a-la-carte#R3
     - spec:2026-11-19-event-driven-a-la-carte#R4
-    - spec:2026-11-19-event-driven-a-la-carte#R16
+    - spec:2026-11-19-event-driven-a-la-carte#R9
+    - spec:2026-11-19-event-driven-a-la-carte#R22
     levels: {}
     status: not-implemented
     notes: ''
