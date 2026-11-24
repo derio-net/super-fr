@@ -9,13 +9,7 @@ phase:
   - 5
   - 6
   tracking_issue: null
-  acceptance:
-  - s1-config-root
-  - s1-switch-moved
-  - s1-executable-config-protection
-  - s1-migration
-  - s1-shipped-defaults
-  - s1-triage-state-home
+  acceptance: []
   tier: standard
   files:
   - tests/scenarios/**
