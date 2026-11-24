@@ -573,3 +573,10 @@ Evidence: 2026-11-24: tests/integration/test_queue_errors.py, test_queue_land.py
 Step: `land: merge`: per-PR merges at pinned heads; a forced tree mismatch stops the queue with a reason. (R11)
 
 Evidence: 2026-11-24: tests/unit/test_triage_batch_merge.py, tests/integration/test_queue_land.py (land: merge, tree mismatch stops); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-5 created=2026-11-24T12:40:35+00:00 -->
+### test-plan-step-5 · discovery · Test Plan step 5: ran
+
+Step: Approval by content: approved at H; the session merges `main` (same patch-id) and the approval holds; an empty commit holds it; a code edit, a whitespace-only edit and a binary edit each void it and remove the label; an old event with no patch-id follows `reaches()` until a pass records its id; a clean merge of `main` after an fr update holds it; a `main` newer than the clone's copy holds it after the refetch; a host's diff configuration (textconv, external diff, prefixes) never moves the id; a moved identical hunk, a hand-edited merge resolution and a rewrite of the branch each void it (the succession check); an unreadable patch-id holds it without voiding. (R12)
+
+Evidence: 2026-11-24: tests/unit/test_merge_train_approval.py, test_triage_approval.py, test_gitseam_patch_id.py (patch-id approval, textconv, void cases); full wave-queue unit (542) + integration (134) + scenario (3) runs green
