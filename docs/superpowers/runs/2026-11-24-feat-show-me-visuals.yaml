@@ -3,7 +3,7 @@ run: 2026-11-24-feat-show-me-visuals
 workflow: fr-goal@1
 branch: feat/show-me-visuals
 started: '2026-11-24T13:23:59+00:00'
-cursor: lens-review
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -122,8 +122,8 @@ steps:
     exit: 0
     stdout: ''
   lens-review:
-    state: running
-    at: '2026-11-24T20:39:32+00:00'
+    state: done
+    at: '2026-11-24T20:49:10+00:00'
     units:
       step/lens-review:
         attempts:
@@ -131,6 +131,13 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 21912ebc-378e-41be-ad3b-a1a39f6684f2
+          returned: '2026-11-24T20:49:10+00:00'
+          outcome: done
+        evidence:
+          review: lens-review-r1
+          reviewer: docs-accuracy=a783c2646898c1d3d,security=a12da626c46e67347,tests=a96f2ab957e9adc99
+          findings: l-docs-accuracy-r1,l-docs-accuracy-r2,l-docs-accuracy-r3,l-security-r1,l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4,l-tests-r5
+          lenses: docs-accuracy=22:l-docs-accuracy-r1,l-docs-accuracy-r2,l-docs-accuracy-r3;security=9:l-security-r1;tests=23:l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4,l-tests-r5
   deliver:
     state: pending
 fr_version: 9.0.0rc2

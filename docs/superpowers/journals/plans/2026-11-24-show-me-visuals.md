@@ -184,3 +184,98 @@ The skill, the explainer and review-lenses.md now name the last `review-phase` r
 ### p2-r2-resolved · finding [fixed] · resolves p2-r2: the skill's examples were not checked against fr.shape or the code (phase 2)
 
 test_every_fenced_example_is_a_shape_block, test_the_inline_none_example_is_a_shape_block, test_the_call_tree_example_names_functions_that_exist, and test_show_me_pipeline_prose.py::test_goal_names_when_the_brief_reads_the_shape_file.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-24T20:49:10+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · fr-brainstorming-and-plan.md said the brainstorm adds four things; the list now has five
+
+fr-brainstorming-and-plan.md said the brainstorm adds four things; the list now has five.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-24T20:49:10+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · 01-fr-goal.md put the shape file before lens-review; the brief reads it at the last review-phase resolve
+
+01-fr-goal.md put the shape file before lens-review; the brief reads it at the last review-phase resolve.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3 created=2026-11-24T20:49:10+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r3 · finding [open] (reviewer: in scope) · the shape file placed review-lenses.md under docs/explainers and omitted skills_cmd.py
+
+the shape file placed review-lenses.md under docs/explainers and omitted skills_cmd.py.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-24T20:49:10+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · shape grammar read fences unlike the PR body's closing-keyword reader, so a valid shape could hide a later Fixes #N or swallow fr's sections
+
+shape grammar read fences unlike the PR body's closing-keyword reader, so a valid shape could hide a later Fixes #N or swallow fr's sections.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-24T20:49:10+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · the Test Plan heading repair's new Design shape stop had no test
+
+the Test Plan heading repair's new Design shape stop had no test.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-24T20:49:10+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · an empty fenced block passed as a shape block; closing-fence edge cases unpinned
+
+an empty fenced block passed as a shape block; closing-fence edge cases unpinned.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-24T20:49:10+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · deliver's unreadable-shape-file branch and shape_section's fallback had no test
+
+deliver's unreadable-shape-file branch and shape_section's fallback had no test.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-24T20:49:10+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · the partial-archive branch's PR-body move and the staging were untested
+
+the partial-archive branch's PR-body move and the staging were untested.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-24T20:49:10+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · the shape file put the rerender hop in registry.py and omitted agents/__init__.py and skills_cmd.py
+
+the shape file put the rerender hop in registry.py and omitted agents/__init__.py and skills_cmd.py.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-r1 created=2026-11-24T20:49:10+00:00 -->
+### lens-review-r1 · review · lens review: docs-accuracy 3, security 1, tests 5 findings, all in scope and fixed
+
+One reviewer per lens over the whole feature diff and the shape file. The security finding tightened the shape grammar; the rest were page, shape-file and test gaps.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-24T20:49:10+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: fr-brainstorming-and-plan.md said the brainstorm adds four things; the list now has five
+
+Changed to five.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-24T20:49:10+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: 01-fr-goal.md put the shape file before lens-review; the brief reads it at the last review-phase resolve
+
+The page now says the last phase review's close builds the brief and reads the file then.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3-resolved created=2026-11-24T20:49:10+00:00 state=fixed resolves=l-docs-accuracy-r3 -->
+### l-docs-accuracy-r3-resolved · finding [fixed] · resolves l-docs-accuracy-r3: the shape file placed review-lenses.md under docs/explainers and omitted skills_cmd.py
+
+Each page on its own line at its real path; skills_cmd.py, agents_kind.py and README.md added.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-24T20:49:10+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: shape grammar read fences unlike the PR body's closing-keyword reader, so a valid shape could hide a later Fixes #N or swallow fr's sections
+
+shape_block_problem now refuses a shape that pr_body.leaves_fence_open (the same _prose_lines reader) says ends inside a fence; R6 amended; tests/unit/test_shape.py::test_a_shape_that_leaves_a_pr_body_fence_open_is_refused (red before) and ::test_the_rendered_section_cannot_hide_a_later_closing_keyword.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-24T20:49:10+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: the Test Plan heading repair's new Design shape stop had no test
+
+Added Design shape to test_test_plan_heading.py::test_demotion_stops_at_each_keyword_section.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-24T20:49:10+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: an empty fenced block passed as a shape block; closing-fence edge cases unpinned
+
+Empty fences are refused (R6 amended); invalid cases for empty and whitespace-only fences and an info-string closer, a valid case for a longer opener run.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-24T20:49:10+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: deliver's unreadable-shape-file branch and shape_section's fallback had no test
+
+test_pr_body_shape.py::test_an_undecodable_shape_file_is_refused and ::test_an_undecodable_shape_file_renders_as_no_file.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-24T20:49:10+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: the partial-archive branch's PR-body move and the staging were untested
+
+test_archive_cmd.py::test_an_already_archived_cursor_carries_its_live_shape_file now seeds the PR body and asserts both moves are staged.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-24T20:49:10+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: the shape file put the rerender hop in registry.py and omitted agents/__init__.py and skills_cmd.py
+
+Shape file corrected: hop under agents_kind.py, agents/__init__.py and skills_cmd.py listed.
