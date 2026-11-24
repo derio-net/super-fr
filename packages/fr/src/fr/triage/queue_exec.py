@@ -241,7 +241,10 @@ def _resolve(
     `MergeConflictError` naming only the real paths. Whether a lockfile was taken (so a
     relock is owed)."""
     refused = unresolvable(version, wt.show, base, entry.head, conflicted)
-    kinds = classify_conflicts(refused, regen.generated, lambda p: _conflicted_text(wt, p))
+    held = wt.unmerged_stages()
+    kinds = classify_conflicts(
+        refused, regen.generated, lambda p: _conflicted_text(wt, p), lambda p: held.get(p, {})
+    )
     owed = [*kinds.whole, *kinds.regenerate]
     real = [*kinds.real, *([] if regen.mirrors else owed)]
     if real:

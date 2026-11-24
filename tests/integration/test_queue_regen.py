@@ -161,3 +161,57 @@ def test_a_generated_conflict_with_no_mirrors_is_a_real_conflict(tmp_path: Path)
     with pytest.raises(MergeConflictError) as raised:
         _build(w, regen=Regen(generated=("gen/*",)))
     assert set(raised.value.paths) == {"gen/out.txt", "README.md"}
+
+
+# ------------------------------------------ security review: stages and environment
+
+
+def test_a_stamp_page_one_entry_deleted_is_a_real_conflict(tmp_path: Path) -> None:
+    w = world(tmp_path)
+    w.move_main({"docs/page.md": _page("2026-11-01")})
+    git(w.seed, "fetch", "--quiet", "origin")
+    git(w.seed, "checkout", "--quiet", "-B", "feat/pr-1", "origin/main")
+    git(w.seed, "rm", "--quiet", "docs/page.md")
+    git(w.seed, "commit", "--quiet", "-m", "pr 1 deletes the page")
+    git(w.seed, "push", "--quiet", "--force", "origin", "feat/pr-1:feat/pr-1")
+    git(w.seed, "checkout", "--quiet", "--detach")
+    w.prs[1], w.titles[1] = "feat/pr-1", "Delete the page"
+    w.pr(2, {"docs/page.md": _page("2026-11-23")})
+    w.fetch()
+    with pytest.raises(MergeConflictError) as raised:
+        _build(w, regen=Regen(mirrors=MIRRORS, generated=("gen/*",)))
+    assert raised.value.paths == ("docs/page.md",)
+
+
+def test_a_binary_add_add_conflict_is_a_real_conflict(tmp_path: Path) -> None:
+    w = world(tmp_path)
+    w.pr(1, {"blob.bin": "\x00one\x00\n"})
+    w.pr(2, {"blob.bin": "\x00two\x00\n"})
+    w.fetch()
+    with pytest.raises(MergeConflictError) as raised:
+        _build(w, regen=Regen(mirrors=MIRRORS, generated=("gen/*",)))
+    assert raised.value.paths == ("blob.bin",)
+
+
+DUMP_ENV = (PY, "-c", "import os, pathlib; pathlib.Path('gen/out.txt').write_text("
+            "' '.join(sorted(os.environ)) + '\\n')")  # fmt: skip
+
+
+def test_a_mirror_runs_with_no_forge_credential_or_ssh_agent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in (
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "FR_FORGE_API",
+        "SSH_AUTH_SOCK",
+        "UV_INDEX_X_PASSWORD",
+    ):
+        monkeypatch.setenv(name, "secret")
+    monkeypatch.setenv("UV_CACHE_DIR", str(tmp_path / "uv-cache"))
+    w = _generated_world(tmp_path)
+    _, two = _build(w, regen=Regen(mirrors=(DUMP_ENV,), generated=("gen/*", "README.md")))
+    seen = set(_show(w, two.sha, "gen/out.txt").split())
+    assert not seen & {"GH_TOKEN", "GITHUB_TOKEN", "FR_FORGE_API", "SSH_AUTH_SOCK",
+                       "UV_INDEX_X_PASSWORD"}  # fmt: skip
+    assert {"PATH", "HOME", "UV_CACHE_DIR"} <= seen

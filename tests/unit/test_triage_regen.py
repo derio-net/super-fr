@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import pytest
-from fr.triage.regen import classify_conflicts, outside_generated, resolve_hunks
+from fr.triage.regen import REGULAR, classify_conflicts, outside_generated, resolve_hunks
 
 
 def _hunk(ours: str, theirs: str, base: str | None = None) -> str:
@@ -108,6 +108,8 @@ def test_an_unterminated_hunk_is_a_real_conflict() -> None:
 
 # ------------------------------------------------------------ classification (R9)
 
+_BOTH = {2: REGULAR[0], 3: REGULAR[0]}
+
 
 def test_classify_sorts_paths_into_whole_hunk_and_real() -> None:
     files = {
@@ -117,7 +119,7 @@ def test_classify_sorts_paths_into_whole_hunk_and_real() -> None:
         "src/a.py": _hunk("x = 1\n", "x = 2\n"),
         "gone.md": None,
     }
-    got = classify_conflicts(list(files), [".opencode/skills/**"], files.get)
+    got = classify_conflicts(list(files), [".opencode/skills/**"], files.get, lambda p: _BOTH)
     assert got.whole == (".opencode/skills/x/SKILL.md",)
     assert set(got.hunks) == {"docs/page.md", "README.md"}
     assert got.hunks["docs/page.md"] == _page("reviewed: 2026-11-23 entry\n")
@@ -126,7 +128,7 @@ def test_classify_sorts_paths_into_whole_hunk_and_real() -> None:
 
 
 def test_a_glob_star_spans_slashes() -> None:
-    got = classify_conflicts(["a/b/c.md"], ["a/*"], lambda p: None)
+    got = classify_conflicts(["a/b/c.md"], ["a/*"], lambda p: None, lambda p: _BOTH)
     assert got.whole == ("a/b/c.md",) and got.real == ()
 
 
@@ -156,3 +158,32 @@ def test_outside_generated_counts_a_block_renamed_or_added_as_outside() -> None:
     before = {"README.md": "<!-- generated:a -->\nx\n<!-- /generated:a -->\n"}
     after = {"README.md": "<!-- generated:b -->\nx\n<!-- /generated:b -->\n"}
     assert outside_generated(before, after, []) == ["README.md"]
+
+
+# ------------------------------------- security review: what counts as hunk-resolved
+
+
+def test_a_conflicted_path_with_no_marker_hunk_is_real() -> None:
+    got = classify_conflicts(["a.md"], [], lambda p: "no markers here\n", lambda p: _BOTH)
+    assert got.real == ("a.md",) and got.hunks == {}
+
+
+@pytest.mark.parametrize(
+    "stages",
+    [
+        {3: "100644"},  # modify/delete: ours deleted it
+        {2: "100644"},  # modify/delete: the entry deleted it
+        {2: "120000", 3: "100644"},  # a type change: a symlink on one side
+        {2: "160000", 3: "160000"},  # a submodule
+        {},  # no unmerged stages read at all
+    ],
+)
+def test_a_path_whose_stages_are_not_two_regular_blobs_is_real(stages: dict[int, str]) -> None:
+    text = _resolved("2026-11-20", "2026-11-23")
+    got = classify_conflicts(["docs/p.md"], [], lambda p: text, lambda p: stages)
+    assert got.real == ("docs/p.md",)
+
+
+def test_a_whole_generated_path_ours_deleted_is_real() -> None:
+    got = classify_conflicts(["gen/a"], ["gen/*"], lambda p: None, lambda p: {3: "100644"})
+    assert got.real == ("gen/a",) and got.whole == ()

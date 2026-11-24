@@ -13,6 +13,17 @@ from the paths and their marked-up texts, which conflicts the queue resolves its
 - anything else is **real**, and hands the entry back.
 
 `outside_generated` is R11's last limit: what a mirror run changed that it may not.
+
+A path counts as hunk-resolved only when git left it as two regular blobs (index stages 2
+and 3, mode 100644 or 100755) and its text held at least one conflict hunk, every one of
+which resolved. A modify/delete, a type change, a submodule, a binary conflict or a file
+with no markers is real, so it is handed back rather than written as it stands.
+
+**Trust boundary.** The mirrors are the BASE's `mirrors:` (the `.fr/triage.yaml` collected
+from the default branch), never the merged tree's, but the scripts they run are the merged
+tree's, so they run code from the queued PRs. The queue already trusts that code to the
+level it tests it: CI runs the same combination. The executor runs them with a scrubbed
+environment (`fr.triage.gitseam.mirror_env`): no forge token, no fr setting, no SSH agent.
 """
 
 from __future__ import annotations
@@ -25,6 +36,8 @@ from dataclasses import dataclass, field
 _OURS, _BASE, _SPLIT, _THEIRS = "<<<<<<<", "|||||||", "=======", ">>>>>>>"
 _OPEN = re.compile(r"<!-- generated:(\S+) -->")
 _CLOSE = re.compile(r"<!-- /generated:(\S+) -->")
+REGULAR: tuple[str, ...] = ("100644", "100755")
+"""The index modes of a regular blob: the only kind whose text a hunk resolution may write."""
 _STAMP = re.compile(r"reviewed:\s*(\d{4}-\d{2}-\d{2})(?:\s.*)?")
 
 
@@ -53,6 +66,7 @@ def _stamp_date(side: list[str]) -> str | None:
 class _Resolution:
     text: str
     regenerate: bool  # a generated-block hunk was taken, so the mirrors are owed
+    hunks: int = 0  # how many conflict hunks were resolved
 
 
 def _resolve(text: str) -> _Resolution | None:
@@ -61,6 +75,7 @@ def _resolve(text: str) -> _Resolution | None:
     front: bool | None = None  # None: not yet seen; True: inside; False: closed or none
     block: str | None = None
     regenerate = False
+    hunks = 0
     i = 0
     while i < len(lines):
         line = lines[i]
@@ -94,6 +109,7 @@ def _resolve(text: str) -> _Resolution | None:
         if i >= len(lines) or side is not theirs:
             return None  # unterminated or malformed
         i += 1  # the >>>>>>> line
+        hunks += 1
         dates = (_stamp_date(ours), _stamp_date(theirs))
         if front and dates[0] and dates[1]:
             out.extend(ours if dates[0] > dates[1] else theirs)
@@ -102,7 +118,7 @@ def _resolve(text: str) -> _Resolution | None:
             regenerate = True
         else:
             return None
-    return _Resolution("".join(out), regenerate)
+    return _Resolution("".join(out), regenerate, hunks)
 
 
 def resolve_hunks(text: str) -> str | None:
@@ -129,23 +145,34 @@ class Classified:
     real: tuple[str, ...] = ()
 
 
+def _regular(stages: Mapping[int, str], *which: int) -> bool:
+    return all(stages.get(n) in REGULAR for n in which)
+
+
 def classify_conflicts(
-    paths: Sequence[str], generated: Sequence[str], read: Callable[[str], str | None]
+    paths: Sequence[str],
+    generated: Sequence[str],
+    read: Callable[[str], str | None],
+    stages: Callable[[str], Mapping[int, str]],
 ) -> Classified:
     """Sort *paths* into R9's kinds; *read* gives a path's conflicted text (None: no text
-    file there, which is real). Version and lockfile paths are the caller's
-    (`fr.triage.batch_merge.unresolvable`), before this runs."""
+    file there, which is real) and *stages* its unmerged index stages (stage number to
+    mode, `git ls-files -u`). A whole generated path needs a regular blob on the
+    combination's side (stage 2), a hunk path one on both sides (stages 2 and 3) and at
+    least one resolved hunk; anything else is real. Version and lockfile paths are the
+    caller's (`fr.triage.batch_merge.unresolvable`), before this runs."""
     whole: list[str] = []
     hunks: dict[str, str] = {}
     regenerate: list[str] = []
     real: list[str] = []
     for path in paths:
+        held = stages(path)
         if is_generated(path, generated):
-            whole.append(path)
+            (whole if _regular(held, 2) else real).append(path)
             continue
-        text = read(path)
+        text = read(path) if _regular(held, 2, 3) else None
         got = _resolve(text) if text is not None else None
-        if got is None:
+        if got is None or got.hunks == 0:
             real.append(path)
             continue
         hunks[path] = got.text

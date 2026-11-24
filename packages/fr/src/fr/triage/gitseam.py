@@ -415,6 +415,28 @@ def blob_bytes(cwd: Path, sha: str) -> bytes:
     return git_bytes(["cat-file", "blob", sha], cwd)
 
 
+MIRROR_ENV_NAMES: Final[tuple[str, ...]] = (
+    "PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TERM", "TMPDIR", "TMP", "TEMP",
+    "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME", "SYSTEMROOT",
+)  # fmt: skip
+"""What a `mirrors:` command inherits by name (spec 2026-11-24-ci-economy R11, security
+review): enough to find its programs, a home and a cache. No forge token, no `FR_*`
+setting, no `SSH_AUTH_SOCK`: the command runs the queued PRs' code."""
+_MIRROR_SECRET = re.compile(r"TOKEN|PASSWORD|SECRET|CREDENTIAL|USERNAME|AUTH|KEY", re.I)
+
+
+def mirror_env() -> dict[str, str]:
+    """The whole environment a mirror command runs with: `MIRROR_ENV_NAMES`, every `LC_*`,
+    and every `UV_*` whose name names no credential (uv's cache and Python settings)."""
+    return {
+        k: v
+        for k, v in os.environ.items()
+        if k in MIRROR_ENV_NAMES
+        or k.startswith("LC_")
+        or (k.startswith("UV_") and not _MIRROR_SECRET.search(k))
+    }
+
+
 def run_declared(command: str, cwd: Path, **fields: str) -> None:
     """Run a command the repo declares in `.fr/triage.yaml` (`set`, `relock`).
 
@@ -1103,11 +1125,23 @@ class Worktree:
 
     def run_argv(self, argv: Sequence[str], timeout: float) -> None:
         """Run a repo's declared `mirrors:` command, an argument list with no shell, in this
-        worktree (spec 2026-11-24-ci-economy R11). A non-zero exit, or a run past *timeout*
-        seconds, raises `GitError` naming the command."""
+        worktree (spec 2026-11-24-ci-economy R11), with `mirror_env()` as its WHOLE
+        environment: the scripts it runs are the queued PRs' code. A non-zero exit, or a run
+        past *timeout* seconds, raises `GitError` naming the command."""
         if not argv:
             raise GitError("an empty mirrors command was declared")
-        _run(list(argv), self.path, timeout=timeout)
+        _run(list(argv), self.path, timeout=timeout, env=mirror_env(), exact_env=True)
+
+    def unmerged_stages(self) -> dict[str, dict[int, str]]:
+        """Each conflicted path's index stages, stage number to mode (`git ls-files -u`)."""
+        out: dict[str, dict[int, str]] = {}
+        for entry in git(["ls-files", "-u", "-z"], self.path).split("\0"):
+            if not entry:
+                continue
+            meta, _, path = entry.partition("\t")
+            mode, _sha, stage = meta.split()
+            out.setdefault(path, {})[int(stage)] = mode
+        return out
 
     def stage_all(self) -> None:
         """Stage every change and every new file git does not ignore (what a mirror wrote)."""
