@@ -9439,6 +9439,22 @@ features:
   - super-fr#1309
   - super-fr#1310
   - super-fr#1116
+  - super-fr#1500
+  - super-fr#1507
+  - super-fr#1511
+  - super-fr#1512
+  - super-fr#1513
+  - super-fr#1514
+  - super-fr#1515
+  - super-fr#1516
+  - super-fr#1517
+  - super-fr#1518
+  - super-fr#1519
+  - super-fr#1520
+  - super-fr#1521
+  - super-fr#1522
+  - super-fr#1523
+  - super-fr#1524
   why: 'Oversized command modules and the import cycle (#1174 inside #1318); standard stop report (#1309); tester-gate walker (#1310).'
   start: '/fr-goal architecture sweep #1318'
 - rank: 15
@@ -9522,6 +9538,18 @@ features:
   - super-fr#1579
   why: 'The local suite dominates every run''s wall clock; follow-ups wait for PR #1559.'
   start: 'PR #1559 (session suite-cost-1555); follow-ups after it merges'
+- rank: 26
+  title: Event-driven, à la carte super-fr
+  ids:
+  - super-fr#1652
+  - super-fr#1653
+  - super-fr#1654
+  - super-fr#1655
+  - super-fr#1656
+  - super-fr#1657
+  - super-fr#1651
+  why: 'Epic #1652: configuration homes (S1), à la carte settings (S2), every flow a workflow (S3), stations and the Router (S4); #1657 makes split tracking structural; #1651 cncd retirement.'
+  start: '/fr-brainstorming #1653 (S1), from branch feat/event-driven-a-la-carte'
 exports:
 - wave: '1'
   repo: derio-net/super-fr
