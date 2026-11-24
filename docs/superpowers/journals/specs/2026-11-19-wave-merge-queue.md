@@ -692,3 +692,10 @@ Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py, tests/integration/t
 Step: Channels: each Need of R28 appears with its command; the PR marker comment is edited in place through queued, testing, ejected and landed (and is absent under `forge.comments: off`); the wave report lists landed, ejected and deferred PRs with their cycles and approvals. (R28)
 
 Evidence: 2026-11-24: tests/unit/test_wave_queue_operator_view.py, test_wave_report_text.py (Needs, marker comment edited in place, wave report); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-22 created=2026-11-24T12:41:04+00:00 -->
+### test-plan-step-22 · discovery · Test Plan step 22: ran
+
+Step: Leaving: `defer` takes a batch out of the drain, so the wave drains and its close-out leaves it out; `requeue --wave N+1` puts it in N+1's queue; `requeue` alone puts it in the lowest wave whose queue has not opened, else makes it a between-waves entry; a stall past `stall_hours`, or a spent budget, gives one Need with both commands and never an automatic deferral. (R29, R30)
+
+Evidence: 2026-11-24: tests/unit/test_triage_batch_leave_wave.py, test_triage_queue_model.py, test_wave_queue_planner.py (defer, requeue, stall Need); full wave-queue unit (542) + integration (134) + scenario (3) runs green
