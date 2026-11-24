@@ -1,0 +1,41 @@
+schema_version: 12
+run: 2026-11-24-feat-ci-economy
+step: lens-review
+outcome: done
+journal:
+  - kind: review
+    id: lens-review-1
+    global: true
+    title: Lens review (security, errors, tests, docs-accuracy) of the whole ci-economy diff
+    body: |
+      Four lens reviewers read the feature diff from merge base ec7d198296a6. Twelve findings in
+      scope (eleven fixed, one partly refuted and fixed for the case that is real); the out-of-scope
+      parts are filed at deliver. Fixes: commits 8f6736b1a and 1775a6258.
+  - {kind: finding, id: l-security-r1, global: true, review_scope: in, title: "A mirror could write a path with a .git component that matches a generated glob, and git add --all ran over it"}
+  - {kind: finding, id: l-security-r2, global: true, review_scope: in, title: "The new lane jobs had no permissions block and kept checkout credentials; GH_TOKEN reached the PR's own ci_lane.py"}
+  - {kind: finding, id: l-security-r3, global: true, review_scope: in, title: "landed_run trusted the API's head_sha filter without re-checking each run"}
+  - {kind: finding, id: l-errors-r1, global: true, review_scope: in, title: "ci_lane fell back to the full lane silently on gh, git and parse failures"}
+  - {kind: finding, id: l-errors-r2, global: true, review_scope: in, title: "settle reported a stranded cancelled check as still running, naming neither it nor the re-run"}
+  - {kind: finding, id: l-errors-r3, global: true, review_scope: in, title: "The ops gate collapsed a cancelled, unreplaced check into pending"}
+  - {kind: finding, id: l-errors-r4, global: true, review_scope: in, title: "verify_ci could wait on a gate holding a cancelled and a successful check with nothing running"}
+  - {kind: finding, id: l-tests-r1, global: true, review_scope: in, title: "Workflow if: conditions were pinned by substring, so `<full> || true` passed"}
+  - {kind: finding, id: l-tests-r2, global: true, review_scope: in, title: "verdict was not tested with failed or cancelled shard jobs or scoped-tests"}
+  - {kind: finding, id: l-tests-r3, global: true, review_scope: in, title: "landed_run was not tested against cancelled/skipped conclusions or another sha"}
+  - {kind: finding, id: l-docs-accuracy-r1, global: true, review_scope: in, title: "Pages said the early conflict probe uses the merge's own rules; it resolves only version and lock files"}
+  - {kind: finding, id: l-docs-accuracy-r2, global: true, review_scope: in, title: "Two places said mirrors run in the combination's worktree; they run in a git-less copy"}
+resolves:
+  - {id: l-security-r1, state: fixed, body: "_regenerate hands back any changed path with a .git or .. component or an absolute path before the glob checks; snapshot_export no longer lets ignore rules hide a .git path. Integration test with and without a .gitignore entry (1775a6258)."}
+  - {id: l-security-r2, state: fixed, body: "classify, scoped-tests and ci-ok hold read-only permissions and check out with persist-credentials false; GH_TOKEN is set only for a push to main (8f6736b1a, test_the_lane_jobs_keep_no_credential_in_their_checkout). A workflow-level permissions block for the older jobs predates this change and is filed at deliver."}
+  - {id: l-security-r3, state: fixed, body: "landed_run takes the sha and requires run.head_sha == sha; tested with another sha. Runs come from this repo's own actions/runs endpoint, so head_repository adds nothing."}
+  - {id: l-errors-r1, state: fixed, body: "Every fallback prints `ci_lane: <cause>; taking the full lane` to stderr; a landed miss names the sha. Tests read stderr for the gh and git cases."}
+  - {id: l-errors-r2, state: fixed, body: "settle has a (ci, cancelled) hint naming the cancelled checks and the re-run; verdict stays pending (1775a6258)."}
+  - {id: l-errors-r3, state: fixed, body: "_checks_green raises 'checks were cancelled with no newer run: <names>; re-run the workflow' when every waiting check is cancelled (1775a6258)."}
+  - {id: l-errors-r4, state: fixed, body: "The real client already keeps the latest check per (workflow, name), so the duplicate shape is refuted for that path; the real case, one gate name across two workflows, now uses _unreplaced and a gate with an unreplaced cancelled check is stranded and refused once nothing runs (1775a6258)."}
+  - {id: l-tests-r1, state: fixed, body: "Shard and other jobs' if: are asserted equal to the whole expression (8f6736b1a)."}
+  - {id: l-tests-r2, state: fixed, body: "Shard jobs are tested skipped, failure and cancelled in the full lane, and scoped-tests skipped, failure and cancelled in the light lane."}
+  - {id: l-tests-r3, state: fixed, body: "cancelled, skipped, neutral and timed_out conclusions and a different head_sha are near-miss cases of test_no_other_run_is_trusted."}
+  - {id: l-docs-accuracy-r1, state: fixed, body: "fr-wave-driver.md and the fr-triage skill (mirrors synced) now say the probe uses only the version and lock file rules and a stamp or generated conflict still counts there. Teaching the probe the new rules is filed at deliver."}
+  - {id: l-docs-accuracy-r2, state: fixed, body: ".fr/triage.yaml and the skill say the mirrors run on a copy of the combination's tracked files with no git directory."}
+evidence:
+  review: lens-review-1
+  reviewer: "security=a22b87e3f530f6a7c,errors=a34fa9dba9025b072,tests=adc994290fc85d950,docs-accuracy=a9a8734475df0753d"
