@@ -53,6 +53,7 @@ rows:
       the ops trust tree treats it as fr bookkeeping.
     origin:
     - spec:2026-11-24-show-me-visuals#R12
+    - spec:2026-11-24-show-me-visuals#R17
     levels: {}
     status: not-implemented
     notes: ''
