@@ -310,3 +310,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-24-s1-configuration-homes-p4 created=2026-11-24T20:41:25+00:00 -->
 ### tier-2026-11-24-s1-configuration-homes-p4 · decision · hard: changes the artifact migration runner every artifact kind relies on, with cross-space ordering and crash-window rules
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-24-s1-configuration-homes-p6 created=2026-11-24T20:41:27+00:00 -->
+### tier-2026-11-24-s1-configuration-homes-p6 · decision · hard: moves durable triage state under a possibly live driver, where a wrong rule loses state
