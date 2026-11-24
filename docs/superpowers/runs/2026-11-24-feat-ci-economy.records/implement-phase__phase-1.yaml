@@ -1,0 +1,63 @@
+schema_version: 12
+run: 2026-11-24-feat-ci-economy
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2]
+refactor:
+  P1.T2: "fr/checkstate.py was written green in its final shape (four constants, three pure functions); the only cleanup, moving the test's imports to the top, landed in the same commit"
+  P1.T4: "the late list reuses slot_check's existing by-name grouping; the shared overdue test was factored as it was written, and read_slots' wording split is two short branches"
+journal:
+  - kind: decision
+    id: p1-replaced-cancel-is-dropped
+    phase: 1
+    title: slot_check drops a cancelled run that another run of the same name replaces
+    body: |
+      The plan said "keep the verdict rules otherwise", but with CANCELLED now pending, a
+      combination whose check was cancelled and then re-run green would stay pending
+      forever (any run pending -> pending). Spec R4 scopes the rule to "a cancelled
+      required check that no newer run replaces", so `queue_exec._unreplaced` drops a
+      cancelled run when any non-cancelled run of the same name exists before the verdict
+      and the `late` list are computed. Test:
+      test_a_cancelled_check_replaced_by_a_newer_run_reads_as_the_newer_run.
+  - kind: decision
+    id: p1-cancelled-need-wording
+    phase: 1
+    title: read_slots words a cancelled check's Need apart from a never-reported one
+    body: |
+      The existing Need blamed a workflow missing `push: branches: ['fr-queue/**']`, which
+      is wrong for a check that ran and was cancelled. read_slots now emits a second Need,
+      "check X was cancelled on combination <sha> and no run replaced it within N min:
+      re-run the cancelled workflow on <sha>", for late names that did report.
+  - kind: decision
+    id: p1-rest-bucket-keeps-gh-names
+    phase: 1
+    title: The REST client keeps gh's `cancel` and `skipping` bucket names
+    body: |
+      `real_ghrestclient._BUCKET` became `_bucket(state)`: SKIPPED/NEUTRAL -> skipping,
+      CANCELLED -> cancel (both as `gh pr checks` renders them), every other state through
+      `fr.checkstate.verdict_of`. Readers turn a bucket into a verdict with
+      `bucket_verdict`, so `cancel` is pending everywhere. `batch_merge.FAILING_BUCKETS` was
+      dropped rather than aliased: no other module imported it.
+  - kind: discovery
+    id: p1-verify-ci-cancelled-gate
+    phase: 1
+    title: verify_ci waits on a cancelled gate without marking its workflow busy
+    body: |
+      A cancelled finished gate check joins the `running` list and the `_where` text, but
+      not the `unfinished` list that decides which workflows are busy, so a failed gate in
+      the same workflow is still refused rather than read as a re-run in flight. A
+      skipped gate still refuses (only success passes there), unchanged.
+  - kind: discovery
+    id: p1-docs-currency
+    phase: 1
+    title: Seven covered pages owed a stamp; the wave-driver explainer gained one paragraph
+    body: |
+      `fr docs check` named fr-devops-gate, fr-triage, fr-wave-driver, index,
+      herdr-control-sessions, ops and workflow-shapes. Only fr-wave-driver.md describes
+      how the queue reads checks; it now says a cancelled check waits for its replacement
+      and shows under Needs you now after queue.check_wait_minutes. The rest got a
+      `reviewed` note. The row ci-cancelled-reads-pending moved not-implemented -> ci with
+      eight unit refs (fr acceptance set-status, its own commit).
+resolves: []
+evidence: {}
