@@ -1097,8 +1097,9 @@ can require one for the paths it names in `.fr/lenses.yaml`. So the change that
 touches your authentication code always gets the security lens, whether or not
 anybody thought to ask.
 
-Before it, the agent draws what it delivered into the run's shape file,
-`<run-id>.shape.md`, and commits it. This step dispatches one reviewer per lens in that
+Before the last phase review closes, the agent draws what it delivered into the run's
+shape file, `<run-id>.shape.md`, and commits it. That close builds this step's brief and
+reads the file then, so a file written later is not in the brief. This step dispatches one reviewer per lens in that
 set. Each reviewer gets only its own lens, the feature's whole diff and the shape file,
 and reports any place where the shape contradicts the diff. It ends its return with the
 files it examined and its findings. The step will not close while a lens has no

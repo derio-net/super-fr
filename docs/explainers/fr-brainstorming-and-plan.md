@@ -111,7 +111,7 @@ brainstorm that turns into a build never has to move. One that dies leaves your 
 as it was. In devcontainer mode a repo with no profile is a hard stop (the skill offers
 the [fr-init](fr-init.md) interview); a docker-less host skips that.
 
-It adds four things to a plain brainstorm:
+It adds five things to a plain brainstorm:
 
 - **The brief, recorded.** The skill saves the operator's request verbatim as a
   spec-journal entry (`fr journal add --scope spec --slug <spec-slug> --kind discovery --input

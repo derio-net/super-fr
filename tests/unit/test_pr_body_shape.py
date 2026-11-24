@@ -215,3 +215,24 @@ def test_the_minimal_durable_render_carries_the_section(
     durable = _durable(root).read_text()
     assert HEADING in durable
     assert _shape_file(root).read_text().strip() in durable
+
+
+def test_an_undecodable_shape_file_is_refused(tmp_path: Path, live: dict[str, str]) -> None:
+    """Lens l-tests-r3: a shape file that exists but cannot be read as UTF-8."""
+    root = _at_deliver(tmp_path)
+    _shape_file(root).write_bytes(b"```\n\xff\xfe tree\n```\n")
+    _commit(root, "undecodable shape")
+    live["body"] = "never read"
+    _rec, out = _deliver(root)
+    assert out.exit_code == 2, out.output
+    flat = _flat(out.output)
+    assert f"{RUN}.shape.md" in flat and "cannot be read" in flat
+    assert _flat(TWO_FORMS) in flat
+
+
+def test_an_undecodable_shape_file_renders_as_no_file(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    path = shape_path(root, RUN)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"\xff\xfe")
+    assert _section(root, _state(SPEC_REL)) == "No shape file was written."

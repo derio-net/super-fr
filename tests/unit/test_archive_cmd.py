@@ -1033,11 +1033,22 @@ def test_an_already_archived_cursor_carries_its_live_shape_file(tmp_path):
     live = shape_path(repo, run_id)
     live.parent.mkdir(parents=True, exist_ok=True)
     live.write_text("none — left behind\n")
+    body = live.with_name(f"{run_id}.pr-body.md")
+    body.write_text("## Findings\n\nNone.\n")
     _git(repo, "init", "-q", "-b", "main")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "seed")
 
     archive_run_cursor(repo, run_id)
 
-    assert not live.exists()
+    assert not live.exists() and not body.exists()
     assert cursor.with_name(f"{run_id}.shape.md").read_text() == "none — left behind\n"
+    assert cursor.with_name(f"{run_id}.pr-body.md").read_text() == "## Findings\n\nNone.\n"
+    staged = subprocess.run(
+        ["git", "-C", str(repo), "diff", "--cached", "--name-status"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    for name in (f"{run_id}.shape.md", f"{run_id}.pr-body.md"):
+        assert f"implemented/runs/{name}" in staged, staged

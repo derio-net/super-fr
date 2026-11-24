@@ -66,6 +66,17 @@ def shape_block_problem(text: str) -> str | None:
     if unclosed:
         return "a fenced code block is never closed"
     if any(is_fence for _line, _in, is_fence in states):
+        if not any(inside and not fence and line.strip() for line, inside, fence in states):
+            return "its fenced code blocks are empty"  # lens l-tests-r2: nothing is drawn
+        from fr.record.pr_body import leaves_fence_open
+
+        if leaves_fence_open(text):
+            # fr renders the shape above its own sections, read with the PR body's
+            # list- and blockquote-aware fence reader (lens l-security-r1)
+            return (
+                "a fence is left open as the PR body reads it (a fence in a list item "
+                "or quote, or a backtick in a ``` info string)"
+            )
         return None  # every fence line opened or closed a block, and none is left open
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     if not lines:

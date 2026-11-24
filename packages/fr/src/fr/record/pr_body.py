@@ -183,6 +183,14 @@ def _prose_lines(body: str, *, as_github: bool = False) -> Iterator[tuple[str, s
         yield raw, _LINK.sub(_one_ref_per_link, _CODE_SPAN.sub("", raw)).replace("*", "")
 
 
+def leaves_fence_open(text: str) -> bool:
+    """True when *text*, read as `_prose_lines` reads a PR body, ends inside a fence:
+    a block placed verbatim above more of the body would then hide the rest from
+    the closing-keyword gate (`fr.shape`, lens l-security-r1)."""
+    sentinel = "\n\nfr-fence-sentinel"
+    return list(_prose_lines(text + sentinel, as_github=True))[-1] is None
+
+
 def _closing_lines(
     body: str, *, as_github: bool = False, keyword: re.Pattern[str] = _KEYWORD
 ) -> Iterator[tuple[str, str, list[re.Match[str]], list[re.Match[str]]]]:
