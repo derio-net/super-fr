@@ -32,20 +32,26 @@ done
 SH
 printf '#!/bin/sh\necho "exit 0"\n' > "$world/bin/curl"
 chmod +x "$world/bin/"*
-# super-fr's source: a local origin whose install.sh registers the plugin as the real one does.
+# super-fr's source: a local origin with the real bootstrap.sh and one release tag whose
+# install.sh carries the channel marker and registers the plugin as the real one does.
+# The setup script installs that release through bootstrap.sh, never main.
 git init -q --bare -b main "$world/origin.git" || fail "bare origin"
 src="$world/seed"
 git init -q -b main "$src" || fail "seed repo"
 mkdir -p "$src/scripts"
+cp "$here/../../scripts/bootstrap.sh" "$src/scripts/bootstrap.sh" || fail "copy bootstrap.sh"
 cat > "$src/scripts/install.sh" <<'SH'
 #!/usr/bin/env bash
+# fr-install-channels: 1
 set -euo pipefail
 f="$HOME/.claude/plugins/installed_plugins.json"
 [ -f "$f" ] && [ -f "$HOME/.claude/settings.json" ] || { echo "missing registration files" >&2; exit 1; }
 printf '{"version":2,"plugins":{"super-fr@derio-net--super-fr":[{"version":"stub"}]}}\n' > "$f"
 SH
+chmod +x "$src/scripts/install.sh"
 git -C "$src" add -A && git -C "$src" commit -qm seed || fail "seed commit"
-git -C "$src" push -q "$world/origin.git" main || fail "seed push"
+git -C "$src" tag v0.0.1 || fail "seed tag"
+git -C "$src" push -q --tags "$world/origin.git" main || fail "seed push"
 mkdir -p "$HOME/.cache/fr/src"
 git clone -q "$world/origin.git" "$HOME/.cache/fr/src/super-fr" || fail "pre-clone"
 

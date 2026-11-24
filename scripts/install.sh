@@ -5,6 +5,85 @@
 # PostToolUse hook hint.
 set -euo pipefail
 
+# Channel: which version this run installs. The default is the newest stable release,
+# on every path; a release candidate or main only when --version asks for it.
+#   (none)          a clean, detached checkout of a vX.Y.Z / vX.Y.Z-rc.N tag installs
+#                   that tag (how bootstrap.sh runs a tag's install.sh); anything
+#                   else, a clone on main included, installs the newest release
+#   --version main  this checkout: main, clean and in sync with origin/main
+#   --version <v>   RC, X.Y.Z, X.Y.Z-RC, X.Y.Z-rc.N, as bootstrap.sh resolves them
+# A clone on main follows main, and release.py commits `release: vX.Y.Z-rc.N` onto
+# main while a gate is pending: installing the checkout installed that RC. So only
+# `--version main` installs it; every other choice is bootstrap.sh's, which checks the
+# chosen tag out in its managed checkout (FR_SRC_DIR) and leaves this clone alone.
+# --uninstall and --install-bridge choose no version, and FR_INSTALL_SKIP_PREFLIGHT=1
+# (tests only) installs the checkout as it is.
+FR_CHANNEL=""
+FR_HAVE_CHANNEL=0
+FR_PASS_ARGS=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --version)
+      if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+        echo "ERROR: --version needs a value (RC, X.Y.Z, X.Y.Z-RC, X.Y.Z-rc.N or main)." >&2
+        exit 1
+      fi
+      FR_CHANNEL="$2"; FR_HAVE_CHANNEL=1; shift 2 ;;
+    --version=*) FR_CHANNEL="${1#--version=}"; FR_HAVE_CHANNEL=1; shift ;;
+    *) FR_PASS_ARGS+=("$1"); shift ;;
+  esac
+done
+set -- ${FR_PASS_ARGS[@]+"${FR_PASS_ARGS[@]}"}
+fr_here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fr_delegate=0
+case "${1:-}" in
+  --uninstall | --install-bridge) ;;
+  *)
+    if [ "${FR_INSTALL_SKIP_PREFLIGHT:-}" = "1" ]; then
+      :
+    elif [ "$FR_HAVE_CHANNEL" = 1 ]; then
+      case "$(printf '%s' "$FR_CHANNEL" | tr '[:upper:]' '[:lower:]')" in
+        main) ;;
+        *) fr_delegate=1 ;;
+      esac
+    else
+      # Read first: `git tag | grep -q` under pipefail can lose git to SIGPIPE, which
+      # would read a tagged checkout as untagged.
+      fr_head_tags="$(git -C "$fr_here" tag --points-at HEAD 2>/dev/null || true)"
+      if git -C "$fr_here" symbolic-ref -q HEAD >/dev/null 2>&1 \
+         || ! printf '%s\n' "$fr_head_tags" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'; then
+        fr_delegate=1
+      fi
+    fi ;;
+esac
+if [ "$fr_delegate" = 1 ]; then
+  if [ -n "${FR_INSTALL_DELEGATED:-}" ]; then
+    echo "ERROR: install.sh was handed back to itself without a version to install." >&2
+    echo "  Run it with --version main to install this checkout, or with --version <v>." >&2
+    exit 1
+  fi
+  if [ "$FR_HAVE_CHANNEL" = 1 ]; then
+    echo "install.sh: --version $FR_CHANNEL: resolving it with bootstrap.sh"
+    set -- --version "$FR_CHANNEL" "$@"
+  else
+    echo "install.sh: installing the newest stable release (--version main installs this checkout, --version RC the newest release candidate)"
+  fi
+  if [ -z "${FR_SRC_REMOTE:-}" ]; then
+    FR_SRC_REMOTE="$(git -C "$fr_here" remote get-url origin 2>/dev/null || true)"
+  fi
+  [ -z "${FR_SRC_REMOTE:-}" ] || export FR_SRC_REMOTE
+  export FR_INSTALL_DELEGATED=1
+  # bootstrap.sh checks a tag out in its managed checkout, which can be this very
+  # clone (the cloud setup script's), and bash reads a script file as it runs. So it
+  # runs from memory, as it does piped from curl; it never names its own path. Read
+  # by an assignment, so a failed read stops here (set -e ignores one in an argument).
+  fr_bootstrap="$(cat "$fr_here/scripts/bootstrap.sh")"
+  exec bash -c "$fr_bootstrap" bootstrap.sh "$@"
+fi
+# The guard is for the one hand-off above; this run installs, so nothing it starts
+# inherits it.
+unset FR_INSTALL_DELEGATED
+
 # One install per machine at a time (gh#938). Every release is followed by a
 # reinstall — by hand, by a watcher, by `fr triage batch drive`'s post_merge —
 # and two of them overlapping share the fixed `<file>.tmp` sidecars below and

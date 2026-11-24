@@ -28,16 +28,19 @@ fr_fr_resolve || exit 0
 # Code honours both registrations two teardowns of one workspace would run at
 # once. The second waits, then finds nothing to remove.
 locks="$HOME/.cache/fr/locks"; mkdir -p "$locks"
-lock="$locks/worktree-remove.$(printf '%s' "$path" | cksum | cut -d' ' -f1)"
+lock="$locks/worktree-remove.$(printf '%s' "$path" | cksum | cut -d' ' -f1).lock"
 waited=0
-until mkdir "$lock" 2>/dev/null; do
-  holder=$(cat "$lock/pid" 2>/dev/null || true)
-  if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then rm -rf "$lock"; continue; fi
+# The lock is a FILE made by the shell itself: `noclobber` opens it O_EXCL, so the
+# exclusion is the kernel's and rests on no external binary (an external `mkdir` was
+# seen succeeding twice on one path on Linux CI, gh#1463/gh#1586). It is created and
+# holds the holder's pid in one step; a reader that sees it empty just waits.
+until ( set -o noclobber; echo $$ > "$lock" ) 2>/dev/null; do
+  holder=$(cat "$lock" 2>/dev/null || true)
+  if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then rm -f "$lock"; continue; fi
   [ "$waited" -ge 300 ] && { echo "fr-worktree-remove: gave up waiting for $lock" >&2; exit 0; }
   sleep 1; waited=$((waited + 1))
 done
-trap 'rm -rf "$lock"' EXIT
-echo $$ > "$lock/pid"
+trap 'rm -f "$lock"' EXIT
 "$FR_FR_BIN" isolation down --worktree "$path" >&2 ||
   echo "fr-worktree-remove: fr isolation down refused for $path; workspace kept (see fr isolation status)" >&2
 exit 0

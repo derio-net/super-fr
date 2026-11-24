@@ -210,13 +210,16 @@ def _installed_version() -> str:
 
 
 def _install_release(release: str, *, remote: str | None = None) -> None:
-    """Install fr *release* the way the cloud setup does (spec §H): a super-fr source
-    clone on a clean `main` at origin/main, which must contain the release's tag, then
-    its `scripts/install.sh` with its normal preflight. The clone lives under
-    `~/.cache/fr/src/super-fr`, never in the marketplace directory, which install.sh
-    replaces (dropping its `.git`), so a second reinstall finds the clone it left (p6-r1).
-    *remote* defaults to the release repo. Raises `RuntimeError` naming the failed step
-    and its stderr; tests replace it."""
+    """Install exactly fr *release* the way the cloud setup does (spec §H): origin/main's
+    `scripts/bootstrap.sh --version <release>`, which checks the release tag out in the
+    super-fr source clone and runs that tag's `scripts/install.sh`. The clone lives
+    under `~/.cache/fr/src/super-fr`, never in the marketplace directory, which
+    install.sh replaces (dropping its `.git`), so a second reinstall finds the clone it
+    left (p6-r1). It used to install origin/main once main contained the tag, and main
+    is a release candidate while a gate is pending, so a reinstall of the latest
+    release installed that RC. *remote* defaults to the release repo. Raises
+    `RuntimeError` naming the failed step and its stderr; tests replace it."""
+    import os
     import subprocess
     from pathlib import Path as _Path
 
@@ -225,13 +228,17 @@ def _install_release(release: str, *, remote: str | None = None) -> None:
     url = remote or f"https://github.com/{FR_RELEASE_REPO}.git"
     clone = _Path.home() / ".cache" / "fr" / "src" / "super-fr"
 
-    def run(*argv: str) -> None:
+    def run(*argv: str, env: dict[str, str] | None = None, label: str = "") -> str:
         try:
-            subprocess.run(argv, check=True, capture_output=True, text=True)
+            done = subprocess.run(
+                argv, check=True, capture_output=True, text=True,
+                env=None if env is None else {**os.environ, **env},
+            )  # fmt: skip
+            return done.stdout
         except subprocess.CalledProcessError as exc:
             said = " ".join((exc.stderr or exc.stdout or "").split())
             raise RuntimeError(
-                f"`{' '.join(argv[:3])}` exited {exc.returncode}: {said or 'no output'}"
+                f"`{label or ' '.join(argv[:3])}` exited {exc.returncode}: {said or 'no output'}"
             ) from exc
         except OSError as exc:
             raise RuntimeError(f"`{argv[0]}` could not run: {exc}") from exc
@@ -246,25 +253,15 @@ def _install_release(release: str, *, remote: str | None = None) -> None:
     git = ("git", "-C", str(clone))
     run(*git, "remote", "set-url", "origin", url)
     run(*git, "fetch", "--quiet", "--force", "--tags", "origin", "main")
-    # install.sh's preflight installs only a clean `main` in sync with origin/main
-    # (p7-r1), so the release is installed from there, never from a detached tag:
-    # refuse a tag main does not contain rather than install something else.
-    try:
-        on_main = subprocess.run(
-            [*git, "merge-base", "--is-ancestor", f"refs/tags/{release}", "origin/main"],
-            capture_output=True, text=True,
-        )  # fmt: skip
-    except OSError as exc:
-        raise RuntimeError(f"`git` could not run: {exc}") from exc
-    if on_main.returncode != 0:
-        said = " ".join((on_main.stderr or "").split())
-        raise RuntimeError(
-            f"release tag {release} is not on origin/main of {url}; refusing to install "
-            f"it (install.sh installs only main){': ' + said if said else ''}"
-        )
-    run(*git, "checkout", "--quiet", "--force", "-B", "main", "origin/main")
-    run(*git, "clean", "-fdxq")
-    run("bash", str(clone / "scripts" / "install.sh"))
+    # bootstrap.sh checks the tag out in this clone, so it runs from memory (as it does
+    # piped from curl), never from a file the checkout changes under it. It refuses a
+    # tag that is unknown or predates install channels, naming the installable ones.
+    bootstrap = run(*git, "show", "origin/main:scripts/bootstrap.sh")
+    run(
+        "bash", "-c", bootstrap, "bootstrap.sh", "--version", release,
+        env={"FR_SRC_DIR": str(clone), "FR_SRC_REMOTE": url},
+        label=f"bootstrap.sh --version {release}",
+    )  # fmt: skip
 
 
 def _reexec(release: str) -> None:
