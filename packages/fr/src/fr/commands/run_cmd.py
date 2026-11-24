@@ -112,6 +112,7 @@ from fr.run.model import (
     save_run_state,
     validate_run_id,
 )
+from fr.shape import shown_path
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -8286,13 +8287,7 @@ def resolve_in_process(
     )
 
 
-def _shown_path(path: Path, repo_root: Path) -> str:
-    """*path* relative to the checkout when it is inside it, else absolute: under quiet
-    and stealth a run's files live outside the product checkout."""
-    try:
-        return path.resolve().relative_to(repo_root.resolve()).as_posix()
-    except ValueError:
-        return str(path)
+_shown_path = shown_path  # one display rule with fr.shape's refusals (review p1-r1)
 
 
 def _resolve_with_record(

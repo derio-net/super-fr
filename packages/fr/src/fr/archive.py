@@ -797,9 +797,10 @@ def _archive_run(repo_root: Path, plan_rel: Path) -> None:
 
 def archive_run_cursor(repo_root: Path, run_id: str) -> None:
     """Move run `run_id`'s cursor to implemented/runs/, carrying its usage
-    file (`_archive_usage`). With the cursor already archived, a usage file
-    left live is moved on its own. A no-op when the destination already holds
-    a cursor (a re-run) — the caller sees the live file remain.
+    file (`_archive_usage`). With the cursor already archived, a usage file,
+    PR body render or shape file left live is moved on its own. A no-op when the
+    destination already holds a cursor (a re-run) — the caller sees the live file
+    remain.
 
     Public so `fr archive --branch` can move an orphan cursor — one whose
     `emitted.plan` is already archived (2026-09-28-closeout-always §C's
@@ -810,6 +811,8 @@ def archive_run_cursor(repo_root: Path, run_id: str) -> None:
     if not src.exists():
         if dst.exists():
             _archive_usage(repo_root, dst, run_id)
+            _archive_pr_body(repo_root, run_id)
+            _archive_shape(repo_root, run_id)
         return
     if dst.exists():
         return

@@ -182,7 +182,7 @@ def deliver_shape_refusal(repo_root: Path, state: RunState) -> str | None:
     if owed != "owed":
         return None
     path = shape_path(repo_root, state.run)
-    shown = _shown(path, repo_root)
+    shown = shown_path(path, repo_root)
     try:
         content = path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -195,9 +195,11 @@ def deliver_shape_refusal(repo_root: Path, state: RunState) -> str | None:
     return f"deliver: the run's shape file {shown} is not a shape block: {problem}. {TWO_FORMS}"
 
 
-def _shown(path: Path, repo_root: Path) -> str:
-    """Repo-relative inside the checkout; the full path under quiet or stealth."""
+def shown_path(path: Path, repo_root: Path) -> str:
+    """*path* relative to the checkout when it is inside it, else absolute: under quiet
+    and stealth a run's files live outside the product checkout. Both sides are
+    resolved, so a symlinked checkout (macOS ``/var``) still reads relative."""
     try:
-        return path.relative_to(repo_root).as_posix()
+        return path.resolve().relative_to(repo_root.resolve()).as_posix()
     except ValueError:
         return str(path)

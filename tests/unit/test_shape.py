@@ -7,11 +7,6 @@ from pathlib import Path
 
 import pytest
 
-
-def test_fr_shape_imports() -> None:
-    import fr.shape  # noqa: F401
-
-
 FENCED_TICKS = "Some text.\n\n```\nfoo/\n  bar.py\n```\n"
 FENCED_TILDES = "~~~\nfoo\n~~~\n"
 FENCED_MERMAID = "```mermaid\nsequenceDiagram\n  A->>B: hi\n```\n"
