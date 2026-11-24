@@ -295,3 +295,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-s1-configuration-homes-p4 created=2026-11-24T20:41:16+00:00 -->
 ### phase-split-2026-11-24-s1-configuration-homes-p4 · decision · ask: the relocating-kind framework and the migration of every moved file (R9-R14)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-s1-configuration-homes-p5 created=2026-11-24T20:41:18+00:00 -->
+### phase-split-2026-11-24-s1-configuration-homes-p5 · decision · ask: one home for shipped defaults (R15, R16)
