@@ -63,8 +63,8 @@ Design section: a name that does not exist, or a drawing that the text contradic
 finding.
 
 **The run's shape file, `<run-id>.shape.md`.** It sits beside the run's cursor and shows
-what was delivered, not what was planned. fr-goal writes and commits it before it sends out
-the lens reviewers. Each lens reviewer gets the file's path in its brief, reads it, and
+what the run delivered, not what the plan said. fr-goal writes and commits it before it
+sends out the lens reviewers. Each lens reviewer gets the file's path in its brief, reads it, and
 reports any place where it contradicts the diff. At `deliver`, fr renders the file into the
 PR body as `## Shape of the change`, and refuses to deliver while the file is missing or is
 not a shape block. A run that started before design shapes existed shows "This run predates
@@ -81,5 +81,5 @@ with the smallest view and a sentence or two on what it shows.
 ## Credit
 
 The menu of views and the smallest-view rule come from HumanLayer's `show-me` skill, under
-the MIT licence. fr's version drops its last-resort browser page and adds the shape-block
-grammar and the two places fr asks for one.
+the Massachusetts Institute of Technology (MIT) licence. fr's version drops its last-resort
+browser page. It adds the shape-block grammar and the two places fr asks for one.

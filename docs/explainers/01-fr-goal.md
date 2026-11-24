@@ -747,9 +747,10 @@ design under it, is what the questions settled. From here on it is the
 contract: nothing after this step goes back to your original words. The run
 does not build a requirement the specification does not state. If the
 specification turns out to be wrong, the fix goes into the specification.
+
 The specification also carries a **Design shape**: a small picture of the change,
 such as an annotated file tree or a sequence diagram, drawn with
-[fr-show-me](fr-show-me.md), or one line `none — <reason>` when no picture helps.
+[fr-show-me](fr-show-me.md). When no picture helps, it is one line, `none — <reason>`.
 fr refuses a specification without one.
 
 The agent that wrote the specification does not check it. An author who
@@ -1130,7 +1131,9 @@ The final PR discloses the spec and plan, the review findings and fixes, the
 refuted findings, unfinished manual work, the operator-driven Test Plan and the
 remaining acceptance debt. Its **Shape of the change** section is the run's shape file;
 `deliver` refuses while that file is missing or holds no picture and no `none — <reason>`
-line. Because fr commits the run's record on the same
+line.
+
+Because fr commits the run's record on the same
 branch, the PR also shows the sequence of steps that produced all of it. Findings
 come from both journals, the specification's and the plan's. The out-of-scope
 ones get a section of their own, each naming the issue it went to. The
