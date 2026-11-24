@@ -292,3 +292,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-wave-queue-gaps-p3 created=2026-11-24T22:52:33+00:00 -->
 ### phase-split-2026-11-24-wave-queue-gaps-p3 · decision · ask: ask 2, overlap-aware waves (R7-R10), last because it needs PR #1669
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-24-wave-queue-gaps-p1 created=2026-11-24T22:52:35+00:00 -->
+### tier-2026-11-24-wave-queue-gaps-p1 · decision · hard: changes the queue's conflict gate and a safety hold every landing relies on (git ancestry, force-push brief)
