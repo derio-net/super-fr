@@ -8922,6 +8922,11 @@ batches:
     - super-fr#1507
     - super-fr#1511
     - super-fr#1524
+  - kind: closeout
+    at: '2026-11-24T20:17:08.933297Z'
+    runner: herdr
+    handle: w3P:pB
+    archive: chore/closeout-2026-11-24-1
 - id: dispatch-safety
   title: 'Dispatch safety: no submission past a failed dedup, no symlinked content in cncd payloads'
   ids:
@@ -10178,6 +10183,13 @@ closeouts:
   handle: w3P:pB
   planned:
   - run-durability
+  pr: 1662
+  head: 2bc464668c2928a7f3a2bef350379ad81052b37b
+  members:
+  - run-durability
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-19-run-durability.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-19-run-durability.md"
 queues:
 - repo: derio-net/super-fr
   wave: 22
