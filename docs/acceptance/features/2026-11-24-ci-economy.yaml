@@ -51,9 +51,14 @@ rows:
     - spec:2026-11-24-ci-economy#R16
     - spec:2026-11-24-ci-economy#R17
     - spec:2026-11-24-ci-economy#R18
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_lane.py#test_classify_reads_a_docs_only_pull_request_as_light
+      - super-fr:tests/unit/test_ci_lane.py#test_light_skips_only_the_shard_jobs
+      - super-fr:tests/unit/test_ci_lanes_workflow.py#test_scoped_tests_runs_the_fr_scope_tier_in_the_light_lane
+    status: walk-owed
+    notes: Classifier, verdict and workflow shape unit-tested in CI; only a real docs-only
+      pull request shows the skipped jobs and a green ci-ok, owed post-merge (gate tester)
     verify: live
   - id: own-artifacts-tests-selected
     capability: ci
