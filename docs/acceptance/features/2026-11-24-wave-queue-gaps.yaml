@@ -40,9 +40,18 @@ rows:
     origin:
     - spec:2026-11-24-wave-queue-gaps#R4
     - spec:2026-11-24-wave-queue-gaps#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/integration/test_queue_lineage.py#test_a_head_that_merged_an_ejected_entrys_combination_carries_it
+      - super-fr:tests/integration/test_queue_lineage.py#test_a_combination_rebuilt_fresh_into_mains_history_is_not_carried
+      - super-fr:tests/integration/test_queue_lineage.py#test_an_unknown_object_raises
+      - super-fr:tests/unit/test_wave_queue_handback_planner.py#test_a_carrying_entry_is_not_built_and_yields_one_carry_action
+      - super-fr:tests/unit/test_wave_queue_handback_planner.py#test_an_unreadable_carry_or_lead_drops_the_entry_with_a_warning
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_carrying_head_gets_one_carry_brief_naming_the_reset_head
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_carrying_head_with_no_clean_hand_back_head_is_held
+    status: ci
+    notes: 'wave-queue-gaps phase 1: Checkout.carried/leads over real bare remotes,
+      the planner''s carry hold and R5 warnings, and the driver''s carry brief and hold'
     verify: none
   - id: wave-queue-gaps-live
     capability: Wave merge queue hand-backs
