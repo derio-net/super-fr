@@ -214,7 +214,7 @@ def test_the_cloud_setup_script_requires_the_plugin() -> None:
 
     script = cloud.setup_script()
     assert "FR_REQUIRE_PLUGIN=1" in script
-    assert script.index("FR_REQUIRE_PLUGIN=1") < script.index('scripts/bootstrap.sh)')
+    assert script.index("FR_REQUIRE_PLUGIN=1") < script.index("scripts/bootstrap.sh)")
 
 
 # ── Rules ────────────────────────────────────────────────────────────
