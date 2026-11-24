@@ -239,3 +239,6 @@ row_kinds:
 run_gate: tester
 run_kind: none
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-ci-economy-p2 created=2026-11-24T15:00:03+00:00 -->
+### phase-split-2026-11-24-ci-economy-p2 · decision · ask: asks 1, 2 and 4's CI side — ci.yml lanes, concurrency and the landed skip are one reviewable workflow change
