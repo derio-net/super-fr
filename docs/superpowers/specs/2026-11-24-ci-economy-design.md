@@ -194,3 +194,4 @@ gate: tester
 
 | Plan | Repo | File | Depends on |
 |---|---|---|---|
+| 2026-11-24-ci-economy | `derio-net/super-fr` | `2026-11-24-ci-economy` | — |

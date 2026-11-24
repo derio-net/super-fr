@@ -1,0 +1,59 @@
+schema_version: 2
+phase:
+  number: 3
+  title: own_artifacts tests and their selection (R19, R20)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - own-artifacts-tests-selected
+  tier: standard
+  files:
+  - pyproject.toml
+  - tests/**/*.py
+  - docs/**/*.md
+  - AGENTS.md
+  - docs/acceptance/features/2026-11-24-ci-economy.yaml
+  estimate_lines: 450
+tasks:
+- number: 1
+  title: The tripwire (R20)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: `tests/unit/test_tripwire_own_artifacts.py`: a pure `root_readers(sources)` over `{path: source}` flags a module with no `own_artifacts` mark (module `pytestmark` or a decorator on a test) that names `REPO_ROOT` or the other aliases this repo's tests use for the checkout root (find them by searching `tests/`), computes `Path(__file__)...parents[...]`, or imports a `tests/` helper module that itself exposes the root; fixture sources prove each pattern and the marked case. Then a test over this repo's `tests/` asserts no unmarked module: RED now.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: register `own_artifacts: reads this checkout's own tracked files (docs/, .fr/, .changes/, root *.md); --fr-scope selects them when those change` in `pyproject.toml`'s markers, and add module-level `pytestmark = pytest.mark.own_artifacts` (merged into an existing `pytestmark`, never replacing it) to every module the tripwire flags. Tests pass.
+- number: 2
+  title: --fr-scope selects them (R19)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: in the fr-scope tests (`tests/unit/test_fr_scope*.py`), the selection keeps an `own_artifacts` item when a changed path is under `docs/`, `.fr/` or `.changes/`, or is a root-level `*.md` or `.test_durations`, and does not keep it for a change only under `packages/` that its imports do not reach.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: implement it in `tests/fr_scope.py` (`keep_item` learns whether such a path changed, threaded from the session's changed set), and say it in one sentence in AGENTS.md's "Tiers" paragraph. Tests pass; the fast tier is green.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

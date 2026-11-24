@@ -1,0 +1,112 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Generated files and stamps in the queue combination (R8-R14)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - queue-regenerates-generated
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/regen.py
+  - packages/fr/src/fr/triage/*.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - .fr/triage.yaml
+  - tests/**/*.py
+  - docs/**/*.md
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - docs/acceptance/features/2026-11-24-ci-economy.yaml
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Config and facts schema (R8, R14)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: `TriageConfig` accepts `generated: [globs]` (default `[]`) and refuses a non-list; `FACTS_SCHEMA == 17`, and a schema-16 facts file still loads with `generated == []` (extend `test_triage_model.py`'s pins).
+  - id: P4.T1.S2
+    text: |-
+      GREEN: add `generated: list[str] = []` to `TriageConfig` (model.py:558) with a comment naming spec 2026-11-24-ci-economy R8, and move `FACTS_SCHEMA` to 17 with a comment above it in the style of model.py:41-88. Tests pass.
+- number: 2
+  title: Pure hunk resolution (R9, R10)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: `tests/unit/test_triage_regen.py` for `fr.triage.regen`: `resolve_hunks(text)` over files with git conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`, and the diff3 `|||||||` form). A front-matter `reviewed:` hunk takes the later date (2026-11-20 against 2026-11-23, either side); equal dates take the theirs (entry) side; a hunk wholly inside `<!-- generated:NAME -->`/`<!-- /generated:NAME -->` takes ours; a file mixing both resolves; any other hunk (prose, a `reviewed:` line outside front matter, two lines in a hunk, a hunk straddling a marker) returns None. `classify_conflicts(paths, generated_globs, read)` sorts paths into whole-generated, hunk-resolvable and real (version and lockfile paths go to the existing `unresolvable` in the caller).
+  - id: P4.T2.S2
+    text: |-
+      GREEN: implement `fr/triage/regen.py` (pure, no git). Tests pass.
+  - id: P4.T2.S3
+    text: |-
+      RED then GREEN: `outside_generated(before, after, generated_globs)` over `{path: text or None}` snapshots lists a changed path that matches no glob and whose change is not wholly inside generated blocks (added or removed files outside the globs count); a change inside a block of `README.md` is allowed.
+- number: 3
+  title: The builder resolves them (R9-R12)
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      RED: queue builder tests over real bare git repos (extend the existing `queue_exec` build tests and fixtures): (a) two entries editing a whole generated file differently, with a `mirrors:` command (a small python script committed in the fixture repo, run as an argv) that regenerates it from a source both entries touch without conflict: the combination builds, the generated file equals the regenerated output, no `MergeConflictError`; (b) a `<!-- generated:x -->` block conflict in a doc regenerates; (c) a `reviewed:` stamp conflict takes the newer date with no mirrors declared; (d) a mixed real conflict raises `MergeConflictError` whose `paths` name only the real path; (e) a mirror command exiting 1, one that sleeps past a short injected timeout, and one that writes a file outside the globs each raise `MergeConflictError` naming the paths and, for a failure, the command; (f) a generated conflict with no `mirrors:` is a real conflict. All for `squash`, and (a) also for `rebase` and `merge`.
+  - id: P4.T3.S2
+    text: |-
+      GREEN: add `Worktree.run_argv(argv, timeout)` and `Worktree.snapshot_tracked()` in `gitseam.py`; thread `mirrors` and `generated` from the repo's `TriageConfig` through `QueuePorts` (queue_exec.py:843), `build`, `_combine`, `_merged_tree`, `_keeps_merge_content` and `_resolve`. In `_resolve`, classify with `regen.classify_conflicts`, keep the version rule for the rest, write and stage resolved hunk files, take ours for whole generated paths, then run the mirrors (10-minute default timeout) and check `outside_generated` and leftover markers, raising `MergeConflictError` per R11. Wire the code that builds `QueuePorts`. Tests pass.
+- number: 4
+  title: super-fr declares its mirrors (R13)
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      RED: a test reads this repo's `.fr/triage.yaml` and asserts `mirrors` holds the five `uv run --frozen python scripts/sync-*.py` argument lists, and `generated` holds globs that match the files those scripts write in whole (the OpenCode skills, instructions, agent and commands mirrors, the Hermes skills and SOUL.d rules, `packages/fr/src/fr/agents/*.md`, `packages/fr/src/fr/lens_manifests/*`), match neither `README.md` nor `docs/reference/cli.md`, and each match at least one tracked file.
+  - id: P4.T4.S2
+    text: |-
+      GREEN: add `mirrors:` and `generated:` to `.fr/triage.yaml` with a comment naming spec 2026-11-24-ci-economy R13, checking each sync script's output paths in its source. Tests pass.
+  - id: P4.T4.S3
+    text: |-
+      REFACTOR: document `generated:` beside `mirrors:` in the fr-triage skill's config section (canonical `plugins/super-fr/skills/fr-triage/SKILL.md`, then run `scripts/sync-opencode.py` and `scripts/sync-hermes.py`), and update every docs page `uv run fr docs check --base origin/main` names (the queue's explainer or guide). The fast tier is green.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
