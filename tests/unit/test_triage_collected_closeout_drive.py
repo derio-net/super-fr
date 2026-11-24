@@ -10,6 +10,7 @@ over the in-memory forge.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,7 @@ from typing import Any
 import pytest
 from fr.triage.batch_drive import (
     attributed,
+    batch_item_id,
     closeout_event,
     collected_item_id,
     drive_pass,
@@ -536,8 +538,8 @@ def test_p6_r6_a_collected_pr_touching_code_is_never_auto_merged(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:
     _started(
-        world, tmp_path, "b1", checkout=checkout, diff=[*FILES, "A\tscripts/x.sh"]
-    )  # the forge's file list says docs only
+        world, tmp_path, "b1", checkout=checkout, diff=[*FILES, "A\tscripts/x.sh"], labels=[]
+    )  # the forge's file list says docs only; no approved-fr (gh#1497 would release it)
     code, out = _drive(tmp_path, "--once", "--yes")
     assert "pr_merge 900" not in world.calls
     (line,) = _lines(out, "closeout-needs-review")
@@ -613,3 +615,199 @@ def test_p6b_r2_a_collected_pr_with_no_check_results_is_never_green(
     code, out = _drive(tmp_path, "--once", "--yes")
 
     assert "pr_merge 900" not in world.calls, out
+
+
+# ------------------------------------- gh#1494: the collected close-out session closes
+
+
+def _closed_out(*bids: str, finished: tuple[str, ...] | None = None, **kw: Any) -> Any:
+    """*bids* collected onto PR #900 on FIRST, merged; the ones in *finished* (default:
+    all) archived. Every batch's and the collected item's session is live."""
+    done = bids if finished is None else finished
+    events = {f"{b}_events": _recorded(**({"archived": 900} if b in done else {})) for b in bids}
+    events.update({k: kw.pop(k) for k in list(kw) if k.endswith("_events")})
+    marker = _anchored(bids, merged=True, planned=list(bids))
+    sessions = frozenset({ITEM, *(batch_item_id(REPO, b) for b in bids)})
+    return _landed(*bids, closeouts=(marker,), close_sessions=True, sessions=sessions,
+                   **events, **kw)  # fmt: skip
+
+
+def test_gh1494_the_collected_closeout_session_closes_with_its_last_finished_batch() -> None:
+    plan = drive_pass(_closed_out("a", "b"))
+    closed = {i for a in plan.actions if a.kind == "close" for i in a.items}
+    assert ITEM in closed
+    assert sum(ITEM in a.items for a in plan.actions if a.kind == "close") == 1
+
+
+def test_gh1494_the_collected_session_stays_while_one_of_its_batches_is_unfinished() -> None:
+    plan = drive_pass(_closed_out("a", "b", finished=("a",)))
+    closed = {i for a in plan.actions if a.kind == "close" for i in a.items}
+    assert ITEM not in closed
+    assert batch_item_id(REPO, "a") in closed
+
+
+def test_gh1494_a_collected_session_whose_pr_is_unmerged_stays() -> None:
+    snap = _closed_out("a")
+    snap = replace(snap, closeouts=(_anchored(("a",), planned=["a"]),))
+    plan = drive_pass(snap)
+    assert ITEM not in {i for a in plan.actions if a.kind == "close" for i in a.items}
+
+
+def test_gh1494_a_held_planned_batch_keeps_the_collected_session() -> None:
+    """A batch the close-out planned but held (closeout_hold) is the operator's to look
+    at through that session: never closed while it is unfinished."""
+    snap = _closed_out("a", "b", finished=("a",), b_events=[_hold()])
+    snap = replace(snap, closeouts=(_anchored(("a",), merged=True, planned=["a", "b"]),))
+    plan = drive_pass(snap)
+    assert ITEM not in {i for a in plan.actions if a.kind == "close" for i in a.items}
+
+
+# ------------- gh#1497: approved-fr admits a closeout-needs-review PR to the queue
+
+
+def test_gh1497_an_approved_held_closeout_pr_is_admitted_at_its_live_head() -> None:
+    from fr.triage.approval import Approved
+
+    snap = _under_way(_shared(head="h999"), "a", "b",
+                      collected_approvals={ITEM: Approved("h999")})  # fmt: skip
+    plan = drive_pass(snap)
+    assert "closeout-needs-review" not in [a.kind for a in plan.actions]
+    (entry,) = plan.admitted.values()
+    assert (entry.kind, entry.pr.number, entry.pr.head, entry.batch) == (
+        "closeout", 900, "h999", "a")  # fmt: skip
+
+
+@pytest.mark.parametrize("verdict", ["none", "unlabelled", "void", "first"])
+def test_gh1497_a_held_closeout_pr_without_a_recorded_approval_stays_held(verdict: str) -> None:
+    """`First` too: a label no `--yes` pass recorded never admits a held PR."""
+    from fr.triage.approval import First, Unlabelled, Void
+
+    approvals = {"none": {}, "unlabelled": {ITEM: Unlabelled()}, "void": {ITEM: Void("h900")},
+                 "first": {ITEM: First("h999")}}  # fmt: skip
+    snap = _under_way(_shared(head="h999"), "a", collected_approvals=approvals[verdict])
+    kinds = _kinds_of(snap)
+    assert "closeout-needs-review" in kinds and "admitted" not in kinds
+
+
+def test_gh1497_an_approved_closeout_pr_still_waits_for_green_and_mergeable() -> None:
+    from fr.triage.approval import Approved
+
+    snap = _under_way(_shared(head="h999", mergeable="UNKNOWN"), "a",
+                      collected_approvals={ITEM: Approved("h999")})  # fmt: skip
+    kinds = _kinds_of(snap)
+    assert "admitted" not in kinds and "closeout-needs-review" not in kinds
+
+
+def test_gh1497_an_approval_never_admits_a_body_closing_other_issues() -> None:
+    from fr.triage.approval import Approved
+
+    snap = _under_way(_shared(head="h999"), "a", marker=_anchored(("a",), closes=[f"{REPO}#7"]),
+                      collected_body_closes={ITEM: frozenset({f"{REPO}#7", f"{REPO}#99"})},
+                      collected_approvals={ITEM: Approved("h999")})  # fmt: skip
+    kinds = _kinds_of(snap)
+    assert "closeout-needs-review" in kinds and "admitted" not in kinds
+
+
+def test_gh1497_an_approval_never_admits_a_closes_set_it_could_not_check() -> None:
+    from fr.triage.approval import Approved
+
+    snap = _under_way(_shared(head="h999"), "a", collected_narrowed={ITEM: None},
+                      collected_approvals={ITEM: Approved("h999")})  # fmt: skip
+    kinds = _kinds_of(snap)
+    assert "closeout-needs-review" in kinds and "admitted" not in kinds
+
+
+def test_gh1497_the_driver_records_the_approval_on_the_queue_and_queues_the_held_pr(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """End to end: the session's push moved the head past the recorded one (gh#1496's
+    state); the operator's approved-fr is recorded on the queue's events at the live head
+    and the PR becomes a queue entry there; the driver merges nothing itself."""
+    from tests.unit.test_triage_batch_drive_cmd import _queued
+
+    target = _started(world, tmp_path, "b1", "b2", checkout=checkout, head_oid="sha-901")
+    checkout.status["sha-901"] = frozenset(FILES)
+    checkout.patch_ids = {"sha-901": "p1"}
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 0, out
+    assert "approval of closeout PR #900 recorded at sha-901" in out
+    assert _queued(world) == ["closeout#900"] and "pr_merge 900" not in world.calls
+    judgements = load_judgements(target / "judgements.yaml")
+    events = [e for q in judgements.queues for e in q.events if e.kind == "approval"]
+    assert [(e.entry.pr, e.entry.kind, e.head) for e in events] == [(900, "closeout", "sha-901")]
+
+
+def test_gh1497_a_push_that_changes_the_diff_voids_the_approval_and_the_pr_stays_held(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    from tests.unit.test_triage_batch_drive_cmd import _queued
+
+    target = _started(world, tmp_path, "b1", checkout=checkout, head_oid="sha-901",
+                      mergeable="UNKNOWN")  # fmt: skip
+    checkout.status["sha-901"] = frozenset(FILES)
+    checkout.patch_ids = {"sha-901": "p1", "sha-902": "p2"}
+    code, out = _drive(tmp_path, "--once", "--yes")  # recorded at sha-901, not yet mergeable
+    assert "approval of closeout PR #900 recorded at sha-901" in out
+    world.prs[900].update(head_oid="sha-902", mergeable="MERGEABLE")  # a push changing the diff
+    checkout.status["sha-902"] = frozenset(FILES)
+    world.queue_plans.clear()
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert "approval of closeout PR #900 at sha-901 voided" in out
+    assert _queued(world) == [] and "pr_merge 900" not in world.calls
+    assert _lines(out, "closeout-needs-review")
+    assert load_judgements(target / "judgements.yaml").closeouts[0].merged is False
+
+
+# ------------------ gh#1569: a release-pending migration is a wait, never a hold
+
+
+def test_gh1569_no_collected_closeout_starts_while_an_artifact_it_does_not_archive_is_stale() -> (
+    None
+):
+    """Owed, never held: retried every pass, and a Need while it waits (nothing may migrate
+    it unless someone does), so the drive never polls silently."""
+    path = "docs/superpowers/runs/r.yaml"
+    plan = drive_pass(_landed("a", "b", closeout_waits={REPO: path}))
+    assert [a for a in plan.actions if a.kind == "closeout"] == []
+    (wait,) = [
+        a for a in plan.actions if a.kind == "blocked" and "waits for a migration" in a.detail
+    ]
+    assert path in wait.detail and "a, b" in wait.detail and "fr migrate artifacts" in wait.detail
+    assert plan.summary.blocked >= 1
+    again = drive_pass(_landed("a", "b", closeout_waits={REPO: path}))
+    assert [a.kind for a in again.actions if "waits for a migration" in a.detail] == ["blocked"]
+
+
+def test_gh1569_the_closeout_starts_once_nothing_it_leaves_alone_is_stale() -> None:
+    plan = drive_pass(_landed("a", "b", closeout_waits={}))
+    (start,) = [a for a in plan.actions if a.kind == "closeout"]
+    assert start.items == ("a", "b")
+
+
+def test_gh1569_the_driver_reports_the_wait_and_starts_no_session(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    from fr.commands import triage_batch_cmd
+
+    _world_landed(world, tmp_path, "b1")
+    checkout.released = True
+    stale = "docs/superpowers/runs/r.yaml"
+    monkeypatch.setattr(triage_batch_cmd._Driver, "_closeout_waits",
+                        lambda self, due, repos: {REPO: stale})  # fmt: skip
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert runner.dispatched == [] and load_judgements(tmp_path / "judgements.yaml").closeouts == []
+    assert f"waits for a migration of {stale}" in out
+    assert not any(e.kind == "closeout_hold"
+                   for b in load_judgements(tmp_path / "judgements.yaml").batches
+                   for e in b.events)  # fmt: skip
+    monkeypatch.setattr(triage_batch_cmd._Driver, "_closeout_waits", lambda self, due, repos: {})
+    code, out = _drive(tmp_path, "--once", "--yes")  # the release migrated it
+    (item,) = runner.dispatched
+    assert item.id == CMD_ITEM

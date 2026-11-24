@@ -17,10 +17,12 @@ MAX_HEADROOM = 400
 
 BUDGETS: dict[str, int] = {
     f"{SRC}commands/run_cmd.py": 9100,
-    f"{SRC}commands/triage_batch_cmd.py": 8200,
+    # +25 each: batch closeout-truth (gh#1494/#1496/#1497/#1569) changes the close-out steps
+    # these modules hold; the split they need is #1516 (hand-back and close-out leaves).
+    f"{SRC}commands/triage_batch_cmd.py": 8225,
     f"{SRC}isolation/local.py": 3200,
     f"{SRC}plan_ops.py": 2600,
-    f"{SRC}triage/batch_drive.py": 2250,
+    f"{SRC}triage/batch_drive.py": 2275,
 }
 
 HELD: frozenset[str] = frozenset(
