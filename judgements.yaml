@@ -10170,6 +10170,14 @@ closeouts:
   - "D\tdocs/superpowers/runs/2026-11-19-feat-batch-train-truth.yaml"
   - "D\tdocs/superpowers/specs/2026-11-19-batch-train-truth-design.md"
   - "D\tdocs/superpowers/usage/2026-11-19-feat-batch-train-truth.yaml"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-24-1
+  branch: chore/closeout-2026-11-24-1
+  at: '2026-11-24T20:16:19.826636Z'
+  runner: herdr
+  handle: w3P:pB
+  planned:
+  - run-durability
 queues:
 - repo: derio-net/super-fr
   wave: 22
