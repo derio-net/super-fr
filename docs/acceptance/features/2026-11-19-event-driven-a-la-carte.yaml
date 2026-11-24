@@ -83,8 +83,9 @@ rows:
     - spec:2026-11-19-event-driven-a-la-carte#R16
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: candidate walk scenario, built in plan phase 7
     verify: candidate
+    scenario: tests/scenarios/config-homes.sh
   - id: s1-triage-state-home
     capability: triage
     acceptance: A triage scope keeps its working state in a host-cache git repository
