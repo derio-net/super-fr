@@ -88,3 +88,12 @@ rows:
     status: not-implemented
     notes: ''
     verify: none
+amendments:
+  - row: ci-superseded-runs
+    op: reword
+    base: 0
+    acceptance: A pull-request CI run superseded by a newer push to the same pull request
+      is cancelled, and the pull request's head reports only the newer run's ci-ok;
+      pushes to main and fr-queue/** and merge groups are never cancelled, and ci-ok
+      is never skipped
+    why: 'spec-review s-r1-3: ci-ok keeps if: always()'
