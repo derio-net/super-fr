@@ -42,9 +42,11 @@ else
   mkdir -p "$(dirname "$src")"
   git clone --quiet --branch main {source} "$src"
 fi
+# An assignment, so a failed read stops the script (set -e ignores a failed $(...)
+# inside an argument, and `bash -c ""` would install nothing and exit 0).
+bootstrap="$(git -C "$src" show origin/main:scripts/bootstrap.sh)"
 # FR_REQUIRE_PLUGIN=1: refuse, never warn and skip, if the plugin cannot be registered.
-FR_SRC_DIR="$src" FR_SRC_REMOTE={source} FR_REQUIRE_PLUGIN=1 \
-  bash -c "$(git -C "$src" show origin/main:scripts/bootstrap.sh)" bootstrap.sh
+FR_SRC_DIR="$src" FR_SRC_REMOTE={source} FR_REQUIRE_PLUGIN=1 bash -c "$bootstrap" bootstrap.sh
 
 # 4. The cloud proxy refuses GitHub's GraphQL API (HTTP 403): fr talks REST.
 forge="$HOME/.config/fr/forge.yaml"

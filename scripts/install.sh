@@ -71,8 +71,10 @@ if [ "$fr_delegate" = 1 ]; then
   export FR_INSTALL_DELEGATED=1
   # bootstrap.sh checks a tag out in its managed checkout, which can be this very
   # clone (the cloud setup script's), and bash reads a script file as it runs. So it
-  # runs from memory, as it does piped from curl; it never names its own path.
-  exec bash -c "$(cat "$fr_here/scripts/bootstrap.sh")" bootstrap.sh "$@"
+  # runs from memory, as it does piped from curl; it never names its own path. Read
+  # by an assignment, so a failed read stops here (set -e ignores one in an argument).
+  fr_bootstrap="$(cat "$fr_here/scripts/bootstrap.sh")"
+  exec bash -c "$fr_bootstrap" bootstrap.sh "$@"
 fi
 
 # One install per machine at a time (gh#938). Every release is followed by a
