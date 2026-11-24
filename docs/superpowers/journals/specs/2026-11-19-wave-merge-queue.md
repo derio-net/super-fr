@@ -664,3 +664,10 @@ Evidence: 2026-11-24: tests/integration/test_queue_resume.py (resume after queue
 Step: The pass line, the board and the Batches page show the queue line; a queued, approved PR is never "awaiting approval". (R25)
 
 Evidence: 2026-11-24: tests/unit/test_wave_queue_operator_view.py (queue line, board, Batches page, never awaiting approval); full wave-queue unit (542) + integration (134) + scenario (3) runs green
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-18 created=2026-11-24T12:40:57+00:00 -->
+### test-plan-step-18 · discovery · Test Plan step 18: ran
+
+Step: Wave sequencing: wave N drains, the hold reads `drained`; wave N+1's approved green PRs stay waiting; the release run clears the hold (once each for an RC, a final, and "nothing installable"); the next pass opens wave N+1's queue. A wave that drains by deferral, and one landed by `land: merge`, both reach the release through the `drained` push. A failed release run leaves the hold, and after `release_wait_hours` it is a Need. (R2, R17, R18, R19, R29)
+
+Evidence: 2026-11-24: tests/unit/test_wave_queue_planner.py, test_wave_queue_drive.py, test_queue_hold.py (drained hold, release clears, release_wait_hours Need); full wave-queue unit (542) + integration (134) + scenario (3) runs green
