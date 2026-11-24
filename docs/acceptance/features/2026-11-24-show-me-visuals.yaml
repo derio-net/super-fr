@@ -1,0 +1,76 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-24-show-me-visuals
+repo: derio-net/super-fr
+rows:
+  - id: show-me-skill
+    capability: fr-show-me visual vocabulary
+    acceptance: The fr-show-me skill ships a ranked, harness-neutral visual vocabulary
+      (structure-diffs, trees, pseudocode, mermaid; no HTML route) to Claude Code, OpenCode
+      and Hermes, credits its source and tells the author to redact third parties.
+    origin:
+    - spec:2026-11-24-show-me-visuals#R1
+    - spec:2026-11-24-show-me-visuals#R2
+    - spec:2026-11-24-show-me-visuals#R3
+    - spec:2026-11-24-show-me-visuals#R4
+    - spec:2026-11-24-show-me-visuals#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: spec-design-shape-gate
+    capability: spec design shape
+    acceptance: The brainstorm and spec-review resolves refuse a spec with no valid
+      `## Design shape` (a fenced block or `none — <reason>`), naming the spec and the
+      two forms, before anything is written.
+    origin:
+    - spec:2026-11-24-show-me-visuals#R6
+    - spec:2026-11-24-show-me-visuals#R7
+    - spec:2026-11-24-show-me-visuals#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: pr-shape-section
+    capability: PR shape section
+    acceptance: Every rendered PR body carries `## Shape of the change` from the run's
+      shape file (or says the run predates design shapes), and deliver refuses a run
+      whose spec has a design shape but whose shape file is missing or invalid.
+    origin:
+    - spec:2026-11-24-show-me-visuals#R9
+    - spec:2026-11-24-show-me-visuals#R10
+    - spec:2026-11-24-show-me-visuals#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: shape-file-archived
+    capability: shape file lifecycle
+    acceptance: fr archive moves a run's shape file beside its archived cursor, and
+      the ops trust tree treats it as fr bookkeeping.
+    origin:
+    - spec:2026-11-24-show-me-visuals#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: spec-reviewer-checks-shape
+    capability: shape accuracy review
+    acceptance: fr-spec-reviewer is instructed to check the spec's design shape against
+      the codebase and the spec's own design, reporting a mismatch as a finding.
+    origin:
+    - spec:2026-11-24-show-me-visuals#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: show-me-live-run
+    capability: show-me end to end
+    acceptance: A real fr-goal run on the released build produces a spec whose `## Design
+      shape` matches the code and a PR whose `## Shape of the change` matches the diff.
+    origin:
+    - spec:2026-11-24-show-me-visuals#R13
+    - spec:2026-11-24-show-me-visuals#R14
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live

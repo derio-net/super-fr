@@ -1,0 +1,80 @@
+schema_version: 2
+run: 2026-11-24-feat-show-me-visuals
+captures:
+- host: h-6a9ba924
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-11-24T13:51:47+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 21912ebc-378e-41be-ad3b-a1a39f6684f2
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 70
+        cache_write: 348296
+        cache_read: 4006554
+        output: 26532
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 8
+      other:
+        usd: null
+        turns: 15
+      paperwork:
+        usd: null
+        turns: 10
+    steps:
+      (outside run):
+        usd: null
+        turns: 13
+        input: 32
+        cache_write: 308985
+        cache_read: 1156673
+        output: 7424
+      brainstorm:
+        usd: null
+        turns: 18
+        input: 38
+        cache_write: 39311
+        cache_read: 2849881
+        output: 19108
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 8
+          input: 22
+          cache_write: 205867
+          cache_read: 759025
+          output: 5170
+        brainstorm:
+          usd: null
+          turns: 18
+          input: 38
+          cache_write: 39311
+          cache_read: 2849881
+          output: 19108
+      subagent:
+        (outside run):
+          usd: null
+          turns: 5
+          input: 10
+          cache_write: 103118
+          cache_read: 397648
+          output: 2254
+    units:
+      (unattributed):
+        subagent:
+          usd: null
+          turns: 5
+          input: 10
+          cache_write: 103118
+          cache_read: 397648
+          output: 2254
+    briefs:
+      a6ba72939932ba67d: 739

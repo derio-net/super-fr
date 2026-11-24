@@ -3,11 +3,14 @@ run: 2026-11-24-feat-show-me-visuals
 workflow: fr-goal@1
 branch: feat/show-me-visuals
 started: '2026-11-24T13:23:59+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-24T13:24:10+00:00'
+    state: done
+    at: '2026-11-24T13:51:45+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-24-show-me-visuals-design.md
   spec-review:
     state: pending
   plan:
