@@ -9295,6 +9295,8 @@ batches:
     pr: 1630
     head: ea6ad2ff8f0ca2f9e833614643740f0787f7d095
     patch_id: 5b177e09f58a2d01f6c397f293b569292afd2884
+  - kind: post_merge
+    at: '2026-11-24T23:09:04.356046Z'
 - id: merge-readiness
   title: 'Merge only what delivered: the driver reads deliver from the cursor, and the Batches page shows
     one readiness verdict per PR'
@@ -10328,3 +10330,8 @@ queues:
     patch_id: 5b177e09f58a2d01f6c397f293b569292afd2884
     base: 0160e4677f456c77fe157f3401444d3a2aee9440
     parent: 0160e4677f456c77fe157f3401444d3a2aee9440
+  - kind: queue_land
+    at: '2026-11-24T23:08:42.999951Z'
+    main: 36d8ffa46f425f7087b22ab21032fa689db0e3a5
+    entries:
+    - batch: triage-hardening
