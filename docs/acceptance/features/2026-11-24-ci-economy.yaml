@@ -95,9 +95,22 @@ rows:
     - spec:2026-11-24-ci-economy#R12
     - spec:2026-11-24-ci-economy#R13
     - spec:2026-11-24-ci-economy#R14
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_regen.py#test_classify_sorts_paths_into_whole_hunk_and_real
+      - super-fr:tests/unit/test_triage_model.py#test_a_schema_16_facts_file_loads_with_no_generated_globs
+      - super-fr:tests/unit/test_triage_yaml_mirrors.py#test_the_mirrors_are_the_five_sync_scripts_through_uv_run_frozen
+      int:
+      - super-fr:tests/integration/test_queue_regen.py#test_a_whole_generated_conflict_is_regenerated_by_the_mirrors
+      - super-fr:tests/integration/test_queue_regen.py#test_a_stamp_conflict_takes_the_newer_date_with_no_mirrors
+      - super-fr:tests/integration/test_queue_regen.py#test_a_failing_mirror_hands_the_entry_back_naming_the_command
+      - super-fr:tests/integration/test_queue_drive_cmd.py#test_the_drive_regenerates_a_generated_file_both_entries_changed
+    status: ci
+    notes: 'ci-economy phase 4: regen.py resolves reviewed stamps and generated blocks
+      (two regular blobs with marker hunks only), the builder regenerates through the
+      base''s mirrors in a named environment with git-dir tampering undone, super-fr
+      declares its mirrors and generated globs; tested over real bare repos for squash,
+      rebase and merge'
     verify: none
 amendments:
   - row: ci-superseded-runs
