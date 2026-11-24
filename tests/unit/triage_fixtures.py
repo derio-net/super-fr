@@ -261,8 +261,10 @@ class FakeForge:
         return self.visibility.get(repo)
 
     def anchor_reads(self) -> list[dict[str, Any]]:
-        """`read_file_at_ref` calls other than collect's one config read per repo."""
-        return [kw for kw in self.called("read_file_at_ref") if kw["path"] != ".fr/triage.yaml"]
+        """`read_file_at_ref` calls other than collect's config reads per repo: the quiet
+        switch probe at `fr-config` (`fr.config.space.forge_ref`) and `.fr/triage.yaml`."""
+        config = (".fr/triage.yaml", ".fr/settings.yaml")
+        return [kw for kw in self.called("read_file_at_ref") if kw["path"] not in config]
 
     def called(self, name: str) -> list[dict[str, Any]]:
         return [kw for n, kw in self.calls if n == name]
