@@ -55,6 +55,13 @@ def write_text_atomic(path: Path, text: str) -> None:
     mode: int | None = None
     with contextlib.suppress(OSError):
         mode = path.stat().st_mode & 0o7777
+    if mode is None:
+        # A new file: `mkstemp` makes its temp file 0600, and a cursor or plan
+        # created that way would be private where `write_text` made it
+        # 0666 & ~umask. Reading the umask means setting it; restore at once.
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
 
     fd, tmp_name = tempfile.mkstemp(dir=directory, prefix=f".{path.name}.", suffix=".fr-tmp")
     tmp = Path(tmp_name)
