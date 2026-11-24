@@ -693,3 +693,8 @@ Raised under the docs-accuracy lens (l-docs-accuracy-r1). R12 scopes the new rul
 ### l-out-workflow-permissions-resolved · finding [out-of-scope] · resolves l-out-workflow-permissions: ci.yml has no workflow-level permissions block; the older jobs run with the repo's default token
 
 Predates this change: the older ci.yml jobs had no permissions block before it; this change scoped only its own lane jobs.
+
+<!-- fr:journal kind=finding scope=plan id=l-out-probe-rules-resolved created=2026-11-24T21:58:43+00:00 state=open resolves=l-out-probe-rules out_of_scope=true -->
+### l-out-probe-rules-resolved · finding [out-of-scope] · resolves l-out-probe-rules: The early conflict probe resolves only version and lock files, so a stamp or generated conflict outside a queue slot still costs a hand-back
+
+R12 scopes the new resolution rules to the combination builder; the early probe in batch_merge predates this change and is a separate improvement.
