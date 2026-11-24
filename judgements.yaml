@@ -9297,6 +9297,17 @@ batches:
     patch_id: 5b177e09f58a2d01f6c397f293b569292afd2884
   - kind: post_merge
     at: '2026-11-24T23:09:04.356046Z'
+  - kind: claims_released
+    at: '2026-11-24T23:14:49.115699Z'
+    keys:
+    - super-fr#1075
+    - super-fr#1539
+    - super-fr#1542
+    - super-fr#1545
+    - super-fr#1556
+    - super-fr#1557
+    - super-fr#1561
+    - super-fr#1572
 - id: merge-readiness
   title: 'Merge only what delivered: the driver reads deliver from the cursor, and the Batches page shows
     one readiness verdict per PR'
@@ -10252,6 +10263,14 @@ closeouts:
   files:
   - "A\tdocs/superpowers/implemented/journals/debug/2026-11-19-run-durability.md"
   - "D\tdocs/superpowers/journals/debug/2026-11-19-run-durability.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-24-2
+  branch: chore/closeout-2026-11-24-2
+  at: '2026-11-24T23:14:37.073754Z'
+  runner: herdr
+  handle: w3V:p3
+  planned:
+  - closeout-truth
 queues:
 - repo: derio-net/super-fr
   wave: 22
