@@ -1,20 +1,16 @@
-# Event-driven, à la carte super-fr — architecture, and S1: configuration homes
+# S1: configuration homes (event-driven, à la carte epic)
 
 **Date:** 2026-11-19 (brainstormed 2026-11-19 to 2026-11-24)
 **Slug:** `2026-11-19-event-driven-a-la-carte`
 **Status:** design (fr-brainstorming, standalone)
 **Repo:** `derio-net/super-fr`
-**Tracking:** epic #1652; this spec builds S1 (#1653). S2 #1654, S3 #1655 and S4 #1656 each get
-their own spec, written from Part I. Related: #1657 (split tracking), #1651 (cncd).
-
-This document has two parts. **Part I** is the architecture the operator settled for the whole
-epic: vocabulary, decisions and the order of the sub-projects. It is not built by this spec and
-holds no requirements; S2 to S4 cite it. **Part II** is S1, the only part this spec builds:
-`## Requirements`, `## Design`, `## Verification` and `## Test Plan` belong to S1 alone.
+**Tracking:** #1653, sub-project S1 of epic #1652. The epic's architecture (vocabulary, operator
+decisions D0 to D15, the order S1 to S4) lives in the epic issue and in this spec journal's entry
+`operator-decisions-r1`; this spec builds S1 only and cites the decisions it implements (D12 to D15).
 
 ## Background
 
-The operator asked for two things (spec journal entry `brief`):
+The epic answers the operator's brief (spec journal entry `brief`):
 
 - **À la carte:** a repo composes the process it wants in its own configuration: which workflows
   exist, which PR-body sections it wants (not everybody wants Proportionality or Cost), where fr's
@@ -50,62 +46,6 @@ What exists today (read 2026-11-24 on this branch):
 - Triage state's working copy is `<clone>/.fr/triage-state/<scope>/`; its durable copy, the orphan
   branch `refs/heads/fr-triage/<scope-id>`, exists only once a `state_repo` was chosen
   (`fr.triage.state_ref.decide_state_repo`, asked on first collect).
-
-# Part I — Architecture (S1 to S4)
-
-## Vocabulary
-
-- **Space.** Where a run's state lives and its configuration is read: the remote's feature
-  branches under `repo`, the `fr` branch under `quiet`, the tracking branch under `stealth`. A
-  triage scope's space is its `fr-triage/<scope-id>` branch.
-- **Repo configuration.** What an fr-enabled repo declares about its own process. It lives in
-  `.fr/` at the root of its space and travels with the space, into stealth too.
-- **Shipped defaults.** What super-fr provides: code, and default workflows, verification
-  strategies, lenses and (S4) stations. Repo configuration overrides them.
-- **Station.** A role that does steps: Product Owner, Architect, Tester, DevOps, Orchestrator.
-  Declared abstractly in repo configuration.
-- **Binding.** A host's statement that a runner (harness, model, profiles) staffs a station. Lives
-  in the host file, outside every repo.
-- **Staffing.** `solo`: one session runs the workflow and runs each step's agent as a subagent.
-  `stations`: a Router hands each step to its station.
-- **Router.** The mechanical decider of handoffs. A port with adapters; one per space.
-
-## Decisions
-
-Recorded as spec journal entry `operator-decisions-r1`.
-
-| # | Decision |
-|---|---|
-| D0 | Each workflow step declares the station that does it; a step boundary is a commit, pushed per placement. Ad-hoc flows (fr-debugging, …) become workflows. A mechanical Router decides handoffs: a port, whose first adapter sits beside the wave driver, with a Local Router for stealth and room for a future service. |
-| Split | The repo declares stations; a host file binds them to runner, harness and model. A future Coordinator node may hold the bindings of several runner nodes. |
-| D1 | Every runner a station binds provides `SessionMessenger`. Whether a runner can take a message no longer decides continue-or-fresh. |
-| D2 | Two staffings: `solo` (today's fr-goal, generalised) and `stations`. |
-| D3 | One Router per space; station and Router configuration live in that space's `.fr/`. |
-| D4 | Runs register implicitly: the cursor in the space, watched through `fr_dispatch`'s `Source`. |
-| D5 | One Router per space, held by a lease; a host may run several Routers. |
-| D6 | Stealth uses a Local Router on its tracking space. |
-| D7 | Stealth: state is pushed to the tracking repo on every write; code reaches the target (`fr push`, `fr pr create`) only after the operator explicitly confirms, whatever `git.push` says. |
-| D8 | cncd cannot be bound to a station; its retirement is #1651. |
-| D9 | A station session handles one ticket. |
-| D10 | A host-wide admission ledger (`HostCapacity`: session slots plus sampled load and memory, oldest waiter first) is shared by every Router and wave driver on the host. A full host spills over to a fallback binding the host file names when the space is pushed; else the step waits and raises a Need after a set time. Stealth always waits. |
-| D11 | The devcontainer profile is the unit of access: a station names a profile; a profile declares its network reach; a binding lists the profiles its host can enter; a bounded reach probe runs at admission. `fr hosts check` refuses a binding or fallback that cannot satisfy its station. |
-| D12 | `.fr/` holds repo configuration only and follows the space. |
-| D13 | super-fr's shipped defaults get one home. |
-| D14 | Triage state follows the unit under triage; its branch is the wave-driver Router's space. |
-| D15 | A repo scope's triage branch lives in that repo; an org scope's in the org's state repo; a stealth repo's in its tracking repo; a repo may name a state repo in `.fr/settings.yaml`. The privacy guard is unchanged. |
-
-## Sub-projects
-
-| # | Issue | Builds | Needs |
-|---|---|---|---|
-| S1 | #1653 | Configuration homes: D12, D13, D14, D15 (this spec). | — |
-| S2 | #1654 | À la carte settings: available workflows, required PR-body sections (`fr.record.pr_body.REQUIRED_SECTIONS` becomes configurable), placement choices with stealth settings read from its space, and D7. #1657 is a candidate. | S1 |
-| S3 | #1655 | Every flow is a workflow: fr-debugging and the other ad-hoc flows as manifests, each step declaring its station, the step boundary as a commit, `staffing: solo`. | S1, S2 |
-| S4 | #1656 | Stations and the Router: D1 to D6, D9 to D11, the host file, `staffing: stations`. | S3 |
-
-A Coordinator node or external broker is later and out of the epic.
-
-# Part II — S1: configuration homes
 
 ## Requirements
 
@@ -259,7 +199,7 @@ rule and their generated mirrors.
 
 ## Non-goals
 
-- Everything in S2 to S4.
+- Everything in S2 to S4 of epic #1652.
 - Where `.devcontainer/<profile>/` lives under stealth.
 - The host-independent triage scope id (filed, see §F).
 - Retiring cncd (#1651).
