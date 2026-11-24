@@ -54,6 +54,14 @@ from fr.triage.model import (
     RedHandbackEvent,
     RequeuedEvent,
 )
+from fr.triage.queue_handback import (
+    aimed,
+    brief_mode,
+    hold_lineage,
+    lineage_actions,
+    merge_clause,
+    reissue_actions,
+)
 
 QueuePhase = Literal["open", "releasing", "idle"]
 HoldState = Literal["open", "drained", "cleared"]
@@ -70,6 +78,8 @@ QueueActionKind = Literal[
     "queue-held",
     "queue-need",
     "queue-warn",
+    "queue-reissue",  # wave-queue-gaps R2: a hand-back re-issued on the new stack target
+    "queue-carry",  # R4: a head carrying a dead combination, held and briefed
 ]
 REPORT_KINDS: frozenset[str] = frozenset({"queue-held", "queue-need", "queue-warn"})
 """The actions that only say something: the driver runs them before the executor exists
@@ -182,6 +192,7 @@ class BuildConflict:
     head: str
     paths: tuple[str, ...]
     reason: str = ""
+    onto: str = ""  # the commit it was being built on (wave-queue-gaps §A)
 
 
 @dataclass(frozen=True)
@@ -238,6 +249,12 @@ class QueueSnapshot:
     runs: Mapping[str, str] = field(default_factory=dict)  # entry key -> its run id, for the Need
     scope_args: tuple[str, ...] = ()  # the drive's own scope arguments, for pasted commands
     default: str = ""  # the repo's default branch; "": unread, no entry is base-checked
+    # wave-queue-gaps §A: the merge method ("": unread, R1's mode is then `main`); per entry
+    # whether its hand-back's `onto` still leads to `main`, and the dead combinations its
+    # head carries (None for each: git could not read it, R5)
+    method: str = ""
+    leads: Mapping[str, bool | None] = field(default_factory=dict)
+    carries: Mapping[str, tuple[str, ...] | None] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -264,6 +281,7 @@ class QueueAction:
     batch: str = ""  # need, eject: the batch it is about
     key: str = ""  # warn: the report key, said once
     scope: str = ""  # held: the scope holding the hold
+    carried: tuple[str, ...] = ()  # carry: the dead combinations the head reaches (R4)
 
 
 @dataclass(frozen=True)
@@ -890,13 +908,16 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
         # there like any other pass (an empty window must not hold the hold open forever).
         rep = replace(rep, base=qs.base)
     by_id = {b.id: b for b in qs.batches}
+    held = hold_lineage(qs, entries)  # wave-queue-gaps R4, R5: never built
     earlier: list[tuple[str, Sequence[str]]] = []
+    ejects = len(actions)
     for key in list(entries):  # R6: a conflict met at build, at the head it still has
         met = qs.conflicts.get(key)
         if met is None or met.head != _head(key, qs):
             continue
         batch = by_id.get(key)
-        decided = (conflict_decision(batch.events, met.head, met.paths, earlier).kind
+        decided = (conflict_decision(batch.events, met.head, met.paths, earlier,
+                                     qs.leads.get(key)).kind
                    if batch is not None else "")  # fmt: skip
         earlier.append((key, met.paths))
         entries.remove(key)
@@ -906,6 +927,10 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
             wave=wave, entries=(key,), reason="conflict", paths=met.paths, decision=decided,
             batch=key if batch is not None else "", head=met.head))  # fmt: skip
     valid = _valid(entries, rep.base, rep.combos, qs)
+    target = aimed(qs, rep, valid)  # R1: computed after this pass's ejections
+    actions[ejects:] = [replace(a, base=target[0], slots=target[1]) for a in actions[ejects:]]
+    actions += [*lineage_actions(qs, rep, held, target, wave),
+                *reissue_actions(qs, rep, target, wave)]  # fmt: skip
     green = 0
     while green < len(valid) and _verdict(valid[green], qs).verdict == "green":
         green += 1
@@ -1028,15 +1053,18 @@ def _ejected_other_needs(record: QueueRecord, rep: Replay, qs: QueueSnapshot) ->
     """R32: a non-batch entry ejected at the head it still has has no session to hand it
     back to, so it is a Need until its head moves or it is closed."""
     out: list[QueueAction] = []
+    target = aimed(qs, rep, tuple(rep.combos.values()))
     for o in qs.others:
         head = rep.ejected.get(o.key)
         pr = qs.live.get(o.key)
         if head is None or pr is None or pr.state != "OPEN" or head != pr.head:
             continue
+        merge = (f"; to fix a conflict, {merge_clause(qs, target)}"
+                 if brief_mode(qs.config, qs.method) == "slot" else "")  # R6  # fmt: skip
         out.append(QueueAction(
             "queue-need", qs.repo, f"{o.kind} PR #{o.pr} was ejected from {qs.repo}'s merge "
             f"queue at {head[:12]} (it conflicts or its combination failed): the queue holds "
-            "it out until its head moves; fix it on its branch, or close it",
+            f"it out until its head moves; fix it on its branch, or close it{merge}",
             wave=record.wave, batch=o.batch))  # fmt: skip
     return out
 

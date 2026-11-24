@@ -305,7 +305,11 @@ def build(
     try:
         for entry, slot in zip(entries, slots, strict=False):
             wt.reset_hard(prev)
-            tree, tip = _combine(checkout, wt, prev, entry, method, version)
+            try:
+                tree, tip = _combine(checkout, wt, prev, entry, method, version)
+            except MergeConflictError as exc:
+                exc.onto = prev  # wave-queue-gaps §A: what it was built on
+                raise
             ref = slot_ref(scope, slot)
             # R13: never the sha the slot holds on the remote either. A rebuild in the
             # same second as a build the leases do not name would otherwise be that very
@@ -1269,7 +1273,8 @@ class QueueExecutor:
         except MergeConflictError as exc:
             dropped = "rebase would drop" in str(exc)
             self.conflicts[exc.batch] = BuildConflict(exc.head, exc.paths,
-                                                      str(exc) if dropped else "")  # fmt: skip
+                                                      str(exc) if dropped else "",
+                                                      exc.onto)  # fmt: skip
             if dropped:
                 return f"{exc}: it leaves the queue"
             return f"{exc.batch} conflicts in {', '.join(exc.paths)}: it leaves the queue"

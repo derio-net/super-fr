@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import shlex
 from collections.abc import Sequence
+from dataclasses import replace
 from typing import TYPE_CHECKING, Literal
 
 from fr.settle.managed import MANAGED_SENTENCE
 from fr.triage.model import Batch, ConflictEvent
 
-if TYPE_CHECKING:  # `fr.triage.wave_queue` imports `batch_drive`, which imports this lazily
-    from fr.triage.wave_queue import QueueConfig, Replay
+if TYPE_CHECKING:  # `fr.triage.wave_queue` imports this module: read at run time lazily
+    from fr.triage.wave_queue import Combo, QueueAction, QueueConfig, QueueSnapshot, Replay
 
 BriefMode = Literal["slot", "main"]
 
@@ -119,3 +120,131 @@ def conflict_brief(
             NO_APPROVAL_LINE,
         ]
     )
+
+
+# ------------------------------------------------------------ the planner's part (§A)
+
+
+def slot_name(scope: str, slot: int) -> str:
+    """The slot branch a brief names, `fr-queue/<scope>/slot-<j>` (`queue_exec.slot_ref`
+    without `refs/heads/`)."""
+    return f"fr-queue/{scope}/slot-{slot}"
+
+
+def target_ref(qs: QueueSnapshot, slots: Sequence[int]) -> str:
+    """The ref a brief fetches for a target in *slots* (one slot, or none: the base)."""
+    return slot_name(qs.scope, slots[0]) if slots else f"origin/{qs.default or 'main'}"
+
+
+def _lineage_key(qs: QueueSnapshot, key: str) -> str:
+    pr = qs.live.get(key)
+    return f"queue-lineage\0{qs.repo}\0{key}\0{pr.head if pr is not None else ''}"
+
+
+def hold_lineage(qs: QueueSnapshot, entries: list[str]) -> list[tuple[str, tuple[str, ...] | None]]:
+    """R4, R5: take out of *entries* each one whose head carries a combination the queue
+    built that no longer leads to `main` (its carried shas), and each one git could not
+    read (None). Only under R1's land and method; else nothing."""
+    if brief_mode(qs.config, qs.method) != "slot":
+        return []
+    out: list[tuple[str, tuple[str, ...] | None]] = []
+    for key in list(entries):
+        carried = qs.carries.get(key, ())
+        if carried is None or qs.leads.get(key, True) is None:
+            out.append((key, None))
+        elif carried:
+            out.append((key, tuple(carried)))
+        else:
+            continue
+        entries.remove(key)
+    return out
+
+
+def aimed(qs: QueueSnapshot, rep: Replay, standing: Sequence[Combo]) -> tuple[str, tuple[int, ...]]:
+    """The target a hand-back names this pass, as (sha, slots): the last combination of
+    *standing* (R1), or the base with no slot; always the base outside R1's mode."""
+    if brief_mode(qs.config, qs.method) != "slot":
+        return rep.base, ()
+    sha, slot = stack_target(replace(rep, combos={c.slot: c for c in standing}))
+    return sha, (slot,) if slot is not None else ()
+
+
+def lineage_actions(
+    qs: QueueSnapshot,
+    rep: Replay,
+    held: Sequence[tuple[str, tuple[str, ...] | None]],
+    target: tuple[str, tuple[int, ...]],
+    wave: int | None,
+) -> list[QueueAction]:
+    """The actions *held* entries give (R4-R6): a warning, said once, for one git could not
+    read; a `queue-carry` for a batch whose head was never briefed (a `conflict` event at
+    the head is the brief, so one per head), and a Need for any other entry."""
+    from fr.triage.wave_queue import QueueAction
+
+    by_id = {b.id: b for b in qs.batches}
+    sha, slots = target
+    out: list[QueueAction] = []
+    for key, carried in held:
+        pr = qs.live.get(key)
+        head = pr.head if pr is not None else ""
+        if carried is None:
+            if (k := _lineage_key(qs, key)) not in qs.warned:
+                out.append(QueueAction(
+                    "queue-warn", qs.repo, f"{key} is held this pass: git could not read "
+                    f"whether its head {head[:12]} leads to {qs.repo}'s `main`", wave=wave,
+                    key=k))  # fmt: skip
+            continue
+        said = (f"{key} at {head[:12]} carries {', '.join(s[:12] for s in carried)}, a "
+                "combination the queue built that no longer leads to `main`")  # fmt: skip
+        batch = by_id.get(key)
+        if batch is None:
+            out.append(QueueAction(
+                "queue-need", qs.repo, f"PR #{pr.number if pr else '?'} ({said}): reset its "
+                "branch to a head before that merge, re-apply its own commits, then "
+                + merge_clause(qs, target), wave=wave))  # fmt: skip
+        elif latest_conflict(batch.events, head) is None:
+            out.append(QueueAction(
+                "queue-carry", qs.repo, f"hold {said}", wave=wave, entries=(key,), batch=key,
+                head=head, base=sha, slots=slots, carried=carried, reason="conflict"))  # fmt: skip
+    return out
+
+
+def reissue_actions(
+    qs: QueueSnapshot, rep: Replay, target: tuple[str, tuple[int, ...]], wave: int | None
+) -> list[QueueAction]:
+    """R2, R5: each batch ejected at the head it still has whose hand-back named a commit
+    that no longer leads to `main` gets one `queue-reissue` on *target*; one git could not
+    read is warned once and stays out."""
+    from fr.triage.wave_queue import QueueAction, _ejected_head
+
+    if brief_mode(qs.config, qs.method) != "slot":
+        return []
+    out: list[QueueAction] = []
+    by_id = {b.id: b for b in qs.batches}
+    sha, slots = target
+    for key in rep.ejected:
+        batch, pr = by_id.get(key), qs.live.get(key)
+        if batch is None or pr is None or _ejected_head(key, rep, by_id) != pr.head:
+            continue
+        met = latest_conflict(batch.events, pr.head)
+        if met is None or met.onto is None or key not in qs.leads:
+            continue
+        if qs.leads[key] is None:
+            if (k := _lineage_key(qs, key)) not in qs.warned:
+                out.append(QueueAction(
+                    "queue-warn", qs.repo, f"{key} is held this pass: git could not read "
+                    f"whether {met.onto[:12]}, the commit its hand-back named, still leads to "
+                    f"{qs.repo}'s `main`", wave=wave, key=k))  # fmt: skip
+        elif reissue_due(batch.events, pr.head, qs.leads[key]):
+            out.append(QueueAction(
+                "queue-reissue", qs.repo, f"re-issue {key}'s hand-back: {met.onto[:12]} no "
+                f"longer leads to `main`; merge {sha[:12]} instead", wave=wave, entries=(key,),
+                batch=key, head=pr.head, base=sha, slots=slots, paths=tuple(met.paths),
+                reason="conflict", decision="reissue"))  # fmt: skip
+    return out
+
+
+def merge_clause(qs: QueueSnapshot, target: tuple[str, tuple[int, ...]]) -> str:
+    """R6's words for a non-batch entry: the commit to merge, and where to fetch it."""
+    sha, slots = target
+    return f"merge `{sha}` (`git fetch origin {target_ref(qs, slots)}`) into its branch"

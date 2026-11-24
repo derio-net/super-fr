@@ -42,11 +42,14 @@ class MergeStopError(TriageError):
 class MergeConflictError(MergeStopError):
     """A real conflict: merge refused to resolve *paths* bringing *batch*'s PR at *head*
     up to date (spec 2026-10-06-verification-strategies §G; R19). Not a moved head, so a
-    driver steps over it; it hands the conflict back to the batch's session."""
+    driver steps over it; it hands the conflict back to the batch's session. *onto* is the
+    commit the queue was building it on ("": not a queue build; wave-queue-gaps §A)."""
 
-    def __init__(self, message: str, *, batch: str, head: str, paths: Sequence[str]) -> None:
+    def __init__(
+        self, message: str, *, batch: str, head: str, paths: Sequence[str], onto: str = ""
+    ) -> None:
         super().__init__(message)
-        self.batch, self.head, self.paths = batch, head, tuple(paths)
+        self.batch, self.head, self.paths, self.onto = batch, head, tuple(paths), onto
 
 
 class WorktreeSeam(Protocol):
