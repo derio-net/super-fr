@@ -28,7 +28,9 @@ def test_ci_runs_fr_docs_check_on_every_pull_request_inside_ci_ok() -> None:
     on the default branch, the default branch as base on a merge group)."""
     jobs = _ci()["jobs"]
     job = jobs["docs-check"]
-    assert "if" not in job, "docs-check must run on every event, not only pull_request"
+    # Every event, not only pull_request. The one skip is the landed lane (ci-economy R5):
+    # a push to main whose sha already passed this whole workflow on an fr-queue/** push.
+    assert job["if"] == "needs.classify.outputs.lane != 'landed'"
     steps = job["steps"]
     checkout = next(s for s in steps if str(s.get("uses", "")).startswith("actions/checkout@"))
     assert checkout["with"]["fetch-depth"] == 0

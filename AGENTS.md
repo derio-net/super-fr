@@ -503,6 +503,15 @@ the full suite, and `deliver` uses `tests: ci` (a local `-m ""` log stays accept
 `tests: ci` needs valid `gate_checks` in the same file. `--fr-scope` also names, on
 one line, the changed paths no test reaches beyond the smoke set, and on another the
 test files `ast` could not parse.
+**CI lanes** (spec `2026-11-24-ci-economy` R1, R5, R15–R17). `ci.yml`'s first job,
+`classify`, picks one lane per run through `scripts/ci_lane.py`, and `ci-ok` (always run,
+never skipped) asks `ci_lane.py verdict` whether the jobs did what the lane asks. The
+**light** lane is a pull request that changes nothing installable, nothing under `tests/`
+and nothing under `.github/`: its `scoped-tests` job runs `--fr-scope` against the base
+instead of `plan`, `collect`, the shards, `split-check` and `coverage`. The **landed** lane
+is a push to `main` whose sha already passed this workflow on an `fr-queue/**` push: only
+`validate-artifacts` (strict) and `ci-ok` run again, and `ci-ok` names the run it trusts.
+Everything else is **full**. A newer push to a pull request cancels its older run.
 
 **The CI time-budget watcher** (`.github/workflows/ci-budget.yml` +
 `scripts/ci_budget.py`, spec `2026-09-26-ci-time-budget-design.md`) files (and
@@ -533,8 +542,8 @@ running a full suite once drove a 16-thread host to load ~800 (gh#1225).
 `FR_PYTEST_WORKERS=<n>` sets the count exactly, in CI too; `tests/conftest.py`
 holds the rule.
 
-No local pre-commit hook — `.github/workflows/ci.yml` (`lint`, `typecheck`,
-`plan`, `collect`, `test` (sharded x7), `split-check`, `coverage`,
+No local pre-commit hook — `.github/workflows/ci.yml` (`classify`, `lint`, `typecheck`,
+`plan`, `collect`, `test` (sharded x7), `split-check`, `coverage`, `scoped-tests`,
 `validate-artifacts`, `opencode-plugin-test`, `version-sync`, `change-fragment`,
 `docs-check`, `site-build`, `ci-ok` jobs) is the single source of truth for the
 gate; if this file and `ci.yml` ever disagree, trust `ci.yml` and fix this
