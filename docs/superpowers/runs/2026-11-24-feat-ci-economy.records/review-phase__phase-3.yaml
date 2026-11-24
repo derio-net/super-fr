@@ -1,0 +1,42 @@
+schema_version: 12
+run: 2026-11-24-feat-ci-economy
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+  - kind: review
+    id: review-p3
+    phase: 3
+    title: Phase 3 review (own_artifacts marker, fr-scope selection, tripwire)
+    body: |
+      Independent reviewer read d73314be3..e858898c6 against R19/R20. touches_own_artifacts, the
+      conftest wiring (scenario always dropped) and the pytestmark mass edit are correct. Three
+      tripwire findings: p3-r1 fixed, p3-r2 fixed in part, p3-r3 refuted.
+  - kind: finding
+    id: p3-r1
+    phase: 3
+    review_scope: in
+    title: _is_marked counted a mark on one test as marking the whole module
+  - kind: finding
+    id: p3-r2
+    phase: 3
+    review_scope: in
+    title: _climbs missed a name holding .parents then indexed, negative indexes and ../.. joins
+  - kind: finding
+    id: p3-r3
+    phase: 3
+    review_scope: in
+    title: ROOT_ALIASES is a hand-kept list
+resolves:
+  - id: p3-r1
+    state: fixed
+    body: _is_marked now reads only a module-level pytestmark assignment. test_a_mark_on_one_test_does_not_cover_the_module pins that a module with one marked test and one unmarked root reader is flagged. No module in tests/ relied on a per-test mark, and the real-repo tripwire stays green.
+  - id: p3-r2
+    state: fixed
+    body: _climbs treats X.parents as one above X, so a name holding .parents and indexed later counts (test_a_name_holding_parents_then_indexed_is_flagged). parents[-1] is the filesystem root, not the checkout, so it is correctly not a root climb. No test module in tests/ joins "../..", and the docstring already says the tripwire is not sound against every spelling.
+  - id: p3-r3
+    state: refuted
+    body: The alias list only covers names a module uses without binding them (star imports from conftest). A new alias a helper defines by climbing from __file__ is caught through the helper-import path whatever its name, and an alias a module binds is judged by what it is bound to. A new unbound name would need a new star-imported constant in conftest, which is the case the dated list documents.
+evidence:
+  review: review-p3
+  reviewer: ad7bfa2708697d199
