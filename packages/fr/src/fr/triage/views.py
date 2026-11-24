@@ -76,6 +76,7 @@ from fr.triage.model import (
     Severity,
 )
 from fr.triage.queue_exec import queue_config
+from fr.triage.readiness import fact_cursors
 from fr.triage.scope_config import scope_id
 from fr.triage.timestamps import parse_aware
 
@@ -159,6 +160,7 @@ def drive_snapshot(
             head_ref=entry.pr.head_ref,
             trusted=True,  # the queue holds `batch_pr`s only (gh#936)
             labels=tuple(entry.pr.labels) if entry.pr.labels is not None else None,
+            url=entry.pr.url,
         )
     merged_at: dict[str, datetime] = {}
     for b in batches:
@@ -195,6 +197,7 @@ def drive_snapshot(
         awaiting=frozenset(b.id for b in batches if batch_awaits_live(b, facts)),
         rejected=rejected_by_batch(batches, facts),
         approvals=fact_approvals(queue),
+        cursors=fact_cursors(queue),
         ledgers=fact_ledgers(batches, facts, stages),  # labels only: no clone (R13)
         ledger_unknown=fact_ledger_unknown(batches, facts, stages),
         post_merge_repos=frozenset(

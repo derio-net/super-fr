@@ -33,6 +33,8 @@ from tests.unit.test_triage_batch_drive_cmd import (  # noqa: F401 - the drive t
     runner_fixture,
     world_fixture,
 )
+from tests.unit.test_wave_queue_planner import DELIVERED
+from tests.unit.triage_board_fixtures import DELIVERED as DELIVERED_PR
 from tests.unit.triage_board_fixtures import REPO as REPO_B
 from tests.unit.triage_board_fixtures import batch as mk
 from tests.unit.triage_board_fixtures import dispatch, facts, issue, j, judgements, pr
@@ -74,6 +76,7 @@ def _qs(batches: Sequence[Batch], record: QueueRecord, **kw: Any) -> QueueSnapsh
         repo=REPO, scope=ME, config=QueueConfig(), now=NOW, batches=tuple(batches),
         stages=stages,  # type: ignore[arg-type]
         live=live, approvals={bid: First(p.head) for bid, p in live.items()},
+        cursors={bid: (p.head, DELIVERED, "read") for bid, p in live.items()},
         records=(record,), base=MAIN, hold_read=True, **kw,
     )  # fmt: skip
 
@@ -155,7 +158,7 @@ def test_the_line_marks_an_ejected_entry_a_barrier_and_a_halt() -> None:
 
 def _board(*record_events: dict[str, Any]) -> tuple[Any, Any]:
     """A repo with one approved open PR whose queue record holds *record_events*."""
-    p = pr(11, "feat/batch-a", labels=["approved-fr"])
+    p = pr(11, "feat/batch-a", labels=["approved-fr"], **DELIVERED_PR)
     f = facts([issue(1, prs=[p])], schema=12, config={REPO_B: {"queue": {"ci": "push"}}})
     jd = judgements({"widgets#1": j(1)}, [mk("a", [1], events=[dispatch("a")])])
     record = QueueRecord.model_validate({

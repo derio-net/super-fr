@@ -31,6 +31,7 @@ from fr.triage.errors import ForgeError
 from fr.triage.gitseam import Checkout, GitError
 from fr.triage.merge_stops import load_stops
 from fr.triage.model import (
+    CursorPosition,
     Facts,
     Issue,
     PullRequest,
@@ -53,6 +54,10 @@ COLLECTED = f"{REPO}/run/closeout-2026-10-02-1"  # the pass's one collected clos
 
 
 # ------------------------------------------------------------------ fakes
+
+
+DELIVERED = CursorPosition(run="r-delivered", step="deliver", kind="deliver-done")
+DELIVERED_FILE = "docs/superpowers/runs/r-delivered.yaml"
 
 
 class World:
@@ -96,8 +101,16 @@ class World:
             "cross_repo": False,
             # The operator's approval (merge-train-safety §A): on unless a test says not.
             "labels": ["approved-fr"],
+            # Its run delivered (batch-merge-readiness R1): on unless a test says not.
+            "delivered": True,
             **kw,
         }
+
+    def delivered_at(self, head: str) -> str | None:
+        """The branch of the open, delivered PR at *head*: its head carries a run cursor at
+        `deliver` done (the fake clone serves it). None for any other head."""
+        return next((p["head_ref"] for p in self.prs.values() if p["head_oid"] == head
+                     and p["state"] == "OPEN" and p.get("delivered", True)), None)  # fmt: skip
 
     def facts(self) -> Facts:
         prs = {n: self._pr(n) for n in self.prs}
@@ -154,6 +167,8 @@ class World:
             author=p["author"],
             cross_repo=p["cross_repo"],
             labels=list(p["labels"]) if p["state"] == "OPEN" else None,
+            cursor=DELIVERED if p["state"] == "OPEN" and p.get("delivered", True) else None,
+            cursor_read="read" if p["state"] == "OPEN" else None,
         )
 
     # -- the GhClient adapter
@@ -337,7 +352,16 @@ class DriveCheckout:
     def show(self, ref: str, file: str) -> str | None:
         if file == ".fr/triage.yaml":
             return yaml.safe_dump(self.world.config) if self.world.config else None
+        if file == DELIVERED_FILE and (branch := self._delivered(ref)) is not None:
+            return yaml.safe_dump({"run": "r-delivered", "branch": branch, "cursor": "deliver",
+                                   "steps": {"deliver": {"state": "done"}}})  # fmt: skip
         return self.files.get((ref, file))
+
+    def _delivered(self, ref: str) -> str | None:
+        """A delivered PR head with no runs of its own in `files` serves one cursor."""
+        if any(at == ref and f.startswith("docs/superpowers/runs/") for at, f in self.files):
+            return None
+        return self.world.delivered_at(ref)
 
     def remote_branch_exists(self, branch: str) -> bool:
         return False
@@ -373,6 +397,8 @@ class DriveCheckout:
 
     def list_dir(self, ref: str, directory: str) -> list[str]:
         prefix = directory.rstrip("/") + "/"
+        if DELIVERED_FILE.startswith(prefix) and self._delivered(ref) is not None:
+            return [DELIVERED_FILE.removeprefix(prefix)]
         return sorted({f.removeprefix(prefix).split("/")[0] for (at, f) in self.files
                        if at == ref and f.startswith(prefix)})  # fmt: skip
 
@@ -4744,8 +4770,9 @@ def test_the_drivers_board_asks_for_the_label_in_a_ci_none_repo(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:  # fmt: skip
-    """p1-r2: the driver holds a `ci none` repo's unlabelled PR, so its board says so."""
-    _pr_open(world, tmp_path, labels=[])
+    """p1-r2: the driver holds a `ci none` repo's unlabelled PR, so its board says so (no
+    run cursor at its head: a delivered one asks to approve it from the Reviewer lane)."""
+    _pr_open(world, tmp_path, labels=[], delivered=False)
     world.checks[101] = []
     world.all_checks[101] = {"pass": 0, "fail": 0, "pending": 0}
     monkeypatch.setattr(triage_batch_cmd, "ci_is_none", lambda path: True)

@@ -16,6 +16,14 @@ URL = f"https://github.com/{REPO}"
 COLLECTED = "2026-10-02T12:00:00+00:00"
 
 
+DELIVERED: dict[str, Any] = {
+    "cursor": {"run": "r1", "step": "deliver", "kind": "deliver-done", "unit": None},
+    "cursor_read": "read",
+}
+"""`pr(..., **DELIVERED)`: the run cursor at the PR's head records `deliver` done
+(batch-merge-readiness R1), so the queue may admit it."""
+
+
 def pr(number: int, head_ref: str, **kw: Any) -> dict[str, Any]:
     return {
         "repo": REPO,

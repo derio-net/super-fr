@@ -24,9 +24,9 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Literal
 
 from fr.artifacts.paths import KIND_DIRS
-from fr.labels import awaiting_devops, held_gates, pre_merge_held
+from fr.labels import awaiting_devops, held_gates
 from fr.settle.managed import MANAGED_SENTENCE
-from fr.triage.approval import ApprovalVerdict, Approved, is_approved
+from fr.triage.approval import ApprovalVerdict, Approved
 from fr.triage.batch import (
     UNSATISFIABLE,
     BatchStage,
@@ -48,6 +48,8 @@ from fr.triage.model import (
     CloseoutHoldEvent,
     CollectedCloseout,
     ConflictEvent,
+    CursorPosition,
+    CursorRead,
     DispatchEvent,
     Export,
     Facts,
@@ -440,6 +442,10 @@ class Snapshot:
     queue_runs: Mapping[str, str] = field(default_factory=dict)
     head_changed: Mapping[str, datetime] = field(default_factory=dict)
     session_status: Mapping[str, str] = field(default_factory=dict)
+    # batch id -> (head read at, cursor position, read status) from facts (readiness R1)
+    cursors: Mapping[str, tuple[str, CursorPosition | None, CursorRead | None]] = field(
+        default_factory=dict
+    )
 
     # marker item -> its open PR's approval verdict (gh#1497), settled as a `closeout`
     # queue entry's (R32): what admits a PR `review_reasons` holds. None is never approved.
@@ -1589,39 +1595,36 @@ def _red_action(bid: str, pr: LivePr) -> Action:
 
 
 def _member_reports(
-    entries: Sequence[QueueEntry], snap: Snapshot
+    entries: Sequence[QueueEntry], snap: Snapshot, repo: str
 ) -> tuple[list[Action], list[str], list[str]]:
-    """What the pass says about a repo's pr-open batches before the queue takes them (the
-    reports the retired merge train made, R22): a failing PR is a red `warn` for the red
-    recovery, wherever it sits, draft or ready, approved or not (batch-train-truth R15);
-    one with no valid approval is *awaiting* it, said by the board; one a pre-merge gate
-    holds is `held` (fr-ops R14: the DevOps stage owns it). A draft is a member only with
-    a valid approval (merge-train-safety §A): an unapproved one is reported red and never
-    awaits approval. The queue itself takes the rest: it plans no merge here."""
+    """A repo's pr-open batches before the queue takes them (R22), by `batch_readiness` over
+    the queue's own snapshot (R4): failing is a red `warn` wherever it sits; unapproved is
+    *awaiting* (an unapproved draft is no member); approved but not delivered (readiness R2)
+    or gated (fr-ops R14) is *awaiting* and `held`. Only what the queue admits is ready."""
+    from fr.triage.readiness import batch_readiness
+
+    qs = queue_snapshot(snap, repo)
     actions: list[Action] = []
     awaiting: list[str] = []
     ready: list[str] = []
     for entry in entries:
         bid = entry.batch.id
         pr = snap.live.get(bid)
-        verdict = snap.approvals.get(bid)
-        approved = verdict is not None and is_approved(verdict)
         if pr is None or pr.state != "OPEN":
             continue
         if pr.checks == "failing":  # wherever it sits: reported now, not when it leads
             actions.append(_red_action(bid, pr))
             continue
-        if pr.draft and not approved:
-            continue  # not a member
-        if not approved:
-            awaiting.append(bid)
-            continue
-        if pre_merge_held(pr.labels):  # fr-ops R14: held until the DevOps stage released it
-            awaiting.append(bid)
-            actions.append(Action("held", bid, awaiting_devops(pr.number), pr=pr.number))
-            continue
-        if pr.checks == "green":
+        r = batch_readiness(entry.batch, qs)
+        if r.admits:
             ready.append(bid)
+        elif not r.approved:
+            awaiting.extend(() if pr.draft else (bid,))
+        elif not r.delivered.ok or r.kind == "gate-held":
+            awaiting.append(bid)
+            why = awaiting_devops(pr.number) if r.delivered.ok else (
+                f"approved, not delivered: {r.delivered.reason}")  # fmt: skip
+            actions.append(Action("held", bid, why, pr=pr.number))
     return actions, awaiting, ready
 
 
@@ -1761,7 +1764,7 @@ def queue_snapshot(
     batch of it (the wave choice reads them all), as entries only the selected ones that no
     other scope's claim holds (*held*), and the non-batch PRs its own trust rules *admitted*
     (R32), none of them one a queue already landed."""
-    from fr.triage.wave_queue import OtherEntry, QueueSnapshot, landed_keys
+    from fr.triage.wave_queue import OtherEntry, QueueConfig, QueueSnapshot, landed_keys
 
     batches = tuple(b for b in snap.batches if snap.repos.get(b.id) == repo)
     skip = set(held)
@@ -1782,7 +1785,8 @@ def queue_snapshot(
         # PRs only: no close-out, archive, export or housekeeping entry, and no wave waits on one
         closeout, mine = None, []
     return QueueSnapshot(
-        repo=repo, scope=snap.scope_id or snap.me, config=snap.wave_queues[repo], now=snap.now,
+        repo=repo, scope=snap.scope_id or snap.me, now=snap.now, cursors=snap.cursors,
+        config=snap.wave_queues.get(repo) or QueueConfig(),
         batches=batches, stages=snap.stages, live={**snap.live, **{a.key: a.pr for a in mine}},
         approvals=snap.approvals, records=records,
         hold=snap.queue_holds.get(repo), hold_read=repo in snap.queue_holds,
@@ -1875,7 +1879,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     awaiting: list[str] = []
     ready_members: list[str] = []
     for repo in sorted(by_repo):
-        reports, waits, ok = _member_reports(by_repo[repo], snap)
+        reports, waits, ok = _member_reports(by_repo[repo], snap, repo)
         actions.extend(reports)
         awaiting.extend(waits)
         ready_members.extend(ok)

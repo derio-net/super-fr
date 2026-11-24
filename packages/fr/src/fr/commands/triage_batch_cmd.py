@@ -353,6 +353,7 @@ from fr.triage.queue_exec import (
     required_names,
 )
 from fr.triage.quota import Pace
+from fr.triage.readiness import fact_cursors
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
@@ -4544,6 +4545,7 @@ class _Driver:
                     base=str(view.get("base_ref") or ""),
                     mergeable=str(view.get("mergeable") or ""),  # R17: the conflict probe
                     merge_state=str(view.get("merge_state") or ""),
+                    url=e.pr.url,
                 )
             # Every landed batch, selected or not: adopting a finished close-out is
             # bookkeeping (gh#990). Only the selection is read further.
@@ -4651,6 +4653,7 @@ class _Driver:
             closeout_waits=self._closeout_waits(due, repos),
             **reads,
             approvals=approvals,
+            cursors=fact_cursors(queue),
             batches=tuple(judgements.batches),
             stages=stages,
             queue=queue,

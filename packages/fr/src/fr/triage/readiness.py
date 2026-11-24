@@ -38,7 +38,7 @@ Pure: no git, no forge, no clock read (the time is `QueueSnapshot.now`).
 from __future__ import annotations
 
 import shlex
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from typing import Literal
 
@@ -51,9 +51,10 @@ from fr.triage.approval import (
     Void,
     is_approved,
 )
+from fr.triage.batch import QueueEntry
 from fr.triage.batch_drive import LivePr
 from fr.triage.mergeability import conflicting
-from fr.triage.model import ApprovalEvent, Batch, ConflictEvent
+from fr.triage.model import ApprovalEvent, Batch, ConflictEvent, CursorPosition, CursorRead
 from fr.triage.wave_queue import QueueSnapshot, base_refusal, is_deferred, queue_held_reason
 
 DeliveredState = Literal["delivered", "at-step", "no-cursor", "unread", "no-clone", "stale-head"]
@@ -135,8 +136,8 @@ class ReadinessFacts:
 @dataclass(frozen=True)
 class Readiness:
     """One batch PR's verdict (R5): its *kind*, the line the page leads with (*verdict*),
-    the *reason* inside it, the R6 *facts*, R1's *delivered* and whether the queue
-    *admits* it."""
+    the *reason* inside it, the R6 *facts*, R1's *delivered*, whether its approval is valid
+    (*approved*) and whether the queue *admits* it."""
 
     kind: VerdictKind
     verdict: str
@@ -144,6 +145,7 @@ class Readiness:
     facts: ReadinessFacts
     admits: bool
     delivered: Delivered
+    approved: bool = False
 
 
 def _short(sha: str) -> str:
@@ -183,7 +185,7 @@ def _admission(batch: Batch, pr: LivePr, qs: QueueSnapshot, approved: bool) -> b
 
 def _gated(batch: Batch, pr: LivePr, qs: QueueSnapshot) -> bool:
     """R26: a gate:devops entry waits for the DevOps stage's release."""
-    return pre_merge_held(pr.labels) and batch.id not in qs.released
+    return bool(pre_merge_held(pr.labels)) and batch.id not in qs.released
 
 
 def _voided_sha(batch: Batch, pr: LivePr, verdict: ApprovalVerdict | None) -> str | None:
@@ -330,7 +332,16 @@ def batch_readiness(batch: Batch, qs: QueueSnapshot) -> Readiness:
         link=link,
     )
     admits = d.ok and _admission(batch, pr, qs, approved)
-    return Readiness(kind, _LINES[kind].format(r=reason), reason, facts, admits, d)
+    return Readiness(kind, _LINES[kind].format(r=reason), reason, facts, admits, d, approved)
+
+
+def fact_cursors(
+    queue: Iterable[QueueEntry],
+) -> dict[str, tuple[str, CursorPosition | None, CursorRead | None]]:
+    """Each queued batch's run cursor as collect read it (R1): the head it was read at, its
+    folded position and the read status. The driver and the board both build
+    `Snapshot.cursors` with it, so the verdict reads one input path."""
+    return {e.batch.id: (e.pr.head_oid, e.pr.cursor, e.pr.cursor_read) for e in queue}
 
 
 def in_queue_order(r: Readiness, key: str, order: Sequence[str]) -> Readiness:

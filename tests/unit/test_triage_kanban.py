@@ -27,6 +27,7 @@ from fr.triage.merge_stops import MergeStop
 from fr.triage.model import Facts, Judgements
 
 from tests.unit.triage_board_fixtures import (
+    DELIVERED,
     REPO,
     batch,
     busy,
@@ -240,7 +241,7 @@ def test_the_driver_would_dispatch_a_proposed_batch() -> None:
 def test_the_driver_would_merge_a_green_open_pr() -> None:
     f, jd = _world(
         [batch("a", [1], events=[dispatch("a")])],
-        [issue(1, prs=[pr(11, "feat/batch-a", labels=["approved-fr"])])],
+        [issue(1, prs=[pr(11, "feat/batch-a", labels=["approved-fr"], **DELIVERED)])],
         config={REPO: {"queue": {"ci": "push"}}},
     )
     assert _hint("a", f, jd) == "in merge queue"  # R25: the offline queue holds it
@@ -371,7 +372,7 @@ def test_a_merge_the_driver_stopped_on_needs_you_not_merge_ready() -> None:
 def test_a_merge_stop_at_a_head_since_moved_no_longer_counts() -> None:
     f, jd = _world(
         [batch("a", [1], events=[dispatch("a")])],
-        [issue(1, prs=[pr(11, "feat/batch-a", labels=["approved-fr"])])],
+        [issue(1, prs=[pr(11, "feat/batch-a", labels=["approved-fr"], **DELIVERED)])],
         config={REPO: {"queue": {"ci": "push"}}},
     )
     card = build_board(f, jd, {}, stops=_stopped("sha-older")).card("a")
