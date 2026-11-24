@@ -688,3 +688,8 @@ Raised under the security lens (l-security-r2). This change gave its own lane jo
 ### l-out-probe-rules · finding [open] (reviewer: out of scope) · The early conflict probe resolves only version and lock files, so a stamp or generated conflict outside a queue slot still costs a hand-back
 
 Raised under the docs-accuracy lens (l-docs-accuracy-r1). R12 scopes the new rules to the combination builder; batch_merge.trial_conflicts should call regen.classify_conflicts with the repo's mirrors and generated globs.
+
+<!-- fr:journal kind=finding scope=plan id=l-out-workflow-permissions-resolved created=2026-11-24T21:58:41+00:00 state=open resolves=l-out-workflow-permissions out_of_scope=true -->
+### l-out-workflow-permissions-resolved · finding [out-of-scope] · resolves l-out-workflow-permissions: ci.yml has no workflow-level permissions block; the older jobs run with the repo's default token
+
+Predates this change: the older ci.yml jobs had no permissions block before it; this change scoped only its own lane jobs.
