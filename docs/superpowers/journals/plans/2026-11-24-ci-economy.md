@@ -678,3 +678,8 @@ fr-wave-driver.md and the fr-triage skill (mirrors synced) now say the probe use
 ### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: Two places said mirrors run in the combination's worktree; they run in a git-less copy
 
 .fr/triage.yaml and the skill say the mirrors run on a copy of the combination's tracked files with no git directory.
+
+<!-- fr:journal kind=finding scope=plan id=l-out-workflow-permissions created=2026-11-24T21:58:17+00:00 state=open review_scope=out -->
+### l-out-workflow-permissions · finding [open] (reviewer: out of scope) · ci.yml has no workflow-level permissions block; the older jobs run with the repo's default token
+
+Raised under the security lens (l-security-r2). This change gave its own lane jobs read-only tokens and credential-free checkouts; the older jobs predate it.
