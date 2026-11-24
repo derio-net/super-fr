@@ -732,6 +732,9 @@ class RealGhClient:
         return value if isinstance(value, bool) else None
 
 
+# Exempt from `fr.checkstate` on purpose (spec 2026-11-24-ci-economy Design §A): these read
+# GitHub's aggregate `statusCheckRollup.state`, which has no CANCELLED of its own (GitHub
+# folds a cancelled run before fr sees it), and feed only `list_linked_prs`' display `ci`.
 _CI_PASS = {"SUCCESS"}
 _CI_FAIL = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"}
 _CI_PENDING = {"PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS"}

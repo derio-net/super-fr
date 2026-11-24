@@ -185,7 +185,7 @@ def test_a_head_with_no_checks_yet_is_pending(tmp_path: Path) -> None:
 # --- refused (exit 2) -----------------------------------------------------
 
 
-@pytest.mark.parametrize("conclusion", ["failure", "cancelled", "skipped"])
+@pytest.mark.parametrize("conclusion", ["failure", "timed_out", "skipped"])
 def test_a_gate_that_did_not_succeed_is_refused_with_its_url(
     tmp_path: Path, conclusion: str
 ) -> None:
@@ -199,6 +199,18 @@ def test_a_gate_that_did_not_succeed_is_refused_with_its_url(
         verify_ci(repo, client)
 
     assert "ci-ok" in str(exc.value) and conclusion in str(exc.value) and url in str(exc.value)
+
+
+def test_a_cancelled_gate_is_pending_never_refused(tmp_path: Path) -> None:
+    """Spec 2026-11-24-ci-economy R3: a cancelled gate run was superseded, so `deliver`
+    waits (exit 75) instead of refusing. DERIVED from the captured green head."""
+    repo, client, head = _world(tmp_path)
+    client.commit_checks_by_sha[(REPO, head)] = _with("green-head", "ci-ok", conclusion="cancelled")
+
+    with pytest.raises(CiPending) as exc:
+        verify_ci(repo, client)
+
+    assert "ci-ok" in str(exc.value)
 
 
 def test_an_absent_gate_on_a_finished_head_is_refused(tmp_path: Path) -> None:

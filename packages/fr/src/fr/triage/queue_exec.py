@@ -26,6 +26,7 @@ from typing import Any, Literal, Protocol
 
 import yaml
 
+from fr.checkstate import Verdict, verdict_of
 from fr.ghclient import UnsupportedBatchOps, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
 from fr.triage.batch_merge import MergeConflictError, MergeStopError, unresolvable
@@ -673,9 +674,6 @@ def pause_landings(plan: QueuePlan, reason: str | None) -> QueuePlan:
 
 # ------------------------------------------------------------------ checks (R7)
 
-_FAILED = frozenset({"failure", "cancelled", "timed_out", "action_required", "startup_failure",
-                     "stale", "error"})  # fmt: skip
-
 
 def gate_checks_of(text: str | None) -> list[str] | None:
     """The gate-check names `.fr/ci.yaml`'s *text* declares, None when it declares none
@@ -693,10 +691,11 @@ def gate_checks_of(text: str | None) -> list[str] | None:
     return out or None
 
 
-def _state(check: Mapping[str, Any]) -> Literal["pass", "fail", "pending"]:
+def _state(check: Mapping[str, Any]) -> Verdict:
+    """A combination's check as `fr.checkstate` reads it: a cancelled one is pending."""
     if check.get("status") != "completed":
         return "pending"
-    return "fail" if str(check.get("conclusion") or "").lower() in _FAILED else "pass"
+    return verdict_of(str(check.get("conclusion") or ""))
 
 
 def slot_check(

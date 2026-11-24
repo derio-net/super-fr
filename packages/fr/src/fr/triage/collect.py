@@ -24,6 +24,7 @@ from pydantic import ValidationError
 
 from fr import real_ghclient
 from fr.artifacts.paths import KIND_DIRS
+from fr.checkstate import verdict_of
 from fr.ghclient import GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
 from fr.labels import FR_CLAIMED, FR_IN_PROGRESS, READY_FR, held_gates
@@ -351,12 +352,12 @@ _SEVERITY = {"pass": 0, "pending": 1, "fail": 2}
 
 
 def _bucket(check: dict[str, Any]) -> str:
+    """A check's count bucket: `fr.checkstate`'s verdict, so a cancelled check is pending
+    (spec 2026-11-24-ci-economy R3). `SUCCEEDED`/`PASS`/`PASSED` are other forges' passes."""
     state = str(check.get("conclusion") or check.get("state") or "").upper()
-    if state in {"SUCCESS", "SUCCEEDED", "PASS", "PASSED", "SKIPPED", "NEUTRAL"}:
+    if state in {"SUCCEEDED", "PASS", "PASSED"}:
         return "pass"
-    if state in {"FAILURE", "FAILED", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"}:
-        return "fail"
-    return "pending"
+    return verdict_of(state)
 
 
 def _checks(raw: Iterable[dict[str, Any]]) -> dict[str, int]:

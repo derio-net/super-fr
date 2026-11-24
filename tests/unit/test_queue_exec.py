@@ -178,3 +178,15 @@ def test_pausing_strips_the_landing_and_says_why_with_a_need() -> None:
     assert [a.kind for a in paused.actions] == ["queue-build", "queue-need"]
     assert "post_merge failed: boom" in paused.actions[-1].detail
     assert pause_landings(plan, None) is plan
+
+
+@pytest.mark.parametrize(
+    ("conclusion", "state"),
+    [("cancelled", "pending"), ("CANCELLED", "pending"), ("stale", "fail"),
+     ("timed_out", "fail"), ("success", "pass"), ("skipped", "pass")],
+)  # fmt: skip
+def test_a_combinations_check_state_reads_cancelled_as_pending(conclusion: str, state: str) -> None:
+    """Spec 2026-11-24-ci-economy R3."""
+    from fr.triage.queue_exec import _state
+
+    assert _state(_check("test", conclusion=conclusion)) == state

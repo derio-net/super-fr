@@ -22,6 +22,7 @@ from typing import Any, Literal
 
 import yaml
 
+from fr.checkstate import is_superseded
 from fr.git import GitUnavailableError, git_answer
 
 CI_PENDING_EXIT = 75
@@ -347,6 +348,12 @@ def _finished(check: dict[str, Any]) -> bool:
     return check.get("status") == "completed"
 
 
+def _superseded(check: dict[str, Any]) -> bool:
+    """A finished check that was cancelled: superseded, so still owed a run, never a
+    failure (spec 2026-11-24-ci-economy R3, `fr.checkstate`)."""
+    return _finished(check) and is_superseded(str(check.get("conclusion") or ""))
+
+
 def _where(unfinished: list[dict[str, Any]], checks_page: str) -> str:
     """§I step 5 (p2-r6): each unfinished check's URL, or the PR's checks page
     when none has reported, so the orchestrator can say where to look."""
@@ -415,7 +422,7 @@ def verify_ci(repo_root: Path, client: Any = None, *, now: Callable[[], float] =
     rerunning: list[str] = []
     for g, cs in by_gate.items():
         for c in cs:
-            if _finished(c) and c.get("conclusion") != "success":
+            if _finished(c) and not _superseded(c) and c.get("conclusion") != "success":
                 if c.get("workflow") and c.get("workflow") in busy:
                     rerunning.append(g)
                 else:
@@ -426,13 +433,15 @@ def verify_ci(repo_root: Path, client: Any = None, *, now: Callable[[], float] =
         raise CiEvidenceRefused(
             f"tests: ci — on {ci_sha[:12]}, gate check(s) did not succeed: {'; '.join(failed)}"
         )
-    running = [g for g, cs in by_gate.items() if any(not _finished(c) for c in cs)]
+    waiting = unfinished + [c for c in checks if c.get("name") in gates and _superseded(c)]
+    running = [
+        g for g, cs in by_gate.items() if any(not _finished(c) or _superseded(c) for c in cs)
+    ]
     absent = [g for g, cs in by_gate.items() if not cs]
     if running or rerunning or (absent and unfinished):
         raise CiPending(
             ci_sha,
-            f"waiting on {', '.join(running + rerunning + absent)}; "
-            f"{_where(unfinished, checks_page)}",
+            f"waiting on {', '.join(running + rerunning + absent)}; {_where(waiting, checks_page)}",
         )
     if absent:
         raise CiEvidenceRefused(

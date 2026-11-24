@@ -89,10 +89,18 @@ def test_ci_green() -> None:
 
 
 def test_ci_red_names_the_failing_checks() -> None:
-    v = _eval(checks=[_check("lint", "fail"), _check("test", "cancel"), _check("ok", "pass")])
+    v = _eval(checks=[_check("lint", "fail"), _check("test", "fail"), _check("ok", "pass")])
     assert v.ci_state == "red"
     assert v.failing_checks == ("lint", "test")
     assert any("lint" in ln and "test" in ln for ln in v.lines)
+
+
+def test_a_cancelled_check_is_pending_never_red() -> None:
+    """Spec 2026-11-24-ci-economy R3: a cancelled run was superseded."""
+    v = _eval(checks=[_check("test", "cancel"), _check("ok", "pass")])
+    assert v.ci_state == "pending" and v.failing_checks == ()
+    red = _eval(checks=[_check("lint", "fail"), _check("test", "cancel")])
+    assert red.ci_state == "red" and red.failing_checks == ("lint",)
 
 
 def test_ci_pending_while_a_check_has_not_finished() -> None:

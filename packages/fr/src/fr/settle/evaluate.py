@@ -28,6 +28,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, Final
 
+from fr.checkstate import bucket_verdict
 from fr.run.ci_evidence import NO_CI_WAIT_SECONDS
 from fr.settle.model import (
     EXIT_FAILING,
@@ -43,7 +44,6 @@ from fr.settle.model import (
 )
 from fr.triage.mergeability import conflicting
 
-_FAILING_BUCKETS: Final = frozenset({"fail", "cancel"})
 _UNKNOWN: Final = frozenset({"", "UNKNOWN"})
 
 _HINTS: Final[dict[tuple[str, str], str]] = {
@@ -132,11 +132,11 @@ def _ci_state(
         return "unrunnable", (), "unrunnable", ()
     relevant = [c for c in checks if not gate_names or c.get("name") in gate_names]
     failing = tuple(
-        sorted({str(c.get("name")) for c in relevant if c.get("bucket") in _FAILING_BUCKETS})
+        sorted({str(c.get("name")) for c in relevant if bucket_verdict(c.get("bucket")) == "fail"})
     )
     if failing:
         return "red", failing, "red", ()
-    if any(c.get("bucket") == "pending" for c in relevant):
+    if any(bucket_verdict(c.get("bucket")) == "pending" for c in relevant):
         return "pending", (), "pending", ()
     fresh = age is None or age < NO_CI_WAIT_SECONDS
     if not checks:

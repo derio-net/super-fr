@@ -743,17 +743,14 @@ def stage_1(gate: Gate) -> None:
 
 
 def _checks_green(gate: Gate) -> None:
+    from fr.checkstate import bucket_verdict
     from fr.triage.batch_drive import checks_verdict
 
     t = gate.target
     every = gate.forge.pr_checks(t.repo, t.pr)
     counts = {"pass": 0, "fail": 0, "pending": 0}
-    for c in every:
-        bucket = str(c.get("bucket") or "")
-        key = "pass" if bucket in ("pass", "skipping") else bucket
-        key = "fail" if key == "cancel" else key
-        if key in counts:
-            counts[key] += 1
+    for c in every:  # a cancelled check is pending (spec 2026-11-24-ci-economy R3)
+        counts[bucket_verdict(str(c.get("bucket") or ""))] += 1
     verdict, names = checks_verdict(gate.forge.pr_required_checks(t.repo, t.pr), counts,
                                     ci_none=False)  # fmt: skip
     if verdict != "green":

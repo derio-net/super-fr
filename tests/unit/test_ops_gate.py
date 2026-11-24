@@ -1293,3 +1293,22 @@ def test_gh1275_stage_7_passes_nothing_when_the_pr_has_no_gate_tester(ops_root: 
 
     assert _gate_passes(tree) == []
     assert 7 in _host(ops_root).stages()
+
+
+def test_the_merges_check_read_reports_a_cancelled_check_pending_not_failed() -> None:
+    """Spec 2026-11-24-ci-economy R3: `_checks_green` reads the `cancel` bucket as pending."""
+    from types import SimpleNamespace
+
+    from fr.ops.gate import StageFailed, _checks_green
+
+    class Forge:
+        def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            return [{"name": "ci", "bucket": "cancel"}, {"name": "x", "bucket": "pass"}]
+
+        def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            return []
+
+    gate = SimpleNamespace(target=SimpleNamespace(repo=REPO, pr=5), forge=Forge())
+    with pytest.raises(StageFailed) as exc:
+        _checks_green(gate)  # type: ignore[arg-type]
+    assert "pending" in str(exc.value) and "failing" not in str(exc.value)
