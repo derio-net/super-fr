@@ -8908,6 +8908,11 @@ batches:
     - docs/reference/cli.md
     - docs/reference/workflow-shapes.md
     delivered: held
+  - kind: approval
+    at: '2026-11-24T19:47:25.451765Z'
+    pr: 1568
+    head: de1f1337afb4dbc0f5fb9ca2e6cb7599dd2fb716
+    patch_id: 4e07aa3bc67025a39a1929638fd89a27b5fca0da
 - id: dispatch-safety
   title: 'Dispatch safety: no submission past a failed dedup, no symlinked content in cncd payloads'
   ids:
@@ -10156,3 +10161,11 @@ closeouts:
   - "D\tdocs/superpowers/runs/2026-11-19-feat-batch-train-truth.yaml"
   - "D\tdocs/superpowers/specs/2026-11-19-batch-train-truth-design.md"
   - "D\tdocs/superpowers/usage/2026-11-19-feat-batch-train-truth.yaml"
+queues:
+- repo: derio-net/super-fr
+  wave: 22
+  scope: s-f7ea4061
+  base: 11c158e462514cd2a7a8d21553561ddeae8b9d4d
+  events:
+  - kind: queue_open
+    at: '2026-11-24T19:47:47.776075Z'
