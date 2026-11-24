@@ -263,7 +263,7 @@ def test_setup_script_prints_the_template(monkeypatch: pytest.MonkeyPatch) -> No
         "installed_plugins.json",
         "settings.json",
         "derio-net--super-fr",
-        "scripts/install.sh",
+        "scripts/bootstrap.sh",
         "api: rest",
     ):
         assert needle in out, needle

@@ -41,7 +41,7 @@ def _install_checkout(tmp_path: Path) -> Path:
     return repo
 
 
-def _run_install(tmp_path: Path, repo: Path) -> subprocess.CompletedProcess[str]:
+def _run_install(tmp_path: Path, repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     home = tmp_path / "home"
     (home / "bin").mkdir(parents=True, exist_ok=True)
     uv = home / "bin" / "uv"
@@ -53,7 +53,10 @@ def _run_install(tmp_path: Path, repo: Path) -> subprocess.CompletedProcess[str]
         "FR_INSTALL_SKIP_PREFLIGHT": "",
     }
     return subprocess.run(
-        ["bash", str(repo / "scripts" / "install.sh")], capture_output=True, text=True, env=env
+        ["bash", str(repo / "scripts" / "install.sh"), *args],
+        capture_output=True,
+        text=True,
+        env=env,
     )
 
 
@@ -81,7 +84,7 @@ def test_preflight_refuses_a_detached_head_that_is_not_a_tag(tmp_path: Path) -> 
     repo = _install_checkout(tmp_path)
     _git(repo, "tag", "rc/some-branch/abc1234")  # per-branch pre-merge tag: not a channel
     _git(repo, "checkout", "-q", "--detach", "HEAD")
-    res = _run_install(tmp_path, repo)
+    res = _run_install(tmp_path, repo, "--version", "main")  # no --version: stable channel
     assert res.returncode != 0
     assert "Preflight failed" in res.stderr
     assert "Channel:" not in res.stdout
@@ -276,7 +279,9 @@ def test_a_channel_switch_keeps_ignored_files_in_the_managed_cache(tmp_path: Pat
     assert (src / ".venv" / "keep").exists()
 
 
-def test_no_marked_final_falls_back_to_main_saying_so(tmp_path: Path) -> None:
+def test_no_marked_final_installs_nothing_and_names_the_explicit_channels(tmp_path: Path) -> None:
+    """gh: the default is the newest stable release, never main or an RC by accident.
+    With no installable final, bootstrap refuses and names `--version main` / `RC`."""
     origin = tmp_path / "origin"
     (origin / "scripts").mkdir(parents=True)
     (origin / "scripts" / "bootstrap.sh").write_text(BOOTSTRAP_SH.read_text())
@@ -287,10 +292,21 @@ def test_no_marked_final_falls_back_to_main_saying_so(tmp_path: Path) -> None:
     _git(origin, "config", "user.name", "t")
     _git(origin, "add", "-A")
     _git(origin, "commit", "-q", "-m", "init")
+    _git(origin, "tag", "v1.0.0-rc.1")
     res, marker = _bootstrap(tmp_path, origin)
+    assert res.returncode != 0
+    assert not marker.exists()
+    assert "no installable release" in res.stderr.lower()
+    assert "--version main" in res.stderr and "--version RC" in res.stderr
+    assert "v1.0.0-rc.1" in res.stderr
+
+
+def test_main_channel_tells_install_sh_to_install_its_checkout(tmp_path: Path) -> None:
+    """main's install.sh delegates to the stable channel unless told `--version main`,
+    so bootstrap's main channel must say it (else the two would loop)."""
+    res, marker = _bootstrap(tmp_path, _fixture_remote(tmp_path), "--version", "main", "--x")
     assert res.returncode == 0, res.stderr
-    assert marker.exists()
-    assert "origin/main" in res.stdout and "No installable release" in res.stdout
+    assert marker.read_text().split() == ["--version", "main", "--x"]
 
 
 def test_other_flags_reach_install_sh(tmp_path: Path) -> None:
@@ -324,7 +340,7 @@ def test_preflight_refuses_a_loose_v_tag(tmp_path: Path) -> None:
     repo = _install_checkout(tmp_path)
     _git(repo, "tag", "v5-hotfix")
     _git(repo, "checkout", "-q", "--detach", "v5-hotfix")
-    res = _run_install(tmp_path, repo)
+    res = _run_install(tmp_path, repo, "--version", "main")  # no --version: stable channel
     assert res.returncode != 0
     assert "Preflight failed" in res.stderr
     assert "Channel:" not in res.stdout
@@ -342,5 +358,112 @@ def test_preflight_on_main_in_sync_prints_channel_main(tmp_path: Path) -> None:
     upstream = _install_checkout(tmp_path)
     clone = tmp_path / "clone"
     _git(tmp_path, "clone", "-q", "--branch", "main", f"file://{upstream}", str(clone))
-    res = _run_install(tmp_path, clone)
+    res = _run_install(tmp_path, clone, "--version", "main")
     assert "Channel: main" in res.stdout, res.stdout + res.stderr
+
+
+# ── install.sh from a clone: stable by default (amends R23) ───────────
+
+
+def _clone_with_real_scripts(tmp_path: Path) -> tuple[Path, Path]:
+    """The fixture remote, with main moved to a commit carrying the REAL install.sh
+    and bootstrap.sh, cloned on main: what an operator's base clone looks like."""
+    origin = _fixture_remote(tmp_path)
+    (origin / "scripts" / "install.sh").write_text(INSTALL_SH.read_text())
+    (origin / "scripts" / "bootstrap.sh").write_text(BOOTSTRAP_SH.read_text())
+    _git(origin, "add", "-A")
+    _git(origin, "commit", "-q", "-m", "release: v1.3.0-rc.1")
+    clone = tmp_path / "clone"
+    _git(tmp_path, "clone", "-q", "--branch", "main", f"file://{origin}", str(clone))
+    return origin, clone
+
+
+def _run_clone_install(
+    tmp_path: Path, clone: Path, *args: str, extra_env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    for name in ("uv", "jq"):
+        stub = bin_dir / name
+        if not stub.exists():
+            stub.write_text("#!/bin/sh\nexit 0\n")
+            stub.chmod(0o755)
+    (tmp_path / "home").mkdir(exist_ok=True)
+    env = {
+        "HOME": str(tmp_path / "home"),
+        "PATH": f"{bin_dir}:/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin",
+        "FR_SRC_DIR": str(tmp_path / "src"),
+        "BOOTSTRAP_TEST_MARKER": str(tmp_path / "marker.txt"),
+        **(extra_env or {}),
+    }
+    return subprocess.run(
+        ["bash", str(clone / "scripts" / "install.sh"), *args],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+def test_install_sh_on_main_installs_the_newest_stable_release(tmp_path: Path) -> None:
+    """The operator's report: install.sh in a clone on main installed main's HEAD, which
+    the release bot makes an RC while a gate is pending. No --version means stable."""
+    _, clone = _clone_with_real_scripts(tmp_path)
+    res = _run_clone_install(tmp_path, clone)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert _installed(res) == "v1.2.0", res.stdout + res.stderr
+    assert "--version main" in res.stdout  # says how to install the checkout instead
+    assert _git(clone, "symbolic-ref", "--short", "HEAD") == "main"  # clone untouched
+
+
+def test_install_sh_version_rc_installs_the_newest_rc(tmp_path: Path) -> None:
+    _, clone = _clone_with_real_scripts(tmp_path)
+    res = _run_clone_install(tmp_path, clone, "--version", "RC")
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert _installed(res) == "v1.2.0-rc.10"
+
+
+def test_install_sh_forwards_other_flags_through_the_delegation(tmp_path: Path) -> None:
+    _, clone = _clone_with_real_scripts(tmp_path)
+    res = _run_clone_install(tmp_path, clone, "--x", "--version=1.1.0", "a b")
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert _installed(res) == "v1.1.0"
+    assert (tmp_path / "marker.txt").read_text().splitlines() == ["--x", "a b"]
+
+
+def test_install_sh_refuses_to_delegate_twice(tmp_path: Path) -> None:
+    """A bootstrap whose main channel forgot `--version main` must not loop forever."""
+    _, clone = _clone_with_real_scripts(tmp_path)
+    res = _run_clone_install(tmp_path, clone, extra_env={"FR_INSTALL_DELEGATED": "1"})
+    assert res.returncode != 0
+    assert "--version main" in res.stderr
+    assert not (tmp_path / "marker.txt").exists()
+
+
+def test_the_cloud_setup_script_installs_the_newest_stable_release(tmp_path: Path) -> None:
+    from fr import cloud
+
+    origin, _ = _clone_with_real_scripts(tmp_path)
+    script = cloud.setup_script().replace(cloud.SOURCE_URL, f"file://{origin}")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    for name in ("uv", "jq", "rsync"):
+        stub = bin_dir / name
+        stub.write_text("#!/bin/sh\nexit 0\n")
+        stub.chmod(0o755)
+    home = tmp_path / "home"
+    home.mkdir()
+    env = {
+        "HOME": str(home),
+        "PATH": f"{bin_dir}:/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin",
+        "BOOTSTRAP_TEST_MARKER": str(tmp_path / "marker.txt"),
+    }
+    res = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert _installed(res) == "v1.2.0", res.stdout + res.stderr
+
+
+def test_the_wave_drivers_post_merge_installs_main_explicitly() -> None:
+    import yaml
+
+    config = yaml.safe_load((REPO_ROOT / ".fr" / "triage.yaml").read_text())
+    assert config["post_merge"] == ["./scripts/install.sh", "--version", "main"]

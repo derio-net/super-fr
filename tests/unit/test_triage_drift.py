@@ -10,6 +10,8 @@ with the real `claude-cloud` runner and its mailbox.
 
 from __future__ import annotations
 
+import os
+
 import json
 import shutil
 from datetime import timedelta
@@ -599,16 +601,12 @@ def test_a_replayed_self_rehome_creates_one_session(
     assert load_lease(state).generation == 1  # type: ignore[union-attr]
 
 
-def test_install_release_keeps_its_source_clone_outside_the_marketplace(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """p6-r1: the REAL installer, twice, against a local remote whose install.sh is a
-    stub that (like the real one) drops the marketplace dir's `.git` and (p7-r1, like
-    the real preflight) refuses anything but a clean `main` in sync with origin/main.
-    HOME is a tmp dir."""
+def _release_remote(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, market: Path):
+    """A work repo + bare remote carrying the REAL bootstrap.sh and a stub install.sh
+    that (like the real one) carries the channel marker, refuses anything but a clean
+    checkout detached at a v* tag, drops the marketplace dir's `.git` and records the
+    VERSION it installed. uv/jq/rsync are stubs on PATH; HOME is a tmp dir."""
     import subprocess
-
-    from fr.commands import triage_drive_cmd
 
     def git(cwd: Path, *argv: str) -> None:
         subprocess.run(
@@ -617,28 +615,43 @@ def test_install_release_keeps_its_source_clone_outside_the_marketplace(
             cwd=cwd, check=True, capture_output=True,
         )  # fmt: skip
 
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for name in ("uv", "jq", "rsync"):
+        (bin_dir / name).write_text("#!/bin/sh\nexit 0\n")
+        (bin_dir / name).chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
     marker = tmp_path / "installed.txt"
     monkeypatch.setenv("FR_TEST_MARKER", str(marker))
     work, bare = tmp_path / "work", tmp_path / "super-fr.git"
     (work / "scripts").mkdir(parents=True)
     git(tmp_path, "init", "--quiet", "-b", "main", str(work))
-    market = Path.home() / ".claude" / "plugins" / "marketplaces" / "derio-net--super-fr"
-    preflight = (
-        'root="$(cd "$(dirname "$0")/.." && pwd)"\n'
-        'branch="$(git -C "$root" symbolic-ref --short HEAD 2>/dev/null || echo DETACHED)"\n'
-        '[ "$branch" = main ] || { echo "preflight: on $branch, expected main" >&2; exit 1; }\n'
-        '[ -z "$(git -C "$root" status --porcelain)" ] '
-        '|| { echo "preflight: dirty tree" >&2; exit 1; }\n'
-        'git -C "$root" fetch --quiet origin main\n'
-        '[ "$(git -C "$root" rev-parse HEAD)" = "$(git -C "$root" rev-parse origin/main)" ] '
-        '|| { echo "preflight: out of sync" >&2; exit 1; }\n'
+    (work / "scripts" / "bootstrap.sh").write_text(
+        (Path(__file__).parents[2] / "scripts" / "bootstrap.sh").read_text()
     )
     stub = (
-        "#!/bin/bash\nset -e\n" + preflight
-        + f'mkdir -p "{market}" && rm -rf "{market}/.git"\n'
-        'cat "$(dirname "$0")/../VERSION" >> "$FR_TEST_MARKER"\n'
-    )  # fmt: skip
+        "#!/bin/bash\nset -e\n# fr-install-channels: 1\n"
+        'root="$(cd "$(dirname "$0")/.." && pwd)"\n'
+        'git -C "$root" symbolic-ref -q HEAD >/dev/null '
+        '&& { echo "preflight: on a branch, expected a tag" >&2; exit 1; }\n'
+        '[ -z "$(git -C "$root" status --porcelain)" ] '
+        '|| { echo "preflight: dirty tree" >&2; exit 1; }\n'
+        f'mkdir -p "{market}" && rm -rf "{market}/.git"\n'
+        'cat "$root/VERSION" >> "$FR_TEST_MARKER"\n'
+    )
     (work / "scripts" / "install.sh").write_text(stub)
+    (work / "scripts" / "install.sh").chmod(0o755)
+    return git, work, bare, marker
+
+
+def test_install_release_keeps_its_source_clone_outside_the_marketplace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p6-r1: the REAL installer path, twice, against a local remote. HOME is a tmp dir."""
+    from fr.commands import triage_drive_cmd
+
+    market = Path.home() / ".claude" / "plugins" / "marketplaces" / "derio-net--super-fr"
+    git, work, bare, marker = _release_remote(tmp_path, monkeypatch, market)
     for version in ("6.0.0", "6.0.1"):
         (work / "VERSION").write_text(version + "\n")
         git(work, "add", "-A")
@@ -658,49 +671,55 @@ def test_install_release_keeps_its_source_clone_outside_the_marketplace(
     assert (Path.home() / ".cache" / "fr" / "src" / "super-fr" / ".git").is_dir()
     assert not (market / ".git").exists()
 
-    (work / "scripts" / "install.sh").write_text("#!/bin/bash\necho boom-on-stderr >&2\nexit 3\n")
+    (work / "scripts" / "install.sh").write_text(
+        "#!/bin/bash\n# fr-install-channels: 1\necho boom-on-stderr >&2\nexit 3\n"
+    )
     (work / "VERSION").write_text("6.0.2\n")
     git(work, "add", "-A")
     git(work, "commit", "--quiet", "-m", "6.0.2")
     git(work, "tag", "v6.0.2")
     git(work, "push", "--quiet", "--tags", str(bare), "HEAD:refs/heads/main")
-    with pytest.raises(RuntimeError, match="boom-on-stderr"):
+    with pytest.raises(RuntimeError, match="boom-on-stderr") as failed:
         triage_drive_cmd._install_release("v6.0.2", remote=str(bare))
+    assert "bootstrap.sh --version v6.0.2" in str(failed.value)
+    assert "set -euo pipefail" not in str(failed.value)  # never the script's text
 
 
-def test_install_release_refuses_a_tag_that_is_not_on_main(
+def test_install_release_installs_the_release_not_mains_newer_head(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """p7-r1: a release tag origin/main does not contain is refused by name, and
-    install.sh never runs."""
-    import subprocess
-
+    """main moves past the release (the release bot commits `release: vX.Y.Z-rc.N` onto
+    it while a gate is pending). Reinstalling the release installed main, i.e. the RC."""
     from fr.commands import triage_drive_cmd
 
-    def git(cwd: Path, *argv: str) -> None:
-        subprocess.run(
-            ["git", "-c", "user.name=t", "-c", "user.email=t@example.com",
-             "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", *argv],
-            cwd=cwd, check=True, capture_output=True,
-        )  # fmt: skip
-
-    marker = tmp_path / "installed.txt"
-    monkeypatch.setenv("FR_TEST_MARKER", str(marker))
-    work, bare = tmp_path / "work", tmp_path / "super-fr.git"
-    (work / "scripts").mkdir(parents=True)
-    git(tmp_path, "init", "--quiet", "-b", "main", str(work))
-    (work / "scripts" / "install.sh").write_text('#!/bin/bash\necho ran >> "$FR_TEST_MARKER"\n')
+    market = Path.home() / ".claude" / "plugins" / "marketplaces" / "derio-net--super-fr"
+    git, work, bare, marker = _release_remote(tmp_path, monkeypatch, market)
     (work / "VERSION").write_text("6.0.0\n")
     git(work, "add", "-A")
     git(work, "commit", "--quiet", "-m", "6.0.0")
-    git(work, "checkout", "--quiet", "-b", "side")
-    (work / "VERSION").write_text("6.0.9\n")
-    git(work, "commit", "--quiet", "-am", "side")
-    git(work, "tag", "v6.0.9")
-    git(work, "checkout", "--quiet", "main")
+    git(work, "tag", "v6.0.0")
+    (work / "VERSION").write_text("6.1.0rc1\n")
+    git(work, "commit", "--quiet", "-am", "release: v6.1.0-rc.1")
+    git(work, "tag", "v6.1.0-rc.1")
     git(tmp_path, "clone", "--quiet", "--bare", str(work), str(bare))
-    git(work, "push", "--quiet", "--tags", str(bare))
 
-    with pytest.raises(RuntimeError, match=r"v6\.0\.9.*origin/main"):
+    triage_drive_cmd._install_release("v6.0.0", remote=str(bare))
+    assert marker.read_text().split() == ["6.0.0"]
+
+
+def test_install_release_refuses_a_tag_bootstrap_cannot_install(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.commands import triage_drive_cmd
+
+    market = Path.home() / ".claude" / "plugins" / "marketplaces" / "derio-net--super-fr"
+    git, work, bare, marker = _release_remote(tmp_path, monkeypatch, market)
+    (work / "VERSION").write_text("6.0.0\n")
+    git(work, "add", "-A")
+    git(work, "commit", "--quiet", "-m", "6.0.0")
+    git(work, "tag", "v6.0.0")
+    git(tmp_path, "clone", "--quiet", "--bare", str(work), str(bare))
+
+    with pytest.raises(RuntimeError, match=r"v6\.0\.9.*not installable"):
         triage_drive_cmd._install_release("v6.0.9", remote=str(bare))
     assert not marker.exists()

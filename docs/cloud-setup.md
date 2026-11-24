@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/cloud.py
   - packages/fr/src/fr/commands/cloud_cmd.py
-reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 the doctor's fr check now compares release candidates and fails a version it cannot read (batch release-truth)
+reviewed: 2026-11-24 the setup script installs the newest release through bootstrap.sh, never main (fix/install-stable-by-default). 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 the doctor's fr check now compares release candidates and fails a version it cannot read (batch release-truth)
 ---
 
 # fr in a Claude Code cloud session
@@ -42,7 +42,9 @@ In this order, the script:
    `~/.claude/settings.json` (`{}`) when they are absent. A fresh container has neither file.
    `scripts/install.sh` now **fails** and names the absent file. It does not warn
    and exit 0 without a registered plugin;
-3. clones super-fr's `main` into `~/.cache/fr/src/super-fr` and runs its `scripts/install.sh`.
+3. installs the newest super-fr release with `scripts/bootstrap.sh`, read from `origin/main`.
+   It never installs `main` itself, because `main` is a release candidate while a release
+   waits for a gate. The managed clone is `~/.cache/fr/src/super-fr`.
    The clone is outside the marketplace directory, because `install.sh` replaces that directory;
 4. writes `api: rest` to `~/.config/fr/forge.yaml`.
 

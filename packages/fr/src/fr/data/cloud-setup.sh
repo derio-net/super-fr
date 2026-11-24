@@ -27,22 +27,24 @@ mkdir -p "$HOME/.claude/plugins"
   || echo '{"version":2,"plugins":{}}' > "$HOME/.claude/plugins/installed_plugins.json"
 [ -f "$HOME/.claude/settings.json" ] || echo '{}' > "$HOME/.claude/settings.json"
 
-# 3. super-fr from source, then its installer: the fr CLI, the derio-net--super-fr
-#    plugin and its rules. The clone lives outside the marketplace directory, which
-#    install.sh replaces; an existing one is reused, so the script is safe to re-run
-#    (the claude-cloud worker brief runs it when fr is missing).
+# 3. The newest stable release of super-fr, through bootstrap.sh: the fr CLI, the
+#    derio-net--super-fr plugin and its rules. main is never installed by default:
+#    while a gate is pending, main is a release candidate. bootstrap.sh keeps its
+#    managed clone outside the marketplace directory, which install.sh replaces, and
+#    reuses it, so the script is safe to re-run (the claude-cloud worker brief runs it
+#    when fr is missing). It checks the release tag out in that clone, so it runs
+#    from memory, read from origin/main, never from a file the checkout changes.
 src="$HOME/.cache/fr/src/super-fr"
 if [ -d "$src/.git" ]; then
   git -C "$src" fetch --quiet origin main
-  git -C "$src" checkout --quiet --force -B main origin/main
-  git -C "$src" clean -fdxq  # install.sh's preflight refuses a dirty tree
 else
   rm -rf "$src"
   mkdir -p "$(dirname "$src")"
   git clone --quiet --branch main {source} "$src"
 fi
 # FR_REQUIRE_PLUGIN=1: refuse, never warn and skip, if the plugin cannot be registered.
-FR_REQUIRE_PLUGIN=1 bash "$src/scripts/install.sh"
+FR_SRC_DIR="$src" FR_SRC_REMOTE={source} FR_REQUIRE_PLUGIN=1 \
+  bash -c "$(git -C "$src" show origin/main:scripts/bootstrap.sh)" bootstrap.sh
 
 # 4. The cloud proxy refuses GitHub's GraphQL API (HTTP 403): fr talks REST.
 forge="$HOME/.config/fr/forge.yaml"

@@ -1,0 +1,2 @@
+bump: minor
+summary: every install path installs the newest stable release by default; `scripts/install.sh` takes `--version` (RC, X.Y.Z, main), a clone on main installs main only with `--version main`, and the cloud setup script and the cloud driver's self-update install the release, never main
