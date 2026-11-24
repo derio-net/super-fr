@@ -3,7 +3,7 @@ run: 2026-11-24-feat-show-me-visuals
 workflow: fr-goal@1
 branch: feat/show-me-visuals
 started: '2026-11-24T13:23:59+00:00'
-cursor: journal-check
+cursor: lens-review
 steps:
   brainstorm:
     state: done
@@ -117,7 +117,10 @@ steps:
           visual: none
           findings: p2-r1,p2-r2
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-24T20:39:31+00:00'
+    exit: 0
+    stdout: ''
   lens-review:
     state: pending
   deliver:
