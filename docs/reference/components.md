@@ -7,7 +7,7 @@ covers:
   - packages/*/pyproject.toml
   - packages/fr-opencode-plugin/package.json
   - plugins/*/.claude-plugin/plugin.json
-reviewed: 2026-11-19 still true; the plugin lock overrides glob and minimatch, no component changes (batch hook-hardening). 2026-11-14 VK support removed; the fr-vk package and its MCP requirement are gone
+reviewed: 2026-11-20 Python 3.14 is the floor, and uv downloads it when the host has none (ci-single-python). 2026-11-19 still true; the plugin lock overrides glob and minimatch, no component changes (batch hook-hardening). 2026-11-14 VK support removed; the fr-vk package and its MCP requirement are gone
 ---
 
 # Components and requirements
@@ -38,7 +38,8 @@ entry-point group. So to add a runner, you do not edit `fr-dispatch`.
   absent, the git remote selects it.
 - Docker, for the default devcontainer isolation. A host without Docker can isolate with
   a worktree alone (`FR_ISOLATION_TARGET=worktree`).
-- [uv](https://docs.astral.sh/uv/), for the `fr` CLI.
+- [uv](https://docs.astral.sh/uv/), for the `fr` CLI. `fr` needs Python 3.14 or newer. When the
+  host has no such Python, uv downloads one.
 - `git`, `jq` and `rsync`: the installer checks for them first and names any that is absent.
 - The `devcontainer` CLI, for the default isolation. The installer tries to install it with
   `npm` when it is absent.

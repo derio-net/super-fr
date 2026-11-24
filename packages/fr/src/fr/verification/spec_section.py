@@ -10,6 +10,8 @@ PR body (never compared as strings by those consumers — they call
     gate: <gate>                 (optional, run-level; spec 2026-10-14 R5)
     gate: <row-id>=<gate>        (optional, one row each)
     - <row-id>: <strategy|none> — <reason>
+    settle.<conflicts|ci>: <off|report|fix> — <reason>
+                                 (optional, one per key; spec 2026-11-23-pr-readiness-wait R6)
 
 The `strategy:` line is optional (the shape's default stands in). The reason
 after the em dash is optional HERE: whether one is owed depends on the
@@ -22,6 +24,12 @@ A section with NO grammar line at all — no `strategy:` line, no bullet the row
 grammar accepts — is not this section (review p3-r6): specs older than the
 grammar used `## Verification` for prose bullets, and an in-flight run whose
 spec is one of them must deliver unchanged, not fail closed.
+
+A `settle.` line overrides one key of the repo's `git.settle` for this feature's PR. Its
+reason is required, and any line that starts with `settle.` and breaks the grammar is an
+error: an override is never ignored. Settle lines are not strategy grammar (review p2-r6):
+a section holding only them (and prose) is still no `## Verification` section to
+`parse_section`, so no strategy, gate or walk changes; `settle_overrides` reads them.
 """
 
 from __future__ import annotations
@@ -43,6 +51,13 @@ _ROW_LINE = re.compile(
 _GATE_LINE = re.compile(
     r"^gate:\s*(?:(?P<row>[A-Za-z0-9][A-Za-z0-9._-]*)=)?(?P<gate>[a-z][a-z0-9-]*)\s*$"
 )
+_SETTLE_LINE = re.compile(
+    r"^settle\.(?P<key>[a-z][a-z0-9_-]*):\s+(?P<mode>[a-z]+)\s+—\s+(?P<reason>\S.*?)\s*$"
+)
+SETTLE_KEYS = frozenset({"conflicts", "ci"})
+SETTLE_OVERRIDE_MODES = frozenset({"off", "report", "fix"})
+"""`fr.settings.model.SETTLE_MODES`, restated so the spec grammar reads no settings model
+(`tests/unit/test_spec_section_settle.py` pins the two equal)."""
 GATE_NAMES = GATES | {"none"}
 """What a `gate:` line may name: the closed vocabulary, or `none` (no gate)."""
 
@@ -58,11 +73,18 @@ class RowLine:
 
 
 @dataclass(frozen=True)
+class SettleOverride:
+    mode: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class Section:
     strategy: str | None = None
     rows: dict[str, RowLine] = field(default_factory=dict)
     gate: str | None = None
     row_gates: dict[str, str] = field(default_factory=dict)
+    settle: dict[str, SettleOverride] = field(default_factory=dict)
 
 
 def _section_span(text: str) -> tuple[int, list[tuple[int, str]]] | None:
@@ -98,9 +120,22 @@ def _section_lines(text: str) -> list[tuple[int, str]] | None:
 
 
 def _is_grammar(line: str) -> bool:
-    """Does `line` belong to the grammar: any `strategy:` line, or a bullet the
-    row grammar accepts?"""
+    """Does `line` belong to the strategy grammar: any `strategy:` or `gate:` line, or a
+    bullet the row grammar accepts? A `settle.` line does not (`settle_overrides`)."""
     return line.startswith(("strategy:", "gate:")) or _ROW_LINE.match(line) is not None
+
+
+def _settle_line(n: int, raw: str, settle: dict[str, SettleOverride]) -> None:
+    m = _SETTLE_LINE.match(raw.strip())
+    if m is None or m["key"] not in SETTLE_KEYS or m["mode"] not in SETTLE_OVERRIDE_MODES:
+        raise SectionError(
+            f"line {n}: malformed `settle.` line: {raw.strip()!r} — expected "
+            f"`settle.<{'|'.join(sorted(SETTLE_KEYS))}>: "
+            f"<{'|'.join(sorted(SETTLE_OVERRIDE_MODES))}> — <reason>`, the reason required"
+        )
+    if m["key"] in settle:
+        raise SectionError(f"line {n}: a second `settle.{m['key']}:` line")
+    settle[m["key"]] = SettleOverride(m["mode"], m["reason"])
 
 
 def parse_section(text: str) -> Section | None:
@@ -114,9 +149,12 @@ def parse_section(text: str) -> Section | None:
     gate: str | None = None
     row_gates: dict[str, str] = {}
     rows: dict[str, RowLine] = {}
+    settle: dict[str, SettleOverride] = {}
     for n, raw in lines:
         line = raw.strip()
-        if line.startswith("gate:"):
+        if line.startswith("settle."):
+            _settle_line(n, raw, settle)
+        elif line.startswith("gate:"):
             m = _GATE_LINE.match(line)
             if m is None or m["gate"] not in GATE_NAMES:
                 raise SectionError(
@@ -152,7 +190,17 @@ def parse_section(text: str) -> Section | None:
             if m["row"] in rows:
                 raise SectionError(f"line {n}: row {m['row']!r} appears more than once")
             rows[m["row"]] = RowLine(m["strategy"], m["reason"])
-    return Section(strategy=strategy, rows=rows, gate=gate, row_gates=row_gates)
+    return Section(strategy=strategy, rows=rows, gate=gate, row_gates=row_gates, settle=settle)
+
+
+def settle_overrides(text: str) -> dict[str, SettleOverride]:
+    """The section's `settle.` lines, whether or not it holds strategy grammar; empty
+    without a section. A malformed one raises `SectionError` naming the line."""
+    settle: dict[str, SettleOverride] = {}
+    for n, raw in _section_lines(text) or []:
+        if raw.strip().startswith("settle."):
+            _settle_line(n, raw, settle)
+    return settle
 
 
 _NO_SECTION = (

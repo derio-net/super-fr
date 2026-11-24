@@ -6,7 +6,8 @@
 #   curl -fsSL .../scripts/bootstrap.sh | bash -s -- --version RC  # pick a channel
 #
 # --version (spec 2026-10-14-exit-gates R22; every other flag goes to install.sh):
-#   (none)      newest installable vX.Y.Z; with none yet, origin/main, saying so
+#   (none)      newest installable vX.Y.Z; with none yet, installs nothing and
+#               names --version RC / --version main (never an RC or main by default)
 #   RC          newest installable vX.Y.Z-rc.N (numeric order)
 #   X.Y.Z       that release          X.Y.Z-RC   newest vX.Y.Z-rc.*
 #   X.Y.Z-rc.N  exactly that RC       main       origin/main (development)
@@ -155,7 +156,7 @@ if [ "$HAVE_VERSION" = 1 ] && [ "$WANT" = main ]; then
   TAG=main
 elif [ "$HAVE_VERSION" = 0 ]; then
   TAG="$(installable_tags | grep -v -- '-rc\.' | sort_versions | tail -n 1 || true)"
-  [ -n "$TAG" ] || TAG=main_fallback
+  [ -n "$TAG" ] || refuse "no installable release vX.Y.Z yet. The default installs only a release; ask for another channel explicitly: --version RC (the newest release candidate) or --version main (the development channel)."
 else
   AVAILABLE="$(installable_tags)"
   case "$WANT" in
@@ -167,12 +168,14 @@ else
   TAG="$CAND"
 fi
 
+# install.sh on main installs its own checkout only when told `--version main`; with
+# no --version it delegates back here for the newest release. So the main channel
+# passes it on. A tag's install.sh is detached at that tag and gets no --version
+# (older tags' install.sh do not know the flag).
 case "$TAG" in
-  main | main_fallback)
-    if [ "$TAG" = main_fallback ]; then
-      echo "No installable release yet; installing origin/main."
-    fi
+  main)
     git -C "$SRC" checkout -q -f -B main origin/main </dev/null
+    ARGS=(--version main ${ARGS[@]+"${ARGS[@]}"})
     echo "Channel: main" ;;
   *)
     git -C "$SRC" checkout -q -f --detach "refs/tags/$TAG" </dev/null

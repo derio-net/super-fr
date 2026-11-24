@@ -96,7 +96,7 @@ ALWAYS_RECORD_SECTIONS = frozenset({"outcome", "evidence"})
 """Every step's record may say how it ended and what proves it."""
 
 DERIVED_EVIDENCE = frozenset(
-    {"findings", "proportionality", "docs", "visual", "single-phase", "lenses"}
+    {"findings", "proportionality", "docs", "visual", "single-phase", "lenses", "settle"}
 )
 """The evidence `fr run resolve` derives ITSELF and refuses from the caller.
 One set, read by the resolve gate, the dispatch brief and the record

@@ -446,7 +446,7 @@ def _refuse_stealth_bound(root: Path) -> None:
         state = state_path(root)
         if state.is_file() and json.loads(state.read_text()).get("to") == paths.STEALTH:
             bound = True
-    except (SettingsError, ValueError, OSError):
+    except SettingsError, ValueError, OSError:
         bound = True  # an unreadable move state is no evidence the repo is not stealth
     if bound:
         raise SettingsError(

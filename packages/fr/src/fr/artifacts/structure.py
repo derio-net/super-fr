@@ -445,7 +445,7 @@ def validate_fragment(path: Path) -> list[str]:
             continue
         try:
             other: Any = yaml.safe_load(sibling.read_text())
-        except (OSError, yaml.YAMLError):
+        except OSError, yaml.YAMLError:
             continue  # the sibling's own validation reports it
         theirs = other.get("repo") if isinstance(other, dict) else None
         if isinstance(theirs, str) and theirs != fragment.repo:

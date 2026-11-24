@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 from fr.cli import app
-from fr.run import units
+from fr.run import cli_step, units
 from fr.run.model import load_run_state
 from fr.version_floor import CEILING_VERSION
 from fr_dispatch.work_item import run_item_id
@@ -543,7 +543,7 @@ def _forbid_execution(monkeypatch, run_cmd, boom) -> None:
     above all) and the cli-step executor, which runs its shell through
     `Popen` in `fr.run.cli_step` (super-fr#1507), out of reach of the first."""
     monkeypatch.setattr(subprocess, "run", boom)
-    monkeypatch.setattr(run_cmd, "run_cli_command", boom)
+    monkeypatch.setattr(cli_step, "run_cli_command", boom)
 
 
 def test_advance_agent_step_never_invokes_a_model(tmp_path: Path, monkeypatch) -> None:

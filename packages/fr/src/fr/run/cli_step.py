@@ -54,6 +54,18 @@ def failure_line(step_id: str, returncode: int, timed_out_after: float | None) -
     )
 
 
+def run_step(command: str, cwd: Path, step_id: str) -> tuple[int, str, str | None]:
+    """Run one cli step under `FR_CLI_STEP_TIMEOUT`; returns (exit code, bounded
+    stdout, the failure line or None). A malformed timeout raises `ValueError`
+    before anything runs."""
+    timeout = timeout_from_env()
+    returncode, stdout, timed_out = run_cli_command(command, cwd, timeout)
+    failure = None
+    if returncode != 0:
+        failure = failure_line(step_id, returncode, timeout if timed_out else None)
+    return returncode, bounded_stdout(stdout), failure
+
+
 def run_cli_command(command: str, cwd: Path, timeout: float | None) -> tuple[int, str, bool]:
     """Run `command` in a shell; returns (exit code, stdout, timed out).
 

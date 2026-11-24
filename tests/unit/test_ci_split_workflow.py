@@ -1,8 +1,9 @@
 """Pins the CI test layout of spec 2026-11-01-ci-speed §3.B/§3.C (R4-R7, R12).
 
-`plan` picks ONE durations file per run, every shard of both legs splits by it,
+`plan` picks ONE durations file per run, every shard splits by it,
 `collect` + `split-check` prove the shards ran exactly the collected set, and a
-push to main saves the 3.14 leg's measured durations for the next run.
+push to main saves the shards' measured durations for the next run. One leg, on
+the requires-python floor (#1589).
 """
 
 from __future__ import annotations
@@ -48,7 +49,7 @@ def test_test_job_splits_seven_ways_by_the_plans_file() -> None:
     assert "plan" in _needs("test")
     assert test["timeout-minutes"] == 20
     assert test["strategy"]["matrix"]["shard"] == [1, 2, 3, 4, 5, 6, 7]
-    assert test["strategy"]["matrix"]["python"] == ["3.11", "3.14"]
+    assert "python" not in test["strategy"]["matrix"]
     run = _pytest_step("test")["run"]
     for flag in (
         "--splits 7",
@@ -69,10 +70,12 @@ def test_test_job_splits_seven_ways_by_the_plans_file() -> None:
     assert cp < steps.index(_pytest_step("test"))
 
 
-def test_collect_job_collects_per_leg_with_the_shards_addopts_and_no_split() -> None:
+def test_collect_job_collects_once_with_the_shards_addopts_and_no_split() -> None:
     collect = JOBS["collect"]
     assert collect["timeout-minutes"] == 10
-    assert collect["strategy"]["matrix"]["python"] == ["3.11", "3.14"]
+    assert "strategy" not in collect
+    upload = next(s for s in collect["steps"] if "upload-artifact" in str(s.get("uses", "")))
+    assert upload["with"]["name"] == "collected"
     run = _pytest_step("collect")["run"]
     assert "--collect-only -q" in run
     assert '-o addopts="--strict-markers"' in run
@@ -88,7 +91,14 @@ def test_split_check_gates_and_saves_the_cache_only_on_main_pushes() -> None:
     assert save["if"] == "github.event_name == 'push' && github.ref == 'refs/heads/main'"
     assert save["with"]["key"] == "test-durations-${{ github.run_id }}"
     merge = next(s for s in sc["steps"] if "split_check.py merge" in str(s.get("run", "")))
-    assert "py3.14" in merge["run"]
+    assert "durations-shard-*" in merge["run"]
+    test_upload = next(
+        s
+        for s in JOBS["test"]["steps"]
+        if "upload-artifact" in str(s.get("uses", ""))
+        and str(s["with"]["name"]).startswith("durations-")
+    )
+    assert test_upload["with"]["name"] == "durations-shard-${{ matrix.shard }}"
     # One file, three places: merge writes it, save stores it, plan restores it.
     restore = next(
         s for s in JOBS["plan"]["steps"] if "actions/cache/restore" in str(s.get("uses", ""))
@@ -97,12 +107,12 @@ def test_split_check_gates_and_saves_the_cache_only_on_main_pushes() -> None:
     assert out == save["with"]["path"] == restore["with"]["path"]
 
 
-def test_split_check_covers_every_test_leg() -> None:
-    test_legs = JOBS["test"]["strategy"]["matrix"]["python"]
-    assert JOBS["collect"]["strategy"]["matrix"]["python"] == test_legs
+def test_split_check_checks_the_one_leg() -> None:
     text = _steps_text("split-check")
-    assert "for dir in collected/collected-py*" in text
-    assert "3.11 3.14" not in text
+    assert text.count("split_check.py check") == 1
+    assert "--collected collected/collected.txt" in text
+    assert "durations-shard-*" in text
+    assert "collected-py" not in text and "py3" not in text
 
 
 def test_ci_ok_needs_the_new_jobs() -> None:

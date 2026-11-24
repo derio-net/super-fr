@@ -8,7 +8,7 @@ covers:
   - packages/fr/src/fr/run/**
   - packages/fr/src/fr/commands/run_cmd.py
   - plugins/super-fr/workflows/*.yaml
-reviewed: 2026-11-22 cursor writes are atomic, a save refuses another command's newer cursor, and a cli step has a timeout and a bounded stored output (batch run-durability). 2026-11-21 still true; deliver's hand-off names fr ops gate --run for a devops-gated run, no shape change (gh#1614); 2026-11-19 still true; run_cmd gained the declared `tests ci` brief key and the advisory-log refusal, no shape change (local-suite-cost); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-19 explicit merge targets preserve existing run steps and evidence; target alignment applies to review, delivery and PR creation. 2026-11-18 still true; deliver's owed closing check now counts an issue URL only on the repo's forge host (owed-followups), no shape change. 2026-11-17 still true; visual.py asks git check-ignore through fr.git.is_ignored, and fr run adopt names a plan's run after its folder (batch-acceptance-edits). 2026-11-16 still true; run_cmd.py gained the deliver check that a discharged owed issue is closed by the PR body. 2026-11-15 the deliver-evidence fixes (stale fresh log, forge read, capture wrappers) change no shape, and closeout.py changed only the DevOps brief of a finished stage (batch gate-truth)
+reviewed: 2026-11-24 still true; cursor writes are atomic, a save refuses another command's newer cursor, and a cli step has a timeout and a bounded stored output (batch run-durability). 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-23 the deliver brief gains a `settle` line and the close-out brief a settle step after the housekeeping PR, no shape change (pr-readiness-wait R9, R10); deliver derives a `settle` witness last, exit 75 while the PR is not settled (pr-readiness-wait R8); 2026-11-21 still true; deliver's hand-off names fr ops gate --run for a devops-gated run, no shape change (gh#1614); 2026-11-19 still true; run_cmd gained the declared `tests ci` brief key and the advisory-log refusal, no shape change (local-suite-cost); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-19 explicit merge targets preserve existing run steps and evidence; target alignment applies to review, delivery and PR creation. 2026-11-18 still true; deliver's owed closing check now counts an issue URL only on the repo's forge host (owed-followups), no shape change. 2026-11-17 still true; visual.py asks git check-ignore through fr.git.is_ignored, and fr run adopt names a plan's run after its folder (batch-acceptance-edits). 2026-11-16 still true; run_cmd.py gained the deliver check that a discharged owed issue is closed by the PR body. 2026-11-15 the deliver-evidence fixes (stale fresh log, forge read, capture wrappers) change no shape, and closeout.py changed only the DevOps brief of a finished stage (batch gate-truth)
 ---
 
 # Workflow shapes and the run cursor
@@ -58,6 +58,18 @@ A run without an explicit merge target keeps the remote-default behavior. Use
 It records `base_branch` without replacing the run or clearing its steps. The
 same target supplies lens rules, the review diff, delivery docs/proportionality
 checks and draft PR creation. A later `--base` cannot contradict that target.
+
+`deliver` derives its `settle` witness after every other witness. It also comes after
+every `deliver` gate on the PR: placement, acceptance, leftovers, the PR body and the
+exit guard. It runs before the label sync. Only the check for emits that were not given
+comes after it. It reads the
+conflict state and the CI state of the PR under the `git.settle` modes, and it does not
+wait. Under `fix`, a failing state refuses the resolve. A state that is not known yet
+stops the resolve with exit 75, and the cursor does not change. Run `fr pr settle --wait
+<seconds>`, then resolve again. The witness is `off` when both keys are `off`, and
+`managed` on a branch that the wave driver owns. It is `merged` when the run's PR has
+merged and no other PR is open. When the origin remote is a local path or a `file://`
+URL, no forge can answer, so the witness records `unsupported` and refuses nothing.
 
 `fr workflow check` validates the schema, duplicate step ids, `needs` that point nowhere,
 cycles and unknown capabilities. CI runs it on every shipped shape.

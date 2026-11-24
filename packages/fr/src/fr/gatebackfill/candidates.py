@@ -316,7 +316,7 @@ def collect_candidates(
     try:
         matrix = load_effective(repo_root)
         origins = {r.id: tuple(r.origin) for r in matrix.rows}
-    except (AcceptanceError, OSError):
+    except AcceptanceError, OSError:
         origins = {}
     issues: list[dict[str, Any]] = []
     if forge is not None:

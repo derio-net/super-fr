@@ -200,7 +200,7 @@ def _below_artifact_root(repo_root: Path, target: str) -> bool:
 
     try:
         space = space_for(repo_root, create=False)
-    except (SettingsError, OSError):
+    except SettingsError, OSError:
         return False
     if space.placement == REPO:
         return False
