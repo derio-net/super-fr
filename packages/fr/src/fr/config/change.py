@@ -45,7 +45,9 @@ request was closed unmerged."""
 def change_kind(rel: str) -> str:
     """The kind a change to *rel* names: its path below `.fr/`, `/` as `-`, without the
     suffix (`settings`, `models`, `workflows-mine`)."""
-    below = rel.rsplit(".fr/", 1)[-1]
+    from fr.config.space import SPACE_DIR
+
+    below = rel.rsplit(f"{SPACE_DIR}/", 1)[-1]
     stem = below.rsplit(".", 1)[0] if "." in below.rsplit("/", 1)[-1] else below
     kind = "".join(c if c.isalnum() or c in "-_" else "-" for c in stem.replace("/", "-"))
     return kind.strip("-") or "config"
