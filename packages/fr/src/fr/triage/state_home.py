@@ -83,19 +83,54 @@ def clone_copy(root: Path, name: str) -> Path:
 def settle(name: str, root: Path, cache: Path, *, say: Callable[[str], None] = _say) -> None:
     """Move the clone at *root*'s copy of scope *name* into *cache* (R18's five rules; see
     the module docstring). Nothing when the clone holds none. Raises `TriageError` on a
-    refusal, with both copies as they were."""
+    refusal, with both copies as they were.
+
+    Nothing destructive runs through a link: `.fr`, `.fr/triage-state` and the scope's
+    directory must each be a real directory inside the clone (`fr.config.space.link_problem`,
+    lstat at every step), and a copy that is, holds or sits in the cache, or a cache that
+    lies inside the clone, is refused (`_overlap`). Checked before any rename, delete, tidy
+    or worktree removal."""
     copy = clone_copy(root, name)
+    _refuse_links(root, copy.parent)
     if not copy.parent.is_dir():
         return
-    if not copy.is_dir() or copy.is_symlink():
+    if not (copy.exists() or copy.is_symlink()):
         _tidy(root, copy.parent)
         return
+    _refuse_links(root, copy)
+    if not copy.is_dir():
+        raise TriageError(f"{copy} is not a directory: fr does not move or delete it")
     if any(_same(root, p) for p in PROTECTED_SOURCES):
         raise TriageError(f"{copy} is in a protected clone: its triage state is never moved")
+    why = _overlap(root, copy, cache)
+    if why is not None:
+        raise TriageError(f"{why}: fr does not move the triage state (S1 R18)")
     with _move_lock(cache):
         if copy.is_dir() and not copy.is_symlink():
             _move(name, root, copy, cache, say)
         _tidy(root, copy.parent)
+
+
+def _refuse_links(root: Path, path: Path) -> None:
+    from fr.config.space import link_problem
+
+    why = link_problem(root, path)
+    if why is not None:
+        raise TriageError(f"{why}: fr does not move or delete triage state through it (S1 R18)")
+
+
+def _overlap(root: Path, copy: Path, cache: Path) -> str | None:
+    """Why the clone copy and the cache may not be moved one into the other, or None: the
+    same directory, one inside the other, or a cache inside the clone the copy is retired
+    from. Resolved paths are compared."""
+    c, k, r = copy.resolve(), cache.resolve(), root.resolve()
+    if c == k:
+        return f"{copy} is the same directory as the cache {cache}"
+    if k.is_relative_to(c) or c.is_relative_to(k):
+        return f"{copy} and the cache {cache} lie one inside the other"
+    if k.is_relative_to(r):
+        return f"the cache {cache} lies inside the clone {root}"
+    return None
 
 
 def _same(a: Path, b: Path) -> bool:

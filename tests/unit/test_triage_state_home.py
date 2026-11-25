@@ -468,3 +468,81 @@ def test_the_suite_protects_the_checkout_under_test() -> None:
     from tests.conftest import REPO_ROOT
 
     assert Path(REPO_ROOT) in state_home.PROTECTED_SOURCES
+
+
+# ------------------------------------------- symlinks never reach a destructive step
+
+
+@pytest.mark.parametrize("linked", [".fr", ".fr/triage-state"])
+def test_a_symlinked_parent_of_the_clone_copy_refuses_and_deletes_nothing(
+    tmp_path: Path, cache: Path, linked: str
+) -> None:
+    clone = _clone(tmp_path, "clone")
+    elsewhere = tmp_path / "elsewhere"
+    target = elsewhere / PRODUCT_TRIAGE_STATE / SCOPE.name
+    target.mkdir(parents=True)
+    (target / "judgements.yaml").write_bytes(JUDGED)
+    link = clone / linked
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(elsewhere / linked, target_is_directory=True)
+
+    with pytest.raises(TriageError, match="symlink"):
+        state_dir(SCOPE, workspace=clone)
+
+    assert (target / "judgements.yaml").read_bytes() == JUDGED
+    assert not (cache / "judgements.yaml").exists()
+
+
+def test_a_symlinked_parent_with_no_copy_is_refused_before_any_tidy(
+    tmp_path: Path, cache: Path
+) -> None:
+    clone = _clone(tmp_path, "clone")
+    other = tmp_path / "other-state"
+    other.mkdir()
+    (other / f".{SCOPE.name}.s1-moved-x").mkdir()  # what _tidy would delete
+    (clone / ".fr").mkdir()
+    (clone / PRODUCT_TRIAGE_STATE).symlink_to(other, target_is_directory=True)
+
+    with pytest.raises(TriageError, match="symlink"):
+        state_dir(SCOPE, workspace=clone)
+
+    assert (other / f".{SCOPE.name}.s1-moved-x").is_dir()
+
+
+def test_a_clone_copy_that_is_the_cache_itself_is_refused(tmp_path: Path, cache: Path) -> None:
+    """A clone copy reached through a symlinked scope directory that resolves to the cache."""
+    clone = _clone(tmp_path, "clone")
+    state_dir(SCOPE)  # the cache exists, an S1 repository
+    (cache / "judgements.yaml").write_bytes(JUDGED)
+    (clone / PRODUCT_TRIAGE_STATE).mkdir(parents=True)
+    (clone / PRODUCT_TRIAGE_STATE / SCOPE.name).symlink_to(cache, target_is_directory=True)
+
+    with pytest.raises(TriageError, match="symlink"):
+        state_dir(SCOPE, workspace=clone)
+
+    assert (cache / "judgements.yaml").read_bytes() == JUDGED
+
+
+def test_a_cache_inside_the_clone_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A home that is itself a clone (a dotfiles repository) holding an old copy: the cache
+    would land inside the very clone the copy is retired from."""
+    home = _clone(tmp_path, "home")
+    monkeypatch.setenv("HOME", str(home))
+    copy = _old_copy(home, {"judgements.yaml": JUDGED})
+
+    with pytest.raises(TriageError, match="inside"):
+        state_dir(SCOPE, workspace=home)
+
+    assert (copy / "judgements.yaml").read_bytes() == JUDGED
+    assert not legacy_state_dir(SCOPE).exists()
+
+
+def test_overlap_rules_compare_resolved_paths(tmp_path: Path) -> None:
+    root, cache = tmp_path / "clone", tmp_path / "cache" / "o--r"
+    copy = root / PRODUCT_TRIAGE_STATE / "o--r"
+    assert state_home._overlap(root, copy, cache) is None
+    assert "same" in (state_home._overlap(root, copy, copy) or "")
+    assert "inside" in (state_home._overlap(root, copy, copy / "x") or "")
+    assert "inside" in (state_home._overlap(tmp_path, tmp_path / "c" / "o--r", cache) or "")
