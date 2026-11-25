@@ -118,3 +118,38 @@ d8d17cd75: _voided_sha returns None for Held. Test test_triage_readiness.py::tes
 ### p1-r7-resolved · finding [fixed] · resolves p1-r7: the approve-pr Need still asks to label a green PR approved-fr while its run has not delivered (contradicts R4, invites an approval R3 voids) (phase 1)
 
 c2549b27a: needs_you reads readiness.snapshot_readiness over the board's snapshot; no label Need while undelivered, R12 Need for a PR with no cursor. Test test_merge_train_label_board.py::test_a_green_pr_whose_run_has_not_delivered_is_never_asked_for_the_label.
+
+<!-- fr:journal kind=decision scope=plan id=p2-others-refused-via-actions created=2026-11-25T03:08:29+00:00 phase=2 -->
+### p2-others-refused-via-actions · decision · Refused close-out, archive and export candidates are read off the pass's own actions (phase 2) (phase 2)
+
+drive_pass could not grow (batch_drive.py is at its budget), so readiness.refused_others reads the trust rules' refusals from the pass's actions: a candidate is told apart by which PR set (collected_prs, archives, export_prs) holds its number, never by the action text, and the action's detail is the reason. QueueSnapshot.refused (key -> reason) and refused_entries carry them; they are never entries, and wave_queue._base_needs skips them so a refused PR raises no queue Need.
+
+<!-- fr:journal kind=decision scope=plan id=p2-queue-reports-moved created=2026-11-25T03:08:29+00:00 phase=2 -->
+### p2-queue-reports-moved · decision · queue_reports and QUEUE_REPORT_KEY moved out of batch_drive to fr.triage.queue_reports (phase 2) (phase 2)
+
+To add the refused hook inside batch_drive.py's 2275-line budget, an equal amount of code left it: the queue's report actions. views.py and the planner test import from the new module.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-board-facts-lack-others created=2026-11-25T03:08:29+00:00 phase=2 -->
+### p2-board-facts-lack-others · discovery · The board's facts name no default branch, PR base, collected close-out PR or export PR (phase 2) (phase 2)
+
+drive_snapshot cannot admit or refuse an archive PR on the board (no default branch, no base), and collected close-out and export PRs are not in the facts. So the card's archive PR gets a verdict kanban._archive_view builds from what the facts do say (checks, a conflict, else 'its base branch is not in the collected facts: the driver reads it live'), through the same other_readiness. Close-out and export entries show whenever the plan holds them (Card.others by batch, Board.others for no batch), and render tests cover them.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-opening-wave-order created=2026-11-25T03:08:29+00:00 phase=2 -->
+### p2-opening-wave-order · discovery · A ready entry of a wave whose queue is only opening read 'not in the queue this pass' (phase 2) (phase 2)
+
+plan_queue opens a wave's queue with no entries and builds on the next pass, so in_queue_order placed nothing. wave_queue._readiness now orders the opening wave's ready entries first, so the card reads 'Approved, merges next'.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-hints-kept created=2026-11-25T03:08:29+00:00 phase=2 -->
+### p2-hints-kept · discovery · The merge-ready, in-queue and awaiting-approval hints were removed; the conflict, unconfigured, draft and CI-pending hints stay (phase 2) (phase 2)
+
+R5 gives an approved conflicting PR no verdict (the queue ejects it), and a repo with no queue block has no queue verdict, so CONFLICT_HINT and HINT_QUEUE_UNCONFIGURED say what the verdict does not. A card whose PR was ready, queued or awaiting now carries no hint; every open batch PR gets a verdict, from snapshot_readiness when its repo has no queue plan. The tests that read the old hints read the verdict instead.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-25T03:08:29+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+other_readiness is new code beside batch_readiness and _other_ready now delegates to it; the only move (the queue report actions out of batch_drive) was done in the same commit to hold the module budget
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-25T03:08:29+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+the board change is additive (Card.readiness and Card.others); the hint cleanup is P2.T3.S3
