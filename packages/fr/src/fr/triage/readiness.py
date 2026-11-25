@@ -27,7 +27,9 @@ The verdict is exactly one of R5's, decided in this order, first match wins (`R5
    conflict is the queue's to find and eject)
 8. `ready-for-approval`: Ready for approval (no valid approval)
 9. `merges-next` / `queued-behind`: Approved, merges next / Approved, queued behind <entry>
-   (`in_queue_order`, from the plan's own entry order)
+   (`in_queue_order`, from the plan's own entry order); `not-queued` when the plan did not
+   place it: ejected at its live head (it re-enters once the head moves), or not placed
+   this pass
 
 Merge state (clean, behind, conflicting) never changes `admits`. A batch with no open PR
 reads `not-open`, outside R5's list, and is never admitted.
@@ -54,7 +56,14 @@ from fr.triage.approval import (
 from fr.triage.batch import QueueEntry
 from fr.triage.batch_drive import LivePr
 from fr.triage.mergeability import conflicting
-from fr.triage.model import ApprovalEvent, Batch, ConflictEvent, CursorPosition, CursorRead
+from fr.triage.model import (
+    ApprovalEvent,
+    Batch,
+    ConflictEvent,
+    CursorPosition,
+    CursorRead,
+    QueueEjectEvent,
+)
 from fr.triage.wave_queue import QueueSnapshot, base_refusal, is_deferred, queue_held_reason
 
 DeliveredState = Literal["delivered", "at-step", "no-cursor", "unread", "no-clone", "stale-head"]
@@ -71,6 +80,7 @@ VerdictKind = Literal[
     "ready-for-approval",
     "merges-next",
     "queued-behind",
+    "not-queued",
     "not-open",
 ]
 R5_ORDER: tuple[tuple[VerdictKind, ...], ...] = (
@@ -82,7 +92,7 @@ R5_ORDER: tuple[tuple[VerdictKind, ...], ...] = (
     ("approval-voided",),
     ("conflicting",),
     ("ready-for-approval",),
-    ("merges-next", "queued-behind"),
+    ("merges-next", "queued-behind", "not-queued"),
 )
 """R5's verdicts in the order `_decide` tries them, first match wins."""
 
@@ -99,6 +109,7 @@ _LINES: dict[VerdictKind, str] = {
     "ready-for-approval": "Ready for approval",
     "merges-next": "Approved, merges next",
     "queued-behind": "Approved, queued behind {r}",
+    "not-queued": "Approved, {r}",
     "not-open": "Not ready: no open PR",
 }
 
@@ -179,22 +190,24 @@ def _admission(batch: Batch, pr: LivePr, qs: QueueSnapshot, approved: bool) -> b
         return False
     if qs.eligible is not None and batch.id not in qs.eligible:
         return False
-    return approved and not _gated(batch, pr, qs) and not base_refusal(pr, qs) \
+    return approved and not gated(batch, pr, qs) and not base_refusal(pr, qs) \
         and pr.checks == "green"  # fmt: skip
 
 
-def _gated(batch: Batch, pr: LivePr, qs: QueueSnapshot) -> bool:
-    """R26: a gate:devops entry waits for the DevOps stage's release."""
+def gated(batch: Batch, pr: LivePr, qs: QueueSnapshot) -> bool:
+    """R26: a gate:devops entry waits for the DevOps stage's release. The driver holds an
+    approved PR for DevOps by this test itself, whatever its verdict (CI, the queue)."""
     return bool(pre_merge_held(pr.labels)) and batch.id not in qs.released
 
 
 def _voided_sha(batch: Batch, pr: LivePr, verdict: ApprovalVerdict | None) -> str | None:
     """R3: the push that voided the approval, None when none did. Before settlement
     (`Void`) the live head; after it, the last approval event's `voided_at` (never
-    `approval.voided_at()`, which returns the approved head)."""
+    `approval.voided_at()`, which returns the approved head). A `Held` verdict (the label
+    is on, its patch-id unreadable) is no void: an older event's push does not speak for it."""
     if isinstance(verdict, Void):
         return pr.head
-    if verdict is not None and is_approved(verdict):
+    if isinstance(verdict, Held) or (verdict is not None and is_approved(verdict)):
         return None
     last = [e for e in batch.events if isinstance(e, ApprovalEvent) and e.pr == pr.number]
     return last[-1].voided_at if last else None
@@ -296,7 +309,7 @@ def _decide(batch: Batch, pr: LivePr, qs: QueueSnapshot, d: Delivered,
         return "ci-red", ", ".join(pr.failing) or "checks failing"
     if pr.checks != "green":
         return "ci-running", ""
-    if _gated(batch, pr, qs):
+    if gated(batch, pr, qs):
         return "gate-held", ""
     refused = base_refusal(pr, qs)
     if refused:
@@ -344,11 +357,31 @@ def fact_cursors(
     return {e.batch.id: (e.pr.head_oid, e.pr.cursor, e.pr.cursor_read) for e in queue}
 
 
-def in_queue_order(r: Readiness, key: str, order: Sequence[str]) -> Readiness:
+def _ejected(key: str, qs: QueueSnapshot | None) -> str | None:
+    """Why *key* left the queue at its live head (it waits for the head to move), else None."""
+    pr = qs.live.get(key) if qs is not None else None
+    if qs is None or pr is None:
+        return None
+    events = [e for rec in qs.records for e in rec.events if isinstance(e, QueueEjectEvent)]
+    last = next((e for e in reversed(events) if e.entry.batch == key), None)
+    if last is None or last.head != pr.head:
+        return None
+    why = f"{last.reason}: {last.detail}" if last.detail else last.reason
+    return f"ejected at {_short(pr.head)} ({why}): re-enters once its head moves"
+
+
+def in_queue_order(
+    r: Readiness, key: str, order: Sequence[str], qs: QueueSnapshot | None = None
+) -> Readiness:
     """An approved verdict placed in the plan's entry *order* (R5's last pair): merges next
-    when *key* leads it (or is not in it), else queued behind the entry before it."""
-    if r.kind not in ("merges-next", "queued-behind") or key not in order:
+    when *key* leads it, queued behind the entry before it, and `not-queued` when the plan
+    did not place it (ejected at its live head, by *qs*'s records, or not placed this pass)."""
+    if r.kind not in ("merges-next", "queued-behind"):
         return r
+    if key not in order:
+        why = _ejected(key, qs) or "not in the queue this pass"
+        return replace(r, kind="not-queued", reason=why,
+                       verdict=_LINES["not-queued"].format(r=why))  # fmt: skip
     at = list(order).index(key)
     if at == 0:
         return replace(r, kind="merges-next", verdict=_LINES["merges-next"], reason="")

@@ -1601,7 +1601,7 @@ def _member_reports(
     the queue's own snapshot (R4): failing is a red `warn` wherever it sits; unapproved is
     *awaiting* (an unapproved draft is no member); approved but not delivered (readiness R2)
     or gated (fr-ops R14) is *awaiting* and `held`. Only what the queue admits is ready."""
-    from fr.triage.readiness import batch_readiness
+    from fr.triage.readiness import batch_readiness, gated
 
     qs = queue_snapshot(snap, repo)
     actions: list[Action] = []
@@ -1620,7 +1620,7 @@ def _member_reports(
             ready.append(bid)
         elif not r.approved:
             awaiting.extend(() if pr.draft else (bid,))
-        elif not r.delivered.ok or r.kind == "gate-held":
+        elif not r.delivered.ok or gated(entry.batch, pr, qs):
             awaiting.append(bid)
             why = awaiting_devops(pr.number) if r.delivered.ok else (
                 f"approved, not delivered: {r.delivered.reason}")  # fmt: skip

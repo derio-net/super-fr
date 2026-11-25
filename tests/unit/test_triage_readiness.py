@@ -261,3 +261,38 @@ def test_the_module_names_its_spec() -> None:
     import fr.triage.readiness as readiness
 
     assert "2026-11-24-batch-merge-readiness" in (readiness.__doc__ or "")
+
+
+def test_an_admitted_batch_outside_the_plans_order_is_not_merges_next() -> None:
+    """p1-r3: a batch the queue admits but this pass did not place reads as not queued,
+    never "merges next"."""
+    ready = _facts(_qs(B))
+    got = in_queue_order(ready, "b1", ("b0",))
+    assert got.kind == "not-queued"
+    assert got.verdict == "Approved, not in the queue this pass"
+    assert got.admits
+
+
+def test_an_ejected_batch_outside_the_order_reads_its_eject_reason() -> None:
+    """p1-r3: ejected at its live head, it waits for the head to move, and says so."""
+    eject = {"kind": "queue_eject", "at": "2026-11-24T10:30:00Z", "entry": {"batch": "b1"},
+             "reason": "conflict", "detail": "a.py", "head": HEAD}  # fmt: skip
+    qs = _qs(B, records=(_record(OPENED, eject),))
+    got = in_queue_order(_facts(qs), "b1", (), qs)
+    assert got.kind == "not-queued"
+    assert got.verdict == (
+        f"Approved, ejected at {HEAD[:12]} (conflict: a.py): re-enters once its head moves"
+    )
+    moved = dataclasses.replace(qs, live={"b1": _live(head="n" * 40)},
+                                approvals={"b1": Approved("n" * 40)},
+                                cursors={"b1": ("n" * 40, DONE, "read")})  # fmt: skip
+    got = in_queue_order(_facts(moved), "b1", (), moved)
+    assert got.verdict == "Approved, not in the queue this pass"
+
+
+def test_a_held_approval_never_reads_an_older_void() -> None:
+    """p1-r4: a re-labelled PR whose patch-id is unreadable reads "held unreadable", not the
+    void an earlier push recorded."""
+    got = _facts(_qs(_batch(VOIDED), approved=Held("a" * 40, "git failed")))
+    assert got.kind == "ready-for-approval"
+    assert got.facts.approval == "held unreadable: git failed"

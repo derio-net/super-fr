@@ -123,3 +123,20 @@ def test_the_drive_never_readies_or_merges_an_approved_draft_until_it_delivered(
     assert not any(c.startswith("pr_ready") for c in world.calls)
     assert bool(_lines(out, "queue-open")) is delivered
     assert ("approved, not delivered" in out) is not delivered
+
+
+def test_the_driver_holds_a_gated_approved_pr_for_devops_whatever_its_ci() -> None:
+    """p1-r2: a `gate:devops` PR, approved and delivered, is held for DevOps with CI still
+    running, as it is when green: the gate is tested directly, not through the verdict."""
+    from fr.labels import awaiting_devops
+    from tests.unit.test_triage_batch_drive import _live as drive_live
+
+    b = drive_batch("a", 1)
+    snap = _snap([b], {"a": "pr-open"})
+    pr = snap.live["a"]
+    for checks in ("pending", "green"):
+        live = {"a": drive_live(pr.number, pr.head, checks=checks, labels=("gate:devops",))}
+        got = drive_pass(replace(snap, live=live))
+        assert "a" in got.awaiting and "a" not in got.ready, checks
+        (action,) = [a for a in got.actions if a.kind == "held" and a.batch == "a"]
+        assert action.detail == awaiting_devops(pr.number)

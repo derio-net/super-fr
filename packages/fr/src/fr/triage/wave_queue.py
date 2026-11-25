@@ -1185,7 +1185,7 @@ def _readiness(plan: QueuePlan, qs: QueueSnapshot) -> dict[str, Readiness]:
     for b in qs.batches:
         pr = qs.live.get(b.id)
         if pr is not None and pr.state == "OPEN":
-            out[b.id] = in_queue_order(batch_readiness(b, qs), b.id, order)
+            out[b.id] = in_queue_order(batch_readiness(b, qs), b.id, order, qs)
     return out
 
 
