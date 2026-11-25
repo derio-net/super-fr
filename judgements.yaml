@@ -10469,6 +10469,7 @@ closeouts:
   planned:
   - consumer-delivery
   pr: 1704
+  closed: true
   head: 290e5d293af8be718e0434a258e41d52565e25e5
   members:
   - consumer-delivery
@@ -10753,3 +10754,6 @@ queues:
     entries:
     - pr: 1704
       kind: closeout
+  - kind: queue_drain
+    at: '2026-11-25T20:51:28.959190Z'
+    main: ff14a97ae139a6e4383b1acbc9ce3fe7cb0a6781
