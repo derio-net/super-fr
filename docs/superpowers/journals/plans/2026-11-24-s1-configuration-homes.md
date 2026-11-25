@@ -770,3 +770,115 @@ change_branch -> fr-config-change/<kind>-<hash> (kind: the path below .fr/). Bef
 ### p4-tests-added · decision · Missing p4 tests added (p4-r11) (phase 4)
 
 Stealth profiles walk (v1->v3, structure check, crash window on the config clone): test_config_stealth_keeps_product.py. Guard wiring through resolve_workflow, resolve_strategy and run_cmd._resolve_manifest_checked_schema (the function fr run advance resolves its shape with) under quiet with real protection answers (local origin = not enforced; fake forge client serving the captured approved ruleset via protection._default_client): test_config_degraded.py. Fallback bypass: test_config_legacy_by_tip.py. Lost lease: test_config_move_verified.py. A full fr run advance CLI walk under quiet was not built (cursor + fr worktree fixtures); the advance path is exercised at its resolver.
+
+<!-- fr:journal kind=review scope=plan id=review-p4 created=2026-11-25T08:19:19+00:00 phase=4 -->
+### review-p4 · review · Phase 4 adversarial review (relocation framework, moved kinds, cross-space migration, dogfood) (phase 4)
+
+Independent adversarial reviewer read 956538f..HEAD against §D, R9-R14 and the artifact-versioning
+rule: compliant (profiles 2->3 relocating hop, seven new kinds at 2, every hop asserted, no collision).
+Reproduced content loss on a lost stealth lease and an old-path shadow bypassing the guard. Eleven
+in-scope findings and one out-of-scope (fixed here too), plus two automated security-review follow-ups
+(fork PR trusted by head name; symlinked-parent unlink). All fixed in dfb201a31..c0e1e7d06 with spec
+amendments to R7, R10 and R13. Selection 3234 passed / 2 failed (pre-existing in test_services_cli.py,
+fixed by c0e1e7d06) / 1 skipped; ruff, mypy, fr validate artifacts (171 valid) clean.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-11-25T08:19:19+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · move_across unlinked the product file without verifying the destination landed (stealth lost lease swallowed, ensure_space exists() race) (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-11-25T08:19:19+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · R13 fallback let a product-side old path override the configuration space and bypass read_checked under quiet/stealth (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-11-25T08:19:19+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · the profiles/workflow/strategy guard exceeded spec R7 and locked free-plan quiet/stealth repos out of isolation up, services and ops (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-11-25T08:19:19+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · quiet/stealth v1 profiles: 2->3 refused fr's own uncommitted 1->2 rewrite and missed the creation (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-11-25T08:19:19+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · _config_checkout decided by a -config directory name (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-11-25T08:19:19+00:00 phase=4 state=open review_scope=in -->
+### p4-r6 · finding [open] (reviewer: in scope) · stealth migrate auto-committed a deletion of an FR_OWNED path on the target branch, which the stealth push refuses (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7 created=2026-11-25T08:19:19+00:00 phase=4 state=open review_scope=in -->
+### p4-r7 · finding [open] (reviewer: in scope) · a diverged or dirty fr-config worktree was silently skipped, leaving an uncommitted product deletion (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8 created=2026-11-25T08:19:19+00:00 phase=4 state=open review_scope=in -->
+### p4-r8 · finding [open] (reviewer: in scope) · importing fr.config.migrate first failed with a circular import (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9 created=2026-11-25T08:19:19+00:00 phase=4 state=open review_scope=in -->
+### p4-r9 · finding [open] (reviewer: in scope) · fr repos sync ignored the old plan-config path and wrote the fr-config worktree directly under quiet (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r10 created=2026-11-25T08:19:19+00:00 phase=4 state=open review_scope=in -->
+### p4-r10 · finding [open] (reviewer: in scope) · owed s1-refuse-old-paths named no release and omitted R16's env vars (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r11 created=2026-11-25T08:19:19+00:00 phase=4 state=open review_scope=in -->
+### p4-r11 · finding [open] (reviewer: in scope) · no stealth profiles walk, guard wiring tested only with read_checked mocked, no tests for the fallback bypass or the lost lease (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r12 created=2026-11-25T08:19:19+00:00 phase=4 state=open review_scope=out -->
+### p4-r12 · finding [open] (reviewer: out of scope) · change_branch named every change settings-<hash>, and a closed-unmerged config PR was re-proposed on every command (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-11-25T08:19:19+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: move_across unlinked the product file without verifying the destination landed (stealth lost lease swallowed, ensure_space exists() race) (phase 4)
+
+dfb201a31: unlink only once the re-fetched tip holds the exact bytes; absent -> propose, differing -> refuse (R12), never appearing -> refuse; a lost stealth lease raises BranchRaceError and is re-fetched as existing. Tests: lost lease, exists() race, untracked old path.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-11-25T08:19:19+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: R13 fallback let a product-side old path override the configuration space and bypass read_checked under quiet/stealth (phase 4)
+
+7205bd1a7 and b95c44316: a fetched configuration branch makes the product old path ignored (notice); with none, the old file is read only at the default branch's committed bytes and old-path executable content never runs; spec R13 amended; re-closes p5-exec-manifests-guard for this path.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-11-25T08:19:19+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: the profiles/workflow/strategy guard exceeded spec R7 and locked free-plan quiet/stealth repos out of isolation up, services and ops (phase 4)
+
+1f4c10a03: fr/config/degraded.py: unprotected repo workflows/strategies fall back to the shipped ones, profiles.yaml keeps only schema_version, default, profiles and purpose and names what it drops; a failed protection read still refuses executors; fr services shows the degraded view with protection unknown; spec R7 amended.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-11-25T08:19:19+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: quiet/stealth v1 profiles: 2->3 refused fr's own uncommitted 1->2 rewrite and missed the creation (phase 4)
+
+6edcc584e: v1 -> v3 bytes are built in memory from the committed file and the configuration branch is created with them; fr's own in-flight rewrite is accepted, an operator edit still refused.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-11-25T08:19:19+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: _config_checkout decided by a -config directory name (phase 4)
+
+07abd65fb: a configuration checkout is recognised by structure (HEAD on refs/heads/fr-config at the computed path, or the migrating product's own space); the ci-config case passes.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-11-25T08:19:19+00:00 phase=4 state=fixed resolves=p4-r6 -->
+### p4-r6-resolved · finding [fixed] · resolves p4-r6: stealth migrate auto-committed a deletion of an FR_OWNED path on the target branch, which the stealth push refuses (phase 4)
+
+a2ed5010f: under stealth the product file stays, fr prints the exact git rm once, nothing is staged on the target branch; spec R10 amended; discovery p4-stealth-product-deletion superseded.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7-resolved created=2026-11-25T08:19:19+00:00 phase=4 state=fixed resolves=p4-r7 -->
+### p4-r7-resolved · finding [fixed] · resolves p4-r7: a diverged or dirty fr-config worktree was silently skipped, leaving an uncommitted product deletion (phase 4)
+
+d88c216f0: require_current_config_worktree refuses a dirty or diverged fr-config worktree before any unlink, naming the state and the remedy.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved created=2026-11-25T08:19:19+00:00 phase=4 state=fixed resolves=p4-r8 -->
+### p4-r8-resolved · finding [fixed] · resolves p4-r8: importing fr.config.migrate first failed with a circular import (phase 4)
+
+9f8f58d94: the moved-kinds table is built on first use; a test imports each new module first in a fresh python -I interpreter.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r9-resolved created=2026-11-25T08:19:19+00:00 phase=4 state=fixed resolves=p4-r9 -->
+### p4-r9-resolved · finding [fixed] · resolves p4-r9: fr repos sync ignored the old plan-config path and wrote the fr-config worktree directly under quiet (phase 4)
+
+959df32b9 and faf1deaca: resolution through located(); under quiet/stealth a PR through the configuration writer (git.pr honoured) or a refusal naming fr migrate artifacts --yes; never writes the configuration checkout; every old-path read, move and unlink checks for linked parents (link_problem).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r10-resolved created=2026-11-25T08:19:19+00:00 phase=4 state=fixed resolves=p4-r10 -->
+### p4-r10-resolved · finding [fixed] · resolves p4-r10: owed s1-refuse-old-paths named no release and omitted R16's env vars (phase 4)
+
+e27835234: the owed entry names the first minor after S1's release, how fr detects it, and R16's old FR_SHIPPED_* variables; the orchestrator files a dedicated issue at deliver and repoints owed_key.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r11-resolved created=2026-11-25T08:19:19+00:00 phase=4 state=fixed resolves=p4-r11 -->
+### p4-r11-resolved · finding [fixed] · resolves p4-r11: no stealth profiles walk, guard wiring tested only with read_checked mocked, no tests for the fallback bypass or the lost lease (phase 4)
+
+Stealth profiles walk (transform, structure check, crash window), guard wiring through resolve_workflow, resolve_strategy and run_cmd's manifest resolver with real protection answers (local origin and a fake forge serving the captured ruleset), the fallback bypass and the lost lease are tested; the CLI-level fr run advance walk is left to the phase-7 candidate scenario.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r12-resolved created=2026-11-25T08:19:19+00:00 phase=4 state=fixed resolves=p4-r12 -->
+### p4-r12-resolved · finding [fixed] · resolves p4-r12: change_branch named every change settings-<hash>, and a closed-unmerged config PR was re-proposed on every command (phase 4)
+
+25a68541e and f24f3f028: change branches are fr-config-change/<kind>-<hash>; an open PR is reused only when its head is in the target repo, its base is the configuration branch and its head holds the exact bytes; a closed-unmerged one refuses once with its URL and --repropose; a same-named fork PR is ignored.
+
+<!-- fr:journal kind=finding scope=plan id=p4-stealth-coverage-one-kind-resolved created=2026-11-25T08:19:19+00:00 phase=4 state=fixed resolves=p4-stealth-coverage-one-kind -->
+### p4-stealth-coverage-one-kind-resolved · finding [fixed] · resolves p4-stealth-coverage-one-kind: P4.T2.S1's stealth leg is covered for one kind (models-config), not per kind (phase 4)
+
+Covered by p4-r11's fix: the stealth profiles walk adds the kind whose stealth path differs, beside models-config.

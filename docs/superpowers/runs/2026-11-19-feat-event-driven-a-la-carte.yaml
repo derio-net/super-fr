@@ -161,12 +161,19 @@ steps:
         evidence:
           visual: none
       phase/4/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-25T07:02:53+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: eff5ea4a-9355-4349-88a2-473612f38e60
+          returned: '2026-11-25T08:19:20+00:00'
+          outcome: done
+        evidence:
+          review: review-p4
+          reviewer: a6ec6f6bf0e1f6a44
+          visual: none
+          findings: p4-stealth-coverage-one-kind,p4-sec-symlink,p4-sec-profiles,p4-sec-manifest-tip,p4-r1,p4-r2,p4-r3,p4-r4,p4-r5,p4-r6,p4-r7,p4-r8,p4-r9,p4-r10,p4-r11,p4-r12
   journal-check:
     state: pending
   lens-review:
