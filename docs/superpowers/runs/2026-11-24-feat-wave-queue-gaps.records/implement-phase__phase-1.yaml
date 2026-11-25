@@ -3,8 +3,83 @@ run: 2026-11-24-feat-wave-queue-gaps
 step: implement-phase
 item: phase/1
 outcome: done
-ticks: [P1.T1.S1, P1.T1.S2, P1.T2.S1, P1.T2.S2, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T3.S4, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T4.S4, P1.T5.S1, P1.T5.S2]
-refactor: {}
-journal: []
+ticks: [P1.T1.S1, P1.T1.S2, P1.T2.S1, P1.T2.S2, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T3.S4, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T4.S4, P1.T5.S1, P1.T5.S2, P1.T5.S3]
+refactor:
+  P1.T1: "a smoke module and a mechanical move out of the budgeted modules; the move is the cleanup, and the delegate is one line"
+  P1.T2: "a stamp bump and two optional defaulted fields refused below 14 beside the existing checks; nothing duplicated to fold"
+  P1.T3: "new pure helpers, and conflict_brief moved as it was plus one step-2 branch; batch_dispatch re-exports it by name"
+  P1.T4: "the planner logic went into queue_handback helpers from the start (wave_queue grew by the calls only); the two gitseam reads are small methods with no shared shape to extract"
+journal:
+  - kind: decision
+    id: p1-stack-target-two-sides
+    phase: 1
+    title: The command layer and the planner compute the stack target with one function
+    body: |
+      `queue_handback.stack_target(rep)` is the last combination on the replay's base that
+      holds no ejected entry, else the base. The planner calls it on the combinations `_valid`
+      leaves after this pass's ejections (`aimed`); the driver's `lineage_reads` calls it on
+      the last record's replay (or uses `main` now when the record's base is stale). The
+      planner's target is always a prefix of the records', so an `onto` the planner named is an
+      ancestor of the target `leads` is read against, and a re-issue never fires spuriously.
+  - kind: decision
+    id: p1-carry-brief-mark
+    phase: 1
+    title: A carry brief is recorded as a free re-issue at the carrying head
+    body: |
+      No new event kind: the carry brief writes `ConflictEvent(head=<carrying head>,
+      onto=<target>, reissue=true)`, paths taken from the batch's latest conflict. That is the
+      once-per-head mark (`lineage_actions` emits `queue-carry` only for a head with no conflict
+      event) and spends no budget. With no clean hand-back head the event is `held`, which the
+      board already shows as a merge-conflict Need.
+  - kind: decision
+    id: p1-base-target-brief
+    phase: 1
+    title: In slot mode with nothing standing the brief reads as today
+    body: |
+      Per plan P1.T3.S3, a target on the default branch (`onto_ref` `origin/<default>`) keeps
+      today's step 2 (`git fetch origin && git merge origin/<default>`); only an `fr-queue/`
+      ref gets the slot wording and the wait-for-a-re-issue check. The event still records
+      `onto` (the base sha), so a later move is judged by `leads`.
+  - kind: discovery
+    id: p1-fresh-twin
+    phase: 1
+    title: Checkout.carried drops a combination rebuilt fresh into main's history
+    body: |
+      An R13 fresh rebuild has the same tree and parents as the combination it replaces but a
+      new sha, so a head that merged the original would read as carrying it once the twin
+      landed. `carried` looks, per candidate, for a commit in the target's history since the
+      candidate's first parent with the same tree and parents (one `git log` per candidate,
+      only for built shas the head reaches).
+  - kind: discovery
+    id: p1-explicit-reexport
+    phase: 1
+    title: mypy needs src importers of the moved rules to import from handback_rules
+    body: |
+      `batch_drive` re-exports the moved names for tests and other callers, but mypy's
+      no-implicit-reexport refuses `from fr.triage.batch_drive import conflict_decision` in
+      src. `wave_queue`, `views` and `triage_batch_cmd` now import them from
+      `fr.triage.handback_rules`; one import line changed in `triage_batch_cmd`.
+  - kind: finding
+    id: p1-acceptance-check-foreign-rows
+    phase: 1
+    state: open
+    review_scope: out
+    title: fr acceptance check --no-fetch reports 43 errors on other features' rows
+    body: |
+      Rows such as `issues-page-filter-guard` and `privacy-snapshot-keys` name tests and a spec
+      (`2026-11-22-triage-hardening`) this branch does not have; the fold reads them from the
+      default ref, which is ahead of this branch's base. None is a wave-queue-gaps row; a merge
+      of origin/main into the branch should clear them.
+  - kind: discovery
+    id: p1-t5-test-order
+    phase: 1
+    title: The T5.S1 driver tests were written after the T5.S2 wiring
+    body: |
+      The slot, re-issue and carry driver tests in test_triage_batch_drive_cmd.py passed on
+      first run because the wiring landed first (red was not observed for them). They assert
+      strings only the new code produces (`fr-queue/`, `git merge <sha>`, `Merge queue carry`,
+      `reissue: true`), so they would fail without it.
+  - {kind: lens, lens: errors, title: "GitError is mapped to None (R5) in lineage reads and the carry reset search; check no unreadable answer is read as leads or carries nothing"}
+  - {kind: lens, lens: tests, title: "the driver hand-back tests were written after the code; check they pin behaviour, and that the planner tests cover the third-pass no-op"}
 resolves: []
 evidence: {}
