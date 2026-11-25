@@ -85,6 +85,17 @@ PROTECTED_SOURCES: list[Path] = []
 """Clones whose copy is never moved: a test seam (`tests/conftest.py` names the checkout
 under test and its main checkout), so a suite run from a real clone never moves that clone's
 state into a sandbox home. Empty in production."""
+PROTECTED_SOURCES_ENV: Final = "FR_TRIAGE_PROTECTED_SOURCES"
+"""The same seam for a child process (lens review l-tests-r3): clones joined by
+`os.pathsep`, read at every move, so an `fr` a test starts inherits the suite's protection.
+Unset in production."""
+
+
+def protected_sources() -> list[Path]:
+    """The clones whose copy is never moved: `PROTECTED_SOURCES` and every absolute path
+    `FR_TRIAGE_PROTECTED_SOURCES` names."""
+    named = os.environ.get(PROTECTED_SOURCES_ENV, "").split(os.pathsep)
+    return [*PROTECTED_SOURCES, *(Path(p) for p in named if os.path.isabs(p))]
 
 
 def _say(line: str) -> None:
@@ -159,7 +170,7 @@ def settle(name: str, root: Path, cache: Path, *, say: Callable[[str], None] = _
     _refuse_links(root, copy)
     if not copy.is_dir():
         raise TriageError(f"{copy} is not a directory: fr does not move or delete it")
-    if any(_same(root, p) for p in PROTECTED_SOURCES):
+    if any(_same(root, p) for p in protected_sources()):
         raise TriageError(f"{copy} is in a protected clone: its triage state is never moved")
     why = _overlap(root, copy, cache)
     if why is not None:

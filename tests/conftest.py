@@ -350,6 +350,10 @@ def _never_move_this_checkouts_triage_state(monkeypatch: pytest.MonkeyPatch) -> 
     from fr.triage import state_home
 
     monkeypatch.setattr(state_home, "PROTECTED_SOURCES", list(_PROTECTED_CLONES))
+    # ...and for every `fr` a test starts as a child process (lens review l-tests-r3).
+    monkeypatch.setenv(
+        state_home.PROTECTED_SOURCES_ENV, os.pathsep.join(str(p) for p in _PROTECTED_CLONES)
+    )
     yield
     state_home.release_shared()
 

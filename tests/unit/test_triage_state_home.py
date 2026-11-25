@@ -525,6 +525,55 @@ def test_the_suite_protects_the_checkout_under_test() -> None:
     assert Path(REPO_ROOT) in state_home.PROTECTED_SOURCES
 
 
+def test_the_suite_protects_the_checkout_in_every_fr_child_too() -> None:
+    """Lens review l-tests-r3: `PROTECTED_SOURCES` is in-process, so an `fr` a test starts
+    as a child would be unprotected. The suite also exports the clones in
+    `FR_TRIAGE_PROTECTED_SOURCES`, which every child inherits."""
+    from tests.conftest import REPO_ROOT
+
+    named = os.environ.get(state_home.PROTECTED_SOURCES_ENV, "").split(os.pathsep)
+    assert str(REPO_ROOT) in named
+
+
+_CHILD_MOVE = """
+import sys
+from pathlib import Path
+from fr.triage import state_home
+from fr.triage.errors import TriageError
+from fr.triage.model import Scope, state_dir
+
+assert state_home.PROTECTED_SOURCES == []  # a fresh process: no in-process seam
+try:
+    state_dir(Scope(kind="repo", target="o/r"), workspace=Path(sys.argv[1]))
+except TriageError as exc:
+    print(exc)
+    sys.exit(3)
+"""
+
+
+def test_a_child_process_never_moves_a_clone_the_environment_protects(
+    tmp_path: Path, cache: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A real child process, with only the environment variable to go on, refuses to move a
+    protected clone's copy; the copy and the cache are left as they were."""
+    clone = _clone(tmp_path, "clone")
+    copy = _old_copy(clone, {"judgements.yaml": JUDGED})
+    other = tmp_path / "elsewhere"
+    monkeypatch.setenv(state_home.PROTECTED_SOURCES_ENV, os.pathsep.join([str(other), str(clone)]))
+
+    done = subprocess.run(
+        [sys.executable, "-P", "-c", _CHILD_MOVE, str(clone)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert done.returncode == 3, done.stdout + done.stderr
+    assert "protected" in done.stdout
+    assert (copy / "judgements.yaml").read_bytes() == JUDGED
+    assert not (cache / "judgements.yaml").exists()
+
+
 # ------------------------------------------- symlinks never reach a destructive step
 
 
