@@ -210,14 +210,21 @@ the placement:
 The `.devcontainer/<profile>/` directories stay in the product, and so does
 `.fr/isolation-allow`. Under quiet and stealth, fr ignores the product checkout's own `.fr/`
 and says so once per command. A feature branch therefore cannot change how fr treats it. A
-change to the configuration is a pull request to the configuration branch, and fr opens it.
+change to the configuration is a pull request to the configuration branch. The fr commands open that pull
+request when they change the settings or move a file there. `fr init scaffold` opens none.
+Under quiet it refuses once the branch holds the profile declarations, and under stealth it
+refuses before it writes anything.
 
 **Moving an older repo.** `fr migrate artifacts --yes`, or the migration that runs before an
 fr command in a workspace, moves each old file. Under `repo` it is a rename in one
-`chore(fr): migrate` commit. Under quiet and stealth fr first creates the configuration
-branch with every moved file and pushes it. It removes a file from the product only when
-the fetched branch holds the same bytes. If the push is refused, nothing leaves the
-product. Under stealth the product file stays, and fr prints the `git rm` you can run.
+`chore(fr): migrate` commit. Under quiet and stealth the result depends on the
+configuration branch. If the branch does not exist yet, fr creates it with every moved file
+and pushes it. If the branch exists without a file, fr proposes that file in a pull request.
+The product file then stays until the pull request merges and you run the migration again.
+If the branch holds the file with other bytes, fr refuses that file and keeps both. The migration moves
+only the bytes that the default branch has committed. It removes a file from the product
+only when the fetched branch holds the same bytes. If the push is refused, nothing leaves
+the product. Under stealth the product file stays, and fr prints the `git rm` you can run.
 
 **Older fr.** An fr from before this change reads the switch only from the old file, the
 root `settings.yaml` on `fr`. So fr keeps that old copy identical to the new
@@ -240,9 +247,12 @@ fr reads the rules of the branch, but it cannot see who may bypass them. Keep th
 list of that ruleset empty. fr also trusts what the branch held before you added the rule,
 so check that content once when you add it.
 
-When the forge does not enforce such a rule, fr refuses to run the command and says how to
-fix it. GitHub does not enforce rulesets on a private repo on the free plan, so there fr
-always refuses. A rules read that fails also refuses. Workflow shapes, verification
+When the forge does not enforce such a rule, fr does not trust these files. It refuses to
+run the candidate install or the `.fr/ops.yaml` runbook, and it says how to fix that. It
+ignores the guarded keys of `.fr/ci.yaml` and `.fr/triage.yaml` as though they were absent,
+and it says so once. Then `deliver` asks for a local full-suite log, and the triage driver
+runs no command from `.fr/triage.yaml`. GitHub does not enforce rulesets on a private repo
+on the free plan, so there fr always acts like this. A rules read that fails refuses. Workflow shapes, verification
 strategies and profile declarations do not lock you out. fr uses the shipped shape or
 strategy instead, and reads the profiles without their secrets and service blocks. When fr
 does run a guarded program, it runs it from the fetched tip of the configuration branch,
