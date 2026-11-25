@@ -13,6 +13,7 @@ from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime
 from typing import Any, Final
 
+from fr.checkstate import bucket_verdict
 from fr.triage.approval import is_approved, settle_entry_approval
 from fr.triage.batch import (
     allowed_authors,
@@ -289,10 +290,7 @@ def _live_counts(checks: Iterable[Mapping[str, Any]]) -> dict[str, int]:
     """`PullRequest.checks`-shaped counts of the checks on the PR's head as read now."""
     out = {"pass": 0, "fail": 0, "pending": 0}
     for c in checks:
-        bucket = c.get("bucket")
-        key = "fail" if bucket in ("fail", "cancel") else "pending" if bucket == "pending" \
-            else "pass"  # fmt: skip
-        out[key] += 1
+        out[bucket_verdict(c.get("bucket"))] += 1  # a cancelled check is pending (ci-economy R3)
     return out
 
 
@@ -302,6 +300,17 @@ def _queue_conflict_at(records: Iterable[Any], key: str, head: str) -> bool:
 
     return any(isinstance(e, QueueEjectEvent) and e.reason == "conflict" and e.head == head
                and entry_key(e.entry) == key for r in records for e in r.events)  # fmt: skip
+
+
+def _comments_off(client: Any, repo: str) -> str | None:
+    """Why fr writes no comment on *repo* (R9), or why that policy is unknown; None when it may."""
+    from fr.settings import SettingsError
+    from fr.settings.remote import client_policy
+
+    try:
+        return client_policy(client, repo).block("comments")
+    except SettingsError as exc:
+        return str(exc)
 
 
 def _preapprove(
@@ -353,7 +362,7 @@ def _preapprove(
         _say(f"would preapprove {repo}#{n} at {head[:12]} (patch-id {patch_id[:12]})")
         return view
     client = driver.client(facts, repo)
-    if (off := _labels_off(client, repo)) is not None:
+    if (off := _labels_off(client, repo) or _comments_off(client, repo)) is not None:
         driver._report_once(f"preapprove\0{repo}\0labels", f"{repo}#{n} not preapproved: {off}")
         return view
     ensure_approval_label(client, repo, _say, seen=vars(driver).setdefault("_preapproved", set()))
