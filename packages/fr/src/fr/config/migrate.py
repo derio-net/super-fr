@@ -666,6 +666,103 @@ def move_across(
             "file) and run `fr migrate artifacts --yes` again (S1 R12)"
         )
     writer.refresh()
+    if space.placement == _STEALTH_PLACEMENT:
+        _say_kept(product, source, space)
+        return space.file(below)
     refuse_link(product, source)
     source.unlink()
     return space.file(below)
+
+
+_STEALTH_PLACEMENT: Final = "stealth"
+_KEPT_SAID: set[str] = set()
+
+
+def _say_kept(product: Path, source: Path, space: ConfigSpace) -> None:
+    """Under stealth the product file stays (R10 as amended, decision
+    p4-stealth-keeps-product-file): say once the exact `git rm` the operator may run."""
+    import sys
+
+    rel_path = Path(source).relative_to(product).as_posix()
+    line = (
+        f"fr: {rel_path} moved to {space.ref} and stays in the product under stealth (fr "
+        f"commits no deletion on the target's branch, and ignores this copy, R4); to remove "
+        f"it yourself: git -C {product} rm -- {rel_path}"
+    )
+    if line not in _KEPT_SAID:
+        _KEPT_SAID.add(line)
+        print(line, file=sys.stderr)
+
+
+def restore_committed(product: Path, source: Path) -> None:
+    """Put a kept stealth source back to its committed bytes: fr's own in-flight 1 -> 2
+    rewrite of a profiles file (`profiles_body` refused any other difference) must not stay
+    in the target's working tree. An untracked file is left as it is."""
+    rel_path = refuse_link(product, source)
+    shown = subprocess.run(
+        ["git", "-C", str(product), "show", f"HEAD:{rel_path}"], capture_output=True, check=False
+    )
+    if shown.returncode == 0 and Path(source).read_bytes() != shown.stdout:
+        from fr.artifacts.atomic import write_text_atomic
+
+        write_text_atomic(Path(source), shown.stdout.decode("utf-8"))
+
+
+def stealth_keeps(path: Path) -> bool:
+    """Whether a cross-space hop leaves *path* (an old-locator file) in the product: under
+    stealth always (R10 as amended)."""
+    for entry in all_moved():
+        if entry.across and Path(path).full_match(f"**/{entry.old}"):
+            return placement_of(entry.product_of(Path(path))) == _STEALTH_PLACEMENT
+    return False
+
+
+def kept_copy(path: Path) -> bool:
+    """Whether *path* is a product file a stealth migration already moved and kept: under
+    stealth, at an old locator, with the configuration branch's fetched tip holding exactly
+    the bytes the move pushes. Such a file is not the kind's any more (`owns`), so it never
+    reads as stale. Any failure to tell reads as not kept."""
+    from fr.settings import SettingsError
+
+    for entry in all_moved():
+        if not entry.across or not Path(path).full_match(f"**/{entry.old}"):
+            continue
+        product = entry.product_of(Path(path))
+        if placement_of(product) != _STEALTH_PLACEMENT:
+            return False
+        try:
+            from fr.config.space import config_space
+
+            space = config_space(product)
+            if entry.kind == "profiles":
+                body = profiles_body(product, Path(path))
+            else:
+                body = source_text(product, Path(path))
+            repo = space._git_repo()
+            if repo is None:
+                return False
+            from fr.config.space import _commit
+            from fr.settings.load import show_at_commit
+
+            sha = _commit(repo, f"refs/remotes/{space.ref}")
+            held = (
+                None
+                if sha is None
+                else show_at_commit(repo, sha, space.tree_path(entry.below(Path(path), product)))
+            )
+        except SettingsError, OSError, ValueError, UnicodeDecodeError:
+            return False
+        return held is not None and held == body
+    return False
+
+
+def moved_owns(kind: str) -> Callable[[Path], bool]:
+    """`ArtifactKind.owns` of a moved kind: every match but a stealth-kept copy."""
+    entry = moved(kind)
+
+    def owns(path: Path) -> bool:
+        if not entry.across or not Path(path).full_match(f"**/{entry.old}"):
+            return True
+        return not kept_copy(path)
+
+    return owns

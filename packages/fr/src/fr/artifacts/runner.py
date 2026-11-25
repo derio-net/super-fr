@@ -145,6 +145,11 @@ class SchemaMigration:
     """The bytes a relocating hop gives the file at its destination, when they are not
     the source's own (profiles 2 -> 3 writes its new stamp): a destination already
     holding them is a move that happened, not R12's clash."""
+    keeps: Callable[[Path], bool] | None = None
+    """For a relocating hop: True when its `fn` leaves the SOURCE in place (stealth, spec
+    2026-11-19-event-driven-a-la-carte R10 as amended: no deletion is committed on the
+    target's branch). The runner then does not require the source gone and records no
+    removal; the kind's `owns` stops claiming the kept file."""
 
     def __post_init__(self) -> None:
         if self.to_version <= self.from_version:
@@ -925,7 +930,8 @@ def _relocate(
     def failure(why: str) -> tuple[None, FailedAction]:
         return None, FailedAction(name, path, step.summary, why, also_wrote=wrote)
 
-    if dest != path and path.exists():
+    kept = dest != path and step.keeps is not None and step.keeps(path)
+    if dest != path and path.exists() and not kept:
         return failure(f"the relocating step returned but {path} still exists")
     if not dest.is_file():
         return failure(f"the relocating step returned but {dest} is not there")
@@ -948,7 +954,7 @@ def _relocate(
             from_version=step.from_version,
             to_version=step.to_version,
             also_wrote=also_wrote,
-            removed=(path,) if dest != path else (),
+            removed=(path,) if dest != path and not kept else (),
             moved_to=dest if dest != path else None,
         ),
         None,

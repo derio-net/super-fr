@@ -383,7 +383,7 @@ def test_under_stealth_the_file_lands_on_the_tracking_repos_config_branch_first(
     assert git(track, "show", "main-config:local--origin/.fr/settings.yaml") == (
         "placement: stealth\n"
     )
-    assert not (work / old).exists()
+    assert (work / old).exists()  # R10 as amended: stealth keeps the product file
     stealth.reset_caches()
 
 

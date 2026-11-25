@@ -72,6 +72,7 @@ def _relocation(kind: str) -> SchemaMigration:
         fn=fn,
         relocates=True,
         destination=destination,
+        keeps=moves.stealth_keeps,
         description=f"{kind}: move {entry.old} to {entry.new_locator} (S1 R9)",
     )
 
@@ -150,6 +151,8 @@ def _profiles_relocate(path: Path) -> None:
         # One move with the final bytes (review p4-r4): a version-1 file's 1 -> 2 rewrite
         # is redone in memory on the committed bytes, never refused as uncommitted.
         moves.move_across(product, path, _PROFILES.new, body=moves.profiles_body(product, path))
+        if moves.stealth_keeps(path):
+            moves.restore_committed(product, path)  # the kept copy is the committed one
         return
     text = _profiles_text(path)
     dest = _profiles_destination(path)
@@ -168,6 +171,7 @@ MIGRATIONS.register(
         relocates=True,
         destination=_profiles_destination,
         expected=lambda path: _profiles_text(path).encode(),
+        keeps=moves.stealth_keeps,
         description="profiles: move .devcontainer/fr-profiles.yaml to the configuration "
         "space's profiles.yaml at schema_version 3 (S1 R9)",
     )

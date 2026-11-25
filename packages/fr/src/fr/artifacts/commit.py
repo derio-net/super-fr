@@ -521,6 +521,8 @@ def _staged_moves(repo_root: Path, report: MigrationReport) -> tuple[Path, ...]:
             continue
         if not dest.resolve().is_relative_to(top):
             drop.add(dest)
+            if not action.removed:
+                drop.add(action.path)  # a kept source (stealth, R10 amended): unchanged here
         source = action.path if action.path.is_absolute() else top / action.path
         rel = source.resolve().relative_to(top).as_posix()
         tracked = _git(repo_root, "ls-files", "--", rel)
