@@ -63,7 +63,8 @@ def conflict_decision(
     """The pure decision on a conflict at *head* refusing *paths* (R21, R22).
 
     `skip`: a `conflict` event already exists for this head, so a restarted driver
-    never hands the same head back twice. `wait-behind`: a refused path is shared
+    does not hand the same head back again (only a `reissue`, below, briefs it once more,
+    free). `wait-behind`: a refused path is shared
     with a conflict met earlier in this pass (*earlier_in_pass*, `(batch, paths)` in
     train order), which is fixed first. `held`: two `session|fresh` hand-backs were
     made since the batch's latest `dispatch` event (held ones never count). Else

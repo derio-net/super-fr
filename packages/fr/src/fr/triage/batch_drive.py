@@ -939,7 +939,8 @@ def archive_conflict_decision(events: Sequence[object], head: str) -> ArchiveCon
     """The pure decision on an archive PR conflicting at *head* (R12).
 
     `skip`: an `archive_conflict` event exists for this head, so a restarted driver
-    never hands the same head back twice. `held`: two `session|fresh` hand-backs were
+    does not hand the same head back again (an archive PR has no free re-issue; that is
+    the batch PR's `conflict_decision`). `held`: two `session|fresh` hand-backs were
     made since the batch's latest close-out event (held ones never count; a batch PR's
     `conflict` events are another counter). Else `handback`."""
     if any(isinstance(e, ArchiveConflictEvent) and e.head == head for e in events):
