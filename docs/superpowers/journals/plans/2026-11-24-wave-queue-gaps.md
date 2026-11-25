@@ -284,3 +284,48 @@ the verb imports _load_state, _scope, fail and push_now from triage_cmd and the 
 ### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
 
 operator_reads follows housekeeping_reads' shape on purpose (same settle, same writer) so the two trust rules read side by side; the preapproval conditions are one function (_preapprove) the batch and operator paths both call
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-25T04:48:17+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · R13: a preapproval could be recorded approved at a head the driver never checked or commented on (phase 2)
+
+`_preapprove` returned early when approved-fr was already on, and added the label before the audit comment; `settle_approvals`/`settle_entry_approval` read a label with no live approval as `First` at the live head. For a batch PR `_preapprove` only labelled, and the batch's approval was recorded at the start of the NEXT pass, so a session push between passes was recorded approved at an unvetted H2 while the audit comment named H1. For an operator PR a failed `comment_pr` after `edit_issue_labels` left a label the next pass recorded as First at the live head with no audit comment. Fix: comment, then record the approval at the vetted head and patch-id, then label.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-25T04:48:17+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · R14/R15: the drive loop counted no operator work and ended over an undrained queue (phase 2)
+
+Operator entries counted toward none of the Summary figures and `_operator_stall` returns nothing before stall_hours, so once every batch finished `Summary.done` was true and the loop exited, leaving a wave queue undrained with its hold open, or a between-waves queue built but never landed. Fix: count each pending operator entry (added, not removed, open, unlanded) as `pending` unless its stall Need is reported this pass (that Need is already counted blocked).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-25T04:48:17+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · R11/R12: `queue add` to a repo with no batch was silently inert (phase 2)
+
+`queue add` accepts any repo in facts.repos, but the driver's repos map is built from batches only, and operator_reads / _wave_queue_reads (and the housekeeping, barrier, lineage and placement reads) loop only over it. Fix: the queue readers get the batch map plus every collected repo a queue request of the scope names (unread/carried still skipped), so R14's between-waves queue works in a repo with no batch.
+
+<!-- fr:journal kind=decision scope=plan id=p2-d1 created=2026-11-25T04:48:17+00:00 phase=2 -->
+### p2-d1 · decision · p2-r1: preapproval records its own approval before the label, rather than trusting a label-only First beside an audit marker (phase 2)
+
+Of the two sound options, recording the approval in the preapproval itself is the simpler: it uses the existing settle rule unchanged (a push changing the diff voids by patch-id) and needs no comment read. Order is audit comment, then the approval event (a batch PR's `ApprovalEvent` through the one batch event writer, an operator PR's queue `approval`), then the label: any failure before the label leaves no label, so nothing is approved; a recorded approval without its label is `Unlabelled`. A label already on with no live approval still settles as First: that is a person's label, as for any PR. Spec R13 and §C amended to state the order; the plan's "batch PR gets the label alone" is superseded.
+
+<!-- fr:journal kind=decision scope=plan id=p2-d2 created=2026-11-25T04:48:17+00:00 phase=2 -->
+### p2-d2 · decision · p2-r3: the driver reads queue requests' repos rather than `queue add` refusing a repo with no batch (phase 2)
+
+R14's between-waves queue must work in a scope with no batch in that repo, so `queue add` keeps accepting any collected repo and the driver reads it (`queue_requests.reader_repos`, keys no batch id can take; the Snapshot's own `repos` stays the batches').
+
+<!-- fr:journal kind=review scope=plan id=review-p2-1 created=2026-11-25T04:48:17+00:00 phase=2 -->
+### review-p2-1 · review · independent code review of phase 2: 3 findings, all in scope (phase 2)
+
+Independent review of phase 2 (R11-R15, §C, §F) raised p2-r1 (preapproval at an unvetted head), p2-r2 (the loop counted no operator work) and p2-r3 (a request repo with no batch was never read); all three in scope and fixed with failing-first tests at the command-layer seam. The merge resolution on the branch was verified lossless.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-25T04:48:17+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: R13: a preapproval could be recorded approved at a head the driver never checked or commented on (phase 2)
+
+operator_entries._preapprove now comments, records the approval (via `_approver`: the batch event writer for a batch PR, the queue writer for an operator PR), then labels. Tests: test_operator_reads.py::test_a_preapproved_batch_pr_records_the_batch_approval_at_the_vetted_head, ::test_a_push_between_the_preapproval_and_the_next_settle_voids_a_batch_approval (two passes, H2 pushed between the label and the settle: voided, label off), ::test_a_failed_audit_comment_leaves_no_label_and_no_approval, ::test_a_preapproved_operator_pr_is_recorded_before_it_is_labelled.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-25T04:48:17+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: R14/R15: the drive loop counted no operator work and ended over an undrained queue (phase 2)
+
+wave_queue.operator_work counts pending operator entries minus those whose stall Need is reported (the Need now carries `entries=(key,)`); drive_pass adds it to `pending`. Tests: test_triage_batch_drive_cmd.py::test_an_added_operator_entry_keeps_a_finished_drive_from_reading_done, ::test_a_removed_or_landed_operator_entry_lets_the_drive_read_done, ::test_the_loop_waits_on_an_added_entry_and_ends_once_it_is_removed; test_wave_queue_operator_planner.py::test_a_pending_entry_is_the_drivers_work_until_its_stall_need_makes_it_the_operators.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-25T04:48:17+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: R11/R12: `queue add` to a repo with no batch was silently inert (phase 2)
+
+queue_requests.reader_repos adds every collected repo a request of the scope names to the map the snapshot's queue readers (wave queue, housekeeping, operator, barrier, lineage, placements, post_merge repos) loop over. Test: test_triage_batch_drive_cmd.py::test_an_added_pr_in_a_repo_with_no_batch_is_read_and_lands_between_waves.
