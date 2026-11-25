@@ -1350,3 +1350,212 @@ ad16282f2: scaffold help names the profile declarations (.fr/profiles.yaml); doc
 ### p7-r6-resolved · finding [fixed] · resolves p7-r6: Scenario: some assertions are weaker than they read (phase 7)
 
 1a7fa90d4: grep fr's own refusal wording; the unreadable case stays synthetic with a comment (both captured errors classify as not enforced, no 5xx captured); the cache is asserted a standalone repo with no state-repo branch or remote, as designed; every gate call checks its exit code.
+
+<!-- fr:journal kind=review scope=plan id=review-lenses created=2026-11-25T17:37:21+00:00 -->
+### review-lenses · review · Lens review of S1 configuration homes: docs-accuracy, errors, security, tests
+
+Four read-only reviewers, one per lens, over the whole feature diff (merge base 11c158e4).
+Security found no bypass of the edit gate, allowlist or marker self-protection, or of the
+fr-config and stealth config-clone write targets (case-folding, segments, symlinks, hard
+links, non-ASCII names; bash and TS agree). It raised four trust-model findings. Errors
+raised ten, docs-accuracy four, tests six (one out of scope).
+Every in-scope finding is fixed with a test written first (1e17b090c..f6f2e5683). The spec
+is amended 2026-11-25 at R6, R7, section C, R10 and R20. Three tests that S1 broke in
+test_merge_train_label_board.py were found and fixed on the way (288befc2c).
+An independent adversarial verifier then checked the fixes: 22 of 23 closed;
+l-security-r2 was half closed (an untracked old-path file still moved from disk) and it
+raised three smaller gaps (validate-plans fail-open when fr fails, the CI HEAD fallback in
+the default-ref comparison, stealth's absent sync state not validating the switch). All
+four are fixed (2d81ff235, 6583f7496, 9607b17f9, f6f2e5683).
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · fr-isolation.md says fr refuses all unprotected executable config; guarded ci.yaml and triage.yaml keys are ignored, not refused
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · fr-init page and skill misdescribe scaffold under quiet and stealth
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r3 · finding [open] (reviewer: in scope) · fr-isolation.md says the migration always creates the config branch first
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r4 · finding [open] (reviewer: in scope) · repos_cmd.py docstring names the old plan-config path
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · A partly failed fr settings init (config branch pushed, legacy refused) cannot be retried
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · Quiet fr-config creation never raises BranchRaceError
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · change._forge_prs_for_head swallows every forge error
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · open_change's git timeouts escape as raw TimeoutExpired
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-errors-r5 · finding [open] (reviewer: in scope) · A failed read of triage.state_repo settles the state repo durably
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-errors-r6 · finding [open] (reviewer: in scope) · The stealth-declared triage.state_repo path is unreachable
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r7 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-errors-r7 · finding [open] (reviewer: in scope) · degraded.read_profiles reads a failed fetch as no profiles
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-errors-r8 · finding [open] (reviewer: in scope) · settings sync preview ignores failed fetch and git log
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r9 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-errors-r9 · finding [open] (reviewer: in scope) · settings sync --yes forge-read failure names no remedy
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r10 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-errors-r10 · finding [open] (reviewer: in scope) · A failed fast-forward of the fr-config worktree is silent
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · Enforced accepted an approval a later push keeps
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-security-r2 · finding [open] (reviewer: in scope) · The migration seeded fr-config from HEAD, not the default branch
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-security-r3 · finding [open] (reviewer: in scope) · ci_evidence read guarded keys without fetching or checking origin
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-security-r4 · finding [open] (reviewer: in scope) · _forge_open_pr reused an open PR with no repo or base check
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · validate-plans.sh fell back to the product's old plan-config under quiet and stealth
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · Row s1-switch-moved cited no OpenCode or Hermes test
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · The protected-clone guard did not reach child processes
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · config-homes.sh never asserted its gh log
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-25T17:37:21+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · test_the_cache_lives_in_memory_only grepped source
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6 created=2026-11-25T17:37:21+00:00 state=open review_scope=out -->
+### l-tests-r6 · finding [open] (reviewer: out of scope) · fr.repos.DEFAULT_MANIFEST takes Path.home() at import
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: fr-isolation.md says fr refuses all unprotected executable config; guarded ci.yaml and triage.yaml keys are ignored, not refused
+
+9142cc137: the page separates what fr refuses (candidate install, ops.yaml) from what it ignores (guarded ci.yaml and triage.yaml keys).
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: fr-init page and skill misdescribe scaffold under quiet and stealth
+
+2f53f39bb, 9142cc137: scaffold under quiet refuses and names the manual pull request; under stealth it refuses before writing.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-docs-accuracy-r3 -->
+### l-docs-accuracy-r3-resolved · finding [fixed] · resolves l-docs-accuracy-r3: fr-isolation.md says the migration always creates the config branch first
+
+9142cc137, 24d62e86f, 2d81ff235: the page lists the three branch cases, and says only committed default-branch bytes move and untracked files never do.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-docs-accuracy-r4 -->
+### l-docs-accuracy-r4-resolved · finding [fixed] · resolves l-docs-accuracy-r4: repos_cmd.py docstring names the old plan-config path
+
+573ee39f0: repos_cmd.py and repos.py docstrings name .fr/plan-config.yaml.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: A partly failed fr settings init (config branch pushed, legacy refused) cannot be retried
+
+5efc1011c: sync has an absent state that lands the legacy copy with --yes --expect <tip>; init in that state prints the command; end-to-end tests for quiet and stealth. f6f2e5683 validates the stealth switch first (verifier v-r4).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: Quiet fr-config creation never raises BranchRaceError
+
+b453fc8af: a refused push re-probes and raises BranchRaceError when origin now has fr-config.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [fixed] · resolves l-errors-r3: change._forge_prs_for_head swallows every forge error
+
+7b2088573: only UnsupportedForgeOperation means no earlier proposals; other forge errors refuse.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: open_change's git timeouts escape as raw TimeoutExpired
+
+7b2088573: git timeouts in open_change become a SettingsError saying nothing changed.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-errors-r5 -->
+### l-errors-r5-resolved · finding [fixed] · resolves l-errors-r5: A failed read of triage.state_repo settles the state repo durably
+
+6788f085f: StateRepoUnread; the collect warns and does not settle.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-errors-r6 -->
+### l-errors-r6-resolved · finding [fixed] · resolves l-errors-r6: The stealth-declared triage.state_repo path is unreachable
+
+ac7b220dc: under stealth no triage.state_repo is read (R20 amended); the dead path is removed.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r7-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-errors-r7 -->
+### l-errors-r7-resolved · finding [fixed] · resolves l-errors-r7: degraded.read_profiles reads a failed fetch as no profiles
+
+04aa86f0e: {} only when origin says the branch is absent or no clone exists; else refuse or 'protection unknown'.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-errors-r8 -->
+### l-errors-r8-resolved · finding [fixed] · resolves l-errors-r8: settings sync preview ignores failed fetch and git log
+
+91b80881a: failed fetch labels 'label unknown' with a warning; failed git log refuses; post-push fetch failure updates the tracking ref.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r9-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-errors-r9 -->
+### l-errors-r9-resolved · finding [fixed] · resolves l-errors-r9: settings sync --yes forge-read failure names no remedy
+
+ad3489be2: the refusal names the preview and --expect <tip>.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r10-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-errors-r10 -->
+### l-errors-r10-resolved · finding [fixed] · resolves l-errors-r10: A failed fast-forward of the fr-config worktree is silent
+
+0ca6f3e96: a failed ff-only names the worktree, the reason and the stash command.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: Enforced accepted an approval a later push keeps
+
+1e17b090c: enforced also needs dismiss_stale_reviews_on_push or require_last_push_approval on the same rule; the captured approved reply (both false) is now the negative case; the enforced fixture is that capture with one value flipped, said in the README; R7 and section C amended; the trusted-on-adoption limit is stated beside BYPASS_LIMIT.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-security-r2 -->
+### l-security-r2-resolved · finding [fixed] · resolves l-security-r2: The migration seeded fr-config from HEAD, not the default branch
+
+4382127dd: tracked files move with the default ref's bytes and mode; 2d81ff235: an untracked file is refused (verifier v-r1, reproduced then fixed); 9607b17f9: the CI HEAD fallback is never a default ref (v-r3). R10 amended.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-security-r3 -->
+### l-security-r3-resolved · finding [fixed] · resolves l-security-r3: ci_evidence read guarded keys without fetching or checking origin
+
+218c5f0a1: _at_tip fetches the tip with fetch_tip (origin checked) once protected; a failure refuses.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-security-r4 -->
+### l-security-r4-resolved · finding [fixed] · resolves l-security-r4: _forge_open_pr reused an open PR with no repo or base check
+
+d47cf978a: open_pr_in_repo, and a found PR into another base refuses.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: validate-plans.sh fell back to the product's old plan-config under quiet and stealth
+
+8b479d384: under quiet and stealth the old plan-config is never read; repo still reads it, tested by its effect; 6583f7496: an unknown placement is treated as not repo when origin has fr or fr-config (v-r2); also fixes a BSD sed crash.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: Row s1-switch-moved cited no OpenCode or Hermes test
+
+2db984e: s1-switch-moved cites test_isolation_decision_cases.py, test_hermes_isolation_hook_edits.py and the OpenCode decision-cases.test.ts and marker.test.ts.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: The protected-clone guard did not reach child processes
+
+11f64204d: FR_TRIAGE_PROTECTED_SOURCES, set by conftest; a real child process refuses the move.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: config-homes.sh never asserted its gh log
+
+4b5fd150b: gh.log is emptied before fr run start and must hold the rules route.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-25T17:37:21+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: test_the_cache_lives_in_memory_only grepped source
+
+95a147310: a behaviour test in child processes with a fresh HOME and cwd.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved created=2026-11-25T17:37:21+00:00 state=open resolves=l-tests-r6 out_of_scope=true -->
+### l-tests-r6-resolved · finding [out-of-scope] · resolves l-tests-r6: fr.repos.DEFAULT_MANIFEST takes Path.home() at import
+
+DEFAULT_MANIFEST in fr/repos.py predates S1; S1 did not change how it is computed, and its test sets FR_REPOS_MANIFEST. Filed at deliver.
