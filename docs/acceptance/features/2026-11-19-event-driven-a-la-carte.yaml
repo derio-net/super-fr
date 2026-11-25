@@ -120,3 +120,10 @@ amendments:
     ref: super-fr:tests/unit/test_tripwire_shipped_defaults.py#test_every_shipped_workflow_manifest_passes_check_workflow
     why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
       when the shipped defaults merged into one tree (phase 5)
+  - row: workflow-manifest-validated
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_shipped_workflows.py
+    why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
+      when the shipped defaults merged into one tree (phase 5)
