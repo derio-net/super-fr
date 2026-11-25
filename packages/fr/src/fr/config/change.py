@@ -24,7 +24,7 @@ import subprocess
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 from fr.settings import SettingsError
 
@@ -109,8 +109,10 @@ def _forge_prs_for_head(remote: str, head: str) -> list[dict[str, object]]:
     """The default `PrsForHead` (security review of p4-r12): `list_prs_by_head`, keeping
     only the pull requests whose head is in the target repo (`isCrossRepository` False,
     the same test `open_pr_in_repo` makes by head-repo full name), each read with `pr_view`
-    for its base and head commit. A forge fr cannot ask answers none (the change is then
-    proposed, and `open_pr` still reuses an open pull request)."""
+    for its base and head commit. A forge whose adapter cannot list them
+    (`UnsupportedForgeOperation`) answers none (the change is then proposed, and `open_pr`
+    still reuses an open pull request); any other forge error refuses (lens review
+    l-errors-r3): "no earlier pull request" would re-propose one the operator closed."""
     from fr._hosts import slug_from_url
     from fr.ghclient import UnsupportedForgeOperation
     from fr.hostclient import FORGE_ERRORS, client_for_url
@@ -136,8 +138,14 @@ def _forge_prs_for_head(remote: str, head: str) -> list[dict[str, object]]:
                 }
             )
         return out
-    except FORGE_ERRORS + (UnsupportedForgeOperation,):
+    except UnsupportedForgeOperation:
         return []
+    except FORGE_ERRORS as e:
+        raise SettingsError(
+            f"fr cannot read the earlier pull requests from `{head}` ({str(e).strip()}), so "
+            "it cannot tell whether this change was proposed and closed before; nothing was "
+            "changed. Run the command again once the forge answers"
+        ) from e
 
 
 prs_for_head: PrsForHead = _forge_prs_for_head
@@ -172,18 +180,29 @@ def _earlier_proposal(
     return None
 
 
+def _timed(argv: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
+    """`subprocess.run(argv, timeout=_TIMEOUT_S)`, a timeout refused as a `SettingsError`
+    that says nothing was changed (lens review l-errors-r4), never a traceback."""
+    try:
+        return subprocess.run(
+            argv, capture_output=True, text=True, timeout=_TIMEOUT_S, check=False, **kw
+        )
+    except subprocess.TimeoutExpired as e:
+        shown = " ".join(a for a in argv if not a.startswith("safe.directory="))
+        raise SettingsError(
+            f"`{shown}` timed out after {_TIMEOUT_S}s; the configuration branch was not "
+            "changed: check the remote, then run the command again"
+        ) from e
+
+
 def _run(cwd: Path, *args: str, env: dict[str, str] | None = None, stdin: str | None = None) -> str:
     from fr.git import git_argv
 
-    done = subprocess.run(
+    done = _timed(
         git_argv(cwd, *args),
         cwd=cwd,
         env={**os.environ, "GIT_TERMINAL_PROMPT": "0", **(env or {})},
         input=stdin,
-        capture_output=True,
-        text=True,
-        timeout=_TIMEOUT_S,
-        check=False,
     )
     if done.returncode != 0:
         raise SettingsError(
@@ -271,14 +290,10 @@ def open_change(
         return earlier
     approved = _approve(product, head, f"{base_sha[:12]}+{head.rsplit('-', 1)[-1]}")
     commit = _commit_on(cwd, base_sha, rel, text, message, executable=executable)
-    pushed = subprocess.run(
+    pushed = _timed(
         ["git", "push", "--quiet", "origin", f"{commit}:refs/heads/{head}"],
         cwd=cwd,
         env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
-        capture_output=True,
-        text=True,
-        timeout=_TIMEOUT_S,
-        check=False,
     )
     if pushed.returncode != 0 and not _already_proposed(cwd, head, rel, text):
         raise SettingsError(
@@ -303,13 +318,9 @@ def open_change(
 
 def _already_proposed(cwd: Path, head: str, rel: str, text: str) -> bool:
     """Origin's *head* already holds *rel* = *text* (a retry of the same change)."""
-    fetched = subprocess.run(
+    fetched = _timed(
         ["git", "-C", str(cwd), "fetch", "--quiet", "--no-tags", "origin", f"refs/heads/{head}"],
         env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
-        capture_output=True,
-        text=True,
-        timeout=_TIMEOUT_S,
-        check=False,
     )
     if fetched.returncode != 0:
         return False

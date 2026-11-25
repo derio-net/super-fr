@@ -214,3 +214,59 @@ def test_open_pr_refuses_an_open_pull_request_into_another_base(
     with pytest.raises(SettingsError, match="into `main`, not `fr-config`"):
         change._forge_open_pr("https://github.com/example-org/r.git", "h", "fr-config", "t", "b")
     assert client.created == []
+
+
+def test_a_failed_forge_read_of_earlier_proposals_refuses(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Lens review l-errors-r3: a forge error must not read as "no earlier pull request",
+    which would silently re-propose a change an operator closed unmerged."""
+    import fr.hostclient as hostclient
+    from fr.gh import GhError
+
+    class _Broken:
+        def list_prs_by_head(self, repo: str, head: str) -> list[dict[str, Any]]:
+            raise GhError("gh: Server Error (HTTP 502)", stderr="HTTP 502")
+
+    monkeypatch.setattr(hostclient, "client_for_url", lambda _u: _Broken())
+    with pytest.raises(SettingsError, match="HTTP 502"):
+        change._forge_prs_for_head("https://github.com/example-org/r.git", "h")
+
+
+def test_a_forge_that_cannot_list_pull_requests_answers_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import fr.hostclient as hostclient
+    from fr.ghclient import UnsupportedForgeOperation
+
+    class _Tea:
+        def list_prs_by_head(self, repo: str, head: str) -> list[dict[str, Any]]:
+            raise UnsupportedForgeOperation("list_prs_by_head", "tea")
+
+    monkeypatch.setattr(hostclient, "client_for_url", lambda _u: _Tea())
+    assert change._forge_prs_for_head("https://github.com/example-org/r.git", "h") == []
+
+
+@pytest.mark.parametrize("where", ["run", "push"])
+def test_a_git_timeout_is_a_refusal_not_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, where: str
+) -> None:
+    """Lens review l-errors-r4: a git call that times out says so and that nothing changed."""
+    import subprocess
+
+    real = subprocess.run
+
+    def slow(argv: list[str], *a: Any, **kw: Any) -> Any:
+        hit = ("rev-parse" in argv) if where == "run" else ("push" in argv)
+        if hit:
+            raise subprocess.TimeoutExpired(argv, 60)
+        return real(argv, *a, **kw)
+
+    root = _quiet(tmp_path)
+    monkeypatch.setattr(change, "prs_for_head", lambda r, h: [])
+    monkeypatch.setattr(change.subprocess, "run", slow)
+    with pytest.raises(SettingsError, match="timed out") as refused:
+        change.open_change(
+            root, product=root, remote="https://github.com/example-org/r.git",
+            base_branch="main", base_ref="origin/main", rel=".fr/models.yaml", text="x: 1\n",
+            message="m",
+        )  # fmt: skip
+    assert "run the command again" in str(refused.value)
