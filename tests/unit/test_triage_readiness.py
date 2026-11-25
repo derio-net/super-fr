@@ -226,7 +226,8 @@ def test_whose_move_is_the_sessions_while_its_run_works() -> None:
     running = (HEAD, RUNNING, "read")
     got = _facts(_qs(B, cursor=running, sessions={"b1": "working"}))
     assert got.facts.whose_move == "the session, working"
-    assert got.facts.link == "fr triage batch focus b1 --repo derio-net/super-fr"
+    assert got.facts.command == "fr triage batch focus b1 --repo derio-net/super-fr"
+    assert got.facts.link == URL
     idle = _qs(B, cursor=running, sessions={"b1": "idle"},
                head_changed={"b1": NOW - timedelta(minutes=42)})  # fmt: skip
     assert _facts(idle).facts.whose_move == "the session, idle for 42 minutes"

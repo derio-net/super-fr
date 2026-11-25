@@ -119,3 +119,17 @@ def test_the_verdict_styles_use_tokens_never_literal_colours() -> None:
 
 def test_the_card_type_has_the_two_fields() -> None:
     assert {"readiness", "others"} <= set(Card.__dataclass_fields__)
+
+
+def test_a_session_owned_verdicts_focus_command_shows_on_the_page_escaped() -> None:
+    f, jd = _world()
+    board = build_board(f, jd, {})
+    r = board.card("a").readiness
+    assert r is not None
+    cmd = "fr triage batch focus a --repo example-org/widgets"
+    facts = replace(r.facts, command=cmd, next_action="let the session finish, or focus it")
+    page = _page(_swap(board, "a", readiness=replace(r, facts=facts)))
+    assert f'<code class="mono">{cmd}</code>' in _card_html(page, "a")
+    hostile = replace(r.facts, command=HOSTILE)
+    page = _page(_swap(board, "a", readiness=replace(r, facts=hostile)))
+    assert HOSTILE not in page

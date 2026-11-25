@@ -148,7 +148,8 @@ class Delivered:
 
 @dataclass(frozen=True)
 class ReadinessFacts:
-    """R6: what the verdict came from, one line each, and the next action's link."""
+    """R6: what the verdict came from, one line each, and the next action's *link* (a URL) or
+    *command* (the pane focus command a session-owned verdict names; never a link)."""
 
     delivered: str
     ci: str
@@ -157,6 +158,7 @@ class ReadinessFacts:
     whose_move: str
     next_action: str
     link: str
+    command: str = ""
 
 
 @dataclass(frozen=True)
@@ -293,16 +295,16 @@ def _whose_move(mover: Mover, batch: Batch, qs: QueueSnapshot) -> str:
 
 
 def _next(kind: VerdictKind, d: Delivered, mover: Mover, batch: Batch, pr: LivePr,
-          qs: QueueSnapshot) -> tuple[str, str]:  # fmt: skip
-    """R6's next action and its link: the PR, its checks tab, or the pane focus command."""
+          qs: QueueSnapshot) -> tuple[str, str, str]:  # fmt: skip
+    """R6's next action, its link (the PR or its checks tab) and its command (the pane focus)."""
     if d.state == "no-cursor":
-        return NO_CURSOR_ACTION, pr.url
+        return NO_CURSOR_ACTION, pr.url, ""
     if kind in ("ci-red", "ci-running"):
         what = "fix the failing checks" if kind == "ci-red" else "wait for CI"
-        return what, f"{pr.url}/checks" if pr.url else ""
+        return what, f"{pr.url}/checks" if pr.url else "", ""
     if mover == "session":
         focus = shlex.join(["fr", "triage", "batch", "focus", batch.id, *qs.scope_args])
-        return "let the session finish, or focus it", focus
+        return "let the session finish, or focus it", pr.url, focus
     actions: dict[str, str] = {
         "approval-voided": "re-label `approved-fr` once the PR reads Ready for approval",
         "ready-for-approval": "review the PR and label it `approved-fr`",
@@ -310,7 +312,7 @@ def _next(kind: VerdictKind, d: Delivered, mover: Mover, batch: Batch, pr: LiveP
         "queued-behind": "none: the queue merges it",
         "gate-held": "pass the DevOps stage",
     }
-    return actions.get(kind, "look at the PR"), pr.url
+    return actions.get(kind, "look at the PR"), pr.url, ""
 
 
 def _decide(batch: Batch, pr: LivePr, qs: QueueSnapshot, d: Delivered,
@@ -350,7 +352,7 @@ def batch_readiness(batch: Batch, qs: QueueSnapshot) -> Readiness:
     voided = _voided_sha(batch, pr, verdict)
     kind, reason = _decide(batch, pr, qs, d, approved, voided)
     mover = _mover(kind, d.state)
-    action, link = _next(kind, d, mover, batch, pr, qs)
+    action, link, command = _next(kind, d, mover, batch, pr, qs)
     facts = ReadinessFacts(
         delivered="yes" if d.ok else d.reason,
         ci=_ci_fact(pr),
@@ -359,6 +361,7 @@ def batch_readiness(batch: Batch, qs: QueueSnapshot) -> Readiness:
         whose_move=_whose_move(mover, batch, qs),
         next_action=action,
         link=link,
+        command=command,
     )
     admits = d.ok and qs.config.ci is not None and _admission(batch, pr, qs, approved)
     return Readiness(kind, _LINES[kind].format(r=reason), reason, facts, admits, d, approved)

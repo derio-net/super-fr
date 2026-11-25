@@ -375,6 +375,8 @@ def _readiness(r: Readiness, collected_at: str = "") -> str:
         ("Whose move", esc(f.whose_move)),
         ("Next action", _link(f.next_action, f.link or None)),
     ]
+    if f.command:
+        rows.append(("Command", f'<code class="mono">{esc(f.command)}</code>'))
     lag = (
         f'<p class="meta">as of facts collected {_stamp(collected_at)}</p>' if collected_at else ""
     )
