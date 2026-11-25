@@ -262,6 +262,8 @@ class QueueSnapshot:
     # time (a wave's drain waits on it), and the operator entries removed since (ejected)
     pending_operator: Mapping[str, datetime] = field(default_factory=dict)
     removed: frozenset[str] = frozenset()
+    # l-errors-r2: the pending operator entries their trust rule refuses, with why
+    refused_operator: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -1018,28 +1020,43 @@ def _removed_ejects(rep: Replay, qs: QueueSnapshot, wave: int | None) -> list[Qu
     return out
 
 
-def _operator_stall(record: QueueRecord, qs: QueueSnapshot) -> list[QueueAction] | None:
-    """wave-queue-gaps R15: the pending operator entries that hold this wave's drain (None:
-    nothing holds it), each a Need naming `queue remove` once it has held the drain for
-    `stall_hours` since the later of its add and the queue's last landing."""
+def _operator_pending(qs: QueueSnapshot) -> dict[str, datetime]:
+    """wave-queue-gaps R15: the pending operator entries (added, not removed, open), less any a
+    queue record of the repo landed, with their add time."""
     landed = landed_keys(qs.records)
-    pending = {k: at for k, at in qs.pending_operator.items() if k not in landed}
-    if record.wave is None or not pending:
-        return None
-    lands = [e.at for e in record.events if isinstance(e, QueueLandEvent)]
-    out = []
+    return {k: at for k, at in qs.pending_operator.items() if k not in landed}
+
+
+def operator_needs(qs: QueueSnapshot) -> tuple[QueueAction, ...]:
+    """wave-queue-gaps R15, as amended by l-errors-r2: every pending operator entry is a Need
+    naming `queue remove`, whatever the queue's state: at once when its trust rule refuses it,
+    else once it has been pending for `stall_hours` since the later of its add and the queue's
+    last landing. A Need is blocked, so a drive whose only work is such an entry can end."""
+    mine = [r for r in qs.records if r.scope == qs.scope]
+    last = mine[-1] if mine else None
+    lands = [e.at for e in last.events if isinstance(e, QueueLandEvent)] if last else []
+    holding = (last is not None and last.wave is not None and _drain_event(last) is None
+               and queue_phase(mine, qs.hold) == "open")  # fmt: skip
+    drain = f", holding wave {last.wave}'s drain" if holding and last is not None else ""
     args = "".join(f" {a}" for a in qs.scope_args)
-    for key, added_at in sorted(pending.items()):
-        since = max([added_at, *lands])
-        if qs.now - since < timedelta(hours=qs.config.stall_hours):
-            continue
+    out = []
+    for key, added_at in sorted(_operator_pending(qs).items()):
         n = key.rpartition("#")[2]
+        remove = f"`fr triage queue remove --pr {n}{args}`"
+        wave = last.wave if holding and last is not None else None
+        if (why := qs.refused_operator.get(key)) is not None:
+            out.append(QueueAction(
+                "queue-need", qs.repo, f"{key} was added to {qs.repo}'s merge queue but is "
+                f"not admitted ({why}){drain}: take it out with {remove}", wave=wave,
+                entries=(key,)))  # fmt: skip
+            continue
+        if qs.now - max([added_at, *lands]) < timedelta(hours=qs.config.stall_hours):
+            continue
         out.append(QueueAction(
-            "queue-need", qs.repo, f"{key} was added to {qs.repo}'s merge queue and has held "
-            f"wave {record.wave}'s drain for {qs.config.stall_hours} h without landing: land it "
-            f"(a valid approved-fr, green checks), or take it out with `fr triage queue remove "
-            f"--pr {n}{args}`", wave=record.wave, entries=(key,)))  # fmt: skip
-    return out
+            "queue-need", qs.repo, f"{key} was added to {qs.repo}'s merge queue and has not "
+            f"landed for {qs.config.stall_hours} h{drain}: land it (a valid approved-fr, green "
+            f"checks), or take it out with {remove}", wave=wave, entries=(key,)))  # fmt: skip
+    return tuple(out)
 
 
 def operator_work(pending: Mapping[str, Mapping[str, datetime]], plans: Sequence[QueuePlan]) -> int:
@@ -1066,9 +1083,8 @@ def _tail(
     landing = any(a.kind == "queue-land" for a in actions)
     waiting_on = barrier_open([r for r in qs.records if r.scope == qs.scope])
     drained = None if entries or landing or waiting_on else _drained(record, rep, qs)
-    stalled = _operator_stall(record, qs) if drained is not None else None
-    if stalled is not None:  # wave-queue-gaps R15: the drain waits on an operator entry
-        actions.extend(stalled)
+    if drained is not None and record.wave is not None and _operator_pending(qs):
+        pass  # wave-queue-gaps R15: the drain waits on an operator entry (its Need: plan_queue)
     elif drained is not None:
         actions.append(drained)
     elif (need := _stall_need(record, qs, entries)) is not None:
@@ -1250,6 +1266,7 @@ def plan_queue(qs: QueueSnapshot) -> QueuePlan:
     """One pass of one repo's queue (§A)."""
     plan = _plan_queue(qs)
     needs = () if any(a.kind == "queue-held" for a in plan.actions) else _base_needs(qs)
+    needs = (*needs, *operator_needs(qs))  # l-errors-r2: whatever the queue's state
     plan = replace(plan, actions=(*plan.actions, *needs)) if needs else plan
     return replace(plan, view=queue_view(plan, qs=qs))
 

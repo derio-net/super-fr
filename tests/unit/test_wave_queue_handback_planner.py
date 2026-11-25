@@ -202,3 +202,58 @@ def test_a_carrying_entry_is_not_rebuilt_when_main_moved() -> None:  # p1-r5
     assert rebuild.slots == (1, 2)
     assert "a" not in plan.entries
     assert _one(plan, "queue-carry").batch == "a"
+
+
+# ------------------------------------------------------------- lens review (tests)
+
+
+def test_a_foreign_move_of_main_reissues_once_naming_the_rebuilt_target() -> None:  # l-tests-r3
+    """R2's other cause: `main` moved outside the queue, so the hand-back's `onto` (slot 1 on
+    the old base) no longer leads. The rebuild pass re-briefs nothing while nothing stands on
+    the moved base; the next pass, with the rebuilt combinations recorded, re-issues once on
+    the last of them."""
+    moved = "mv" * 20
+    ejected = (_built(1, "s1", "a"), _eject("b", "conflict", head="head-b"))
+    rebuilt = (_built(1, "r1", "a", base=moved, parent=moved),
+               _built(2, "r2", "c", base=moved, parent="r1"))  # fmt: skip
+    passes = [
+        _with_conflict(_abc(*ejected, base=moved, leads={"b": False}, **PUSH_SQUASH), "b",
+                       onto="s1"),
+        _with_conflict(_abc(*ejected, *rebuilt, base=moved, leads={"b": False}, **PUSH_SQUASH),
+                       "b", onto="s1"),
+    ]  # fmt: skip
+    plans = [plan_queue(p) for p in passes]
+    assert "queue-rebuild" in _kinds(plans[0])
+    reissues = [a for p in plans for a in p.actions if a.kind == "queue-reissue"]
+    assert [(a.batch, a.base, a.slots) for a in reissues] == [("b", "r2", (2,))]
+
+
+# ------------------------------------------------------------- lens review (errors): R5's hold
+# escalates after stall_hours
+
+
+def test_an_unreadable_onto_held_past_stall_hours_is_a_need_naming_the_commit_and_batch() -> None:
+    """l-errors-r4: the hand-back's `onto` git cannot read (a dead slot commit a fresh clone
+    lacks) holds the entry each pass; after `stall_hours` from the hand-back it is a Need."""
+    young = plan_queue(_ejected_b(leads={"b": None}, config=QueueConfig(land="push"),
+                                  method="squash"))  # fmt: skip
+    assert "queue-warn" in _kinds(young) and "queue-need" not in _kinds(young)
+    old = plan_queue(_ejected_b(leads={"b": None}, config=QueueConfig(land="push",
+                                stall_hours=1), method="squash"))  # fmt: skip
+    need = _one(old, "queue-need")
+    assert need.batch == "b" and need.entries == ("b",) and "s0" in need.detail
+    assert "queue-warn" not in _kinds(old) and "queue-reissue" not in _kinds(old)
+
+
+def test_an_unreadable_head_held_past_stall_hours_is_a_need_naming_the_head() -> None:
+    from datetime import timedelta
+
+    from tests.unit.test_wave_queue_planner import NOW
+
+    snap = _abc(carries={"a": None}, head_changed={"a": NOW - timedelta(hours=2)},
+                config=QueueConfig(land="push", stall_hours=1), method="squash")  # fmt: skip
+    plan = plan_queue(snap)
+    need = _one(plan, "queue-need")
+    assert need.batch == "a" and "head-a" in need.detail and "a" not in plan.entries
+    recent = replace(snap, head_changed={"a": NOW - timedelta(minutes=10)})
+    assert "queue-need" not in _kinds(plan_queue(recent))

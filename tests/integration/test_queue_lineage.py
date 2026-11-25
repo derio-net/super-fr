@@ -132,3 +132,33 @@ def test_the_carry_brief_drops_the_dead_slot_commit(tmp_path: Path, slotted: boo
     assert gone.returncode == 1
     assert (work / "d.txt").read_text() == "delta, edited after the merge\n"
     assert not (work / "b.txt").exists()
+
+
+@pytest.mark.parametrize("moved", [False, True])
+def test_the_carry_briefs_push_is_leased_on_the_head_it_names(  # l-security-r1
+    tmp_path: Path, moved: bool
+) -> None:
+    """Step 6, run as written: it replaces the head the brief names, and is refused once the
+    branch moved past it (the session then waits for a re-issued brief)."""
+    import re
+
+    from fr.triage.model import Batch
+    from fr.triage.queue_handback import carry_brief
+
+    w = world(tmp_path)
+    w.pr(1, {"b.txt": "bravo\n"})
+    w.pr(3, {"d.txt": "delta\n"})
+    w.fetch()
+    reset = w.head(3)
+    (one,) = build(w.checkout, w.main(), [w.entry(1)], "squash", None, scope=SCOPE,
+                   slots=(1,), scratch=w.scratch)  # fmt: skip
+    _merge_into(w, 3, one.sha)
+    batch = Batch.model_validate({"id": "b3", "title": "change 3", "ids": ["super-fr#3"]})
+    brief = carry_brief(batch, pr=3, head=w.head(3), reset=reset, carried=(one.sha,),
+                        onto=w.main(), onto_ref="origin/main", branch=w.prs[3])  # fmt: skip
+    work, _ = _run_brief_steps(w, tmp_path, brief)
+    (push,) = [re.findall(r"`([^`]+)`", ln)[0] for ln in brief.splitlines() if ln[:2] == "6."]
+    if moved:
+        w.push_to(3, {"d.txt": "a push the driver never checked\n"})
+    pushed = subprocess.run(["git", *push.split()[1:]], cwd=work, capture_output=True, text=True)
+    assert (pushed.returncode != 0) is moved, pushed.stderr

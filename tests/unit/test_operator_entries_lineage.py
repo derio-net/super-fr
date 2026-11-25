@@ -175,4 +175,39 @@ def test_an_admitted_entry_takes_its_carry_by_the_head_it_is_built_at() -> None:
                            queue_head_carries={REPO: {"head-hk": (OLD,)}})  # fmt: skip
     got = _carries(snap, REPO, [Admitted("housekeeping", REPO, hk),  # type: ignore[arg-type]
                                 Admitted("export", REPO, other)])  # fmt: skip
-    assert got == {"b": (), "housekeeping#7": (OLD,)}
+    # l-errors-r3: an admitted head the read did not reach is unknown (None: held, R5), never
+    # read as carrying nothing
+    assert got == {"b": (), "housekeeping#7": (OLD,), "export#8": None}
+    unread_repo = SimpleNamespace(queue_carries={}, queue_head_carries={})
+    assert _carries(unread_repo, REPO, [Admitted("export", REPO, other)]) == {}  # type: ignore[arg-type]
+
+
+# ------------------------------------------------------------ lens review (errors, tests)
+
+
+def test_only_the_latest_handbacks_onto_at_a_head_is_asked() -> None:  # l-tests-r1
+    events = [
+        {"kind": "conflict", "at": AT, "head": "head-b", "paths": ["x.py"],
+         "delivered": "session", "handle": "h", "onto": OLD},
+        {"kind": "conflict", "at": "2026-11-24T12:05:00Z", "head": "head-b", "paths": ["x.py"],
+         "delivered": "session", "handle": "h", "onto": ONTO, "reissue": True},
+    ]  # fmt: skip
+    batch = Batch.model_validate({"id": "b", "title": "b", "ids": ["super-fr#2"],
+                                  "events": events})  # fmt: skip
+    driver = Driver([_record(_built(1, S1, "a"))])
+    lineage_reads(driver, _facts(), SimpleNamespace(batches=[batch]), {"b": REPO}, LIVE,
+                  {REPO: MAIN}, ())  # fmt: skip
+    assert [(k, sha) for k, sha, _, _ in driver.clone.asked if k == "leads"] == [("leads", ONTO)]
+
+
+def test_an_admitted_entrys_live_head_is_read_even_when_facts_hold_another() -> None:  # l-errors-r3
+    driver = Driver([_record(_built(1, S1, "a"))])
+    driver.clone.carry["head-op-live"] = (OLD,)
+    op = LivePr(number=9, state="OPEN", draft=False, head="head-op-live", checks="green")
+    hk = LivePr(number=7, state="OPEN", draft=False, head="head-hk-live", checks="green")
+    reads = {"queue_operator": {REPO: ((op, None),)}, "queue_housekeeping": {REPO: ((hk, None),)}}
+    out = lineage_reads(driver, _facts((9, "head-op-collected")), _judgements(), {"b": REPO},
+                        LIVE, {REPO: MAIN}, (), reads=reads)  # fmt: skip
+    heads = out["queue_head_carries"][REPO]
+    assert heads["head-op-live"] == (OLD,) and heads["head-hk-live"] == ()
+    assert "head-op-collected" in heads

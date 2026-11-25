@@ -199,11 +199,51 @@ def test_a_landed_operator_entry_is_never_pending() -> None:
     assert "queue-drain" in _kinds(plan)
 
 
-def test_a_between_waves_queue_drains_by_its_own_rule_and_never_stalls() -> None:
+def test_a_between_waves_queue_drains_by_its_own_rule() -> None:
     rec = _record(_built(1, "s1", OP), _land("s1", OP), wave=None)
     plan = plan_queue(_qs([], {}, {}, records=(rec,), hold=replace(OPEN1, wave=None), base="s1",
-                          pending_operator={"operator#8": NOW - timedelta(hours=9)}))  # fmt: skip
-    assert "queue-drain" in _kinds(plan) and "queue-need" not in _kinds(plan)
+                          pending_operator={"operator#8": NOW - timedelta(hours=9)},
+                          config=QueueConfig(stall_hours=1)))  # fmt: skip
+    assert "queue-drain" in _kinds(plan)  # operator#8 holds no between-waves drain, but it
+    assert _one(plan, "queue-need").entries == ("operator#8",)  # has a Need (l-errors-r2)
+
+
+# ------------------------------------------------------------------ l-errors-r2: every pending
+# operator entry has a Need, whatever the queue's state
+
+
+def test_a_trust_refused_entry_is_a_need_at_once_whatever_the_queue_state() -> None:
+    snap = _qs([_batch("a", 1)], {"a": "dispatched"}, {}, scope_args=("--repo", REPO),
+               pending_operator={OP: NOW - timedelta(minutes=1)},
+               refused_operator={OP: "its branch is in another repository"})  # fmt: skip
+    plan = plan_queue(snap)
+    assert plan.phase == "idle"
+    need = _one(plan, "queue-need")
+    assert need.entries == (OP,) and "another repository" in need.detail
+    assert "fr triage queue remove --pr 7 --repo derio-net/super-fr" in need.detail
+    assert operator_work({REPO: snap.pending_operator}, [plan]) == 0  # blocked: the loop can end
+
+
+def test_an_entry_that_never_becomes_ready_is_a_need_after_stall_hours_with_no_queue() -> None:
+    fresh = _qs([], {}, {}, pending_operator={OP: NOW - timedelta(minutes=30)},
+                config=QueueConfig(stall_hours=1))  # fmt: skip
+    assert "queue-need" not in _kinds(plan_queue(fresh))
+    assert operator_work({REPO: fresh.pending_operator}, [plan_queue(fresh)]) == 1
+    stale = replace(fresh, pending_operator={OP: NOW - timedelta(hours=2)})
+    plan = plan_queue(stale)
+    need = _one(plan, "queue-need")
+    assert need.entries == (OP,) and "fr triage queue remove --pr 7" in need.detail
+    assert operator_work({REPO: stale.pending_operator}, [plan]) == 0
+
+
+def test_an_entry_waiting_in_a_wave_queue_still_gets_its_need() -> None:
+    entry, live = _operator(checks="pending")
+    a = _batch("a", 1)
+    live |= {"a": _live(101, "head-a")}
+    plan = plan_queue(_qs([a], {"a": "pr-open"}, live, records=(_record(),), others=(entry,),
+                          hold=OPEN1, pending_operator={OP: NOW - timedelta(hours=9)}))  # fmt: skip
+    (need,) = [x for x in plan.actions if x.kind == "queue-need" and x.entries == (OP,)]
+    assert "fr triage queue remove --pr 7" in need.detail
 
 
 # ------------------------------------------------------------------ R12: remove ejects

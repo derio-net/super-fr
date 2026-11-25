@@ -4639,7 +4639,8 @@ class _Driver:
             )
             queue_reads["queue_released"], queue_reads["queue_runs"] = gated_in, gated_runs
             queue_reads.update(lineage_reads(
-                self, facts, judgements, qrepos, live, queue_reads["bases"], {*unread, *carried}
+                self, facts, judgements, qrepos, live, queue_reads["bases"], {*unread, *carried},
+                reads=queue_reads,
             ))  # fmt: skip
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc

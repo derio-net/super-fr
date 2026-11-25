@@ -133,6 +133,8 @@ def lineage_reads(
     live: Mapping[str, LivePr],
     bases: Mapping[str, str],
     skip: Iterable[str],
+    *,
+    reads: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Spec 2026-11-24-wave-queue-gaps §A: the Snapshot's `queue_methods`, `queue_leads`,
     `queue_carries` and `queue_head_carries`. For each repo whose queue lands by push with
@@ -140,7 +142,9 @@ def lineage_reads(
     combination, or `main` now), then, per batch with a PR: whether the commit its latest
     hand-back at that head named still leads to it, and which of every `queue_built` sha of
     this scope's records for the repo its head carries; and the same carry per open head of
-    the repo's non-batch PRs, which the pass admits as entries later (review p1-r4). Each
+    the repo's non-batch PRs, which the pass admits as entries later (review p1-r4), and per
+    live head of the operator and housekeeping entries in *reads* (the pass's queue reads so
+    far), which may have moved since collect (l-errors-r3). Each
     answer is cached on the driver per (head or onto, target); a `GitError` is None (R5),
     never an answer."""
     from fr.triage.gitseam import GitError
@@ -201,13 +205,12 @@ def lineage_reads(
         # p1-r4: a non-batch entry (close-out, archive, export, housekeeping) is admitted
         # only in the pure pass, so its carry is read per open head of the repo's other PRs
         batch_prs = {pr.number for bid, pr in live.items() if repos.get(bid) == repo}
-        heads[repo] = {
-            p.head_oid: ask("carried", p.head_oid,
-                            lambda h=p.head_oid: checkout.carried(h, target, built))
-            for p in facts.prs
-            if p.repo == repo and p.state == "OPEN" and p.head_oid
-            and p.number not in batch_prs
-        }  # fmt: skip
+        collected = [p.head_oid for p in facts.prs if p.repo == repo and p.state == "OPEN"
+                     and p.head_oid and p.number not in batch_prs]  # fmt: skip
+        admitted = [pr.head for key in ("queue_operator", "queue_housekeeping")
+                    for pr, _ in (reads or {}).get(key, {}).get(repo, ()) if pr.head]  # fmt: skip
+        heads[repo] = {h: ask("carried", h, lambda h=h: checkout.carried(h, target, built))
+                       for h in dict.fromkeys([*collected, *admitted])}  # fmt: skip
     return {"queue_methods": methods, "queue_leads": leads, "queue_carries": carries,
             "queue_head_carries": heads}  # fmt: skip
 
@@ -244,8 +247,9 @@ def carry_hand_back(
             if not checkout.carried(head, onto, built):
                 reset = head
                 break
-        except GitError:
-            unread = unread or head  # unreadable: not a head to reset to, nor a verdict
+        except GitError:  # l-errors-r5: an older head is no answer while a newer one is unread
+            unread = head
+            break
     if reset is None and unread:  # R5: held for the pass, never a durable Need (p1-r6)
         return (f"{action.detail}; held this pass: git could not read whether {unread[:12]}, "
                 "a head the queue handed back, is free of that commit")  # fmt: skip
@@ -319,7 +323,8 @@ def _preapprove(
     record: Callable[[str, str], None],
 ) -> dict[str, Any]:  # fmt: skip
     """R13: add `approved-fr` to preapproved PR *n* at its head, with the audit comment, when
-    the adder *by* is an allowed author now, its own checks are green, the forge does not
+    its base is still the default branch (re-read now: `add` checked it once), the adder *by*
+    is an allowed author now, its own checks are green, the forge does not
     read it as conflicting and no queue conflict is recorded at that head (*conflicted*).
     Returns *view* with the label when it was added. Nothing is written without --yes, and
     a patch-id git cannot read holds it for this pass, never a durable record.
@@ -336,8 +341,10 @@ def _preapprove(
     head = str(view.get("head_oid") or "")
     if APPROVED_FR.name in labels:
         return view
+    base, default = str(view.get("base_ref") or ""), driver._fetched_reader(repo).default_branch()
     why = (
-        f"{by} who added it is not an allowed author of {repo}" if by.lower() not in allowed
+        f"its base {base!r} is not the default branch {default!r}" if base != default
+        else f"{by} who added it is not an allowed author of {repo}" if by.lower() not in allowed
         else "its own checks are not green" if checks != "green"
         else "the forge reads it as conflicting"
         if view.get("mergeable") == "CONFLICTING" or view.get("merge_state") == "DIRTY"
@@ -414,7 +421,9 @@ def operator_reads(
     author) and its `approved-fr` settled on the queue's `approval` events as an `operator`
     entry. `queue_operator` holds the admitted `(LivePr, at)` pairs by repo; `queue_pending`
     every added, open, unlanded operator entry with its add time (R15: the wave's drain waits
-    on it); `queue_removed` the entry keys whose latest request is a remove (R12's eject)."""
+    on it), a skipped repo's from the state alone (l-errors-r1); `queue_refused` the pending
+    ones its trust rule refuses, with why (their Need is due at once, l-errors-r2);
+    `queue_removed` the entry keys whose latest request is a remove (R12's eject)."""
     from fr.commands import triage_batch_cmd as cmd  # the command layer's clock and writer
     from fr.commands.triage_drive_loop import _say
     from fr.triage.model import QueueRemoveEvent
@@ -424,7 +433,11 @@ def operator_reads(
     sid = scope_id(driver.scope)
     admitted: dict[str, tuple[tuple[LivePr, datetime | None], ...]] = {}
     pending: dict[str, dict[str, datetime]] = {}
+    refused: dict[str, dict[str, str]] = {}
     removed: dict[str, frozenset[str]] = {}
+    for repo in sorted(set(repos.values()) & set(skip)):
+        if mine := skipped_pending(facts, judgements, repo, sid):
+            pending[repo] = mine
     for repo in sorted(set(repos.values()) - set(skip)):
         adds = added(judgements.queue_requests, repo, sid)
         removed[repo] = frozenset(
@@ -456,6 +469,7 @@ def operator_reads(
                     known.author if known else None, known.cross_repo if known else None, allowed
                 )  # fmt: skip
                 if known is None or trust is not None:  # never labelled, never admitted
+                    refused.setdefault(repo, {})[key] = str(trust or "collect never read it")
                     driver._report_once(
                         f"operator\0{repo}\0{n}\0{trust}",
                         f"{repo}#{n} was added but is not admitted: {trust}",
@@ -497,4 +511,23 @@ def operator_reads(
                 ), at))  # fmt: skip
         if found:
             admitted[repo] = tuple(found)
-    return {"queue_operator": admitted, "queue_pending": pending, "queue_removed": removed}
+    return {"queue_operator": admitted, "queue_pending": pending, "queue_refused": refused,
+            "queue_removed": removed}  # fmt: skip
+
+
+def skipped_pending(
+    facts: Facts, judgements: Judgements, repo: str, sid: str
+) -> dict[str, datetime]:
+    """l-errors-r1: the pending operator entries of a repo the pass did not read (unread or
+    carried), from the state alone: each added PR no batch owns, no queue record of the
+    scope landed, and collect did not read as closed. No forge read."""
+    from fr.triage.queue_requests import added
+    from fr.triage.wave_queue import landed_keys
+
+    landed = landed_keys([q for q in judgements.queues if q.repo == repo and q.scope == sid])
+    batch_prs = {p.number for b in judgements.batches if batch_repo(b, facts) == repo
+                 and (p := batch_pr(b, facts)) is not None}  # fmt: skip
+    closed = {p.number for p in facts.prs if p.repo == repo and p.state != "OPEN"}
+    adds = added(judgements.queue_requests, repo, sid)
+    return {f"{OPERATOR_KIND}#{n}": r.at for n, r in sorted(adds.items())
+            if n not in batch_prs | closed and f"{OPERATOR_KIND}#{n}" not in landed}  # fmt: skip

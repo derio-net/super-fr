@@ -515,3 +515,67 @@ def test_a_batch_pr_with_a_conflict_event_at_its_head_is_not_preapproved(tmp_pat
           load_judgements(tmp_path / "judgements.yaml"))  # fmt: skip
 
     assert forge.writes == []
+
+
+# ------------------------------------------------------------------ lens review
+
+
+def test_preapproval_skips_a_pr_whose_merge_state_is_dirty(tmp_path: Path) -> None:
+    forge = Forge()
+    forge.view(10, merge_state="DIRTY")
+    judgements = _state(tmp_path, _request(10, preapproved=True))
+    driver = Driver(tmp_path, forge)
+
+    _read(driver, _facts(_pr(10, "fix/10")), judgements)
+
+    assert forge.writes == [] and _approvals(tmp_path) == []
+    assert any("conflicting" in w for w in driver.warned)
+
+
+def test_preapproval_refuses_a_pr_whose_base_moved_off_the_default_branch(tmp_path: Path) -> None:
+    """Hardening (lens security): the base is re-checked at use time, not only at `add`."""
+    forge = Forge()
+    forge.view(10, base_ref="release")
+    judgements = _state(tmp_path, _request(10, preapproved=True))
+    driver = Driver(tmp_path, forge)
+
+    _read(driver, _facts(_pr(10, "fix/10")), judgements)
+    _read(driver, _facts(_pr(10, "fix/10")), judgements)
+
+    assert forge.writes == [] and _approvals(tmp_path) == []
+    (said,) = {w for w in driver.warned if "base" in w}
+    assert "'release'" in said and "'main'" in said
+
+
+def test_a_skipped_repos_added_prs_stay_pending_from_the_state_alone(tmp_path: Path) -> None:
+    """l-errors-r1: a repo the pass skipped (unread, carried) still holds its added PRs as
+    pending, read from the judgements with no forge read: a drive cannot read done over one."""
+    forge = Forge()  # no views: a pr_view would raise
+    land = {"kind": "queue_land", "at": AT, "entries": [{"pr": 13, "kind": "operator"}],
+            "main": MAIN}  # fmt: skip
+    queues = [{"repo": REPO, "wave": None, "scope": scope_id(_scope(REPO, None)), "base": MAIN,
+               "events": [{"kind": "queue_open", "at": AT}, land]}]  # fmt: skip
+    judgements = _state(tmp_path, _request(10), _request(13), _request(17), _request(18),
+                        _request(18, kind="queue_remove", at="2026-11-24T11:00:00Z"),
+                        queues=queues, batch_pr=True)  # fmt: skip
+    facts = _facts(_pr(10, "fix/10"), _pr(13, "fix/13"), _pr(17, "feat/batch-a"))
+
+    out = operator_reads(Driver(tmp_path, forge), facts, judgements, {"a": REPO}, (REPO,))
+
+    assert out["queue_pending"] == {REPO: {"operator#10": datetime(2026, 11, 24, 10, tzinfo=UTC)}}
+    assert out["queue_operator"] == {} and forge.writes == []
+
+
+def test_a_trust_refused_added_pr_is_named_as_refused(tmp_path: Path) -> None:
+    """l-errors-r2: the planner gives a refused entry its Need at once."""
+    forge = Forge()
+    forge.view(11)
+    forge.view(12)
+    judgements = _state(tmp_path, _request(11), _request(12))
+    facts = _facts(_pr(11, "fix/11", cross=True), _pr(12, "fix/12", author="mallory"))
+
+    out = _read(Driver(tmp_path, forge), facts, judgements)
+
+    refused = out["queue_refused"][REPO]
+    assert set(refused) == {"operator#11", "operator#12"}
+    assert all(refused.values())

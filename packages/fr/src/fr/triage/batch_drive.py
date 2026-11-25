@@ -445,11 +445,13 @@ class Snapshot:
         default_factory=dict
     )
     # wave-queue-gaps R12-R15 (`operator_entries.operator_reads`): repo -> the admitted
-    # operator entries, the pending ones (key -> add time) and the removed keys
+    # operator entries, the pending ones (key -> add time), the refused ones (key -> why) and
+    # the removed keys
     queue_operator: Mapping[str, tuple[tuple[LivePr, datetime | None], ...]] = field(
         default_factory=dict
     )
     queue_pending: Mapping[str, Mapping[str, datetime]] = field(default_factory=dict)
+    queue_refused: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
     queue_removed: Mapping[str, frozenset[str]] = field(default_factory=dict)
     # R26: the batches whose DevOps `fr-queue:release` is settled at the patch-id they have
     # now, and the run id of each landed barrier still open (for its Need)
@@ -1707,6 +1709,7 @@ def queue_snapshot(
         method=snap.queue_methods.get(repo, ""), leads=snap.queue_leads.get(repo, {}),
         carries=_carries(snap, repo, mine), pending_operator=snap.queue_pending.get(repo, {}),
         removed=snap.queue_removed.get(repo, frozenset()),
+        refused_operator=snap.queue_refused.get(repo, {}),
     )  # fmt: skip
 
 
@@ -1714,11 +1717,14 @@ def _carries(
     snap: Snapshot, repo: str, admitted: Sequence[Admitted]
 ) -> dict[str, tuple[str, ...] | None]:
     """*repo*'s carries by entry key: its batches', and each admitted non-batch entry's by
-    the head it is built at (wave-queue-gaps R4, R6; review p1-r4). A head not read is left
-    out: nothing is known of it, as before R4."""
-    heads = snap.queue_head_carries.get(repo, {})
+    the head it is built at (wave-queue-gaps R4, R6; review p1-r4). In a repo whose heads
+    were read, a head the read missed is None, held as unread (R5, l-errors-r3); a repo not
+    read (R1's mode off) knows nothing of them, as before R4."""
+    if repo not in snap.queue_head_carries:
+        return dict(snap.queue_carries.get(repo, {}))
+    heads = snap.queue_head_carries[repo]
     return {**snap.queue_carries.get(repo, {}),
-            **{a.key: heads[a.pr.head] for a in admitted if a.pr.head in heads}}  # fmt: skip
+            **{a.key: heads.get(a.pr.head) for a in admitted}}  # fmt: skip
 
 
 def _queue_plans(

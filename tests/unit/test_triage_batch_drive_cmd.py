@@ -5897,6 +5897,7 @@ def test_a_slot_hand_back_names_the_slot_and_records_its_onto(
     ((target, text),) = messenger.messages
     assert target == BATCH_ITEM_B1, out
     assert "/slot-2" in text and f"git merge {SLOT_SHA}" in text and "fr-queue/" in text
+    assert f"git fetch origin fr-queue/{_sid()}/slot-2`" in text, text  # l-tests-r5
     assert "git merge origin/main" not in text
     (event,) = _conflicts(tmp_path)
     assert (event.onto, event.reissue, event.delivered) == (SLOT_SHA, False, "session")
@@ -5985,6 +5986,46 @@ def test_an_unreadable_reset_candidate_holds_the_carry_this_pass_only(
     assert only.head == "sha-100"
 
 
+TWO_HANDBACKS = (
+    "      - {kind: conflict, at: '2026-10-01T10:00:00Z', head: sha-099, paths: [src/a.py], "
+    f"delivered: session, handle: h, onto: '{SLOT_SHA}'}}\n"
+    "      - {kind: conflict, at: '2026-10-01T11:00:00Z', head: sha-100, paths: [src/a.py], "
+    f"delivered: session, handle: h, onto: '{SLOT_SHA}'}}\n"
+)
+
+
+@pytest.mark.parametrize(("dirty", "reset"), [((), "sha-100"), (("sha-100",), "sha-099")])
+def test_the_carry_resets_to_the_newest_clean_hand_back_head(  # l-tests-r4
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: type[RecordingQueue], dirty: tuple[str, ...], reset: str,
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path, events=TWO_HANDBACKS)
+    _at_14(tmp_path)
+    for head in dirty:
+        checkout.carries[head] = (SLOT_SHA,)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    train.script[101] = _queue_action("queue-carry", base=NEW_SHA, carried=(SLOT_SHA,))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    ((_, text),) = messenger.messages
+    assert f"git reset --hard {reset}`" in text, out
+
+
+def test_an_unreadable_newest_reset_candidate_never_briefs_an_older_head(  # l-errors-r5
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: type[RecordingQueue],
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path, events=TWO_HANDBACKS)
+    _at_14(tmp_path)
+    checkout.unreadable.add("sha-100")
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    train.script[101] = _queue_action("queue-carry", base=NEW_SHA, carried=(SLOT_SHA,))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == [], out  # sha-099 is clean, but sha-100 is newer and unread
+    (line,) = _lines(out, "queue-carry")
+    assert "held this pass" in line and "sha-100" in line, out
+    assert len(_conflicts(tmp_path)) == 2  # nothing written
+
+
 # ------------- the planner, not a script, plans the re-issue and the carry (review p1-r7)
 
 DEAD_SHA = "d" * 40
@@ -6032,8 +6073,19 @@ def test_the_planner_holds_a_carrying_head_with_one_queue_carry(
 
 def test_the_planner_reissues_a_handback_whose_onto_stopped_leading(
     tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:  # fmt: skip
     from fr.triage.model import QueueEjectEvent, QueueEntryRef
+
+    real = RecordingQueue.execute
+
+    def _execute(self: RecordingQueue, plan: Any, record: Any, history: Any = ()) -> list[str]:
+        lines = real(self, plan, record, history)  # and hand back what the planner re-issues
+        return [*lines, *(str(self.ports.hand_back(a)) for a in plan.actions
+                          if a.kind == "queue-reissue")]  # fmt: skip
+
+    monkeypatch.setattr(RecordingQueue, "execute", _execute)
+    messenger.status[BATCH_ITEM_B1] = "idle"
 
     _queued_b1(tmp_path, world, _built_other(),
                QueueEjectEvent(kind="queue_eject", at=NOW, entry=QueueEntryRef(batch="b1"),
@@ -6046,6 +6098,19 @@ def test_the_planner_reissues_a_handback_whose_onto_stopped_leading(
     (again,) = [a for a in world.queue_plans if a.kind == "queue-reissue"]
     assert (again.batch, again.head, again.paths) == ("b1", "sha-101", ("src/a.py",)), out
     assert ("leads", SLOT_SHA, DEAD_SHA) in checkout.lineage_reads  # slot 1 still stands
+    # l-tests-r1 (§F 2): the next pass, with the re-issue's target leading, is a no-op
+    assert len(messenger.messages) == 1, out
+    first, reissued = _conflicts(tmp_path)
+    assert (reissued.onto, reissued.reissue) == (again.base, True) and checkout.lead.get(
+        again.base, True
+    )
+    world.queue_plans.clear()
+    del checkout.lineage_reads[:]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert not [a for a in world.queue_plans if a.kind == "queue-reissue"], out
+    assert ("leads", again.base, DEAD_SHA) in checkout.lineage_reads
+    assert ("leads", SLOT_SHA, DEAD_SHA) not in checkout.lineage_reads
+    assert len(messenger.messages) == 1 and len(_conflicts(tmp_path)) == 2
 
 
 def test_a_non_batch_entrys_head_has_its_carry_read(

@@ -31,7 +31,7 @@ from fr.commands.triage_cmd import (
     push_now,
     triage_app,
 )
-from fr.ghclient import GhClient
+from fr.ghclient import GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_url
 from fr.triage.batch import (
     allowed_authors,
@@ -79,6 +79,11 @@ def _target(pr: str, facts: Facts) -> tuple[str, int]:
     if not number.isdigit() or int(number) < 1:
         fail(f"--pr {pr}: not a PR number")
     return repo, int(number)
+
+
+def _unsupported(repo: str, exc: UnsupportedForgeOperation) -> NoReturn:
+    """l-errors-r6: a glab or tea repo has no wave merge queue (the queue is held there)."""
+    fail(f"the merge queue needs a GitHub repo ({repo} is {exc.backend}); nothing written")
 
 
 def _client(facts: Facts, repo: str) -> GhClient:
@@ -156,6 +161,8 @@ def queue_add_command(
         login = client.viewer_login()
     except FORGE_ERRORS as exc:
         fail(f"{owner_repo}#{number}: a forge read failed: {exc}; nothing written")
+    except UnsupportedForgeOperation as exc:
+        _unsupported(owner_repo, exc)
     if view.get("state") != "OPEN":
         _refuse(owner_repo, number, f"the PR is not open ({view.get('state')})")
     if (base := str(view.get("base_ref") or "")) != default:
@@ -215,6 +222,8 @@ def queue_remove_command(
         login = _client(facts, owner_repo).viewer_login()
     except FORGE_ERRORS as exc:
         fail(f"{owner_repo}#{number}: a forge read failed: {exc}; nothing written")
+    except UnsupportedForgeOperation as exc:
+        _unsupported(owner_repo, exc)
     event = QueueRemoveEvent(kind="queue_remove", at=_now(judgements), repo=owner_repo,
                              scope=sid, pr=number, by=login)  # fmt: skip
     _write(target, judgements, event, scope)

@@ -1,0 +1,196 @@
+schema_version: 12
+run: 2026-11-24-feat-wave-queue-gaps
+step: lens-review
+outcome: done
+journal:
+  - kind: finding
+    id: l-security-r1
+    global: true
+    review_scope: in
+    title: "The carry brief's bare --force-with-lease leases against the ref step 2 just fetched, not the head the driver checked"
+    body: "queue_handback.carry_brief step 6 said `git push --force-with-lease origin <branch>`; step 2 fetches the branch first, so the lease pins whatever is there at fetch time and a push made after the driver's check is silently replaced. Fix: lease on `<branch>:<head>` and stop on a refused push."
+  - kind: finding
+    id: l-errors-r1
+    global: true
+    review_scope: in
+    title: "An added PR in a skipped (unread or carried) repo is not in queue_pending, so drive_pass can read done"
+    body: "operator_reads looped set(repos.values()) - set(skip), so a skipped repo's queue_add requests were never counted; batch_drive's pending count (operator_work over queue_pending) could reach 0 while an added PR is open and unlanded."
+  - kind: finding
+    id: l-errors-r2
+    global: true
+    review_scope: in
+    title: "An added PR that never becomes ready, with no open wave queue, stays pending forever with no Need"
+    body: "_operator_stall ran only from _tail of an open wave queue that would otherwise drain (record.wave not None), so an untrusted, reserved or unapproved added PR outside such a queue was pending work every pass with no Need; the loop never ended."
+  - kind: finding
+    id: l-errors-r3
+    global: true
+    review_scope: in
+    title: "A non-batch entry admitted at a live head the collect never saw reads as carrying nothing"
+    body: "lineage_reads read carries per collected head_oid; operator and housekeeping entries are admitted at the live head from pr_view, and batch_drive._carries left an unread head out, so hold_lineage read it as () and the entry was built, against R5."
+  - kind: finding
+    id: l-errors-r4
+    global: true
+    review_scope: in
+    title: "An onto git cannot read is warned once and then held silently forever while the brief says wait"
+    body: "A dead slot commit absent from a fresh or pruned clone raises GitError every pass (gitseam leads/carried), read as None (R5); reissue_actions and lineage_actions warned once, then held the entry with no Need, while the session's brief told it to wait for a re-issue that never came."
+  - kind: finding
+    id: l-errors-r5
+    global: true
+    review_scope: in
+    title: "carry_hand_back skips an unreadable newer reset candidate and briefs an older head"
+    body: "The newest-first loop over hand-back heads recorded a GitError and kept going, so a clean older head was chosen as the reset head while a newer one, maybe also clean and with more of the branch's work, was unread."
+  - kind: finding
+    id: l-errors-r6
+    global: true
+    review_scope: in
+    title: "queue add/remove give a traceback on glab/tea and on an undecodable default-branch answer"
+    body: "triage_queue_cmd caught only FORGE_ERRORS; UnsupportedForgeOperation (repo_default_branch, viewer_login on glab/tea) and a json.loads ValueError in RealGhClient.repo_default_branch escaped as tracebacks."
+  - kind: finding
+    id: l-tests-r1
+    global: true
+    review_scope: in
+    title: "The third-pass no-op of a re-issue (§F 2) is untested end to end"
+    body: "No test showed that, after a re-issue, only the latest onto at the head is asked and a further pass with the new target leading sends nothing."
+  - kind: finding
+    id: l-tests-r2
+    global: true
+    review_scope: in
+    title: "test_the_latest_event_at_the_head_decides passes if latest_conflict returned the first event"
+    body: "Both events in the test named an onto and were delivered, so first and latest agreed; the test could not tell which one decided."
+  - kind: finding
+    id: l-tests-r3
+    global: true
+    review_scope: in
+    title: "The foreign-move-of-main re-issue (R2) has no test"
+    body: "_plan_open's rebuild branch returns before reissue_actions, and no test showed a re-issue ever follows a move of main outside the queue."
+  - kind: finding
+    id: l-tests-r4
+    global: true
+    review_scope: in
+    title: "The carry's reset-head choice is not pinned by order"
+    body: "No test had two hand-back heads, so the newest-clean rule of carry_hand_back was unpinned."
+  - kind: finding
+    id: l-tests-r5
+    global: true
+    review_scope: in
+    title: "slot_name is never checked against queue_exec.slot_ref"
+    body: "queue_handback.slot_name rebuilt the slot branch name by hand; nothing tied it to the executor's slot_ref, and the drive test checked only `/slot-2`."
+  - kind: finding
+    id: l-tests-r6
+    global: true
+    review_scope: in
+    title: "The placement filter that keeps operator entries has no test"
+    body: "batch_drive.queue_snapshot under quiet/stealth keeps only `operator` admitted entries; no test covered it."
+  - kind: finding
+    id: l-docs-accuracy-r1
+    global: true
+    review_scope: in
+    title: "fr-wave-driver.md says 'no earlier head of the branch', the code reads only hand-back heads"
+    body: "docs/explainers/fr-wave-driver.md (carry paragraph) vs operator_entries.carry_hand_back, which tries only heads a conflict event names."
+  - kind: finding
+    id: l-docs-accuracy-r2
+    global: true
+    review_scope: in
+    title: "fr-wave-driver.md says create/edit print overlaps only 'with --wave'"
+    body: "The overlap report runs for create or edit of any batch in a wave (wave_overlap), not only when --wave is given."
+  - kind: finding
+    id: l-docs-accuracy-r3
+    global: true
+    review_scope: in
+    title: "fr-triage SKILL.md step 5 does not say what to do with an `overlap in wave N` line"
+    body: "plugins/super-fr/skills/fr-triage/SKILL.md step 5 (Batch) omitted the three remedies R8-R10 give."
+  - kind: finding
+    id: l-docs-accuracy-r4
+    global: true
+    review_scope: in
+    title: "SKILL.md's Schema 14 note omits the queue_requests list"
+    body: "The note and its 'only the engine appends' line named neither `queue_requests:` nor the `fr triage queue add|remove` that writes it."
+  - kind: finding
+    id: l-docs-accuracy-r5
+    global: true
+    review_scope: in
+    title: "'any open PR' for queue add omits that collect must have read it"
+    body: "queue add refuses a PR facts.json does not hold (distrust of an unknown author); fr-wave-driver.md and SKILL.md said any open PR."
+  - kind: decision
+    id: lr-d1
+    global: true
+    title: "R4 amended: the carry brief's push is leased on the head the brief names"
+    body: "`git push --force-with-lease=<branch>:<head> origin <branch>`; a refused push means the branch moved, and the session waits for a re-issued brief. Spec R4 amended in this commit (l-security-r1)."
+  - kind: decision
+    id: lr-d2
+    global: true
+    title: "R5 amended: an unreadable lineage escalates to a Need after stall_hours"
+    body: "R5's hold-with-warning stays; an entry held so for queue.stall_hours, counted from the later of its hand-back and its head's last change (a non-batch entry's approval time), is a queue-need naming the commit and the entry. With no known time it stays a warning. queue_handback._unread (l-errors-r4)."
+  - kind: decision
+    id: lr-d3
+    global: true
+    title: "R15 amended: every pending operator entry gets a Need whatever the queue's state"
+    body: "At once when its trust rule refuses it (operator_reads' new queue_refused), else after stall_hours from the later of its add and the queue's last landing; wave_queue.operator_needs runs from plan_queue in every phase and _tail only withholds the drain. The Need counts as blocked (operator_work), so a drive can end. A skipped repo's added PRs stay pending from the state (l-errors-r1, l-errors-r2)."
+  - kind: decision
+    id: lr-d4
+    global: true
+    title: "R11 and R13 amended: glab/tea refusal, and the preapproval re-checks the base"
+    body: "R11: on a forge whose adapter lacks the reads (glab, tea) queue add/remove refuse with exit 2 and write nothing. R13: the driver approves a preapproved PR only while its base, read at that time, is still the default branch (lens security hardening)."
+  - kind: review
+    id: lens-review-1
+    global: true
+    title: "lens review (security, errors, tests, docs-accuracy): 18 findings, all in scope"
+    body: "Four lens reviewers over the feature diff. security: queue_handback.py, operator_entries.py, triage_queue_cmd.py, queue_exec.py, gitseam.py (1 finding plus the preapproval base hardening). errors: operator_entries.py, batch_drive.py, wave_queue.py, queue_handback.py, gitseam.py, triage_queue_cmd.py, ghclient.py, real_ghclient.py (6). tests: test_queue_handback.py, test_operator_entries_lineage.py, test_triage_batch_drive_cmd.py, test_wave_queue_handback_planner.py, test_wave_closeout.py, test_triage_queue_cmd.py, test_operator_reads.py (6 plus two small additions). docs-accuracy: docs/explainers/fr-wave-driver.md, plugins/super-fr/skills/fr-triage/SKILL.md (5). All fixed in one commit; four spec amendments (lr-d1..lr-d4)."
+resolves:
+  - id: l-security-r1
+    state: fixed
+    body: "carry_brief step 6 is `git push --force-with-lease=<branch>:<head> origin <branch>` and says a refused push means stop and wait for a re-issued brief. Tests: test_queue_handback.py::test_the_carry_brief_leases_against_the_head_the_driver_checked; integration test_queue_lineage.py::test_the_carry_briefs_push_is_leased_on_the_head_it_names (runs step 6 for real: replaces the named head, refused once the branch moved). Hardening: _preapprove refuses (reported once, nothing written) when the live base is not the default branch: test_operator_reads.py::test_preapproval_refuses_a_pr_whose_base_moved_off_the_default_branch."
+  - id: l-errors-r1
+    state: fixed
+    body: "operator_reads counts, for each skipped repo, every added PR that no batch owns, no scope record landed and collect does not read as closed, from the state alone (operator_entries.skipped_pending, no forge read). Test: test_operator_reads.py::test_a_skipped_repos_added_prs_stay_pending_from_the_state_alone."
+  - id: l-errors-r2
+    state: fixed
+    body: "wave_queue.operator_needs (called by plan_queue in every phase) gives each pending operator entry a queue-need naming `fr triage queue remove --pr <n>`: at once when operator_reads' new queue_refused names it, else after stall_hours from the later of its add and the queue's last landing; _tail only withholds the drain. operator_work counts it as blocked. R15 amended. Tests: test_wave_queue_operator_planner.py::test_a_trust_refused_entry_is_a_need_at_once_whatever_the_queue_state, ::test_an_entry_that_never_becomes_ready_is_a_need_after_stall_hours_with_no_queue, ::test_an_entry_waiting_in_a_wave_queue_still_gets_its_need, ::test_a_between_waves_queue_drains_by_its_own_rule (updated); test_operator_reads.py::test_a_trust_refused_added_pr_is_named_as_refused."
+  - id: l-errors-r3
+    state: fixed
+    body: "lineage_reads takes the pass's queue reads (`reads=`) and also reads each admitted operator and housekeeping entry's live head; batch_drive._carries maps an admitted entry whose head the read missed to None (held with the existing warning) in a repo whose heads were read. Tests: test_operator_entries_lineage.py::test_an_admitted_entrys_live_head_is_read_even_when_facts_hold_another, ::test_an_admitted_entry_takes_its_carry_by_the_head_it_is_built_at (updated)."
+  - id: l-errors-r4
+    state: fixed
+    body: "queue_handback._unread: an unreadable onto (reissue_actions) or head (lineage_actions) is warned once as before, and once held for stall_hours from the later of its hand-back and its head's last change (a non-batch entry's approval) it is a queue-need naming the commit and the entry. R5 amended (decision lr-d2). Tests: test_wave_queue_handback_planner.py::test_an_unreadable_onto_held_past_stall_hours_is_a_need_naming_the_commit_and_batch, ::test_an_unreadable_head_held_past_stall_hours_is_a_need_naming_the_head."
+  - id: l-errors-r5
+    state: fixed
+    body: "carry_hand_back stops at the first GitError in newest-first order and returns the 'held this pass' line, never an older head. Test: test_triage_batch_drive_cmd.py::test_an_unreadable_newest_reset_candidate_never_briefs_an_older_head."
+  - id: l-errors-r6
+    state: fixed
+    body: "queue add and remove catch UnsupportedForgeOperation and refuse 'the merge queue needs a GitHub repo (<repo> is <backend>); nothing written', exit 2; RealGhClient.repo_default_branch turns a JSON decode failure into GhError. R11 amended. Tests: test_triage_queue_cmd.py::test_a_forge_without_the_operation_refuses_cleanly[add|remove], ::test_an_undecodable_default_branch_answer_is_a_gh_error."
+  - id: l-tests-r1
+    state: fixed
+    body: "New test passed at once (the behaviour was right): test_operator_entries_lineage.py::test_only_the_latest_handbacks_onto_at_a_head_is_asked; test_triage_batch_drive_cmd.py::test_the_planner_reissues_a_handback_whose_onto_stopped_leading now executes the re-issue and runs a second pass with the new target leading: still one message, two conflict events, only the new onto asked."
+  - id: l-tests-r2
+    state: fixed
+    body: "test_queue_handback.py::test_the_latest_event_at_the_head_decides now has events that disagree (onto then none: not due; held then session with onto: due). Passed at once: latest_conflict does take the latest."
+  - id: l-tests-r3
+    state: fixed
+    body: "New test passed at once (the planner was right): test_wave_queue_handback_planner.py::test_a_foreign_move_of_main_reissues_once_naming_the_rebuilt_target: the rebuild pass re-issues nothing, the next pass with the rebuilt combinations recorded re-issues once, on r2 slot 2."
+  - id: l-tests-r4
+    state: fixed
+    body: "New parametrized test passed at once: test_triage_batch_drive_cmd.py::test_the_carry_resets_to_the_newest_clean_hand_back_head (sha-099 then sha-100 clean: reset sha-100; sha-100 carrying: sha-099)."
+  - id: l-tests-r5
+    state: fixed
+    body: "slot_name is now derived from queue_exec.slot_ref (lazy import). Tests passed at once: test_queue_handback.py::test_the_slot_name_is_the_executors_slot_ref_without_refs_heads; test_a_slot_hand_back_names_the_slot_and_records_its_onto asserts the full `git fetch origin fr-queue/<scope-id>/slot-2`."
+  - id: l-tests-r6
+    state: fixed
+    body: "New test passed at once: test_wave_closeout.py::test_under_quiet_placement_an_operator_entry_stays_and_housekeeping_goes. Also added: test_triage_queue_cmd.py::test_remove_of_a_batch_pr_records_the_queue_remove_on_disk and test_operator_reads.py::test_preapproval_skips_a_pr_whose_merge_state_is_dirty (both passed at once)."
+  - id: l-docs-accuracy-r1
+    state: fixed
+    body: "fr-wave-driver.md: 'If no head the queue handed back earlier is free of it'; the paragraph also states the lease on the named head and the stall_hours escalation."
+  - id: l-docs-accuracy-r2
+    state: fixed
+    body: "fr-wave-driver.md: 'and `batch create` or `batch edit` of a batch in a wave, print each such pair'."
+  - id: l-docs-accuracy-r3
+    state: fixed
+    body: "SKILL.md step 5 (reworded in place, 120 lines kept): when suggest, create or edit prints an `overlap in wave N` line, merge the two, move one to wave N+1, or accept that whichever lands second gets the conflict hand-back. Mirrors regenerated."
+  - id: l-docs-accuracy-r4
+    state: fixed
+    body: "SKILL.md Schema 14 note names the `queue_requests:` list (`queue_add`, `queue_remove`, written by `fr triage queue add|remove`) in both the engine-appends line and the schema-14 sentence."
+  - id: l-docs-accuracy-r5
+    state: fixed
+    body: "fr-wave-driver.md and SKILL.md: queue add takes an open PR that collect has read since it opened (`fr triage collect` first). Both pages also describe the new Needs, the preapproval base re-check and the leased push."
+evidence:
+  review: lens-review-1
+  reviewer: "security=ae323e3815e0c3dd4,errors=a00e7c6d54016cd19,tests=a0a53484469a01285,docs-accuracy=a9bfd823eab9e50ac"

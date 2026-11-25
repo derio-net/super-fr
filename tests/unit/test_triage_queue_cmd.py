@@ -295,3 +295,48 @@ def test_an_unreadable_default_branch_refuses(monkeypatch: Any, tmp_path: Path) 
 
     assert code == 2 and "HTTP 502" in out, out
     assert _requests(tmp_path) == []
+
+
+@pytest.mark.parametrize("verb", ["add", "remove"])
+def test_a_forge_without_the_operation_refuses_cleanly(  # l-errors-r6
+    monkeypatch: Any, tmp_path: Path, verb: str
+) -> None:
+    from fr.ghclient import UnsupportedForgeOperation
+
+    add = {"kind": "queue_add", "at": "2026-11-20T10:00:00Z", "repo": REPO, "scope": _sid(),
+           "pr": 10, "by": "operator"}  # fmt: skip
+    requests = [add] if verb == "remove" else None
+    _state(tmp_path, requests)
+    client = FakeClient()
+
+    def unsupported(*a: Any) -> str:
+        raise UnsupportedForgeOperation("repo_default_branch", "gitlab")
+
+    client.repo_default_branch = unsupported  # type: ignore[method-assign]
+    client.viewer_login = unsupported  # type: ignore[method-assign]
+
+    code, out = _run(monkeypatch, tmp_path, client, verb, "--pr", "10")
+
+    assert code == 2, out
+    assert f"the merge queue needs a GitHub repo ({REPO} is gitlab); nothing written" in out
+    assert len(_requests(tmp_path)) == (1 if verb == "remove" else 0)
+
+
+def test_remove_of_a_batch_pr_records_the_queue_remove_on_disk(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    _state(tmp_path)
+    assert _run(monkeypatch, tmp_path, FakeClient(), "add", "--pr", "17", "--preapproved")[0] == 0
+    assert _run(monkeypatch, tmp_path, FakeClient(), "remove", "--pr", "17")[0] == 0
+    added, removed = _requests(tmp_path)
+    assert isinstance(added, QueueAddEvent) and added.preapproved
+    assert isinstance(removed, QueueRemoveEvent) and removed.pr == 17 and removed.repo == REPO
+
+
+def test_an_undecodable_default_branch_answer_is_a_gh_error(monkeypatch: Any) -> None:
+    from fr import gh as _gh
+    from fr.real_ghclient import RealGhClient
+
+    monkeypatch.setattr(_gh, "_run_gh", lambda args: "<html>502</html>")
+    with pytest.raises(GhError, match="repos/derio-net/super-fr"):
+        RealGhClient().repo_default_branch(REPO)

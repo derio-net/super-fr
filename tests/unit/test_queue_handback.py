@@ -123,14 +123,17 @@ def test_an_unreadable_lead_reissues_nothing() -> None:
     assert conflict_decision(events, H, ["a.py"], [], leads=None).kind == "skip"
 
 
-def test_the_latest_event_at_the_head_decides() -> None:
-    events = [
+def test_the_latest_event_at_the_head_decides() -> None:  # l-tests-r2: the two disagree
+    later = AT + timedelta(minutes=1)
+    named_then_none = [_dispatch(), _conflict(H, onto=S1), _conflict(H, at=later)]
+    assert not reissue_due(named_then_none, H, False)  # the first alone would be due
+    held_then_session = [
         _dispatch(),
-        _conflict(H, onto=S1),
-        _conflict(H, onto=S2, reissue=True, at=AT + timedelta(minutes=1)),
+        _conflict(H, onto=S1, delivered="held"),
+        _conflict(H, onto=S2, reissue=True, at=later),
     ]
-    assert reissue_due(events, H, False)
-    assert not reissue_due(events, "o" * 40, False)
+    assert reissue_due(held_then_session, H, False)  # the first alone would not be
+    assert not reissue_due(held_then_session, "o" * 40, False)
 
 
 def test_reissues_spend_no_handback() -> None:
@@ -239,3 +242,23 @@ def test_the_merge_clause_with_no_slot_fetches_the_bare_default_branch() -> None
         merge_clause(qs, (BASE, ())) == f"merge `{BASE}` (`git fetch origin main`) into its branch"
     )
     assert "fetch origin fr-queue/" in merge_clause(qs, (S1, (1,)))
+
+
+# ------------------------------------------------- lens review (security, tests)
+
+
+def test_the_carry_brief_leases_against_the_head_the_driver_checked() -> None:  # l-security-r1
+    text = _carry()
+
+    assert f"git push --force-with-lease=feat/batch-b1:{H} origin feat/batch-b1" in text
+    assert "--force-with-lease origin" not in text
+    assert "If the push is refused, the branch moved" in text
+    assert "wait for a re-issued brief" in text.split("6. ")[1]
+
+
+def test_the_slot_name_is_the_executors_slot_ref_without_refs_heads() -> None:  # l-tests-r5
+    from fr.triage.queue_exec import slot_ref
+    from fr.triage.queue_handback import slot_name
+
+    for scope, slot in (("derio-net", 1), ("s-f7ea4061", 2), ("a/b", 9)):
+        assert slot_name(scope, slot) == slot_ref(scope, slot).removeprefix("refs/heads/")

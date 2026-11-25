@@ -12,6 +12,7 @@ from __future__ import annotations
 import shlex
 from collections.abc import Sequence
 from dataclasses import replace
+from datetime import timedelta
 from typing import TYPE_CHECKING, Literal
 
 from fr.settle.managed import MANAGED_SENTENCE
@@ -128,9 +129,11 @@ def conflict_brief(
 
 
 def slot_name(scope: str, slot: int) -> str:
-    """The slot branch a brief names, `fr-queue/<scope>/slot-<j>` (`queue_exec.slot_ref`
-    without `refs/heads/`)."""
-    return f"fr-queue/{scope}/slot-{slot}"
+    """The slot branch a brief names, `fr-queue/<scope>/slot-<j>`: `queue_exec.slot_ref`
+    without `refs/heads/`, derived so the two never drift (l-tests-r5)."""
+    from fr.triage.queue_exec import slot_ref  # queue_exec imports this module's importer
+
+    return slot_ref(scope, slot).removeprefix("refs/heads/")
 
 
 def target_ref(qs: QueueSnapshot, slots: Sequence[int]) -> str:
@@ -147,6 +150,30 @@ def fetch_name(ref: str) -> str:
 def _lineage_key(qs: QueueSnapshot, key: str) -> str:
     pr = qs.live.get(key)
     return f"queue-lineage\0{qs.repo}\0{key}\0{pr.head if pr is not None else ''}"
+
+
+def _unread(
+    qs: QueueSnapshot, key: str, met: ConflictEvent | None, what: str, wave: int | None
+) -> QueueAction | None:
+    """R5, as amended by l-errors-r4: an entry git could not read *what* about is held with
+    a warning, said once; held for `stall_hours` since the later of its hand-back (*met*) and
+    its head's last change (or, for a non-batch entry, its approval), it is a Need naming
+    the commit and the entry, never held silently. None: warned already, not yet due."""
+    from fr.triage.wave_queue import QueueAction
+
+    other = next((o.at for o in qs.others if o.key == key), None)
+    times = [t for t in (met.at if met else None, qs.head_changed.get(key), other) if t]
+    batch = key if any(b.id == key for b in qs.batches) else ""
+    if times and qs.now - max(times) >= timedelta(hours=qs.config.stall_hours):
+        return QueueAction(
+            "queue-need", qs.repo, f"{key} has been held for {qs.config.stall_hours} h: git "
+            f"could not read {what} in the driver's clone of {qs.repo} (a missing object, or "
+            "a failed command): fetch it there, or hand the entry back by hand", wave=wave,
+            entries=(key,), batch=batch)  # fmt: skip
+    if (k := _lineage_key(qs, key)) in qs.warned:
+        return None
+    return QueueAction("queue-warn", qs.repo, f"{key} is held this pass: git could not read "
+                       f"{what}", wave=wave, key=k)  # fmt: skip
 
 
 def hold_lineage(qs: QueueSnapshot, entries: list[str]) -> list[tuple[str, tuple[str, ...] | None]]:
@@ -185,8 +212,9 @@ def lineage_actions(
     wave: int | None,
 ) -> list[QueueAction]:
     """The actions *held* entries give (R4-R6): a warning, said once, for one git could not
-    read; a `queue-carry` for a batch whose head was never briefed (a `conflict` event at
-    the head is the brief, so one per head), and a Need for any other entry."""
+    read (a Need once held for `stall_hours`, l-errors-r4); a `queue-carry` for a batch whose
+    head was never briefed (a `conflict` event at the head is the brief, so one per head),
+    and a Need for any other entry."""
     from fr.triage.wave_queue import QueueAction
 
     by_id = {b.id: b for b in qs.batches}
@@ -196,11 +224,11 @@ def lineage_actions(
         pr = qs.live.get(key)
         head = pr.head if pr is not None else ""
         if carried is None:
-            if (k := _lineage_key(qs, key)) not in qs.warned:
-                out.append(QueueAction(
-                    "queue-warn", qs.repo, f"{key} is held this pass: git could not read "
-                    f"whether its head {head[:12]} leads to {qs.repo}'s `main`", wave=wave,
-                    key=k))  # fmt: skip
+            owner = by_id.get(key)
+            met = latest_conflict(owner.events, head) if owner is not None else None
+            told = _unread(qs, key, met, f"whether its head {head[:12]} leads to {qs.repo}'s "
+                           "`main`", wave)  # fmt: skip
+            out.extend([told] if told is not None else [])
             continue
         said = (f"{key} at {head[:12]} carries {', '.join(s[:12] for s in carried)}, a "
                 "combination the queue built that no longer leads to `main`")  # fmt: skip
@@ -238,11 +266,9 @@ def reissue_actions(
         if met is None or met.onto is None or met.delivered == "held" or key not in qs.leads:
             continue  # a held hand-back is the operator's: never re-issued (p1-r2)
         if qs.leads[key] is None:
-            if (k := _lineage_key(qs, key)) not in qs.warned:
-                out.append(QueueAction(
-                    "queue-warn", qs.repo, f"{key} is held this pass: git could not read "
-                    f"whether {met.onto[:12]}, the commit its hand-back named, still leads to "
-                    f"{qs.repo}'s `main`", wave=wave, key=k))  # fmt: skip
+            said = _unread(qs, key, met, f"whether {met.onto[:12]}, the commit its hand-back "
+                           f"named, still leads to {qs.repo}'s `main`", wave)  # fmt: skip
+            out.extend([said] if said is not None else [])
         elif reissue_due(batch.events, pr.head, qs.leads[key]):
             out.append(QueueAction(
                 "queue-reissue", qs.repo, f"re-issue {key}'s hand-back: {met.onto[:12]} no "
@@ -283,7 +309,8 @@ def carry_brief(
 ) -> str:
     """R4's brief: *head* carries *carried*, combinations the queue built that no longer
     lead to `main`. Reset to *reset* (the newest hand-back head free of them), cherry-pick
-    the branch's own commits since it, merge the stack target, push with a lease. The one
+    the branch's own commits since it, merge the stack target, push with a lease pinned to
+    *head* (l-security-r1: a bare lease would pin the ref step 2 just fetched). The one
     brief that allows a force-push."""
     from fr.triage.batch_dispatch import NO_APPROVAL_LINE, title_block
 
@@ -308,8 +335,11 @@ def carry_brief(
             "4. Re-apply each commit step 2 listed, oldest first, with `git cherry-pick`.",
             f"5. `git merge {onto}` ({onto_ref}, the commit `main` becomes when the entries "
             "ahead land), resolve what conflicts, and run the test suite.",
-            f"6. `git push --force-with-lease origin {branch}`. This is the one hand-back "
-            "that allows a force-push: the commit it drops must not reach `main`.",
+            f"6. `git push --force-with-lease={branch}:{head} origin {branch}`: the lease is "
+            f"the head this brief names, so the push replaces only that head. If the push is "
+            "refused, the branch moved since the driver checked it: stop and wait for a "
+            "re-issued brief. This is the one hand-back that allows a force-push: the commit "
+            "it drops must not reach `main`.",
             MANAGED_SENTENCE,
             NO_APPROVAL_LINE,
         ]
