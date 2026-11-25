@@ -10668,3 +10668,6 @@ queues:
       \ -> fr-hold/queue (failed)\nerror: failed to push some refs to 'https://github.com/derio-net/super-fr'"
     land: push
     main: e7564c69e9eb50a1a7074f7baba0dac5a6a5167a
+  - kind: queue_cleared
+    at: '2026-11-25T10:55:29.864610Z'
+    detail: the release cleared the hold
