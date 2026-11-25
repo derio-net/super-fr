@@ -6,6 +6,10 @@ A creation that did not land (a stealth lease lost to another host, a quiet bran
 host created between the probe and the push) falls into the exists cases: the branch is
 re-fetched and its tip read; a tip without the file is proposed, one with other bytes is
 R12's refusal, and the product file stays either way.
+
+Only a TRACKED source reaches the writer: an untracked one is refused before it runs
+(verification v-r1), which `test_migration_config_kinds.py`'s
+`test_an_untracked_moved_file_is_refused_and_never_reaches_fr_config` proves.
 """
 
 from __future__ import annotations
@@ -83,12 +87,9 @@ class _Writer:
         return "placement: stealth\n"
 
 
-@pytest.mark.parametrize("tracked", [True, False])
-def test_a_creation_that_did_not_land_removes_nothing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tracked: bool
-) -> None:
+def test_a_creation_that_did_not_land_removes_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _quiet(tmp_path)
-    src = _put(root, MODELS, TEXT, commit=tracked)
+    src = _put(root, MODELS, TEXT)
     writer = _Writer(race=False, other=None)
     monkeypatch.setattr(m, "writer_for", lambda _p: writer)
     with pytest.raises(SettingsError, match="did not appear"):
@@ -96,12 +97,9 @@ def test_a_creation_that_did_not_land_removes_nothing(
     assert src.read_text() == TEXT
 
 
-@pytest.mark.parametrize("tracked", [True, False])
-def test_a_lost_lease_falls_into_the_exists_cases(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tracked: bool
-) -> None:
+def test_a_lost_lease_falls_into_the_exists_cases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _quiet(tmp_path)
-    src = _put(root, MODELS, TEXT, commit=tracked)
+    src = _put(root, MODELS, TEXT)
 
     writer = _Writer(race=True, other=None)  # the winner's branch lacks the file
     monkeypatch.setattr(m, "writer_for", lambda _p: writer)
