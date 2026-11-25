@@ -9,9 +9,11 @@ covers:
 reviewed: 2026-11-24 still true after ci-economy phase 1 (a cancelled check now reads as pending, never failing, in every check reader; no claim here names how a cancelled check is read); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-21 gh#1614 a print-only apply is refused and never counted applied; a done entry says if the apply ran; 2026-11-19 a failed forge read of the default branch is an exit-2 refusal that names the error (batch consumer-followups, gh#1554); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth); 2026-11-21 stage 4 posts a marker comment beside the postmerge-done label, and the queue needs both; 2026-11-20 stage 2 adds `fr-queue:release` and merges nothing, stage 4 adds `fr-queue:postmerge-done`, `--method` removed (wave merge queue R26)
 ---
 
-# fr ops — manual operations you can check and run (settle walk: head)
+# fr ops — manual operations you can check and run (settle walk: resolved)
 
 A plan's manual operations used to be prose: "create the deploy key", "rotate the
+
+Walk-only broken link: [missing](no-such-walk-page.md).
 token after merge". Nothing checked them and nothing ran them. At delivery, someone
 found out by hand which ones were done, and in what order the others should run.
 
