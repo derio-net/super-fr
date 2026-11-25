@@ -45,6 +45,8 @@ from tests.unit.test_run_cli import (
     _write_shape,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 PLAN_SLUG = "2026-05-09-fixture-minimal"
 
 

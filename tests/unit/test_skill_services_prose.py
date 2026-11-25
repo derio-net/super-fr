@@ -2,6 +2,10 @@
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.own_artifacts
+
 ROOT = Path(__file__).resolve().parents[2]
 SK = ROOT / "plugins" / "super-fr" / "skills"
 

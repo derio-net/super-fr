@@ -35,7 +35,10 @@ from pathlib import Path
 import pytest
 from fr.isolation.types import IsolationState, save_state, stamp_sentinel_workspace
 
-pytestmark = pytest.mark.skipif(shutil.which("jq") is None, reason="hook scripts require jq")
+pytestmark = [
+    pytest.mark.skipif(shutil.which("jq") is None, reason="hook scripts require jq"),
+    pytest.mark.own_artifacts,
+]
 
 HOOKS = Path(__file__).resolve().parents[2] / "plugins" / "super-fr" / "hooks"
 SESSION = "sess-1"

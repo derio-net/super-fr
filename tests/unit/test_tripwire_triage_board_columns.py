@@ -14,6 +14,8 @@ from pathlib import Path
 import pytest
 from fr.triage.kanban import COLUMN_TITLES
 
+pytestmark = pytest.mark.own_artifacts
+
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / "plugins" / "super-fr" / "skills" / "fr-triage" / "SKILL.md"
 

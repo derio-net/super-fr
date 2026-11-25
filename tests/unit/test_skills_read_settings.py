@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.own_artifacts
+
 ROOT = Path(__file__).resolve().parents[2]
 READERS = (
     "plugins/super-fr/skills/fr-brainstorming/SKILL.md",

@@ -20,6 +20,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from fr.run import units
 from fr.run.model import load_run_state, save_run_state
 from fr.test_support import build_plan_journal
@@ -32,6 +33,8 @@ from tests.unit.test_run_cli import (
     _write_shape,
 )
 from tests.unit.test_run_evidence import PLAN_SLUG
+
+pytestmark = pytest.mark.own_artifacts
 
 _SHAPE = """
 workflow: grouped

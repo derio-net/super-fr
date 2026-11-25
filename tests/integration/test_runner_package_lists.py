@@ -20,6 +20,8 @@ from fr.isolation import scaffold
 
 from tests.conftest import REPO_ROOT, runner_packages
 
+pytestmark = pytest.mark.own_artifacts
+
 INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
 SUPER_FR_GIT = "git+https://github.com/derio-net/super-fr"
 

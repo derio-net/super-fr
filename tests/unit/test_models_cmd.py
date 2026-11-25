@@ -20,6 +20,8 @@ import pytest
 from fr.cli import app
 from typer.testing import CliRunner
 
+pytestmark = pytest.mark.own_artifacts
+
 runner = CliRunner()
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

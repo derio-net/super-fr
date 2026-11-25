@@ -16,7 +16,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fr.harness import HARNESSES, load_matrix
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FR_BRAINSTORMING = REPO_ROOT / "plugins/super-fr/skills/fr-brainstorming/SKILL.md"

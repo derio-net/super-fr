@@ -42,6 +42,8 @@ from tests.unit.test_merge_evidence import (
     stub_fetch,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNS_REL = Path("docs") / "superpowers" / "runs"
 

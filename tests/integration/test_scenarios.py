@@ -20,6 +20,8 @@ import pytest
 
 from tests.conftest import REPO_ROOT, link_state, runner_packages, uv_tool_bin_dir
 
+pytestmark = pytest.mark.own_artifacts
+
 INSTALL = REPO_ROOT / ".fr" / "candidate-install"
 SCENARIOS = REPO_ROOT / "tests" / "scenarios"
 

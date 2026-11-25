@@ -30,6 +30,8 @@ from fr.run.model import (
     save_run_state,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 _SRC = Path(__file__).resolve().parents[2] / "packages" / "fr" / "src" / "fr"
 _PLAN_FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 

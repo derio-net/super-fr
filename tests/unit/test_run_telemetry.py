@@ -39,6 +39,8 @@ from tests.unit.transcript_sessions import (
     write_session,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 
 def _session(tmp_path: Path, session_id: str = "sess-1") -> Path:
     return write_session(tmp_path / "projects", session_id=session_id)

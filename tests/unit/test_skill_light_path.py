@@ -12,6 +12,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.own_artifacts
+
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / "plugins" / "super-fr" / "skills" / "fr-goal" / "SKILL.md"
 EXECUTOR = ROOT / "plugins" / "super-fr" / "agents" / "fr-phase-executor.md"

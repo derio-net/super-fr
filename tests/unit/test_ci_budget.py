@@ -15,6 +15,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "ci_budget.py"
 FIXTURES = REPO / "tests" / "fixtures" / "ci_budget"

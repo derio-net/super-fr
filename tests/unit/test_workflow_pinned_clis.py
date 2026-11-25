@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
+
+pytestmark = pytest.mark.own_artifacts
 
 WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "pinned-clis.yml"
 

@@ -11,6 +11,8 @@ from types import MappingProxyType, ModuleType
 import pytest
 from fr.isolation.scaffold import HostCliPin
 
+pytestmark = pytest.mark.own_artifacts
+
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "check-pinned-clis.py"
 
 

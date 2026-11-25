@@ -1,0 +1,11 @@
+{
+    "conclusion": "success",
+    "event": "pull_request",
+    "head_branch": "fix/install-stable-by-default",
+    "head_sha": "c2d6a72d2b574da8fc0e8e28a37dfbb0f6a36820",
+    "id": 45430010148,
+    "name": "CI",
+    "path": ".github/workflows/ci.yml",
+    "run_attempt": 1,
+    "status": "completed"
+}

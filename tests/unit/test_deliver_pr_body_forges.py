@@ -19,6 +19,8 @@ from fr.run.model import load_run_state
 from tests.unit.record_support import RUN, commit_all, fr, suite_ran_last, write_record
 from tests.unit.test_deliver_pr_body import _at_deliver, _body
 
+pytestmark = pytest.mark.own_artifacts
+
 MR = "https://gitlab.com/example-group/example-project/-/merge_requests/11"
 GITEA_PR = "https://gitea.example.com/example-org/example-repo/pulls/7"
 

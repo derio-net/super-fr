@@ -370,12 +370,12 @@ def test_the_facts_schema_is_pinned_here_once_and_read_back_to_3() -> None:
     a bump edits this line, the constant and its comment in `model.py`, nothing else."""
     from fr.triage.model import FACTS_READS, FACTS_SCHEMA, Facts
 
-    assert FACTS_SCHEMA == 17
+    assert FACTS_SCHEMA == 18
     assert FACTS_READS == tuple(range(3, FACTS_SCHEMA + 1))
     assert Facts.model_fields["schema_"].default == FACTS_SCHEMA
 
 
-@pytest.mark.parametrize("schema", [2, 18])
+@pytest.mark.parametrize("schema", [2, 19])
 def test_a_facts_stamp_outside_the_reads_is_refused(schema: int) -> None:
     from fr.triage.model import Facts
 
@@ -392,7 +392,7 @@ def test_a_facts_stamp_outside_the_reads_is_refused(schema: int) -> None:
         )
 
 
-@pytest.mark.parametrize("schema", [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
+@pytest.mark.parametrize("schema", [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16])
 def test_older_facts_schemas_load(tmp_path: Path, schema: int) -> None:
     from fr.triage.model import load_facts
 
@@ -407,6 +407,45 @@ def test_older_facts_schemas_load(tmp_path: Path, schema: int) -> None:
     }
     path.write_text(json.dumps(doc), encoding="utf-8")
     assert load_facts(path).schema_ == schema
+
+
+# --------------------------------------- ci-economy R8, R14 (facts 18)
+
+
+def test_the_triage_config_takes_generated_globs_defaulting_to_none() -> None:
+    from fr.triage.model import TriageConfig
+
+    assert TriageConfig().generated == []
+    got = TriageConfig.model_validate({"generated": [".opencode/skills/**", "a/*.md"]})
+    assert got.generated == [".opencode/skills/**", "a/*.md"]
+
+
+@pytest.mark.parametrize("bad", ["a/*.md", [["a"]], [1]])
+def test_a_generated_that_is_not_a_list_of_globs_is_refused(bad: object) -> None:
+    from fr.triage.model import TriageConfig
+
+    with pytest.raises(ValueError):
+        TriageConfig.model_validate({"generated": bad})
+
+
+@pytest.mark.parametrize("schema", [16, 17])
+def test_a_schema_16_facts_file_loads_with_no_generated_globs(tmp_path: Path, schema: int) -> None:
+    """A facts file below 18 (17 is triage-hardening's) reads `generated` as `[]`."""
+    from fr.triage.model import load_facts
+
+    path = tmp_path / "facts.json"
+    doc = {
+        "schema": schema,
+        "scope": "derio-net--super-fr",
+        "kind": "repo",
+        "collected_at": "2026-11-20T00:00:00Z",
+        "repos": ["derio-net/super-fr"],
+        "issues": [],
+        "config": {"derio-net/super-fr": {"mirrors": [["uv", "run", "x.py"]]}},
+    }
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    facts = load_facts(path)
+    assert facts.config_for("derio-net/super-fr").generated == []
 
 
 def _released_batch(schema: int) -> dict[str, object]:

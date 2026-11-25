@@ -20,6 +20,8 @@ from tests.unit import record_support
 from tests.unit.fixture_templates import TemplateBuildError
 from tests.unit.record_support import LAST_BRIEF, RUN, fr, git, snapshot, started_run
 
+pytestmark = pytest.mark.own_artifacts
+
 
 def _refs(origin: Path) -> str:
     return subprocess.run(

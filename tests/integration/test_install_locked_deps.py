@@ -25,7 +25,7 @@ from tests.conftest import REPO_ROOT
 
 INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
 REAL_UV = shutil.which("uv")
-pytestmark = pytest.mark.skipif(REAL_UV is None, reason="needs uv")
+pytestmark = [pytest.mark.skipif(REAL_UV is None, reason="needs uv"), pytest.mark.own_artifacts]
 
 _UV_STUB = r"""#!/bin/sh
 case "$1 $2" in

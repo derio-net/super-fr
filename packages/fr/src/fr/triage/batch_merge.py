@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from fr.checkstate import bucket_verdict
 from fr.ghclient import MERGE_METHODS, GhClient
 from fr.triage.batch_dispatch import TRIAGE_CONFIG_PATH
 from fr.triage.batch_drive import ChecksVerdict, checks_verdict
@@ -31,8 +32,6 @@ from fr.triage.batch_version import (
 from fr.triage.errors import ConfigError, TriageError
 from fr.triage.gitseam import GitError
 from fr.triage.model import VersionBlock
-
-FAILING_BUCKETS = frozenset({"fail", "cancel"})
 
 
 class MergeStopError(TriageError):
@@ -154,13 +153,11 @@ def live_checks(ctx: MergeContext, number: int) -> tuple[ChecksVerdict, tuple[st
 
 def _counts(checks: Sequence[dict[str, Any]]) -> dict[str, int]:
     """`pr_checks` buckets as the `pass`/`fail`/`pending` counts R4 reads; a
-    skipped check passes, as in the collected counts."""
+    skipped check passes and a cancelled one is pending (`fr.checkstate`), as in the
+    collected counts."""
     counts = {"pass": 0, "fail": 0, "pending": 0}
     for c in checks:
-        bucket = c.get("bucket")
-        counts[
-            "fail" if bucket in FAILING_BUCKETS else "pending" if bucket == "pending" else "pass"
-        ] += 1
+        counts[bucket_verdict(c.get("bucket"))] += 1
     return counts
 
 

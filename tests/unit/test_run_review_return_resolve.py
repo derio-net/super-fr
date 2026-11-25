@@ -21,6 +21,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+import pytest
 from fr.run import units
 from fr.run.model import load_run_state
 from fr.run.telemetry import parse_timestamp
@@ -35,6 +36,8 @@ from tests.unit.transcript_sessions import (
     agent_result_row,
     dispatched_at,
 )
+
+pytestmark = pytest.mark.own_artifacts
 
 _PHASE_SHAPE = """
 workflow: grouped

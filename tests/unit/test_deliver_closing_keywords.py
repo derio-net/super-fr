@@ -11,6 +11,8 @@ from fr.run.model import load_run_state
 
 from tests.unit.test_deliver_pr_body import RUN, _at_deliver, _body, _deliver, live
 
+pytestmark = pytest.mark.own_artifacts
+
 __all__ = ["live"]  # the fixture, re-exported so pytest finds it here
 
 

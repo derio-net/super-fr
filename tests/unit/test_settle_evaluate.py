@@ -89,10 +89,18 @@ def test_ci_green() -> None:
 
 
 def test_ci_red_names_the_failing_checks() -> None:
-    v = _eval(checks=[_check("lint", "fail"), _check("test", "cancel"), _check("ok", "pass")])
+    v = _eval(checks=[_check("lint", "fail"), _check("test", "fail"), _check("ok", "pass")])
     assert v.ci_state == "red"
     assert v.failing_checks == ("lint", "test")
     assert any("lint" in ln and "test" in ln for ln in v.lines)
+
+
+def test_a_cancelled_check_is_pending_never_red() -> None:
+    """Spec 2026-11-24-ci-economy R3: a cancelled run was superseded."""
+    v = _eval(checks=[_check("test", "cancel"), _check("ok", "pass")])
+    assert v.ci_state == "pending" and v.failing_checks == ()
+    red = _eval(checks=[_check("lint", "fail"), _check("test", "cancel")])
+    assert red.ci_state == "red" and red.failing_checks == ("lint",)
 
 
 def test_ci_pending_while_a_check_has_not_finished() -> None:
@@ -329,3 +337,29 @@ def test_the_deliver_line_names_the_coupling() -> None:
 
     assert "settle.conflicts" in DELIVER_LINE and "settle.ci" in DELIVER_LINE
     assert "unrunnable" in DELIVER_LINE
+
+
+def test_a_cancelled_check_counts_as_running_while_a_gate_is_absent() -> None:
+    """Review p1-r2 (spec 2026-11-24-ci-economy R3): with the gate not yet reported, a
+    cancelled check is pending, so the gate reads as pending, never as absent."""
+    from fr.settle.evaluate import _ci_state
+
+    checks = [{"name": "test (1)", "bucket": "cancel"}]
+    state, _, hint, absent = _ci_state(False, checks, ["ci-ok"], ci_none=False,
+                                       age=NO_CI_WAIT_SECONDS + 1)  # fmt: skip
+    assert (state, hint, absent) == ("pending", "gate-pending", ("ci-ok",))
+
+
+def test_only_cancelled_checks_pending_name_them_and_say_re_run() -> None:
+    """Review #1647: a cancelled check no newer run replaces is named, with the remedy,
+    never reported as still running; the verdict stays pending (exit 75)."""
+    v = _eval(checks=[_check("test (1)", "cancel"), _check("ok", "pass")])
+    assert v.ci_state == "pending" and v.exit_code == 75 and not v.settled
+    ci_line = v.lines[1]
+    assert "test (1)" in ci_line and "cancelled" in ci_line and "re-run" in ci_line
+    assert "still running" not in ci_line
+
+
+def test_a_running_check_beside_a_cancelled_one_is_still_running() -> None:
+    v = _eval(checks=[_check("test (1)", "cancel"), _check("lint", "pending")])
+    assert v.ci_state == "pending" and "still running" in v.lines[1]

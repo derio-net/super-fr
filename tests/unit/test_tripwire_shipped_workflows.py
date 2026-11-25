@@ -15,8 +15,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fr.workflow.check import check_workflow
 from fr.workflow.model import WorkflowError, parse_manifest
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIPPED_WORKFLOWS_DIR = REPO_ROOT / "plugins" / "super-fr" / "workflows"

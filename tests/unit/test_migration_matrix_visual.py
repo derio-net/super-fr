@@ -8,11 +8,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fr.acceptance.model import load_matrix
 from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 
 from tests.unit.acceptance_helpers import matrix_registry_up_to_v5
+
+pytestmark = pytest.mark.own_artifacts
 
 V5 = matrix_registry_up_to_v5()
 

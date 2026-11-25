@@ -11,7 +11,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO = Path(__file__).resolve().parents[2]
 CI = yaml.safe_load((REPO / ".github" / "workflows" / "ci.yml").read_text())
@@ -84,7 +87,7 @@ def test_collect_job_collects_once_with_the_shards_addopts_and_no_split() -> Non
 
 def test_split_check_gates_and_saves_the_cache_only_on_main_pushes() -> None:
     sc = JOBS["split-check"]
-    assert set(_needs("split-check")) == {"test", "collect"}
+    assert set(_needs("split-check")) == {"classify", "test", "collect"}  # ci-economy R15
     assert sc["timeout-minutes"] == 5
     assert "split_check.py check" in _steps_text("split-check")
     save = next(s for s in sc["steps"] if "actions/cache/save" in str(s.get("uses", "")))
