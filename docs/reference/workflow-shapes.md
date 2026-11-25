@@ -22,7 +22,7 @@ another shape. The shapes super-fr ships are in
 [plugins/super-fr/workflows/](https://github.com/derio-net/super-fr/tree/main/plugins/super-fr/workflows).
 
 `/fr-debugging` also has a shape, `fr-debugging`: `debug`, then `review`, then `deliver`. The
-`debug` step names its journal (`emitted: {debug: <path>}`, a file that must exist), and the
+`debug` step names its journal (`emitted: {debug: <path>}`, a file that must exist). The
 review evidence, the findings gate and the PR body read that journal. Its `deliver` needs no
 plan, so it owes only `tests`, `docs` and `settle`.
 
