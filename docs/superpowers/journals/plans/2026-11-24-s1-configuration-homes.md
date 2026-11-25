@@ -263,3 +263,8 @@ Decision p2-create-at-init-and-migration: entering a workspace no longer creates
 ### p2-phase3-sync-needs-protection · discovery · fr settings sync may run without the operator only on a forge-protected configuration branch (phase 3)
 
 Decision p2-config-changes-by-pr: no reader writes the old settings copy, because on an unprotected `fr-config` a direct push looks like a merged review. Once phase 3's `require_protected` / branch-protection reader exists, fr may bring the old copy in step without `fr settings sync --yes` ONLY when the configuration branch is forge-protected with a pull-request rule; an unprotected or unreadable answer keeps requiring the explicit command.
+
+<!-- fr:journal kind=decision scope=plan id=p2-sync-expect-and-second-parent created=2026-11-25T03:28:22+00:00 phase=2 -->
+### p2-sync-expect-and-second-parent · decision · fr settings sync writes only from the previewed tip, and labels a merge by its second parent alone (phase 2)
+
+Security review of `fr settings sync` (amends p2-config-changes-by-pr). The preview fetches the switch branches and `fr-config-change/*` (stealth: into the configuration clone from the tracking repo) and prints the configuration branch's tip, its settings blob, and every first-parent commit since the old copy's version with its sha and second-parent sha; a commit is labelled a merge of a change branch only when that second parent is the tip of a fetched `refs/remotes/origin/fr-config-change/*` ref, never by its subject, and the label is information, not an authorization. `--yes` requires `--expect <tip>` and refuses (exit 2, nothing written) without it or when the tip after its own fetch differs, naming the preview to run again.
