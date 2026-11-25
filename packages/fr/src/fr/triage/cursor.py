@@ -17,7 +17,7 @@ and a run file it cannot use is "could not be read" too, with its cause, never s
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import yaml
@@ -124,3 +124,15 @@ def read_cursor(checkout: Checkout, pr: PullRequest) -> CursorAnswer:
     except TriageError as exc:
         return CursorAnswer(None, "unread", f"reading {RUNS_DIR} at {at} failed: {exc}")
     return CursorAnswer(fold_positions(found), "read")
+
+
+def answer_at(pr: PullRequest, open_clone: Callable[[], Checkout] | None) -> CursorAnswer:
+    """The driver's read of *pr*'s head cursor (batch-merge-readiness R1): `no-clone` when
+    *open_clone* is None, else `read_cursor` through it, a clone that cannot be opened or
+    read being `unread` with its cause (l-errors-r2)."""
+    if open_clone is None:
+        return CursorAnswer(None, "no-clone", f"no clone of {pr.repo}")
+    try:
+        return read_cursor(open_clone(), pr)
+    except TriageError as exc:
+        return CursorAnswer(None, "unread", f"the clone of {pr.repo} could not be read: {exc}")

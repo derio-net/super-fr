@@ -271,7 +271,7 @@ from fr.triage.claim_sync import (
 from fr.triage.claims import Claim, expired, held_line, held_map, held_members, taken_keys
 from fr.triage.claims import stale as claim_stale
 from fr.triage.components import page
-from fr.triage.cursor import read_cursor
+from fr.triage.cursor import answer_at
 from fr.triage.dedupe import candidates
 from fr.triage.drive_errors import DriverRefusal, TransientPassFailure, classify
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
@@ -4227,24 +4227,18 @@ class _Driver:
     # -------------------------------------------------------------- reaching out
 
     def cursor_at(self, pr: PullRequest) -> CursorAnswer:
-        """The run cursor's folded position at open batch PR *pr*'s head and its read status
-        (batch-merge-readiness R1), read through the repo's clone (`gitseam`): `no-clone`
-        with none; an `unread` head is read again on the next call, its cause said once per
-        head (l-errors-r2); a read one is never read again."""
+        """*pr*'s head cursor and read status (`cursor.answer_at`, R1): a read head is cached,
+        an `unread` one is read again next call, its cause said once per head (l-errors-r2)."""
         key = (pr.repo, pr.head_oid)
         if key in self._cursors:
             return self._cursors[key]
-        if self.path_of(pr.repo) is None:
-            return CursorAnswer(None, "no-clone", f"no clone of {pr.repo}")
-        try:
-            got = read_cursor(self._reader(pr.repo), pr)
-        except TriageError as exc:
-            got = CursorAnswer(None, "unread", f"the clone of {pr.repo} could not be read: {exc}")
+        has_clone = self.path_of(pr.repo) is not None
+        got = answer_at(pr, (lambda: self._reader(pr.repo)) if has_clone else None)
         if got.read == "unread":
             said = f"{pr.repo}#{pr.number}: run cursor not read: {got.detail}"
             self._report_once(f"cursor\0{pr.repo}\0{pr.head_oid}", said)
-            return got
-        self._cursors[key] = got
+        if got.read == "read":
+            self._cursors[key] = got
         return got
 
     def client(self, facts: Facts, repo: str) -> GhClient:
