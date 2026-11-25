@@ -50,6 +50,7 @@ from fr.triage.collect import (
     ClientForge,
     CollectStats,
     Forge,
+    StateRepoUnread,
     collect_facts_counted,
     read_declared_state_repo,
 )
@@ -582,11 +583,20 @@ def collect_into(
         known_labels=known_settled_labels(previous),
     )
     if scope.kind == "repo":
-        declared = (
-            _declared_state_repo(scope.target, workspace)
-            if settle
-            else (previous.state_repo_declared.get(scope.target) if previous else None)
-        )
+        try:
+            declared = (
+                _declared_state_repo(scope.target, workspace)
+                if settle
+                else (previous.state_repo_declared.get(scope.target) if previous else None)
+            )
+        except StateRepoUnread as exc:  # lens review l-errors-r5: unknown, never "absent"
+            err_console.print(
+                f"warning: {exc}; the state repo is not decided this collect (the next "
+                "collect reads it again)",
+                markup=False,
+                soft_wrap=True,
+            )
+            declared, settle = None, False
         if declared is not None:
             facts = facts.model_copy(update={"state_repo_declared": {scope.target: declared}})
     target_dir.mkdir(parents=True, exist_ok=True)

@@ -1124,14 +1124,22 @@ _IGNORED_SAID: set[tuple[str, str]] = set()
 SETTINGS_PATH = rel("settings")
 
 
+class StateRepoUnread(Exception):  # noqa: N818 — a state, not a failure of the collect
+    """The declared `triage.state_repo` could not be read (a forge error other than a 404,
+    or a failed protection read; lens review l-errors-r5): neither "declared" nor "absent",
+    so the state repo, decided once, is not decided this collect."""
+
+
 def read_declared_state_repo(forge: Forge, repo: str) -> str | None:
     """The state repo *repo*'s `.fr/settings.yaml` names as `triage.state_repo` (spec
     2026-11-19 R20), read through the forge from the repo's configuration space: its default
     branch under `repo`, `fr-config` under quiet (`forge_ref`). The key decides where private
     issue data is pushed, so it is trust configuration: from `fr-config` it counts only while
     the forge enforces a pull-request rule there (R7, sec-1), and is otherwise ignored, said
-    once. None when the file or the key is absent, and when the file cannot be read or used
-    (said once): the state repo is then decided by the other rules, never guessed."""
+    once. None when the file or the key is absent, when the file cannot be used (not valid
+    settings, said once) and when the forge cannot read files at a ref: the state repo is
+    then decided by the other rules. A read that fails (`StateRepoUnread`, lens review
+    l-errors-r5) is neither: the caller leaves the state repo undecided this collect."""
     from fr.config import protection
     from fr.settings import SettingsError
     from fr.settings.load import parse_settings_text
@@ -1144,8 +1152,7 @@ def read_declared_state_repo(forge: Forge, repo: str) -> str | None:
     except ForgeError as exc:
         if _NOT_FOUND in str(exc):
             return None
-        _say_once(repo, f"triage.state_repo of {where} not read: {exc}")
-        return None
+        raise StateRepoUnread(f"triage.state_repo of {where} not read: {exc}") from exc
     except (SettingsError, UnsupportedForgeOperation) as exc:
         _say_once(repo, f"triage.state_repo of {where} not used: {exc}")
         return None
@@ -1155,8 +1162,7 @@ def read_declared_state_repo(forge: Forge, repo: str) -> str | None:
     try:
         answer = protection.branch_protection(forge, repo, ref)
     except protection.ProtectionReadError as exc:
-        _say_once(repo, f"triage.state_repo of {at} not used: {exc}")
-        return None
+        raise StateRepoUnread(f"triage.state_repo of {at} not read: {exc}") from exc
     if isinstance(answer, protection.Enforced):
         return state_repo
     _say_once(repo, protection.ignored_line(["triage.state_repo"], answer, at))

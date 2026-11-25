@@ -448,3 +448,58 @@ def test_the_stealth_space_declaration_reader_is_gone() -> None:
 def test_p6_r5_the_tracking_repo_wins_over_any_declaration() -> None:
     got = decide_state_repo(["o/one"], {}, _never, declared="o/refs", stealth="o/track")
     assert got == "o/track"
+
+
+# ------------------------- lens review l-errors-r5: a failed read never decides
+
+
+class _UnreadableSettings(FakeForge):
+    def read_file_at_ref(self, *, repo: str, path: str, ref: str) -> str:
+        if path == SETTINGS and ref == "HEAD":
+            from fr.triage.errors import ForgeError
+
+            raise ForgeError("gh: Server Error (HTTP 502)")
+        return super().read_file_at_ref(repo=repo, path=path, ref=ref)
+
+
+class _UnreadableRules(_RulesForge):
+    def branch_rules(self, *, repo: str, branch: str) -> object:
+        from fr import gh as _gh
+
+        raise _gh.GhError("gh: Server Error (HTTP 502)", stderr="HTTP 502")
+
+
+def _assert_undecided(state: Path, result: Any) -> None:
+    assert result.exit_code == 0, result.output
+    assert load_durable(state).state_repo is None
+    flat = " ".join(result.output.split())
+    assert "HTTP 502" in flat and "not decided" in flat
+
+
+def test_a_failed_read_of_the_declaration_leaves_the_state_repo_undecided(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_stealth: None
+) -> None:
+    """A 502 is not "no declaration": deciding from the other rules would record the wrong
+    state repo for good (it is decided once)."""
+    forge = _UnreadableSettings(
+        issues={REPO: list(ISSUES)}, prs={REPO: list(PRS)}, visibility={REPO: "private"},
+        file_bodies={},
+    )  # fmt: skip
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
+    state = tmp_path / "s"
+    _assert_undecided(state, _collect(state))
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: _forge({(REPO, SETTINGS, "HEAD"): DECLARED}))
+    assert _collect(state).exit_code == 0
+    assert load_durable(state).state_repo == "example-org/triage-refs"  # decided next time
+
+
+def test_a_failed_protection_read_leaves_the_state_repo_undecided(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_stealth: None
+) -> None:
+    forge = _UnreadableRules(
+        None, issues={REPO: list(ISSUES)}, prs={REPO: list(PRS)}, visibility={REPO: "private"},
+        file_bodies={(REPO, SETTINGS, "fr-config"): QUIET_DECLARED},
+    )  # fmt: skip
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
+    state = tmp_path / "s"
+    _assert_undecided(state, _collect(state))
