@@ -10736,3 +10736,14 @@ queues:
   events:
   - kind: queue_open
     at: '2026-11-25T20:35:40.376524Z'
+  - kind: queue_built
+    at: '2026-11-25T20:38:58.777283Z'
+    slot: 1
+    sha: ff14a97ae139a6e4383b1acbc9ce3fe7cb0a6781
+    entry:
+      pr: 1704
+      kind: closeout
+    head: 290e5d293af8be718e0434a258e41d52565e25e5
+    patch_id: e82835287a774f3fe8ce4c235c8f94fbf500d482
+    base: 0cffe53140c2c399392030209c57903d32d4b070
+    parent: 0cffe53140c2c399392030209c57903d32d4b070
