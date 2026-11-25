@@ -83,6 +83,11 @@ def _profiles_text(path: Path) -> str:
     return bom + moves.with_stamp(text, 3)
 
 
+def _stamped(text: str) -> str:
+    bom = "\ufeff" if text.startswith("\ufeff") else ""
+    return bom + moves.with_stamp(text.removeprefix(bom), 3)
+
+
 def _config_checkout(top: Path) -> bool:
     """Whether *top* is a configuration checkout (quiet's `fr-config` worktree or a
     stealth configuration clone), not a product checkout."""
@@ -116,10 +121,11 @@ def _profiles_relocate(path: Path) -> None:
         write_text_atomic(path, _profiles_text(path))
         return
     product = _PROFILES.product_of(path)
-    text = _profiles_text(path)
+    moves.refuse_link(product, path)
     if _across(_PROFILES, product):
-        moves.move_across(product, path, _PROFILES.new, text)
+        moves.move_across(product, path, _PROFILES.new, _stamped)
         return
+    text = _profiles_text(path)
     dest = _profiles_destination(path)
     dest.parent.mkdir(parents=True, exist_ok=True)
     write_text_atomic(dest, text)

@@ -147,10 +147,13 @@ def resolve_workflow(
     for path in candidates:
         if path.is_file():
             if path.parent == repo_dir:
-                from fr.config.space import guard_manifest
+                from fr.config.space import read_manifest
 
-                # A manifest's `kind: cli` argv is executable configuration (R7).
-                guard_manifest(repo_root, path, f"run workflow shape {name!r} from {path}")
+                # The whole manifest is executable configuration (its `kind: cli` argv,
+                # R7): under quiet and stealth, the protected branch's reviewed tip.
+                return parse_manifest(
+                    read_manifest(repo_root, path, f"run workflow shape {name!r} from {path}")
+                )
             return parse_manifest(path.read_text())
 
     searched = " and ".join(str(p) for p in candidates)

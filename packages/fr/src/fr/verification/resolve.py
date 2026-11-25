@@ -60,7 +60,7 @@ def resolve_strategy(
     naming EVERY searched path when none exists.
     """
     path = resolved_strategy_path(name, repo_root, shipped_root=shipped_root)
-    manifest = parse_strategy(path.read_text(), source=str(path))
+    manifest = parse_strategy(_strategy_bytes(name, path, repo_root).decode(), source=str(path))
     if manifest.verification != name:
         raise StrategyError(
             f"{path}: manifest names itself {manifest.verification!r}, but its file is {name!r}"
@@ -85,11 +85,6 @@ def resolved_strategy_path(
     )
     for path in candidates:
         if path.is_file():
-            if repo_root is not None and path.parent == repo_dir:
-                from fr.config.space import guard_manifest
-
-                # A strategy's install and scenario argv are executable configuration (R7).
-                guard_manifest(repo_root, path, f"use verification strategy {name!r} from {path}")
             return path
 
     searched = " and ".join(str(p) for p in candidates)
@@ -106,7 +101,19 @@ def strategy_identity(
     import hashlib
 
     path = resolved_strategy_path(name, repo_root, shipped_root=shipped_root)
-    return _label(path.parent, repo_root), hashlib.sha256(path.read_bytes()).hexdigest()
+    data = _strategy_bytes(name, path, repo_root)
+    return _label(path.parent, repo_root), hashlib.sha256(data).hexdigest()
+
+
+def _strategy_bytes(name: str, path: Path, repo_root: Path | None) -> bytes:
+    """*path*'s bytes; a repo strategy through `fr.config.space.read_checked_bytes`: its
+    install and scenario argv are executable configuration (R7), so under quiet and stealth
+    they come from the protected branch's reviewed tip."""
+    if repo_root is None or path.parent != repo_verifications_dir(repo_root):
+        return path.read_bytes()
+    from fr.config.space import read_checked_bytes
+
+    return read_checked_bytes(repo_root, path, f"use verification strategy {name!r} from {path}")
 
 
 def _label(directory: Path, repo_root: Path) -> str:

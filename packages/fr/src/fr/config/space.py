@@ -432,19 +432,40 @@ def located(root: Path, kind: str) -> Path:
     return legacy(config_kind_path(root, kind), root / LEGACY_CONFIG[kind])
 
 
-def guard_manifest(root: Path, path: Path, what: str) -> None:
-    """Refuse *what* when *path* (a manifest about to be read) lives in a quiet or stealth
-    configuration space whose branch is not protected (R7, plan finding
-    p5-exec-manifests-guard): a workflow's `kind: cli` argv and a strategy's commands are
-    executable configuration. Under `repo`, and for a product-checkout path (R13's old
-    location, reviewed with the product), nothing is asked."""
-    space = config_space(Path(root))
-    if space.placement == _REPO:
-        return
+def _in_space_checkout(space: ConfigSpace, path: Path) -> bool:
     try:
         Path(path).resolve().relative_to(space.checkout.resolve())
     except ValueError:
-        return
-    from fr.config.protection import require_protected
+        return False
+    return True
 
-    require_protected(space, None, what)
+
+def read_checked_bytes(root: Path, path: Path, what: str) -> bytes:
+    """The bytes of executable or trust configuration *path* (a repo workflow manifest, a
+    verification strategy, the profile declarations) for the product checkout *root*.
+
+    Under `repo`, and for a product-checkout path (R13's old location, reviewed with the
+    product), the file as it is. In a quiet or stealth configuration space the WHOLE file is
+    executable configuration (a workflow's `kind: cli` argv, a strategy's commands, the
+    profiles' secrets and mounts), so it is read only from the fetched, reviewed tip of a
+    protected configuration branch (`fr.config.protection.read_checked`, R7), never from
+    the configuration checkout's working tree (review p4-sec-manifest-tip, finding
+    p5-exec-manifests-guard). Not protected, or absent at the tip, refuses."""
+    space = config_space(Path(root))
+    if space.placement == _REPO or not _in_space_checkout(space, path):
+        return Path(path).read_bytes()
+    from fr.config import protection
+
+    below = Path(path).resolve().relative_to(space.dir.resolve()).as_posix()
+    text = protection.read_checked(space, None, below, what)
+    if text is None:
+        raise protection.UncheckedTipError(
+            f"fr will not {what}: {below} is not on the reviewed tip of {space.ref}; the "
+            f"configuration checkout's copy ({path}) is not reviewed"
+        )
+    return text.encode()
+
+
+def read_manifest(root: Path, path: Path, what: str) -> str:
+    """`read_checked_bytes` as text."""
+    return read_checked_bytes(root, path, what).decode("utf-8")

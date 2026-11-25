@@ -891,6 +891,8 @@ def relocate_file(source: Path, destination: Path) -> None:
     """Move *source* to *destination* on disk (a destination already holding the same
     bytes is kept, the source removed). The commit stages both, so a tracked file's move
     is a rename in history; an untracked one stays untracked (`commit_migration`)."""
+    if source.is_symlink():
+        raise ValueError(f"{source} is a symlink: fr moves the file itself, never a link to it")
     refusal = both_paths_refusal(source, destination)
     if refusal is not None:
         raise FileExistsError(refusal)

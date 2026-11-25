@@ -448,9 +448,10 @@ def pending_files(product: Path, space: ConfigSpace) -> dict[str, str]:
         if not entry.across:
             continue
         for source in sorted(product.glob(entry.old)):
+            refuse_link(product, source)
             if not source.is_file() or source.relative_to(product).as_posix() not in clean:
                 continue
-            text = source.read_text()
+            text = source_text(product, source)
             if entry.kind == "profiles":
                 if _profiles_version(text) != 2:
                     continue
@@ -459,8 +460,11 @@ def pending_files(product: Path, space: ConfigSpace) -> dict[str, str]:
     if space.placement == QUIET:
         for name in QUIET_FILES:
             source = product / SPACE_DIR / name
-            if source.is_file() and source.relative_to(product).as_posix() in clean:
-                out[space.tree_path(name)] = source.read_text()
+            if not (source.is_file() or source.is_symlink()):
+                continue
+            refuse_link(product, source)
+            if source.relative_to(product).as_posix() in clean:
+                out[space.tree_path(name)] = source_text(product, source)
     return out
 
 
@@ -476,6 +480,59 @@ def _clean_tracked(product: Path) -> set[str]:
         return {line for line in done.stdout.splitlines() if line}
 
     return lines("ls-files") - lines("diff", "--name-only", "HEAD")
+
+
+def refuse_link(product: Path, source: Path) -> str:
+    """*source*'s path relative to *product*, after refusing a symlink at it or at any
+    directory between (review p4-sec-symlink): a moved file is pushed onto the
+    configuration branch, and a link to `~/.ssh/...` must never be read for that. A path
+    outside the checkout refuses too."""
+    from fr.settings import SettingsError
+
+    product = Path(product)
+    try:
+        rel_path = Path(source).relative_to(product)
+    except ValueError:
+        raise SettingsError(f"{source} is outside the checkout {product}: fr will not move it")
+    at = product
+    for part in rel_path.parts:
+        at = at / part
+        if at.is_symlink():
+            raise SettingsError(
+                f"{rel_path.as_posix()} is a symlink ({at} -> {at.readlink()}): fr will not "
+                "read or push what it points at. Replace it with the file itself and run "
+                "`fr migrate artifacts --yes` again (S1 R10)"
+            )
+    if not Path(source).resolve().is_relative_to(product.resolve()):
+        raise SettingsError(f"{source} resolves outside the checkout {product}")
+    return rel_path.as_posix()
+
+
+def source_text(product: Path, source: Path) -> str:
+    """The bytes a cross-space hop pushes for *source* (review p4-sec-symlink): never a
+    symlink; a tracked file's COMMITTED blob, refused while it has uncommitted changes
+    (pushing the blob and deleting the edit would lose it); an untracked one (a regular
+    file, checked above) as it is on disk."""
+    from fr.settings import SettingsError
+
+    rel_path = refuse_link(product, source)
+
+    def git(*args: str) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.run(["git", "-C", str(product), *args], capture_output=True, check=False)
+
+    if not git("ls-files", "--error-unmatch", "--", rel_path).returncode == 0:
+        if not Path(source).is_file():
+            raise SettingsError(f"{rel_path} is not a regular file: fr will not move it")
+        return Path(source).read_text()
+    if git("diff", "--quiet", "HEAD", "--", rel_path).returncode != 0:
+        raise SettingsError(
+            f"{rel_path} has uncommitted changes: commit or stash them, then run "
+            "`fr migrate artifacts --yes` again (fr pushes the committed file, S1 R10)"
+        )
+    shown = git("show", f"HEAD:{rel_path}")
+    if shown.returncode != 0:
+        raise SettingsError(f"cannot read {rel_path} at HEAD: {shown.stderr.decode().strip()}")
+    return shown.stdout.decode("utf-8")
 
 
 def _profiles_version(text: str) -> int:
@@ -520,18 +577,27 @@ def ensure_space(product: Path, *, include: dict[str, str] | None = None) -> boo
     return True
 
 
-def move_across(product: Path, source: Path, below: str, text: str | None = None) -> Path:
+def move_across(
+    product: Path,
+    source: Path,
+    below: str,
+    transform: Callable[[str], str] | None = None,
+) -> Path:
     """Move *source* to *below* (a path below `.fr/`) in *product*'s configuration space
     (R10): the destination is committed and pushed there first, and the product file is
     removed only once it is on the configuration branch. Returns the destination's
     working-tree path. Raises `SettingsError` (R12, a refused push) or `ProposedError`
-    (a pull request opened; nothing removed)."""
+    (a pull request opened; nothing removed). The bytes pushed are `source_text`'s (never
+    a symlink's target, never an uncommitted edit), passed through *transform* when given
+    (profiles writes its new stamp)."""
     from fr.config.space import config_space
     from fr.settings import SettingsError
 
     product = Path(product)
     space = config_space(product)
-    body = source.read_text() if text is None else text
+    body = source_text(product, source)
+    if transform is not None:
+        body = transform(body)
     tree_path = space.tree_path(below)
     writer = writer_for(product)
     writer.fetch()

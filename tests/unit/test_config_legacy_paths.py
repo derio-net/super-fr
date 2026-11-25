@@ -165,25 +165,52 @@ def test_validate_plans_reads_the_old_plan_config_with_a_notice(root: Path) -> N
     assert NOTICE in done.stderr, done.stderr + done.stdout
 
 
-def test_a_manifest_read_from_a_quiet_configuration_space_is_guarded(
+def test_a_quiet_manifest_is_read_from_the_checked_tip_not_the_working_tree(
     root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A workflow's `kind: cli` argv and a strategy's commands are executable
-    configuration (R7, plan finding p5-exec-manifests-guard): read from a quiet or
-    stealth configuration space, they need its branch protected first."""
+    """Review p4-sec-manifest-tip: after the protection check the manifest is the
+    reviewed tip's bytes (`protection.read_checked`), never the checkout's file."""
     from fr.config import protection
 
     checkout = tmp_path / "fr-config"
+    _put(checkout, ".fr/workflows/mine.yaml", "workflow: edited-locally\n")
     quiet = space.ConfigSpace("quiet", checkout / ".fr", checkout, root, "origin/fr-config")
     monkeypatch.setattr(space, "config_space", lambda _root: quiet)
-    asked: list[str] = []
+    seen: list[str] = []
 
-    def refuse(_space: object, _client: object, what: str) -> None:
-        asked.append(what)
-        raise protection.ProtectionError(f"fr will not {what}")
+    def checked(_space: object, _client: object, name: str, what: str, **_kw: object) -> str:
+        seen.append(name)
+        return WORKFLOW
 
-    monkeypatch.setattr(protection, "require_protected", refuse)
+    monkeypatch.setattr(protection, "read_checked", checked)
+    text = space.read_manifest(root, checkout / ".fr/workflows/mine.yaml", "run it")
+    assert text == WORKFLOW and seen == ["workflows/mine.yaml"]
+
+
+def test_quiet_profile_declarations_are_read_through_the_protection_guard(
+    root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review p4-sec-profiles: `.fr/profiles.yaml` decides secrets, mounts and services,
+    so under quiet it is read only from a protected branch's checked tip; an unprotected
+    one refuses the whole file (no safe subset)."""
+    from fr.config import protection
+    from fr.isolation.types import profiles_config
+
+    checkout = tmp_path / "fr-config"
+    _put(checkout, ".fr/profiles.yaml", "profiles:\n  dev: {secrets: [LOCAL]}\n")
+    quiet = space.ConfigSpace("quiet", checkout / ".fr", checkout, root, "origin/fr-config")
+    monkeypatch.setattr(space, "config_space", lambda _root: quiet)
+
+    def tip(_space: object, _client: object, name: str, what: str, **_kw: object) -> str:
+        assert name == "profiles.yaml"
+        return "profiles:\n  dev: {secrets: [TIP]}\n"
+
+    monkeypatch.setattr(protection, "read_checked", tip)
+    assert profiles_config(root)["profiles"]["dev"]["secrets"] == ["TIP"]
+
+    def refuse(*_a: object, **_kw: object) -> str:
+        raise protection.ProtectionError("fr will not read it: fr-config is not protected")
+
+    monkeypatch.setattr(protection, "read_checked", refuse)
     with pytest.raises(protection.ProtectionError):
-        space.guard_manifest(root, checkout / ".fr/workflows/mine.yaml", "run it")
-    space.guard_manifest(root, root / "docs/superpowers/workflows/mine.yaml", "run it")
-    assert asked == ["run it"]  # the product checkout's old path is not asked
+        profiles_config(root)

@@ -385,3 +385,69 @@ def test_under_stealth_the_file_lands_on_the_tracking_repos_config_branch_first(
     )
     assert not (work / old).exists()
     stealth.reset_caches()
+
+
+# --- security review: what a cross-space hop may push ---------------------------------
+
+
+@pytest.mark.parametrize("kind", ["models-config", "profiles"])
+def test_under_quiet_a_symlinked_old_path_is_refused_and_nothing_is_pushed(
+    tmp_path: Path, kind: str
+) -> None:
+    """A symlink at an old path (to ~/.ssh/..., say) must never be read and pushed onto
+    the configuration branch: it is refused, naming it (review p4-sec-symlink)."""
+    old = FILES[kind][0] if kind in FILES else ".devcontainer/fr-profiles.yaml"
+    root = _quiet(tmp_path)
+    secret = tmp_path / "secret"
+    secret.write_text("PRIVATE KEY\n")
+    (root / old).parent.mkdir(parents=True, exist_ok=True)
+    (root / old).symlink_to(secret)
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "a symlink")
+    report = run_migrations(root, dry_run=False)
+    failure = next(f for f in report.failed if f.kind == kind)
+    assert "symlink" in failure.error and old in failure.error
+    assert (root / old).is_symlink()
+    probe = subprocess.run(
+        ["git", "-C", str(_origin(tmp_path)), "grep", "-q", "PRIVATE KEY", "fr-config"],
+        capture_output=True,
+        check=False,
+    )
+    assert probe.returncode != 0  # no fr-config, or one without the secret
+
+
+def test_a_symlink_among_the_pending_files_refuses_the_creation(tmp_path: Path) -> None:
+    root = _quiet(tmp_path)
+    _put(root, "docs/superpowers/models.yaml", "opencode:\n  hard: m\n")
+    secret = tmp_path / "secret"
+    secret.write_text("PRIVATE KEY\n")
+    (root / ".fr").mkdir(exist_ok=True)
+    (root / ".fr/ci.yaml").symlink_to(secret)
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "a symlink")
+    report = run_migrations(root, dry_run=False)
+    assert any("symlink" in f.error and ".fr/ci.yaml" in f.error for f in report.failed)
+    assert (root / "docs/superpowers/models.yaml").exists()
+    assert (
+        subprocess.run(
+            ["git", "-C", str(_origin(tmp_path)), "rev-parse", "--verify", "-q", "fr-config"],
+            capture_output=True,
+            check=False,
+        ).returncode
+        != 0
+    )
+
+
+def test_a_cross_space_hop_pushes_the_committed_bytes_and_refuses_a_dirty_file(
+    tmp_path: Path,
+) -> None:
+    from fr.config.migrate import move_across
+
+    root = _quiet(tmp_path)
+    src = _put(root, "docs/superpowers/models.yaml", "opencode:\n  hard: m\n")
+    src.write_text("opencode:\n  hard: edited\n")
+    from fr.settings import SettingsError
+
+    with pytest.raises(SettingsError, match="uncommitted"):
+        move_across(root, src, "models.yaml")
+    assert src.read_text() == "opencode:\n  hard: edited\n"
