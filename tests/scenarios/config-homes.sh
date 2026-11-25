@@ -265,7 +265,7 @@ for rules in free-plan approved; do
   expect_grep '"step": "brainstorm"' "$out" "the run advances to brainstorm"
   load_paths
   mkdir -p "$FR_SPECS_DIR"
-  printf '# Q\n\n## Verification\n\nstrategy: candidate\n' > "$FR_SPECS_DIR/2026-11-25-q-design.md"
+  printf '# Q\n\n## Design shape\n\nnone — a scenario fixture\n\n## Verification\n\nstrategy: candidate\n' > "$FR_SPECS_DIR/2026-11-25-q-design.md"
   run_fr out run resolve "q-$rules" --step brainstorm --state done --answered-by agent \
     --emitted spec=docs/superpowers/specs/2026-11-25-q-design.md
   require_exit 0 "$out"
