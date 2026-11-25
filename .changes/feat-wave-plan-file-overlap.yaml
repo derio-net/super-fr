@@ -1,0 +1,2 @@
+bump: minor
+summary: fr triage check and the Batches page flag unmerged batches whose plans name the same non-generated files, before they conflict at merge
