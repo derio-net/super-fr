@@ -65,7 +65,7 @@ from fr.triage.model import (
     Launch,
     RedHandbackEvent,
 )
-from fr.triage.readiness import Readiness, Refused, other_readiness
+from fr.triage.readiness import Readiness, Refused, other_readiness, snapshot_readiness
 from fr.triage.stage import Stage
 from fr.triage.views import drive_snapshot, queue_unconfigured
 from fr.triage.wave_queue import queue_line
@@ -169,11 +169,6 @@ HINT_REVIEW = "awaiting review"
 HINT_ARCHIVE_PENDING = "archive PR pending"
 HINT_CLOSEOUT_NOT_RECORDED = "close-out not recorded"
 HINT_FINISHED = "finished"
-# A green member without a valid `approved-fr` label, so no queue entry (merge-train-safety R5).
-HINT_AWAITING_APPROVAL = "awaiting approval"
-# A member the wave merge queue holds as an entry or a ready entry (wave-merge-queue R25).
-HINT_IN_MERGE_QUEUE = "in merge queue"
-HINT_MERGE_READY = "merge ready"
 # A ready PR of a repo whose `.fr/triage.yaml` has no `queue.ci`: the queue holds it.
 HINT_QUEUE_UNCONFIGURED = "queue held: add `queue: {ci: push}` to .fr/triage.yaml"
 
@@ -746,12 +741,8 @@ def _card(
         hint = CONFLICT_HINT  # R19: the queue still plans it; the card never says ready
     elif (repo or "") in (queue_held or {}) and (batch.id in queued or batch.id in ready):
         hint = HINT_QUEUE_UNCONFIGURED  # the queue holds this repo: never "merge ready"
-    elif batch.id in queued:
-        hint = HINT_IN_MERGE_QUEUE
-    elif batch.id in ready:
-        hint = HINT_MERGE_READY
-    elif batch.id in awaiting:
-        hint = HINT_AWAITING_APPROVAL
+    elif batch.id in queued or batch.id in ready or batch.id in awaiting:
+        hint = ""  # the verdict leads the card and says it (batch-merge-readiness R7)
     else:
         hint = fallback_hint(batch, column, facts, batches, selected=batch.id in selected)
     pr = batch_pr(batch, facts)
@@ -869,6 +860,9 @@ def build_board(
     queued = _in_merge_queue(plan)
     queue_held = queue_unconfigured(snapshot, facts)
     verdicts = {k: r for q in plan.queues for k, r in q.readiness.items() if r.entry is None}
+    for b in batches:  # a repo with no queue block has no queue plan: ask the function itself
+        if b.id not in verdicts and (pr := snapshot.live.get(b.id)) and pr.state == "OPEN":
+            verdicts[b.id] = snapshot_readiness(snapshot, b)
     others = _others_of(plan)
     selected = default_selection(batches)
     live = _board_stops(batches, facts, stops or {}, ci_none)

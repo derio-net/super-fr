@@ -1183,6 +1183,12 @@ def _readiness(plan: QueuePlan, qs: QueueSnapshot) -> dict[str, Readiness]:
     from fr.triage.readiness import batch_readiness, in_queue_order, other_readiness
 
     order = (*plan.entries, *(k for k in plan.waiting if k not in plan.entries))
+    if plan.phase == "idle" and any(a.kind == "queue-open" for a in plan.actions) \
+            and plan.wave is not None and not plan.entries:  # fmt: skip
+        # a wave's queue opens first and is built on the next pass: its ready entries are
+        # the ones it will take, in the order it will take them
+        opening = [c.key for c in _by_readiness(_cands(qs, plan.wave)) if c.wave == plan.wave]
+        order = (*opening, *(k for k in order if k not in opening))
     out: dict[str, Readiness] = {
         o.key: in_queue_order(other_readiness(o.key, qs), o.key, order, qs)
         for o in (*qs.others, *qs.refused_entries)

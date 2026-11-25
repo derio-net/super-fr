@@ -244,7 +244,9 @@ def test_the_driver_would_merge_a_green_open_pr() -> None:
         [issue(1, prs=[pr(11, "feat/batch-a", labels=["approved-fr"], **DELIVERED)])],
         config={REPO: {"queue": {"ci": "push"}}},
     )
-    assert _hint("a", f, jd) == "in merge queue"  # R25: the offline queue holds it
+    card = build_board(f, jd, {}).card("a")  # R25: the offline queue holds it
+    assert card.readiness is not None and card.readiness.verdict == "Approved, merges next"
+    assert card.hint == ""
 
 
 def test_a_failing_pr_reads_ci_failing() -> None:
@@ -376,7 +378,8 @@ def test_a_merge_stop_at_a_head_since_moved_no_longer_counts() -> None:
         config={REPO: {"queue": {"ci": "push"}}},
     )
     card = build_board(f, jd, {}, stops=_stopped("sha-older")).card("a")
-    assert (card.hint, card.needs_you) == ("in merge queue", False)
+    assert card.readiness is not None and card.readiness.verdict == "Approved, merges next"
+    assert (card.hint, card.needs_you) == ("", False)
 
 
 def test_a_merge_stop_on_a_pr_no_longer_open_no_longer_counts() -> None:

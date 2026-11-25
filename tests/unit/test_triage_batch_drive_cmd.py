@@ -4778,7 +4778,7 @@ def test_the_drivers_board_asks_for_the_label_in_a_ci_none_repo(
     monkeypatch.setattr(triage_batch_cmd, "ci_is_none", lambda path: True)
     code, out = _drive(tmp_path, "--once", "--yes")
     assert not _opened(world)
-    assert "awaiting approval" in _page(tmp_path)
+    assert "Not ready: not delivered" in _page(tmp_path)  # R7: the verdict says it
 
 
 def test_a_local_clone_tells_the_board_its_repo_is_ci_none(

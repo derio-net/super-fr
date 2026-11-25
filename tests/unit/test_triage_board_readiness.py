@@ -157,3 +157,11 @@ def test_plan_entries_with_no_batch_are_the_boards_not_a_cards() -> None:
     queue = replace(plan.queues[0], readiness={"export#7": other_readiness("export#7", qs)})
     grouped = _others_of(replace(plan, queues=(queue,)))
     assert [r.entry.key for r in grouped[""] if r.entry] == ["export#7"]
+
+
+def test_a_repo_with_no_queue_block_still_leads_its_card_with_a_verdict() -> None:
+    p = pr(11, "feat/batch-a", labels=APPROVED, **DELIVERED)
+    f = facts([issue(1, prs=[p])])
+    jd = judgements({"widgets#1": j(1)}, [mk_batch("a", [1], events=[dispatch("a")])])
+    card = build_board(f, jd, {}).card("a")
+    assert card.readiness is not None and card.readiness.admits

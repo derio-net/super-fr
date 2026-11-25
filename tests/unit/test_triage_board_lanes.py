@@ -82,7 +82,8 @@ def test_a_conflicting_pr_never_reads_merge_ready() -> None:
 def test_a_blocked_pr_still_reads_merge_ready() -> None:
     f, jd = _open(_cursor("deliver-done", "deliver"), labels=["approved-fr"], mergeable="MERGEABLE",
                   merge_state="BLOCKED")  # fmt: skip
-    assert build_board(f, jd, {}).card("a").hint == "in merge queue"  # R25
+    card = build_board(f, jd, {}).card("a")  # R25
+    assert card.readiness is not None and card.readiness.verdict == "Approved, merges next"
 
 
 def test_the_pass_still_counts_a_conflicting_pr_ready_for_the_queue() -> None:

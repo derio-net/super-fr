@@ -15,7 +15,7 @@ from fr.ghclient import UnsupportedForgeOperation
 from fr.labels import APPROVED_FR
 from fr.triage.approval import ensure_approval_label
 from fr.triage.batch_dispatch import NO_APPROVAL_LINE, conflict_brief, render_brief
-from fr.triage.kanban import HINT_AWAITING_APPROVAL, build_board
+from fr.triage.kanban import build_board
 from fr.triage.model import Batch, Facts, Judgements
 from fr.triage.views import NEED_LABELS, needs_you
 from typer.testing import CliRunner
@@ -306,7 +306,8 @@ def test_the_kanban_card_of_an_unapproved_green_member_awaits_approval() -> None
     f, jd = _one(labels=[], cursor=None, cursor_read=None)
     board = build_board(f, jd, {})
     (card,) = [c for col in board.columns for c in col.cards if c.batch.id == "x"]
-    assert card.hint == HINT_AWAITING_APPROVAL == "awaiting approval"
+    assert card.readiness is not None and card.readiness.kind == "not-delivered"  # R7
+    assert card.hint == ""
 
 
 # ------------------------------------------------------------------ the briefs (R6)
@@ -354,7 +355,7 @@ def test_a_ci_none_repo_asks_for_the_label_with_no_check_at_all() -> None:
                  cursor_read=None)  # fmt: skip
     board = build_board(f, jd, {}, ci_none={REPO})
     (card,) = [c for col in board.columns for c in col.cards if c.batch.id == "x"]
-    assert card.hint == HINT_AWAITING_APPROVAL
+    assert card.readiness is not None and card.readiness.kind == "not-delivered"
 
 
 def test_the_page_threads_ci_none_to_needs_you() -> None:

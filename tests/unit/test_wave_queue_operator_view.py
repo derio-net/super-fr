@@ -197,7 +197,9 @@ def test_the_boards_pasted_queue_commands_carry_the_scope_like_the_drivers_do() 
 
 def test_the_board_card_of_a_queued_approved_pr_never_reads_awaiting_approval() -> None:
     f, jd = _board({"kind": "queue_open", "at": AT})
-    assert build_board(f, jd, {}).card("a").hint == "in merge queue"
+    card = build_board(f, jd, {}).card("a")
+    assert card.readiness is not None and card.readiness.verdict == "Approved, merges next"
+    assert card.hint == ""  # R25: the offline queue holds it; the verdict says so
 
 
 # ------------------------------------------------------------ the wave report (R28)
