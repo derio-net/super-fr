@@ -49,6 +49,9 @@ forge:
 # gate <var> <args...>: one fr command with the CLI-entry gate live (no CI marker, no skip),
 # which migrates AND commits in a valid workspace (the explicit `fr migrate artifacts --yes`
 # never commits).
+# Every gate below runs `acceptance status --brief`, which exits 1 in these fixtures (no
+# acceptance fragments), so a migration that went through is RC 1 and a gate that refused
+# over a half-migrated tree is RC 2.
 gate() {
   local __var="$1"; shift
   local __out
@@ -128,6 +131,7 @@ run_fr out isolation up --branch feat/r
 require_exit 0 "$out"
 cd "$HOME/.cache/fr/worktrees/$(basename "$PWD")/feat__r" || fail "no repo workspace: $out"
 gate out acceptance status --brief
+require_exit 1 "$out"
 expect_grep 'fr: migrated and committed .*: chore\(fr\): migrate 7 artifacts' "$out" "the gate migrates the seven old paths"
 expect_grep '^chore\(fr\): migrate 7 artifacts' "$(git log -1 --format=%s)" "one migrate commit"
 renames="$(git show --name-status -M --format= HEAD)"
@@ -185,7 +189,12 @@ export FAKE_RULES=free-plan  # the forge answers the free-plan 403 unless a step
 printf '#!/bin/sh\necho "fr-config refused here" >&2\nexit 1\n' > "$qorigin/hooks/pre-receive"
 chmod +x "$qorigin/hooks/pre-receive"
 gate out acceptance status --brief
-expect_grep 'refused' "$out" "the refused fr-config push is reported"
+require_exit 2 "$out"
+expect_grep 'placement quiet: origin refused the push of the new `fr-config`' "$out" \
+  "the refused fr-config push is reported in fr's words"
+expect_grep 'Nothing was forced and nothing was removed from the product' "$out" \
+  "the refusal says nothing was removed"
+expect_grep 'Refusing to run over a half-migrated tree' "$out" "the gate refuses to run on"
 for old in "${OLD[@]}" .fr/candidate-install .fr/ci.yaml; do
   [ "$old" = .fr-isolation-allow ] && continue  # R8: it stays in the product, renamed in place
   [ -e "$old" ] || fail "a refused push removed $old"
@@ -194,6 +203,7 @@ done
 rm "$qorigin/hooks/pre-receive"
 
 gate out acceptance status --brief
+require_exit 1 "$out"
 expect_grep "ignoring the product checkout's \.fr/ under quiet: candidate-install, ci\.yaml" "$out" \
   "R4: the product's own .fr/ is named as ignored"
 expect_grep '^chore\(fr\): migrate' "$(git log -1 --format=%s)" "the quiet migrate commit"
@@ -279,6 +289,12 @@ require_exit 2 "$out"
 expect_grep 'refused: fr will not run the candidate install: fr-config on example-org/demo is not protected \(GitHub does not enforce rulesets on a private repository on the free plan \(HTTP 403\)\)' \
   "$out" "free plan: the walk refuses, naming why"
 refuse_grep 'candidate-install ran' "$out" "free plan: nothing ran"
+# SYNTHETIC, deliberately (review p7-r6): no captured reply is an unreadable answer.
+# `fr.config.protection` reads both captured errors as an answer, never as a failed read:
+# the free-plan 403 and the 404 (not-found.error.json) are each `NotEnforced` with their
+# reason. An unreadable answer is a network or auth failure or a 5xx, and none was
+# captured, so the fake gh's own loud failure (`fake gh: no capture for: ...`, exit 1, no
+# HTTP status) stands in for it: a failed read that names no status fr could classify.
 out="$(FAKE_RULES=unreadable fr verification walk --run q-approved --model scenario 2>&1)"; RC=$?
 require_exit 2 "$out"
 expect_grep 'the rules of fr-config on example-org/demo could not be read' "$out" \
@@ -334,6 +350,7 @@ require_exit 0 "$out"
 cd "$HOME/.cache/fr/worktrees/stealthy/feat__s" || fail "no stealth workspace: $out"
 head="$(git rev-parse HEAD)"
 gate out acceptance status --brief
+require_exit 1 "$out"
 expect_grep "moved to origin/main-config and stays in the product under stealth .*git -C .* rm -- docs/superpowers/models\.yaml" \
   "$out" "stealth prints the git rm once"
 [ "$(git rev-parse HEAD)" = "$head" ] || fail "stealth committed on the target's branch"
@@ -374,6 +391,17 @@ require_exit 0 "$out"
 expect_grep "moved the triage state of $scope" "$out" "the move says so"
 expect_grep 'restart any `fr triage batch drive`' "$out" "the move says to restart the driver"
 [ -d "$cache/.git" ] || fail "the cache is not a git repository"
+# R17: the cache is a repository of its own (not the clone's, nor nested in it) whose
+# info/exclude ignores every file, so it holds only the state ref's objects. This scope
+# names no state repo, so the design gives it no remote and no `fr-triage/<scope-id>`
+# branch yet: that branch exists once a state repo syncs (fr.triage.state_ref).
+[ "$(git -C "$cache" rev-parse --show-toplevel)" = "$(cd "$cache" && pwd -P)" ] \
+  || fail "the cache is not a repository of its own: $(git -C "$cache" rev-parse --show-toplevel)"
+[ "$(cat "$cache/.git/info/exclude")" = '*' ] || fail "the cache's info/exclude does not ignore everything"
+refuse_grep '.' "$(git -C "$cache" status --porcelain --ignored=no)" "the cache repository tracks no state file"
+refuse_grep '.' "$(git -C "$cache" remote)" "a scope with no state repo has no remote"
+refuse_grep '.' "$(git -C "$cache" for-each-ref "refs/heads/fr-triage/$scope")" \
+  "a scope with no state repo has no fr-triage/$scope branch"
 cmp -s "$cache/judgements.yaml" <(printf 'schema: 6\ntiers: [{n: 1, title: Now}]\nissues:\n  "demo#1": {tier: 1}\n') \
   || fail "the cache does not hold the moved judgements"
 [ -f "$st" ] && [ "$(head -1 "$st")" = fr-triage-state-moved ] || fail "no tombstone at $st"
