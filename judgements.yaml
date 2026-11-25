@@ -10603,3 +10603,14 @@ queues:
   events:
   - kind: queue_open
     at: '2026-11-25T09:35:30.553993Z'
+  - kind: queue_built
+    at: '2026-11-25T09:48:52.783234Z'
+    slot: 1
+    sha: 0e389e2efc43e10a1f343b907ef0c638cccc0b2e
+    entry:
+      pr: 1666
+      kind: export
+    head: cb0f3e4f38d6e2d21d1cc2cc94c64477ae71d686
+    patch_id: f298fc95486de80b93aa48c2eabbf6d747b1154d
+    base: dd2d3e863e222c2760fb54a187695ab473795866
+    parent: dd2d3e863e222c2760fb54a187695ab473795866
