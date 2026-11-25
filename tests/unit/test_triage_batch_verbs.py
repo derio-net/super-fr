@@ -742,6 +742,31 @@ def test_suggest_lists_the_overlapping_pairs_of_one_wave_with_both_remedies(
     assert (tmp_path / "judgements.yaml").read_text("utf-8") == before
 
 
+def test_suggest_reports_no_overlap_between_batches_of_two_repos(tmp_path: Path) -> None:
+    other = "derio-net/other"
+    facts = _facts(_issue(577), _issue(575))
+    facts.repos.append(other)
+    facts.issues.append(
+        Issue(
+            repo=other,
+            number=9,
+            title="t",
+            state="open",
+            url=f"https://github.com/{other}/issues/9",
+            author_association="OWNER",
+        )
+    )
+    doc = yaml.safe_load(JUDGEMENTS) | {
+        "schema": 6,
+        "batches": [_a(), {"id": "b", "title": "b", "ids": ["other#9"], "wave": 1}],
+    }
+    doc["issues"]["other#9"] = {"tier": 1, "theme": "x", "detail": "uses `isolation/local.py`"}
+    _state(tmp_path, facts, yaml.safe_dump(doc, sort_keys=False))
+    code, out = _run(tmp_path, "suggest")
+    assert code == 0, out
+    assert "overlap in wave" not in out
+
+
 def test_suggest_prints_no_suggestions_only_when_there_is_neither_grouping_nor_overlap(
     tmp_path: Path,
 ) -> None:

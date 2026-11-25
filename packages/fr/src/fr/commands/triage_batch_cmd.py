@@ -1359,7 +1359,7 @@ def batch_suggest_command(
     dir_override: DirOpt = None,
     workspace: WorkspaceOpt = None,
 ) -> None:
-    """Print candidate groupings (shared file, theme, pattern). Writes nothing."""
+    """Print candidate groupings and the overlaps within one wave. Writes nothing."""
     _, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     found = suggest(judgements, facts)
     overlaps = overlap_lines(judgements.batches, judgements, facts)

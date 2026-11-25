@@ -362,9 +362,13 @@ def _preapprove(
         _say(f"would preapprove {repo}#{n} at {head[:12]} (patch-id {patch_id[:12]})")
         return view
     client = driver.client(facts, repo)
-    if (off := _labels_off(client, repo) or _comments_off(client, repo)) is not None:
-        driver._report_once(f"preapprove\0{repo}\0labels", f"{repo}#{n} not preapproved: {off}")
-        return view
+    for kind, off in (
+        ("labels", _labels_off(client, repo)),
+        ("comments", _comments_off(client, repo)),
+    ):
+        if off is not None:
+            driver._report_once(f"preapprove\0{repo}\0{kind}", f"{repo}#{n} not preapproved: {off}")
+            return view
     ensure_approval_label(client, repo, _say, seen=vars(driver).setdefault("_preapproved", set()))
     command = " ".join(["fr", "triage", "queue", "remove", "--pr", str(n),
                         *getattr(driver, "scope_args", ())])  # fmt: skip

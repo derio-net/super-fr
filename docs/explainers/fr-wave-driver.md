@@ -56,7 +56,7 @@ Use waves for "these are independent, start them together" and `after` for "this
 what that one adds". A batch may have no wave. With no batch ids on the command line,
 `drive` takes the batches that have a wave, and every batch when none has.
 
-Two batches of one wave that change the same file will conflict when the second one lands.
+Two batches of one wave that change the same file may conflict when the second one lands.
 So `fr triage batch suggest`, and `batch create` and `batch edit` with `--wave`, print each such
 pair: the wave, the shared files, and two ways out. You can merge the two batches into one, or
 move one to the next wave. fr guesses a batch's files from its pull request, or else from the
@@ -160,7 +160,9 @@ is true now, not from what it remembers. In order, a pass:
     head and the change it approved, then records the approval at that head, and only then
     adds the label. So a push before the driver looks again does not slip in unchecked: it
     changes the diff and cancels the approval. Any later green push to the branch lands,
-    so remove the pull request to stop it.
+    so remove the pull request to stop it. While the repository's settings turn off forge
+    comments or labels, the driver approves nothing: it writes no comment, label or record,
+    and says so once.
 
     **Leaving a wave.** A batch that cannot merge need not hold its wave. `fr triage batch
     defer <id>` takes it out of the wave's queue and drain. Its pull request stays open, and

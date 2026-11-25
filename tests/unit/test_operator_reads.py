@@ -370,6 +370,24 @@ def test_preapproval_renews_at_the_next_green_head_after_a_void(tmp_path: Path) 
     assert out["queue_operator"][REPO][0][0].head == H2
 
 
+class _CommentsOffForge(Forge):
+    def read_file(self, repo: str, path: str) -> str:
+        return "forge:\n  comments: off\n"
+
+
+def test_preapproval_does_nothing_while_forge_comments_are_off(tmp_path: Path) -> None:
+    forge = _CommentsOffForge()
+    forge.view(10)
+    judgements = _state(tmp_path, _request(10, preapproved=True))
+    driver = Driver(tmp_path, forge)
+
+    _read(driver, _facts(_pr(10, "fix/10")), judgements)
+
+    assert forge.writes == [] and _approvals(tmp_path) == []  # no comment, label or record
+    (said,) = driver.warned
+    assert "not preapproved" in said and "comments" in said
+
+
 def test_preapproval_writes_nothing_in_a_dry_run(tmp_path: Path) -> None:
     forge = Forge()
     forge.view(10)

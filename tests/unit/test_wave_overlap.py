@@ -185,3 +185,27 @@ def test_the_brief_lines_name_the_other_batch_the_paths_and_the_handback() -> No
     assert "`b`" in text and "p/x.py" in text
     assert "whichever" in text and "lands second" in text and "conflict hand-back" in text
     assert overlap_brief_lines(_batch("c", 3), batches, j, f) == []
+
+
+def test_batches_of_different_repos_never_overlap_though_they_cite_one_path() -> None:
+    other = "derio-net/other"
+    j = _judged(**{"1": "touches a/same.py"})
+    j.issues["other#9"] = j.issues["super-fr#1"]
+    facts = _facts(
+        _issue(1),
+        Issue(
+            repo=other,
+            number=9,
+            title="t",
+            state="open",
+            url=f"https://github.com/{other}/issues/9",
+            author_association="OWNER",
+        ),
+    )
+    facts.repos.append(other)
+    a, b = (
+        _batch("a", 1),
+        Batch.model_validate({"id": "b", "title": "b", "ids": ["other#9"], "wave": 1}),
+    )
+    assert wave_overlaps([a, b], j, facts) == []
+    assert wave_overlaps([a, _batch("c", 1)], j, facts) != []

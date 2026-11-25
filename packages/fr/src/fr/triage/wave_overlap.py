@@ -72,8 +72,8 @@ def wave_overlaps(
     expected = {b.id: expected_paths(b, judgements, facts) for b in live}
     out: list[Overlap] = []
     for x, y in combinations(live, 2):
-        if x.wave != y.wave or x.wave is None:
-            continue
+        if x.wave != y.wave or x.wave is None or x.repo_name != y.repo_name:
+            continue  # the queue is per repo: batches of two repos never conflict
         if only is not None and only not in (x.id, y.id):
             continue
         if paths := _shared(expected[x.id], expected[y.id]):
