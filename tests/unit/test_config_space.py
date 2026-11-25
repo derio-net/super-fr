@@ -558,3 +558,32 @@ def test_a_malformed_switch_leaves_the_lenient_remap_lenient(tmp_path: Path) -> 
     remap, why = load_remap(_bad_switch_repo(tmp_path))
     assert remap == {}
     assert why is not None and "placement" in why
+
+
+# --- the PR body's lens-config question reads at_pair (R3, review p1-r6) ----------------
+
+
+def test_lens_config_changed_under_repo_compares_the_merge_base_with_head(
+    tmp_path: Path,
+) -> None:
+    from fr.record.pr_body import _lens_config_changed
+
+    root = make_repo(tmp_path)
+    base = _commit(root, ".fr/lenses.yaml", "disable: [tests]\n")
+    git(root, "checkout", "-q", "-b", "feat/x")
+    changed = (".fr/lenses.yaml",)
+    assert _lens_config_changed(root, base, changed) is False  # same text at both
+    _commit(root, ".fr/lenses.yaml", "disable: [errors]\n", push=False)
+    assert _lens_config_changed(root, base, changed) is True
+    assert _lens_config_changed(root, base, ()) is False  # the diff did not name it
+    assert _lens_config_changed(root, None, changed) is False  # no merge-base
+
+
+def test_lens_config_changed_is_never_true_under_quiet(tmp_path: Path) -> None:
+    from fr.record.pr_body import _lens_config_changed
+
+    root = quiet_repo(tmp_path)
+    base = git(root, "rev-parse", "HEAD").strip()
+    _commit(root, ".fr/lenses.yaml", "disable: [errors]\n", push=False)
+    _push_orphan(root, "fr-config", {".fr/lenses.yaml": "disable: [tests]\n"})
+    assert _lens_config_changed(root, base, (".fr/lenses.yaml",)) is False
