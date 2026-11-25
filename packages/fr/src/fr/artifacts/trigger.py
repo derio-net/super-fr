@@ -52,6 +52,7 @@ Three properties this module is built around:
 from __future__ import annotations
 
 import os
+import re
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -894,13 +895,19 @@ CARRY_LINE: Final = (
 )
 
 
+_SUBJECT_COUNT_RE: Final = re.compile(r"^chore\(fr\): migrate (\d+) artifacts? ")
+
+
 def _commit_notice(outcome: Any) -> str | None:
     """`fr: migrated and committed <n> artifact(s): <subject> (<sha>)`, or None."""
     if not getattr(outcome, "committed", False):
         return None
     message = getattr(outcome, "message", None) or ""
     subject = message.splitlines()[0] if message else "chore(fr): migrate"
-    n = len(getattr(outcome, "paths", ()) or ())
+    # The subject's count is the artifact count (a move's two staged paths are one
+    # artifact, `migration_commit_message`); the staged paths are only the fallback.
+    counted = _SUBJECT_COUNT_RE.match(subject)
+    n = int(counted.group(1)) if counted else len(getattr(outcome, "paths", ()) or ())
     sha = getattr(outcome, "sha", None)
     return f"{COMMIT_NOTICE_PREFIX} {n} artifact(s): {subject}" + (f" ({sha})" if sha else "")
 

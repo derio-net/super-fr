@@ -1380,3 +1380,22 @@ def test_an_archive_without_dry_run_still_migrates(tmp_path: Path) -> None:
     code, lines = _gate_argv(fx.wt, ["archive", "--all"])
     assert code == 0, lines
     assert _g(fx.wt, "rev-parse", "HEAD~1") == fx.work_sha
+
+
+def test_the_commit_notice_counts_artifacts_as_the_commit_subject_does() -> None:
+    """A relocation stages both sides of a move; the notice must say what the
+    subject says (one artifact per move), not the number of staged paths."""
+    from types import SimpleNamespace
+
+    from fr.artifacts.trigger import _commit_notice
+
+    outcome = SimpleNamespace(
+        committed=True,
+        paths=tuple(Path(f"p{i}") for i in range(14)),
+        message="chore(fr): migrate 7 artifacts to fr 9.1.0\n\n- profiles (2 files)\n",
+        sha="abc1234",
+    )
+    assert _commit_notice(outcome) == (
+        "fr: migrated and committed 7 artifact(s): "
+        "chore(fr): migrate 7 artifacts to fr 9.1.0 (abc1234)"
+    )
