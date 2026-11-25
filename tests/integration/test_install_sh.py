@@ -853,7 +853,7 @@ class TestInstallWorkflows:
     edit that added one (or moved the rsync source) would fail this loudly,
     which is the whole point of a drift guard.
 
-    `fr.workflow.resolve.default_shipped_workflows_dir()`'s fallback is
+    `fr._shipped.marketplace_dir("workflows")`, the walk's last source, is
     literally `$HOME/.claude/plugins/marketplaces/derio-net--super-fr/
     plugins/super-fr/defaults/workflows` — i.e. `$MARKETPLACE_DIR/plugins/super-fr/
     defaults/workflows` — so the marketplace directory (not the version-pinned cache)

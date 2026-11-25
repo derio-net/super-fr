@@ -3,8 +3,8 @@
 Mirrors `fr.models`' repo-over-user precedent (`fr.models.resolve`), but the
 "shipped" side is the installed plugin's manifest directory rather than a
 user config file — `resolve_workflow` takes it as an explicit, injectable
-`shipped_root` (default: the Claude Code marketplace clone path,
-`default_shipped_workflows_dir()`) precisely so tests never touch
+`shipped_root` (default: `fr._shipped`'s walk, `shipped_workflow_dirs()`)
+precisely so tests never touch
 `~/.claude`.
 
 Override is WHOLESALE (spec §4.A: "no merge semantics, because
@@ -19,12 +19,7 @@ from pathlib import Path
 
 import pytest
 from fr.workflow.model import WorkflowError
-from fr.workflow.resolve import (
-    MARKETPLACE_ROOT,
-    SHIPPED_WORKFLOWS_REL,
-    default_shipped_workflows_dir,
-    resolve_workflow,
-)
+from fr.workflow.resolve import resolve_workflow
 
 SHIPPED_TEXT = """
 workflow: fr-goal
@@ -118,43 +113,13 @@ def test_a_second_shape_name_resolves_independently(tmp_path: Path) -> None:
     assert manifest.workflow == "ux-research"
 
 
-def test_default_shipped_workflows_dir_honors_env_override(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("FR_SHIPPED_WORKFLOWS_DIR", str(tmp_path / "custom"))
-    assert default_shipped_workflows_dir() == tmp_path / "custom"
-
-
-def test_default_shipped_workflows_dir_falls_back_to_the_marketplace_clone_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """No `$FR_SHIPPED_WORKFLOWS_DIR` → the `$HOME`-relative marketplace
-    path, built from the SAME `MARKETPLACE_ROOT` constant
-    `plan_validator_wrapper.py`/`isolation/local.py` hardcode as a literal
-    string — so a future marketplace rename only has one constant to fix,
-    not a retyped path this test would silently stop protecting."""
-    monkeypatch.delenv("FR_SHIPPED_WORKFLOWS_DIR", raising=False)
-    monkeypatch.setenv("HOME", str(tmp_path))
-
-    result = default_shipped_workflows_dir()
-
-    assert result == tmp_path / MARKETPLACE_ROOT / SHIPPED_WORKFLOWS_REL
-    # Names the exact convention every other "shipped resource" lookup uses
-    # (plan_validator_wrapper.py:16,35; isolation/local.py:982) — spelled
-    # out here, not just via the constant, so a drift between this
-    # constant's VALUE and that convention still fails loud.
-    assert str(result).endswith(
-        ".claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/defaults/workflows"
-    )
-
-
 def test_resolve_workflow_without_shipped_root_consults_the_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The wiring test: `resolve_workflow(name, repo_root)` called with NO
-    `shipped_root` kwarg must actually reach `default_shipped_workflows_dir()`
-    — proving the production call site, not just the helper in isolation
-    (which the two tests above already cover)."""
+    `shipped_root` kwarg must actually reach the shipped walk
+    (`shipped_workflow_dirs()`) — proving the production call site, not just
+    the helper in isolation."""
     repo_root = tmp_path / "repo"
     (repo_root / "docs" / "superpowers" / "workflows").mkdir(parents=True)
     default_dir = tmp_path / "shipped-via-default"
@@ -178,7 +143,8 @@ def test_the_wheel_copy_beats_a_stale_marketplace_clone(tmp_path, monkeypatch) -
     who upgrades `fr` without re-running `install.sh` would otherwise keep
     resolving a STALE shape — silently, possibly at the wrong granularity.
     The wheel copy ships with the code that reads it and cannot disagree."""
-    from fr.workflow.resolve import MARKETPLACE_ROOT, SHIPPED_WORKFLOWS_REL, resolve_workflow
+    from fr._shipped import MARKETPLACE_ROOT
+    from fr.workflow.resolve import SHIPPED_WORKFLOWS_REL, resolve_workflow
 
     home = tmp_path / "home"
     clone = home / MARKETPLACE_ROOT / SHIPPED_WORKFLOWS_REL
@@ -249,8 +215,8 @@ def test_the_shipped_fr_goal_resolves_with_an_empty_home_and_no_repo_override(
 
 
 def test_the_lookup_order_is_the_one_the_docstring_states(tmp_path, monkeypatch) -> None:
+    from fr._shipped import MARKETPLACE_ROOT
     from fr.workflow.resolve import (
-        MARKETPLACE_ROOT,
         SHIPPED_WORKFLOWS_REL,
         packaged_shipped_workflows_dir,
         shipped_workflow_dirs,

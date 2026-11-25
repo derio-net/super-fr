@@ -26,8 +26,6 @@ from fr.verification.model import RESERVED, StrategyError, StrategyManifest, par
 
 REPO_VERIFICATIONS_REL = Path(KIND_DIRS["verification"])
 PLUGIN_VERIFICATIONS_REL = _shipped.plugin_rel("verifications")
-PACKAGED_VERIFICATIONS_DIRNAME = "defaults/verifications"
-SHIPPED_ENV_VAR = _shipped.DEFAULTS_ENV_VAR
 
 
 def repo_verifications_dir(repo_root: Path) -> Path:
