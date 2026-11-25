@@ -261,6 +261,23 @@ def test_under_quiet_an_executable_file_keeps_its_mode_on_fr_config(tmp_path: Pa
     assert modes[".fr/ci.yaml"] == "100644"
 
 
+def test_with_filemode_off_a_committed_644_file_stays_644_on_fr_config(tmp_path: Path) -> None:
+    """Review p7-r3: the pushed bytes are HEAD's blob, so the mode is HEAD's too. Under
+    `core.fileMode=false` a chmod is no change to git, and the working tree's bit must not
+    turn a committed 100644 file into 100755 on fr-config."""
+    root = _quiet(tmp_path)
+    git(root, "config", "core.fileMode", "false")
+    path = _put(root, ".fr/candidate-install", "#!/bin/sh\necho fr\n")
+    assert git(root, "ls-tree", "HEAD", ".fr/candidate-install").split()[0] == "100644"
+    path.chmod(0o755)
+    assert git(root, "status", "--porcelain", "--", ".fr/candidate-install") == ""
+    _put(root, ".fr/ci.yaml", "tests: ci\n")
+    _migrate(root)
+    tree = git(_origin(tmp_path), "ls-tree", "-r", "fr-config")
+    modes = {line.split()[-1]: line.split()[0] for line in tree.splitlines()}
+    assert modes[".fr/candidate-install"] == "100644"
+
+
 def test_a_proposed_executable_keeps_its_mode(tmp_path: Path, prs: list) -> None:
     """Case 3 (fr-config exists without the file): the pull request's commit keeps the
     executable bit too."""

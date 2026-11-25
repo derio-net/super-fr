@@ -477,7 +477,7 @@ def pending_files(
             else:
                 text = source_text(product, source)
             out[space.tree_path(entry.below(source, product))] = text
-            if executable is not None and is_executable(source):
+            if executable is not None and is_executable(product, source):
                 executable.add(space.tree_path(entry.below(source, product)))
     if space.placement == QUIET:
         for name in QUIET_FILES:
@@ -487,15 +487,28 @@ def pending_files(
             refuse_link(product, source)
             if source.relative_to(product).as_posix() in clean:
                 out[space.tree_path(name)] = source_text(product, source)
-                if executable is not None and is_executable(source):
+                if executable is not None and is_executable(product, source):
                     executable.add(space.tree_path(name))
     return out
 
 
-def is_executable(source: Path) -> bool:
-    """Whether *source*'s owner may execute it: what `git add` commits as `100755`."""
+def is_executable(product: Path, source: Path) -> bool:
+    """Whether *source* goes onto the configuration branch as `100755`. A tracked file's
+    bytes are HEAD's blob (`source_text`), so its mode is HEAD's too: under
+    `core.fileMode=false` a chmod is no change to git, and the working tree's bit must not
+    make a committed 100644 file executable (review p7-r3). An untracked file's mode is
+    its owner's execute bit, what `git add` would commit."""
     import stat
 
+    rel_path = Path(source).relative_to(product).as_posix()
+    listed = subprocess.run(
+        ["git", "-C", str(product), "ls-tree", "HEAD", "--", rel_path],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if listed.returncode == 0 and listed.stdout.strip():
+        return listed.stdout.split()[0] == "100755"
     return bool(Path(source).lstat().st_mode & stat.S_IXUSR)
 
 
@@ -675,7 +688,7 @@ def move_across(
         if transform is not None:
             body = transform(body)
     tree_path = space.tree_path(below)
-    runnable = is_executable(source)
+    runnable = is_executable(product, source)
     writer = writer_for(product)
     writer.fetch()
     if not writer.exists():
