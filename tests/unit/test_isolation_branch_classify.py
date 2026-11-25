@@ -100,7 +100,8 @@ class GitRunner:
 
 SWITCH_PROBE = "refs/heads/fr"
 NO_FETCH_SWITCH_LINE = (
-    "fr: --no-fetch: reading the last fetched origin/fr for the placement "
+    "fr: --no-fetch: reading the last fetched origin/fr-config and origin/fr for the "
+    "placement "
     "(not a reachability check)"
 )
 

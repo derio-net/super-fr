@@ -827,7 +827,8 @@ _BRANCHES: Final = (
 def _fetch_both(root: Path, net: Network, command: str | None) -> None:
     """One probe, one fetch: the branches origin has are fetched, the tracking ref of a
     branch it does not have is deleted."""
-    probe = net(["git", "ls-remote", "--exit-code", "origin", QUIET_REF, CONFIG_REF])
+    # `fr` last: callers that recognise the switch probe by its last argument still do
+    probe = net(["git", "ls-remote", "--exit-code", "origin", CONFIG_REF, QUIET_REF])
     if probe.returncode not in (0, 2):
         raise unreachable((probe.stderr or probe.stdout or "git ls-remote failed").strip(), command)
     present = {
