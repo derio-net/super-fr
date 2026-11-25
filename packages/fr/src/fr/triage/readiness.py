@@ -459,21 +459,26 @@ def refused_others(
     """R8: the close-out, archive and export PRs a trust rule held back this pass, each with
     the reason the rule's own action carries. A candidate is told apart by which of the
     pass's PR sets holds its number, never by its text; one admitted is not refused."""
-    taken = {a.pr.number for a in admitted}
-    pool: dict[int, tuple[Literal["closeout", "archive", "export"], str, LivePr]] = {}
+    taken = {(a.repo, a.pr.number) for a in admitted}
+    pool: dict[tuple[str, int], tuple[Literal["closeout", "archive", "export"], LivePr]] = {}
     for marker in snap.closeouts:
         if (p := snap.collected_prs.get(marker.item)) is not None:
-            pool[p.number] = ("closeout", marker.repo, p)
+            pool[marker.repo, p.number] = ("closeout", p)
     for repo, prs in snap.archives.items():
-        pool.update({p.number: ("archive", repo, p) for p in prs})
-    pool.update({p.number: ("export", repo, p) for (repo, _), p in snap.export_prs.items()})
-    out: dict[int, Refused] = {}
+        pool.update({(repo, p.number): ("archive", p) for p in prs})
+    pool.update({(repo, p.number): ("export", p) for (repo, _), p in snap.export_prs.items()})
+    out: dict[tuple[str, int], Refused] = {}
     for a in actions:
-        if a.pr is None or a.pr in taken or a.pr in out or a.kind not in _REFUSING:
+        # an action names a batch, or (an export's) the repo itself: only a batch is "about"
+        # one; the rest are the board's own (R8)
+        repo = snap.repos.get(a.batch, a.batch)
+        if a.pr is None or a.kind not in _REFUSING:
             continue
-        if a.pr in pool:
-            kind, repo, pr = pool[a.pr]
-            out[a.pr] = Refused(kind, repo, pr, a.detail, a.batch)
+        at = (repo, a.pr)
+        if at in taken or at in out or at not in pool:
+            continue
+        kind, pr = pool[at]
+        out[at] = Refused(kind, repo, pr, a.detail, a.batch if a.batch in snap.repos else "")
     return tuple(out.values())
 
 
