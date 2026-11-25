@@ -511,3 +511,62 @@ Carried from phase 3's adversarial review (p3-r6, out of phase 3's scope). Once 
 ### p3-execute-the-exported-tip · decision · A guarded program runs from the fetched tip exported to a private directory; guarded files are read at that tip; fetches come only from the repository whose rules were read (amends p3-run-the-checked-tip) (phase 3)
 
 Security review of p3-run-the-checked-tip (orchestrator decision). `git status` can be blinded (assume-unchanged, skip-worktree, core.fileMode=false), so the clean/at-tip check of the configuration checkout proved nothing and is DROPPED, not kept as a warning: the checkout's state no longer matters for anything fr runs or trusts. (1) `fr.config.tip.export_checked(space, client, what)`: require_protected, fetch_tip, then `git archive <fetched tip sha> -- <space.prefix>` extracted (tarfile filter=data, file modes kept) into a fresh `mkdtemp` directory chmod 0700, cached per (repo, sha, prefix), removed by `protection.forget()` and at exit; one stderr line names the tip sha it runs. The walk's `_program` runs a configuration-space argv[0] from there (asked once before anything runs, again per program); under repo the working tree runs as before. (2) `protection.read_checked(space, client, name, what, guarded=...)`: fetch_tip, `at_default` (the fetched tip), require_protected when the text holds something guarded; used by load_ops_config, load_remap (still lenient: ignored with the reason), the merge queue's required_names and the ops gate's queue_configured. ops and the remap skip the fetch only when neither the last fetched tip nor the checkout has the file. (3) `fetch_tip` first runs `_check_origin`: under quiet the product clone's origin owner/repo must equal `_target`'s; under stealth the configuration clone's origin must be the tracking repo (same URL via stealth._same_repo, or same host and owner/repo); otherwise UncheckedTipError naming both and `git remote set-url`; a target no forge protects refuses with the protection fix text before any fetch. `require_checked_tip` and `refusal_at(working_tree=)` are removed. Tests: tests/unit/test_config_protection_executors.py (assume-unchanged edit runs the tip, local commit ahead runs the tip, a merged change is fetched and run, export mode 0700 and exec bit kept and removed, failed fetch, --no-fetch, quiet origin mismatch, stealth tip read, stealth clone origin pointing elsewhere refused, ops and exit remap read at the tip).
+
+<!-- fr:journal kind=review scope=plan id=review-p3 created=2026-11-25T05:51:10+00:00 phase=3 -->
+### review-p3 · review · Phase 3 adversarial review (forge protection for executable and trust configuration) (phase 3)
+
+Independent adversarial reviewer read d454de2..HEAD against §C and R7. No fail-open in
+protection.py (_classify, _judge, _ask); cache key and lifetime sound; fixtures match the parser and
+the third-party capture is redacted; mutation checks of the ops, walk, exit-remap and collect guards
+each turned a test red. Five in-scope findings, all fixed in 3d2aa2939..86efa719d (plus two automated
+security-review points: index-flag-blind status check replaced by executing an exported tip, and the
+stealth fetch source verified against the repo whose rules were read). One out-of-scope finding carried
+to phase 5 as p5-exec-manifests-guard. Selection 5499 passed / 17 skipped; ruff, mypy clean.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-25T05:51:10+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · deliver's CI evidence took gate_checks/tests:ci and the fast_tier command from the configuration branch with no require_protected (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-25T05:51:10+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · protection was asked of origin's branch while walk/ops/exit-remap ran the local, agent-editable config checkout (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-25T05:51:10+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · Enforced accepted a pull_request rule with 0 required approvals, and invisible bypass actors were never stated (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-25T05:51:10+00:00 phase=3 state=open review_scope=in -->
+### p3-r4 · finding [open] (reviewer: in scope) · guarded reads used the last-fetched remote-tracking config ref, so unreviewed pre-protection content passed (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-25T05:51:10+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · classic branch protection read as no rules with ruleset-only fix text (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6 created=2026-11-25T05:51:10+00:00 phase=3 state=open review_scope=out -->
+### p3-r6 · finding [open] (reviewer: out of scope) · workflow kind:cli run: and verification argv become configuration-branch executables once phase 5 moves them into .fr/ (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-25T05:51:10+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: deliver's CI evidence took gate_checks/tests:ci and the fast_tier command from the configuration branch with no require_protected (phase 3)
+
+db7c9aca1: ci_evidence._at_tip is the single quiet/stealth reader of .fr/ci.yaml; a file setting gate_checks, tests or fast_tier needs an enforced configuration branch, else it reads as absent with the reason (deliver owes a local full-suite log, no fast_tier in any brief); a failed protection read refuses; spec R7 names the keys (decision p3-guarded-ci-keys).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-25T05:51:10+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: protection was asked of origin's branch while walk/ops/exit-remap ran the local, agent-editable config checkout (phase 3)
+
+e8f31dc78 and 86efa719d: guarded executors run the fetched tip's .fr/ exported by git archive into a private 0700 dir (fr.config.tip.export_checked), and guarded files are read at the fetched tip (protection.read_checked); the local checkout's state no longer matters, an assume-unchanged edit runs the tip's content (decision p3-execute-the-exported-tip).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-25T05:51:10+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: Enforced accepted a pull_request rule with 0 required approvals, and invisible bypass actors were never stated (phase 3)
+
+3d2aa2939: enforced needs a pull_request rule with required_approving_review_count >= 1 (new captured, redacted positive fixture; the 0-approval capture is a negative); every fix text, fr settings sync, spec §C and docs/verification-strategies.md say fr cannot see bypass actors and the operator must keep the bypass list empty (decision p3-enforced-needs-approval).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-25T05:51:10+00:00 phase=3 state=fixed resolves=p3-r4 -->
+### p3-r4-resolved · finding [fixed] · resolves p3-r4: guarded reads used the last-fetched remote-tracking config ref, so unreviewed pre-protection content passed (phase 3)
+
+e8f31dc78 and 86efa719d: guarded paths fetch the configuration branch first, from the repository whose rules were read (origin slug verified under quiet, tracking repo under stealth, mismatch refuses); a failed fetch refuses and --no-fetch says the tip may be stale.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-25T05:51:10+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: classic branch protection read as no rules with ruleset-only fix text (phase 3)
+
+a89d4a781: an empty rules reply says no ruleset on this branch, that classic branch protection is not read, and to protect it with a ruleset.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved created=2026-11-25T05:51:10+00:00 phase=3 state=open resolves=p3-r6 out_of_scope=true -->
+### p3-r6-resolved · finding [out-of-scope] · resolves p3-r6: workflow kind:cli run: and verification argv become configuration-branch executables once phase 5 moves them into .fr/ (phase 3)
+
+Today workflows and verification manifests still resolve from the product checkout, so phase 3 does not cause it; it becomes real when phase 5 moves them into .fr/, and is carried as the open in-scope phase-5 finding p5-exec-manifests-guard.
