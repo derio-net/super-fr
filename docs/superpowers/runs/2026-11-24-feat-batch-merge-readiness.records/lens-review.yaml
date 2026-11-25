@@ -1,0 +1,47 @@
+schema_version: 12
+run: 2026-11-24-feat-batch-merge-readiness
+step: lens-review
+outcome: done
+journal:
+  - kind: review
+    id: lens-review
+    global: true
+    title: "Lens review (security, errors, tests, docs-accuracy) of the whole feature: 16 in-scope findings, all fixed"
+    body: |
+      Four reviewers, one per lens, over git diff 24130aa17..HEAD. Security found no path to ready, admit or merge an undelivered PR; it and errors both found that a corrupt cursor was skipped (fail open), and security found gc's guard blind to quiet/stealth placement and to an unlistable runs dir. Errors found read failures losing their cause and missing Needs. Tests mutation-checked the suite: the R5 order, the unread-retry, the queue-open verdict, whose-move for CI red and the skill's R10 text were unpinned. Docs-accuracy found three false claims (skill, explainer, AGENTS.md). Fixes: 72fcd25c7, 077f478d4, f0f78c421, 5c63c10e1; spec R10 wording in the follow-up commit.
+  - {kind: finding, id: l-security-r1, global: true, review_scope: in, title: "gc's R9 guard reads cursors only from the product worktree; under quiet/stealth a running deliver is reaped"}
+  - {kind: finding, id: l-security-r2, global: true, review_scope: in, title: "branch_runs returns [] on OSError, so an unlistable runs dir reads as nothing running and gc reaps"}
+  - {kind: finding, id: l-security-r3, global: true, review_scope: in, title: "read_cursor skips a corrupt or malformed branch cursor, so a not-delivered run beside a deliver-done one reads delivered"}
+  - {kind: finding, id: l-errors-r1, global: true, review_scope: in, title: "an unparseable or malformed run file is dropped from the every-cursor fold (admits, or wrong R12 merge-by-hand advice)"}
+  - {kind: finding, id: l-errors-r2, global: true, review_scope: in, title: "cursor read failures drop their cause, log nothing and read as the driver's move forever"}
+  - {kind: finding, id: l-errors-r3, global: true, review_scope: in, title: "needs_you raises a Need only for no-cursor; no-clone and persistent unread never reach Needs-you"}
+  - {kind: finding, id: l-errors-r4, global: true, review_scope: in, title: "_shape_has_lens_review's bare except turns any failure into a false 'predates review lenses'"}
+  - {kind: finding, id: l-tests-r1, global: true, review_scope: in, title: "R5 order not pinned: single-condition fixtures and a vacuous R5_ORDER test"}
+  - {kind: finding, id: l-tests-r2, global: true, review_scope: in, title: "no test that _Driver.cursor_at re-reads after an unread result"}
+  - {kind: finding, id: l-tests-r3, global: true, review_scope: in, title: "the queue-opening verdict (merges next) is untested"}
+  - {kind: finding, id: l-tests-r4, global: true, review_scope: in, title: "whose move for ci-red/conflicting is unpinned"}
+  - {kind: finding, id: l-tests-r5, global: true, review_scope: in, title: "no tripwire pins the fr-debugging skill's R10 run-start instructions"}
+  - {kind: finding, id: l-tests-r6, global: true, review_scope: in, title: "two admission tests restate the code under test and cannot fail"}
+  - {kind: finding, id: l-docs-accuracy-r1, global: true, review_scope: in, title: "skill says fr run start refuses a second run on a branch; it refuses only the same workflow"}
+  - {kind: finding, id: l-docs-accuracy-r2, global: true, review_scope: in, title: "fr-debugging explainer's pick-a-profile command lacks --profile and forces --base HEAD"}
+  - {kind: finding, id: l-docs-accuracy-r3, global: true, review_scope: in, title: "AGENTS.md says both shipped shapes run lens-review; fr-debugging has none"}
+resolves:
+  - {id: l-security-r1, state: fixed, body: "077f478d4: preserve.gc_run_hold reads the placement's feature root (space_for, create=False) as well as the worktree; an unresolvable placement or absent non-repo root keeps the workspace ('kept: run cursor location unknown'). Unit and gc dry-run/live tests."}
+  - {id: l-security-r2, state: fixed, body: "077f478d4: a runs dir that exists but cannot be listed keeps the workspace (in the gc hold, so down's branch_runs callers are unchanged per R9); absent dir is still no cursor. chmod 000 test."}
+  - {id: l-security-r3, state: fixed, body: "72fcd25c7: a non-YAML, non-run-shaped or branch-naming-but-unusable file makes the whole read unread, naming the file; tests for corrupt-beside-delivered and lone-corrupt."}
+  - {id: l-errors-r1, state: fixed, body: "72fcd25c7: same change as l-security-r3."}
+  - {id: l-errors-r2, state: fixed, body: "72fcd25c7: read_cursor returns CursorAnswer(position, read, detail); gitseam Checkout.reach_failure carries the fetch error; PullRequest.cursor_detail (optional, inside unreleased facts 17) and cursor_details carry it into the verdict; _Driver.cursor_at reports it once per head via _report_once."}
+  - {id: l-errors-r3, state: fixed, body: "72fcd25c7: no-clone and a caused unread are the operator's move; readiness.cursor_remedy names the remedy on the card and in a new cursor-unread Needs-you row, approved or not."}
+  - {id: l-errors-r4, state: fixed, body: "f0f78c421: catches only WorkflowError/OSError and renders 'fr could not read the workflow shape: <error>'; others propagate. Tests for unknown shape, broken YAML and a RuntimeError."}
+  - {id: l-tests-r1, state: fixed, body: "72fcd25c7: 10 two-condition tests over R5's adjacent pairs; the unused R5_ORDER constant and its vacuous test removed."}
+  - {id: l-tests-r2, state: fixed, body: "72fcd25c7: cursor_at re-reads after unread (three calls, three reads), reports once, and carries a clone-open error."}
+  - {id: l-tests-r3, state: fixed, body: "72fcd25c7: the queue-opening pass pinned to 'Approved, merges next'; verified it fails with the branch disabled."}
+  - {id: l-tests-r4, state: fixed, body: "72fcd25c7: whose move pinned to the session for CI red and an unapproved conflict."}
+  - {id: l-tests-r5, state: fixed, body: "5c63c10e1: tripwire in test_fr_debugging_journal.py over the skill and both mirrors (run start, start-none rule, refusal wording, review via step record)."}
+  - {id: l-tests-r6, state: fixed, body: "72fcd25c7: _ready and _other_ready checked against hand-written admits per case."}
+  - {id: l-docs-accuracy-r1, state: fixed, body: "5c63c10e1: skill says the check is the agent's own; spec R10 reworded to match in the follow-up commit."}
+  - {id: l-docs-accuracy-r2, state: fixed, body: "5c63c10e1: explainer shows fr isolation up --branch fix/<slug> [--profile <name>] [--base HEAD]."}
+  - {id: l-docs-accuracy-r3, state: fixed, body: "5c63c10e1: AGENTS.md says fr-goal and fr-goal-light run lens-review and fr-debugging has none."}
+evidence:
+  review: lens-review
+  reviewer: "security=ab3b19d77c758198e,errors=a94a042ceb54d9962,tests=ab0723e69c8071928,docs-accuracy=a6d9a4700247f3205"
