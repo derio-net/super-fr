@@ -63,9 +63,14 @@ rows:
       has a step or unit running, and says which run and step.
     origin:
     - spec:2026-11-24-batch-merge-readiness#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation.py#test_gc_keeps_merged_workspace_with_a_running_step
+      - super-fr:tests/unit/test_isolation.py#test_gc_keeps_merged_by_content_workspace_with_a_running_step
+      - super-fr:tests/unit/test_isolation_preserve.py#test_branch_runs_running_predicate_over_units
+    status: ci
+    notes: 'phase 3: gc keeps a merged workspace whose cursor has a running step or
+      unit, or is unreadable; down unchanged'
     verify: none
   - id: fr-debugging-run-cursor
     capability: A debug run has a cursor with deliver
