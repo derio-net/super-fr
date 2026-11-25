@@ -40,12 +40,20 @@ run_fr out settings init --stealth "$track@main"
 require_exit 0 "$out"
 git --git-dir="$track" show main:local--origin/settings.yaml | grep -qx 'placement: stealth' \
   || fail "the tracking branch lacks local--origin/settings.yaml saying placement: stealth"
+git --git-dir="$track" show main-config:local--origin/.fr/settings.yaml | grep -qx 'placement: stealth' \
+  || fail "the configuration branch lacks local--origin/.fr/settings.yaml saying placement: stealth"
 # squash-unpushed (review pr1431-r4): the squashed commit's BODY must name nothing of fr.
+# The settings live on `main-config` (spec 2026-11-19-event-driven-a-la-carte R5) with the old
+# copy on `main` kept in step (R6: two that differ refuse), so the policy goes into both.
 policy="$base/track-policy"
+squash='git:\n  history: squash-unpushed\n'
 git clone -q "$track" "$policy" \
-  && printf 'git:\n  history: squash-unpushed\n' >> "$policy/local--origin/settings.yaml" \
+  && printf "$squash" >> "$policy/local--origin/settings.yaml" \
   && git -C "$policy" commit -qam "squash policy" && git -C "$policy" push -q origin main \
-  || fail "set git.history: squash-unpushed on the tracking branch"
+  && git -C "$policy" switch -q main-config \
+  && printf "$squash" >> "$policy/local--origin/.fr/settings.yaml" \
+  && git -C "$policy" commit -qam "squash policy" && git -C "$policy" push -q origin main-config \
+  || fail "set git.history: squash-unpushed on the tracking branches"
 
 run_fr out isolation up --branch feat/s --stealth "$track@main"
 require_exit 0 "$out"
