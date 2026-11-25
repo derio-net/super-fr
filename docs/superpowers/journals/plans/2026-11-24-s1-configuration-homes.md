@@ -1103,3 +1103,8 @@ the forge-side settings read mirrors read_config_lenient's ref choice and protec
 ### p6-product-push-tripwire-red-resolved · finding [fixed] · resolves p6-product-push-tripwire-red: test_tripwire_product_push fails on fr.placement.quiet.create_config_branch (from ddb60c607, phase 4) (phase 6)
 
 Pinned (fr.placement.quiet, create_config_branch) in FR_BRANCH_PUSHERS with its reason: the creation of fr-config (S1 R10), one orphan commit, a plain never-forced push, refused when the branch exists. test_tripwire_product_push.py green (bec21cf4f).
+
+<!-- fr:journal kind=decision scope=plan id=p6-older-cache-from-outside created=2026-11-25T11:06:44+00:00 phase=6 -->
+### p6-older-cache-from-outside · decision · An older (pre-S1) cache is made an S1 repository only by the R18 move (phase 6)
+
+A cache holding files and no .git (an fr below S1's) is never git-init'd in place (state_home.refuse_older, called by state_dir and ensure_repo). From a working directory with no clone copy, fr refuses and names the remedies: run from the clone whose .fr/triage-state/<scope>/ holds the live state (the move keeps the cache as <scope>.pre-s1); if no clone holds one, move the cache into a clone's .fr/triage-state/ and run from there; or --dir <cache> to use it unsynced. Review p6-r2.
