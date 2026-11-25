@@ -776,3 +776,63 @@ def test_rendered_board_html_has_no_closed_set_note_when_only_held_entries_exist
     assert code == 0, out
     page = (tmp_path / "batches.html").read_text(encoding="utf-8")
     assert "closed issue still labelled" not in page
+
+
+# ------------------------------------------------------ plan overlap (spec 2026-11-25 R7, R9)
+
+
+def _two_dispatched(tmp_path: Path) -> None:
+    world = World()
+    world.issues.update({1: "open", 2: "open", 3: "open"})
+    _state(
+        tmp_path,
+        world,
+        _batch("b1", 1, wave=1, events=_dispatch_event("b1")),
+        _batch("b2", 2, wave=2, events=_dispatch_event("b2")),
+        _batch("b3", 3, wave=2, events=_dispatch_event("b3")),
+    )
+
+
+def test_write_board_shows_overlaps_on_both_cards_and_a_note_per_unread_batch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.test_triage_plan_overlap import both_plans
+
+    _two_dispatched(tmp_path)
+    _use(monkeypatch, _Inspector())
+    source = both_plans(["pkg/a.py", "shared.py"], ["shared.py"])
+    seen: list[Any] = []
+
+    def source_for_clones(cwd: Path, checkouts: Any) -> Any:
+        seen.append(checkouts)
+        return lambda repo: source
+
+    monkeypatch.setattr(triage_kanban_cmd, "source_for_clones", source_for_clones)
+    clones = {REPO.lower(): tmp_path}
+
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, checkouts=clones)
+
+    page = path.read_text(encoding="utf-8")
+    assert seen == [clones]
+    for bid, other in (("b1", "b2"), ("b2", "b1")):
+        card = re.search(rf'<details class="card[^"]*" id="card-{bid}".*?</details>', page, re.S)
+        assert card and f"Plans overlap with {other} on shared.py" in card.group(0)
+        assert card.group(0).count('<p class="overlap">') == 1
+    assert 'id="card-b3"' in page
+    assert "plan overlap not checked for b3: no ref origin/feat/batch-b3" in page
+
+
+def test_write_board_survives_a_plan_overlap_failure_with_one_note(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _two_dispatched(tmp_path)
+    _use(monkeypatch, _Inspector())
+
+    def boom(cwd: Path, checkouts: Any) -> Any:
+        raise RuntimeError("clone exploded")
+
+    monkeypatch.setattr(triage_kanban_cmd, "source_for_clones", boom)
+    path, cards = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0)
+    page = path.read_text(encoding="utf-8")
+    assert cards == 3 and 'id="card-b1"' in page
+    assert page.count("plan overlap not checked: clone exploded") == 1

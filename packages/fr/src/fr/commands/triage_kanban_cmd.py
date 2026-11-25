@@ -17,7 +17,7 @@ import importlib.util
 import tempfile
 import time
 import webbrowser
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -77,6 +77,7 @@ from fr.triage.kanban import BoardStatus, build_board
 from fr.triage.kanban_render import render_board
 from fr.triage.merge_stops import load_stops
 from fr.triage.model import Facts, Judgements, Scope
+from fr.triage.plan_overlap import card_lines, plan_overlap_report, source_for_clones
 from fr.triage.quota import budget_from_json
 from fr.triage.render import plural
 from fr.triage.scope_config import load_scope_config, publish_board, scope_id
@@ -414,6 +415,7 @@ def write_board(
     loader: Callable[[str], Runner] | None = None,
     ci_none: Collection[str] | None = None,
     now: datetime | None = None,
+    checkouts: Mapping[str, Path] | None = None,
 ) -> tuple[Path, int]:
     """Render the Batches page into the state directory *target* from the facts and
     judgements on disk now, with live session statuses, and remove the page's old-named
@@ -434,11 +436,19 @@ def write_board(
     notes.extend(gated_notes(facts))
     if (refusal := stopped(*view_inputs(target))) is not None:  # batch-train-truth R8
         notes.insert(0, stopped_line(refusal))
+    try:  # plan file overlap (spec 2026-11-25): the board is a view, never a refusal
+        overlap = plan_overlap_report(judgements, facts, source_for_clones(Path.cwd(), checkouts))
+        notes.extend(f"plan overlap not checked for {b}: {why}" for b, why in overlap.unread)
+        card_overlaps = card_lines(overlap)
+    except Exception as exc:  # noqa: BLE001
+        notes.append(f"plan overlap not checked: {one_line(exc)}")
+        card_overlaps = {}
     board = build_board(
         facts, judgements, statuses, stops=load_stops(target), me=me, now=rendered_at,
         notes=reads.session_notes,
         ci_none=local_ci_none(facts) if ci_none is None else ci_none,
         scope_args=scope_args,
+        overlaps=card_overlaps,
     )  # fmt: skip
     html = render_board(
         board,
