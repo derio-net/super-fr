@@ -20,6 +20,8 @@ from fr.config import change
 from tests.unit.settings_repo import git, make_repo
 from tests.unit.test_placement_quiet import QUIET, push_fr_branch
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 
 WORKFLOW = (REPO / "plugins/super-fr/defaults/workflows/fr-goal-light.yaml").read_text()

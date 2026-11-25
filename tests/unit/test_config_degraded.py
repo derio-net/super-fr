@@ -27,6 +27,8 @@ from fr.config import protection, space
 from tests.unit.settings_repo import git
 from tests.unit.test_config_protection_executors import SLUG, _quiet_with_config, _Rules
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 LIGHT = (REPO / "plugins/super-fr/defaults/workflows/fr-goal-light.yaml").read_text()
 CANDIDATE = (REPO / "plugins/super-fr/defaults/verifications/candidate.yaml").read_text()

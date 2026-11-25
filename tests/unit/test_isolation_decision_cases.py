@@ -27,7 +27,10 @@ CASES: dict[str, Any] = json.loads(
 )
 NO_FR = {"PATH": "/usr/bin:/bin"}
 
-pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="needs git")
+pytestmark = [
+    pytest.mark.skipif(shutil.which("git") is None, reason="needs git"),
+    pytest.mark.own_artifacts,
+]
 
 
 def _bash(script: str) -> str:

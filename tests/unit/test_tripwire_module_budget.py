@@ -21,7 +21,9 @@ BUDGETS: dict[str, int] = {
     f"{SRC}commands/run_cmd.py": 9120,  # show-me-visuals: three call sites of fr.shape
     # +25 each: batch closeout-truth (gh#1494/#1496/#1497/#1569) changes the close-out steps
     # these modules hold; the split they need is #1516 (hand-back and close-out leaves).
-    f"{SRC}commands/triage_batch_cmd.py": 8225,
+    # +75: the merge of main into S1 (event-driven-a-la-carte) adds S1's guarded-key and
+    # state-home reads (+49) to main's ci-economy and closeout-truth growth (+81).
+    f"{SRC}commands/triage_batch_cmd.py": 8300,
     f"{SRC}isolation/local.py": 3200,
     f"{SRC}plan_ops.py": 2600,
     f"{SRC}triage/batch_drive.py": 2275,

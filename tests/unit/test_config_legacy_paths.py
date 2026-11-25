@@ -15,6 +15,8 @@ from typing import Any
 import pytest
 from fr.config import space
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 NOTICE = "is at its old location; run fr migrate artifacts --yes"
 

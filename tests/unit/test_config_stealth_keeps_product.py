@@ -18,6 +18,8 @@ from fr.artifacts.commit import commit_migration
 from tests.unit.settings_repo import git, make_repo
 from tests.unit.test_migration_config_kinds import FILES, _put
 
+pytestmark = pytest.mark.own_artifacts
+
 V1 = "profiles:\n  dev:\n    purpose: dev\n    secrets: []\nbackend: github\n"
 
 

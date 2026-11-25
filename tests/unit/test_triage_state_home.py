@@ -24,6 +24,8 @@ from fr.triage.scope_config import scope_id
 from fr.triage.state_ref import push_state, read_base, ref_name
 from typer.testing import CliRunner
 
+pytestmark = pytest.mark.own_artifacts
+
 SCOPE = Scope(kind="repo", target="o/r")
 JUDGED = b"schema: 6\nissues: {}\n"
 
