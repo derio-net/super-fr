@@ -900,3 +900,18 @@ def test_a_ci_none_repos_archive_pr_with_no_checks_reads_ready_to_merge() -> Non
     assert build_board(f, jd, {}).card("m").hint == "archive PR #30: checks pending"
     card = build_board(f, jd, {}, ci_none=(REPO,)).card("m")
     assert card.hint == "archive PR #30: ready to merge"
+
+
+# ------------------------------------------------------ plan overlap (spec 2026-11-25 R7)
+
+
+def test_overlap_sentences_land_on_the_named_cards_only() -> None:
+    f, jd = _world([batch("a", [1]), batch("b", [2])], [issue(1), issue(2)])
+    board = build_board(f, jd, {}, overlaps={"a": ("Plans overlap with b on x.py: fix.",)})
+    assert board.card("a").overlaps == ("Plans overlap with b on x.py: fix.",)
+    assert board.card("b").overlaps == ()
+
+
+def test_a_board_built_without_overlaps_has_none_on_any_card() -> None:
+    f, jd = _world([batch("a", [1])], [issue(1)])
+    assert build_board(f, jd, {}).card("a").overlaps == ()

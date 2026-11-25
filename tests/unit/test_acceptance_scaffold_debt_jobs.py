@@ -74,6 +74,25 @@ def test_gitlab_debt_job_installs_glab_then_requires_the_masked_variable() -> No
     assert "exit 1" in before
 
 
+def test_gitlab_debt_job_logs_glab_in_before_any_fr_command() -> None:
+    """gh#1691: fr trusts only a host glab is logged into (gh#1014, `fr.glab.host_env`);
+    a GITLAB_TOKEN alone is not a login. So the job logs glab in to its own server, with
+    a throwaway config dir, before the first `fr` command, and after glab is installed."""
+    job = _job("gitlab-ci", "technical-debt")
+    script = job["script"]
+    config = 'export GLAB_CONFIG_DIR="$(mktemp -d)"'
+    login = 'echo "$FR_DEBT_TOKEN" | glab auth login --hostname "$CI_SERVER_HOST" --stdin'
+    assert script[0] == config
+    assert script[1] == login
+    fr_lines = [i for i, line in enumerate(script) if line.startswith("fr ")]
+    assert fr_lines == [2, 3]
+    assert script[2:] == ["fr debt issue --yes", "fr debt archive-pr --yes"]
+    # the login is in `script`, which GitLab runs after every `before_script` line,
+    # so glab is installed by then; and no before_script line runs fr
+    assert not any(line.lstrip().startswith("fr ") for line in job["before_script"])
+    assert "glab auth login" not in "\n".join(job["before_script"])
+
+
 def test_every_template_still_parses_with_every_job() -> None:
     for ci in ("github-actions", "gitea-actions", "gitlab-ci"):
         yaml.safe_load(

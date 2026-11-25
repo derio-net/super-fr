@@ -454,6 +454,8 @@ def _body(card: Card, scope_args: Sequence[str], collected_at: str = "") -> str:
         parts.append(f"<h4>Related PRs</h4><ul>{items}</ul>")
     if card.pr is not None:
         parts.append(_pr(card.pr))
+    if card.overlaps:
+        parts.append(f'<p class="overlap">{esc(" ".join(card.overlaps))}</p>')
     parts.append(_lifecycle(card))
     parts.append(_timeline(card))
     if card.status is not None:

@@ -1,2 +1,0 @@
-bump: minor
-summary: "CI economy: superseded PR runs cancel and read as pending, main skips a landed queue combination, docs-only PRs run a light lane, and the merge queue regenerates generated files and docs stamps"
