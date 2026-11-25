@@ -21,6 +21,7 @@ from fr.triage.views import NEED_LABELS, needs_you
 from typer.testing import CliRunner
 
 from tests.unit.triage_board_fixtures import (
+    DELIVERED,
     REPO,
     URL,
     batch,
@@ -251,7 +252,8 @@ def test_init_scaffold_targets_only_a_github_origin(
 
 def _one(*, labels: list[str] | None, events: list[dict[str, Any]] | None = None,
          **kw: Any) -> tuple[Facts, Judgements]:  # fmt: skip
-    the_pr = pr(20, "feat/batch-x", labels=labels, **kw)
+    # Its run delivered (batch-merge-readiness R1) unless a test says otherwise.
+    the_pr = pr(20, "feat/batch-x", labels=labels, **{**DELIVERED, **kw})
     f = facts([issue(1, prs=[the_pr])], prs=[the_pr], schema=10)
     jd = judgements(
         {"widgets#1": j(1)},
@@ -300,7 +302,8 @@ def test_need_labels_name_the_new_kinds_and_drop_ready_pr() -> None:
 
 
 def test_the_kanban_card_of_an_unapproved_green_member_awaits_approval() -> None:
-    f, jd = _one(labels=[])
+    # Not delivered: a delivered one is the Reviewer lane's (batch-merge-readiness R4).
+    f, jd = _one(labels=[], cursor=None, cursor_read=None)
     board = build_board(f, jd, {})
     (card,) = [c for col in board.columns for c in col.cards if c.batch.id == "x"]
     assert card.hint == HINT_AWAITING_APPROVAL == "awaiting approval"
@@ -346,6 +349,9 @@ def test_a_ci_none_repo_asks_for_the_label_with_no_check_at_all() -> None:
     assert not [n for n in needs_you(f, jd) if n.kind == "approve-pr"]  # CI repo: pending
     (need,) = [n for n in needs_you(f, jd, ci_none={REPO}) if n.kind == "approve-pr"]
     assert need.ref == "x"
+    # The card's hint is a not-delivered PR's (a delivered one is the Reviewer lane's).
+    f, jd = _one(labels=[], checks={"pass": 0, "fail": 0, "pending": 0}, cursor=None,
+                 cursor_read=None)  # fmt: skip
     board = build_board(f, jd, {}, ci_none={REPO})
     (card,) = [c for col in board.columns for c in col.cards if c.batch.id == "x"]
     assert card.hint == HINT_AWAITING_APPROVAL
@@ -381,3 +387,18 @@ def test_a_board_render_builds_one_snapshot_and_one_pass(
     f, jd = _one(labels=[])
     build_board(f, jd, {})
     assert counts == {"snapshot": 1, "pass": 1}
+
+
+def test_a_green_pr_whose_run_has_not_delivered_is_never_asked_for_the_label() -> None:
+    """p1-r7, batch-merge-readiness R3, R4: while the run has not delivered, the board does not
+    invite an approval `deliver` would void; it says what it waits for instead. A PR with no
+    run cursor at all (R12) is the operator's: the Need names its next action."""
+    from fr.triage.readiness import NO_CURSOR_ACTION
+
+    running = {"run": "r1", "step": "deliver", "kind": "none", "unit": None}
+    f, jd = _one(labels=[], cursor=running, cursor_read="read")
+    assert not [n for n in needs_you(f, jd) if n.kind == "approve-pr"]
+    f, jd = _one(labels=[], cursor=None, cursor_read="read")
+    (need,) = [n for n in needs_you(f, jd) if n.kind == "approve-pr"]
+    assert need.text == f"PR #20: no run cursor names feat/batch-x: {NO_CURSOR_ACTION}"
+    assert "label it" not in need.text

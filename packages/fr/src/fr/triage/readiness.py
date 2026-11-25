@@ -54,7 +54,7 @@ from fr.triage.approval import (
     is_approved,
 )
 from fr.triage.batch import QueueEntry
-from fr.triage.batch_drive import LivePr, Pass
+from fr.triage.batch_drive import LivePr, Pass, Snapshot, queue_snapshot
 from fr.triage.mergeability import conflicting
 from fr.triage.model import (
     ApprovalEvent,
@@ -346,6 +346,12 @@ def batch_readiness(batch: Batch, qs: QueueSnapshot) -> Readiness:
     )
     admits = d.ok and _admission(batch, pr, qs, approved)
     return Readiness(kind, _LINES[kind].format(r=reason), reason, facts, admits, d, approved)
+
+
+def snapshot_readiness(snap: Snapshot, batch: Batch) -> Readiness:
+    """*batch*'s verdict over a pass's `Snapshot`, through the slice its repo's queue reads
+    (`queue_snapshot`): the board asks it before it asks for a label (R4)."""
+    return batch_readiness(batch, queue_snapshot(snap, snap.repos.get(batch.id, "")))
 
 
 def fact_cursors(

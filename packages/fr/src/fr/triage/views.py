@@ -76,7 +76,7 @@ from fr.triage.model import (
     Severity,
 )
 from fr.triage.queue_exec import queue_config
-from fr.triage.readiness import fact_cursors
+from fr.triage.readiness import NO_CURSOR_ACTION, fact_cursors, snapshot_readiness
 from fr.triage.scope_config import scope_id
 from fr.triage.timestamps import parse_aware
 
@@ -333,6 +333,12 @@ def needs_you(
             continue
         if conflict_at(entry.batch, live.head if live is not None else pr.head_oid) is not None:
             continue  # R18: conflicting at its head: handed back, or the merge-conflict need
+        delivered = snapshot_readiness(snap, entry.batch).delivered
+        if not delivered.ok:  # readiness R3, R4: never ask for an approval deliver would void
+            if delivered.state == "no-cursor":  # R12: the operator's, by hand or through a run
+                why = f"PR #{pr.number}: {delivered.reason}: {NO_CURSOR_ACTION}"
+                out.append(Need("approve-pr", entry.batch.id, why, pr.url))
+            continue
         was = (
             approval.approved_head
             if isinstance(approval, Void)

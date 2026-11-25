@@ -129,6 +129,7 @@ def test_the_driver_holds_a_gated_approved_pr_for_devops_whatever_its_ci() -> No
     """p1-r2: a `gate:devops` PR, approved and delivered, is held for DevOps with CI still
     running, as it is when green: the gate is tested directly, not through the verdict."""
     from fr.labels import awaiting_devops
+
     from tests.unit.test_triage_batch_drive import _live as drive_live
 
     b = drive_batch("a", 1)

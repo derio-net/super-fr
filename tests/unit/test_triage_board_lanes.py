@@ -11,7 +11,16 @@ from fr.triage.merge_stops import MergeStop
 from fr.triage.mergeability import CONFLICT_HANDED_BACK_HINT, CONFLICT_HINT, conflicting
 from fr.triage.views import needs_you
 
-from tests.unit.triage_board_fixtures import REPO, dispatch, facts, issue, j, judgements, pr
+from tests.unit.triage_board_fixtures import (
+    DELIVERED,
+    REPO,
+    dispatch,
+    facts,
+    issue,
+    j,
+    judgements,
+    pr,
+)
 from tests.unit.triage_board_fixtures import batch as mk_batch
 
 LANES = ("needs-developer", "needs-reviewer", "needs-tester", "needs-devops")
@@ -479,7 +488,7 @@ def _kinds(f: Any, jd: Any) -> list[str]:
 
 
 def test_r18_a_green_pr_with_no_conflict_is_asked_for_approval() -> None:
-    assert _kinds(*_green()) == ["approve-pr"]
+    assert _kinds(*_green(**DELIVERED)) == ["approve-pr"]  # its run delivered (readiness R4)
 
 
 def test_r18_a_delivered_conflict_at_the_head_is_no_approval_and_a_card_hint() -> None:
@@ -495,6 +504,6 @@ def test_r18_a_held_conflict_at_the_head_is_exactly_one_row() -> None:
 
 
 def test_r18_a_conflict_at_an_older_head_does_not_suppress_approval() -> None:
-    f, jd = _green(_conflict_at("sha-old", "session"))
+    f, jd = _green(_conflict_at("sha-old", "session"), **DELIVERED)
     assert _kinds(f, jd) == ["approve-pr"]
     assert build_board(f, jd, {}).card("a").hint != CONFLICT_HANDED_BACK_HINT
