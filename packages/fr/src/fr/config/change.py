@@ -289,6 +289,11 @@ def open_change(
     if earlier:
         return earlier
     approved = _approve(product, head, f"{base_sha[:12]}+{head.rsplit('-', 1)[-1]}")
+    # Every commit fr pushes here is fr-written: the template seam renders its subject and
+    # adds the `Fr-Commit` trailer (idempotent, so a caller that already rendered is fine).
+    from fr.git_policy.templates import fr_message
+
+    message = fr_message(product, message)
     commit = _commit_on(cwd, base_sha, rel, text, message, executable=executable)
     pushed = _timed(
         ["git", "push", "--quiet", "origin", f"{commit}:refs/heads/{head}"],

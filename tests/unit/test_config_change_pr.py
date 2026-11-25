@@ -82,6 +82,20 @@ def test_a_change_to_an_existing_fr_config_opens_a_pull_request(
     assert prs[1][1] == head
 
 
+def test_the_change_commit_goes_through_the_commit_template_seam(
+    repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]]
+) -> None:
+    """Whatever message a caller passes, the commit fr pushes to a change branch is an
+    fr-written commit: rendered by `fr_message`, so it carries the `Fr-Commit` trailer
+    (git policy R14, tripwire test_every_chore_fr_producer_goes_through_the_seam)."""
+    write_settings(quiet_config_space(repo), NEW, message="chore(fr): labels off")
+    head = prs[0][1]
+    message = git(_origin(tmp_path), "log", "-1", "--format=%B", head)
+    assert message.splitlines()[0] == "chore(fr): labels off"
+    assert "Fr-Commit: bookkeeping" in message
+    assert message.count("Fr-Commit:") == 1
+
+
 def _merged(repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]]) -> None:
     write_settings(quiet_config_space(repo), NEW, message="chore(fr): labels off")
     _merge(tmp_path, prs[0][1])
