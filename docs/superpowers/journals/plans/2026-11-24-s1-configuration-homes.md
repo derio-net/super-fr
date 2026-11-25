@@ -151,3 +151,85 @@ a14c733eb: an f-string whose literal parts name .fr as a path segment is a const
 ### p1-r7-resolved · finding [refuted] · resolves p1-r7: under repo every triage collect and remote policy read makes one extra fr-config probe per repo (phase 1)
 
 Spec R3/§A places forge readers on the default branch or fr-config by the remote switch, which fr cannot know without reading it; one 404 per repo per collect is the cost of that design, recorded in p1-forge-ref-lenient, and nothing a user sees in output changes.
+
+<!-- fr:journal kind=decision scope=plan id=p2-up-creates-config-space created=2026-11-25T01:53:05+00:00 phase=2 -->
+### p2-up-creates-config-space · decision · fr isolation up and run start create the configuration branch from the old switch (phase 2)
+
+Phase 1's `fr.config.space` refuses under quiet/stealth while the configuration space
+is missing, so an existing quiet repo (switch only at `origin/fr:settings.yaml`) or
+stealth run (no `<branch>-config`) would refuse every configuration read. A fetching
+`fr isolation up` / `fr run start` therefore creates it: `quiet.ensure_config_branch`
+pushes an orphan `fr-config` whose tree is `.fr/settings.yaml` holding the old file's
+bytes (plain push, never forced; a lost creation race keeps the other clone's branch),
+then `ensure_config_worktree` makes `~/.cache/fr/worktrees/<repo>/fr-config`.
+`stealth.ensure_config_clone` (from `enter`) creates `<branch>-config` on the tracking
+repo (an empty-tree orphan when the target has no settings file, else carrying
+`<target>/settings.yaml` as `<target>/.fr/settings.yaml`), clones
+`stealth--<slug>-config`, and carries the old file when a branch exists without it.
+`--no-fetch` never pushes. Only the settings file moves here; the product's other
+`.fr/` files move with the R11 migration (phase 4).
+
+<!-- fr:journal kind=discovery scope=plan id=p2-phase4-settings-already-moved created=2026-11-25T01:53:05+00:00 phase=4 -->
+### p2-phase4-settings-already-moved · discovery · The settings-location hop meets an fr-config that already holds the settings (phase 4)
+
+After phase 2, every quiet repo that ran a fetching `fr isolation up`/`fr run start`
+(and every stealth target entered) already has `.fr/settings.yaml` on the
+configuration branch with the same bytes as the old file, and fr keeps writing both
+(R6). Phase 4's `settings-location` kind must read that state as migrated (the old
+file is the R6 legacy copy, not a second file for R12's both-paths refusal), or R12
+refuses every quiet repo.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-memory-ref created=2026-11-25T01:53:05+00:00 phase=2 -->
+### p2-memory-ref · discovery · SWITCH_REF also named the memory branch; MEMORY_REF names it now (phase 2)
+
+`paths.SWITCH_REF` (`refs/remotes/origin/fr`) was used both as the switch and as the
+memory branch's tracking ref (quiet FETCH_REFSPEC, worktree creation, fast-forward,
+`merged.pushed_ref`, `archive_cmd._unpushed`, `placement.move` copy/verify). Moving
+SWITCH_REF to `origin/fr-config` would have pointed those at the configuration branch,
+so `paths.MEMORY_REF` now names `origin/fr` for them, and `LEGACY_SWITCH_REF` is that
+same ref for the R13 fallback.
+
+<!-- fr:journal kind=decision scope=plan id=p2-hooks-blob-compare created=2026-11-25T01:53:05+00:00 phase=2 -->
+### p2-hooks-blob-compare · decision · The hooks compare the two switches by blob, as fr compares bytes (phase 2)
+
+`_fr_read_switch` (bash) and `readSwitch` (marker.ts) take `rev-parse --verify` of both
+`<ref>:<path>` locations; two blobs that both exist and differ read as the text
+`placement: two switches that differ`, which `_fr_switch_enabled`/`switchEnabled` call
+fr-enabled and the write-target check never calls canonical quiet: the base clone is
+gated and no `fr`/`fr-config` worktree is a write target (fail closed, R6). A blob
+compare matches Python's byte compare exactly (a text compare after `$(...)` would
+ignore trailing newlines). Write targets: the `fr` or `fr-config` worktree at exactly
+`$HOME/.cache/fr/worktrees/<main>/<branch>` on `refs/heads/<branch>`; the stealth
+configuration clone named `stealth--*-config` on `<tracking branch>-config` beside a
+valid stealth workspace naming its origin. The allowlist is `.fr/isolation-allow` in
+the working tree, `.fr-isolation-allow` only while it is absent; neither is read from
+a ref.
+
+<!-- fr:journal kind=finding scope=plan id=p2-config-writes-not-prs created=2026-11-25T01:53:05+00:00 phase=2 state=open review_scope=in -->
+### p2-config-writes-not-prs · finding [open] (reviewer: in scope) · write_settings pushes the configuration branch directly; spec §B wants a pull request for every change after creation (phase 2)
+
+Spec §B: "fr creates either one ... at the migration (§D) or at `fr settings init` ...
+and opens a pull request for every later change". Phase 2's writer creates the branch
+(init, up, migration) with a plain or compare-and-swap push, and also rewrites an
+existing `fr-config` with a direct fast-forward push (`fr placement move` switching to
+quiet or back to repo, `write_settings` on an existing branch). No plan step builds the
+pull-request path. Once phase 3 makes protection of `fr-config` matter, a protected
+branch refuses those direct pushes (fr reports the refusal; nothing is forced). Decide
+whether `write_settings` on an existing configuration branch opens a PR (and which
+phase builds it) or whether the spec's sentence is amended to the creation-only case.
+
+<!-- fr:journal kind=lens scope=plan id=lens-security-1 created=2026-11-25T01:53:05+00:00 phase=2 lens=security step=implement-phase -->
+### lens-security-1 · lens · a guard change on three harnesses (edit gate write targets, switch reads, allowlist) and new pushes to origin at isolation up (phase 2)
+
+<!-- fr:journal kind=lens scope=plan id=lens-errors-1 created=2026-11-25T01:53:05+00:00 phase=2 lens=errors step=implement-phase -->
+### lens-errors-1 · lens · new network paths (fr-config / <branch>-config creation races, refused pushes, rollbacks) at isolation up and settings writes (phase 2)
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-25T01:53:05+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+the switch read is one function (quiet._read over switch_texts) and the worktree helpers were folded into _ensure_linked/_fast_forward_linked while writing GREEN, so ensure_worktree and the new ensure_config_worktree already share one body
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-25T01:53:05+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+write_settings is one dispatcher over two per-placement writers (quiet.write_switch over write_branch_file, stealth.write_target_settings over _commit_file); init --quiet, init --stealth, plain init and placement move all call it, so no second writer was left to fold
