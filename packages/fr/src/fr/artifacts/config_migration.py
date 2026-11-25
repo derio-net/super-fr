@@ -1,7 +1,7 @@
 """The S1 configuration moves as registered hops (spec 2026-11-19-event-driven-a-la-carte
 §D, R8 to R12; plan 2026-11-24-s1-configuration-homes P4.T2).
 
-- each location-stamped kind of `fr.config.migrate.MOVED` relocates 1 -> 2: a rename in
+- each location-stamped kind of `fr.config.migrate.all_moved()` relocates 1 -> 2: a rename in
   one checkout (`repo`, and `isolation-allow` everywhere), a cross-space move under quiet
   and stealth (`fr.config.migrate.move_across`, destination pushed first);
 - `quiet-config` 1 -> 2 moves the product's R11 `.fr/` files to `fr-config`;
@@ -73,7 +73,7 @@ def _relocation(kind: str) -> SchemaMigration:
     )
 
 
-for _entry in moves.MOVED:
+for _entry in moves.all_moved():
     if _entry.kind != "profiles":  # profiles is body-stamped: its 2 -> 3 hop is below
         MIGRATIONS.register(_relocation(_entry.kind))
 

@@ -2,7 +2,7 @@
 2026-11-19-event-driven-a-la-carte S1 §D, R9 to R12; plan 2026-11-24-s1-configuration-homes
 phase 4).
 
-`MOVED` is the one table of the files S1 moves: each kind's old locator (relative to the
+`all_moved()` is the one table of the files S1 moves: each kind's old locator (relative to the
 product checkout, or to the memory root for the settings file) and its place below `.fr/`.
 `fr.artifacts.registry` builds the moved kinds from it and `fr.artifacts.config_migration`
 registers their hops.
@@ -32,6 +32,7 @@ import re
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
 
@@ -109,14 +110,16 @@ def _moved() -> tuple[Moved, ...]:
     )
 
 
-MOVED: Final = _moved()
-"""Every file S1 moves into `.fr/` (R9, R8), by kind."""
-
-MOVED_BY_KIND: Final = {m.kind: m for m in MOVED}
+@cache
+def all_moved() -> tuple[Moved, ...]:
+    """Every file S1 moves into `.fr/` (R9, R8), by kind. Built on first use, never at
+    import (review p4-r8): the old paths come from `fr.artifacts.paths`, and importing it
+    runs `fr.artifacts`' registry, which imports this module."""
+    return _moved()
 
 
 def moved(kind: str) -> Moved:
-    return MOVED_BY_KIND[kind]
+    return {m.kind: m for m in all_moved()}[kind]
 
 
 # --- where each locator is globbed ------------------------------------------------------
@@ -444,7 +447,7 @@ def pending_files(product: Path, space: ConfigSpace) -> dict[str, str]:
 
     clean = _clean_tracked(product)
     out: dict[str, str] = {}
-    for entry in MOVED:
+    for entry in all_moved():
         if not entry.across:
             continue
         for source in sorted(product.glob(entry.old)):
