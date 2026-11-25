@@ -155,3 +155,10 @@ amendments:
     ref: super-fr:tests/unit/test_tripwire_shipped_workflows.py
     why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
       when the shipped defaults merged into one tree (phase 5)
+  - row: fr-goal-independent-spec-review
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_shipped_defaults.py#test_shipped_fr_goal_evidence_is_the_4_28_lists_plus_visual
+    why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
+      when the shipped defaults merged into one tree (phase 5)
