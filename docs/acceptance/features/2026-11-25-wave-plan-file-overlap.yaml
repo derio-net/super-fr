@@ -35,7 +35,10 @@ rows:
       the other batch, the shared paths and the fix
     origin:
     - spec:2026-11-25-wave-plan-file-overlap#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_a_card_with_overlaps_renders_one_escaped_paragraph_and_others_none
+      - super-fr:tests/unit/test_triage_kanban_cmd.py#test_write_board_shows_overlaps_on_both_cards_and_a_note_per_unread_batch
+    status: ci
+    notes: unit tests in this PR's CI
     verify: none
