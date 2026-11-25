@@ -745,3 +745,8 @@ Relocating hops declare SchemaMigration.keeps (stealth): the file goes to the tr
 ### p4-quiet-worktree-current · decision · A quiet move refuses a dirty or diverged fr-config worktree before any unlink (p4-r7) (phase 4)
 
 QuietWriter.refresh calls fr.placement.quiet.require_current_config_worktree: after the fast-forward, the worktree must be exactly origin/fr-config with nothing uncommitted or untracked; otherwise SettingsError naming the path, the state and the remedy (PR to fr-config, stash -u, or reset --keep). Only the migration writer refuses; other readers keep the silent fast-forward. Tests: test_config_quiet_worktree_state.py.
+
+<!-- fr:journal kind=decision scope=plan id=p4-import-first created=2026-11-25T08:03:48+00:00 phase=4 -->
+### p4-import-first · decision · The moved-kinds table is built on first use (p4-r8) (phase 4)
+
+fr.config.migrate.MOVED became all_moved() (cached), so importing fr.config.migrate first no longer runs fr.artifacts' registry against a half-initialised module. test_config_import_first.py imports each S1 module first in a fresh python -I.
