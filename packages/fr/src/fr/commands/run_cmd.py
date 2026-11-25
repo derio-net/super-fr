@@ -86,7 +86,7 @@ from fr.run import liveness as _liveness
 from fr.run import units
 from fr.run.adopt import MANUAL_ITEM, AdoptError, Superseded, adopt_run, plan_phase_tags
 from fr.run.cli_step import run_step
-from fr.run.debug_journal import require_debug_slug
+from fr.run.debug_journal import debug_slug, require_debug_slug
 from fr.run.historical import (
     HISTORICAL_HEADING,
     HISTORICAL_REVIEWER,
@@ -1773,7 +1773,8 @@ class _EvidenceTarget:
     def subject(self) -> str:
         if self.feature:
             return "the feature"
-        return f"phase {self.phase}" if self.phase is not None else "the spec"
+        fallback = "the fix" if self.scope == "debug" else "the spec"
+        return f"phase {self.phase}" if self.phase is not None else fallback
 
 
 def _evidence_target(step: Step, phase: int | None) -> _EvidenceTarget | None:
@@ -4332,12 +4333,12 @@ def _orchestrator_model_notice(repo_root: Path) -> str | None:
 
 
 def _run_journal(repo_root: Path, state: RunState) -> tuple[JournalScope, str] | None:
-    """`(scope, slug)` of the run journal (spec 2026-10-06-model-binding-churn
-    R11): the plan journal once the run has a plan artifact, else the spec
-    journal — `None` before either exists."""
-    plan_rel = _emitted_plan(state)
-    if plan_rel is not None:
+    """`(scope, slug)` of the run journal (spec 2026-10-06-model-binding-churn R11): plan,
+    else debug, else spec — `None` before any exists."""
+    if (plan_rel := _emitted_plan(state)) is not None:
         return "plan", Path(plan_rel).name
+    if (slug := debug_slug(state)) is not None:
+        return "debug", slug
     from fr.requirements import run_spec
 
     spec_rel = run_spec(state)

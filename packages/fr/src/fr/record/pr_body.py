@@ -1462,6 +1462,18 @@ def _lens_finding_cells(lens: str, entries: list[JournalEntry]) -> str:
     return ", ".join(out) or "none"
 
 
+def _shape_has_lens_review(repo_root: Path, state: RunState) -> bool:
+    """Whether the run's shape declares a `lens-review` step (a shape that does not, like
+    `fr-debugging`, has no lens review to predate). Unreadable: assume it does."""
+    from fr.workflow.resolve import resolve_workflow
+
+    try:
+        manifest = resolve_workflow(state.workflow.partition("@")[0], repo_root)
+    except Exception:  # noqa: BLE001 - the section is informational, never a refusal
+        return True
+    return any(step.id == "lens-review" for step in manifest.steps)
+
+
 def _review_lenses(repo_root: Path, state: RunState) -> str:
     """The `## Review lenses` body (spec 2026-11-12-review-lenses R12, §3.D). Not a
     required section: an older live body that lacks it still passes `missing_sections`."""
@@ -1469,6 +1481,8 @@ def _review_lenses(repo_root: Path, state: RunState) -> str:
     from fr.lenses.model import LensError
 
     if "lens-review" not in state.steps:
+        if not _shape_has_lens_review(repo_root, state):
+            return "This workflow has no lens review."
         return "This run predates review lenses."
     try:
         lenses = lens_set(repo_root, state)

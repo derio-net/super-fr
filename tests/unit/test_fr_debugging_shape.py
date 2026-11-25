@@ -6,6 +6,7 @@ body read.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -128,7 +129,10 @@ def test_a_run_starts_and_briefs_debug_first(tmp_path: Path) -> None:
     root = _started(tmp_path)
     out = _fr(root, ["run", "advance", RUN])
     assert out.exit_code == 0, out.output
-    assert '"step": "debug"' in out.output or "debug" in out.output
+    brief = json.loads(out.output[out.output.index("{") :])
+    assert brief["step"] == "debug"
+    # the pre-filled record asks for the journal path (review p4-r1)
+    assert "debug: <path or url>" in brief["record"]["template"]
 
 
 def test_a_debug_record_emits_the_journal_and_applies_its_entries_there(tmp_path: Path) -> None:
@@ -165,7 +169,8 @@ def test_review_is_refused_while_a_debug_finding_is_open(tmp_path: Path) -> None
     rec = _record(root, "review", **_review_record_fields())
     out = _resolve(root, rec, "review")
     assert out.exit_code != 0
-    assert "d-r1" in out.output
+    assert "filed against the fix are still open: d-r1" in out.output
+    assert f"fr journal resolve --scope debug --slug {SLUG} --id d-r1" in out.output
 
 
 def test_review_passes_once_the_finding_is_fixed(tmp_path: Path) -> None:
@@ -191,7 +196,9 @@ def test_review_is_refused_without_a_review_entry(tmp_path: Path) -> None:
     rec = _record(root, "review", **fields)
     out = _resolve(root, rec, "review")
     assert out.exit_code != 0
-    assert "review" in out.output
+    assert f"--evidence review=d-review names no entry in the debug journal for {SLUG}" in (
+        out.output.replace("\n", " ")
+    )
 
 
 def test_deliver_owes_no_proportionality(tmp_path: Path) -> None:
@@ -267,3 +274,48 @@ def test_deliver_gates_pass_with_tests_docs_and_settle_only(tmp_path: Path) -> N
     assert "proportionality" not in out.output
     body = (root / "docs/superpowers/runs/r1.records/pr-body.md").read_text()
     assert "d-r1" in body
+
+
+def test_deliver_is_refused_end_to_end_while_an_out_of_scope_finding_is_open(
+    tmp_path: Path,
+) -> None:
+    root = _started(tmp_path)
+    _debug_done(root)
+    _fr(root, ["run", "advance", RUN])
+    fields = _review_record_fields(
+        resolves=[
+            {"id": "d-r1", "state": "fixed", "body": "covered by a test"},
+            {"id": "d-r2", "state": "out-of-scope", "body": "not caused by this fix"},
+        ]
+    )
+    fields["journal"].append(
+        {
+            "kind": "finding",
+            "id": "d-r2",
+            "title": "a bug elsewhere",
+            "body": "b",
+            "review_scope": "out",
+        }
+    )
+    assert _resolve(root, _record(root, "review", **fields), "review").exit_code == 0
+    _fr(root, ["run", "advance", RUN])
+    (root / "suite.log").write_text("n passed\n")
+    out = _fr(
+        root,
+        [
+            "run", "resolve", RUN, "--step", "deliver", "--state", "done",
+            "--emitted", "pr=https://example.com/o/r/pull/1",
+            "--evidence", "tests=suite.log",
+        ],
+    )  # fmt: skip
+    text = out.output.replace("\n", " ")
+    assert out.exit_code != 0
+    assert "d-r2" in text
+    assert "fr journal file --scope debug" in text
+
+
+def test_a_debug_run_records_a_substitution_in_its_debug_journal(tmp_path: Path) -> None:
+    from fr.commands.run_cmd import _run_journal
+
+    state = _debug_state({"debug": JOURNAL_REL})
+    assert _run_journal(tmp_path, state) == ("debug", SLUG)  # type: ignore[arg-type]

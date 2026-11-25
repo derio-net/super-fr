@@ -186,3 +186,10 @@ def test_a_lens_the_repo_disabled_is_named_under_the_section(tmp_path: Path) -> 
 
     assert section.startswith("No lens was requested for this change.")
     assert "Note: " in section and "errors" in section
+
+
+def test_a_shape_with_no_lens_review_step_says_so(tmp_path: Path) -> None:
+    root = lens_repo(tmp_path)
+    state = _state(None, with_step=False)
+    state.workflow = "fr-debugging@1"
+    assert _section(root, state) == "This workflow has no lens review."
