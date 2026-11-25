@@ -9417,6 +9417,12 @@ batches:
     patch_id: ca06ca377d637c384f203c352f625b65bec57862
   - kind: post_merge
     at: '2026-11-25T00:44:58.395949Z'
+  - kind: claims_released
+    at: '2026-11-25T00:49:49.957785Z'
+    keys:
+    - super-fr#1552
+    - super-fr#1553
+    - super-fr#1554
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
