@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fr.config import space
@@ -147,19 +148,65 @@ def test_located_prefers_the_new_path_when_both_exist(root: Path) -> None:
     assert space.located(root, "models") == new
 
 
-def test_validate_plans_reads_the_old_plan_config_with_a_notice(root: Path) -> None:
-    _put(
-        root,
-        "docs/superpowers/plan-config.yaml",
-        'plan:\n  filename: "{name}.md"\n',
-    )
-    plan = _put(root, "docs/superpowers/plans/x.md", "# X\n\n**Status:** Not Started\n")
-    done = subprocess.run(
+def _validate(root: Path, plan: Path, env: dict[str, str] | None = None) -> Any:
+    return subprocess.run(
         ["bash", str(REPO / "scripts/validate-plans.sh"), str(plan)],
         cwd=root,
         capture_output=True,
         text=True,
-        env={"PATH": "/usr/bin:/bin", "HOME": str(root)},
+        env={"PATH": "/usr/bin:/bin", "HOME": str(root), **(env or {})},
         check=False,
     )
+
+
+OWNER_MISSING = "missing **Owner:** line in header"
+
+
+def _old_plan_config(root: Path) -> Path:
+    """An old-path plan format that requires an `Owner` header, which the shipped default
+    does not: the verdict on a plan without one shows which format was read."""
+    _put(
+        root,
+        "docs/superpowers/plan-config.yaml",
+        "header:\n  required:\n    - Status\n    - Owner\n",
+    )
+    return _put(
+        root, "docs/superpowers/plans/2026-01-01-x.md", "# X\n\n**Status:** Not Started\n"
+    )
+
+
+def test_validate_plans_reads_the_old_plan_config_with_a_notice(root: Path) -> None:
+    """Under `repo` (and with no `fr` to ask) the old file is read while only it exists:
+    its rules take effect, with the notice."""
+    plan = _old_plan_config(root)
+    done = _validate(root, plan)
     assert NOTICE in done.stderr, done.stderr + done.stdout
+    assert done.returncode != 0 and OWNER_MISSING in done.stdout + done.stderr
+    (root / "docs/superpowers/plan-config.yaml").unlink()
+    control = _validate(root, plan)  # the shipped default asks for no Owner
+    assert control.returncode == 0, control.stdout + control.stderr
+
+
+@pytest.mark.parametrize("placement", ["quiet", "stealth"])
+def test_validate_plans_ignores_the_old_plan_config_under_quiet_and_stealth(
+    root: Path, tmp_path_factory: pytest.TempPathFactory, placement: str
+) -> None:
+    """Lens review l-tests-r1: under quiet and stealth the plan format lives in the
+    configuration space, and `fr.config.space.located` never reads the product worktree's
+    old file there. With the configuration space's file absent, the validator does not fall
+    back to it either: the old file's rules do not take effect."""
+    plan = _old_plan_config(root)
+    bin_dir = tmp_path_factory.mktemp("bin")
+    config_file = bin_dir / "fr-config" / ".fr" / "plan-config.yaml"  # absent
+    stub = bin_dir / "fr"
+    stub.write_text(
+        "#!/bin/sh\n"
+        f"echo FR_PLACEMENT={placement}\n"
+        f"echo FR_PLAN_CONFIG_FILE={config_file}\n"
+    )
+    stub.chmod(0o755)
+    done = _validate(root, plan, {"FR_HARNESS_FR": str(stub)})
+    assert NOTICE not in done.stderr, done.stderr
+    assert "is ignored under placement " + placement in done.stderr, done.stderr
+    assert done.returncode == 0, done.stderr + done.stdout
+    assert OWNER_MISSING not in done.stdout + done.stderr

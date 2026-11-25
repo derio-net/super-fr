@@ -67,12 +67,25 @@ for _fr_key in FR_PLAN_CONFIG_FILE FR_PLANS_DIR FR_ARCHIVED_PLANS_DIR FR_LEGACY_
   _fr_val="$(_fr_answer "$_fr_key")"
   if [ -n "$_fr_val" ]; then printf -v "$_fr_key" '%s' "$_fr_val"; fi
 done
+# The placement, read like the paths above; empty (no `fr` to ask) is the `repo` layout.
+FR_PLACEMENT_SEEN="$(printf '%s\n' "$FR_PATHS" | sed -n 's/^FR_PLACEMENT=//p' | head -n 1)"
 : "${FR_PLAN_CONFIG_FILE:=$REPO_ROOT/.fr/plan-config.yaml}"
 # The plan format moved to `.fr/plan-config.yaml` (S1 R9); until the release named by
 # the owed entry s1-refuse-old-paths, the old path is read while only it exists (R13).
-if [ ! -f "$FR_PLAN_CONFIG_FILE" ] && [ -f "$REPO_ROOT/docs/superpowers/plan-config.yaml" ]; then
-  FR_PLAN_CONFIG_FILE="$REPO_ROOT/docs/superpowers/plan-config.yaml"
-  echo "fr: $FR_PLAN_CONFIG_FILE is at its old location; run fr migrate artifacts --yes" >&2
+# Under quiet and stealth the format lives in the configuration space, and the product
+# worktree's old file is never read (`fr.config.space.located`, lens review l-tests-r1):
+# a feature branch must not shadow the space.
+_fr_old_plan_config="$REPO_ROOT/docs/superpowers/plan-config.yaml"
+if [ ! -f "$FR_PLAN_CONFIG_FILE" ] && [ -f "$_fr_old_plan_config" ]; then
+  case "$FR_PLACEMENT_SEEN" in
+    ""|repo)
+      FR_PLAN_CONFIG_FILE="$_fr_old_plan_config"
+      echo "fr: $FR_PLAN_CONFIG_FILE is at its old location; run fr migrate artifacts --yes" >&2
+      ;;
+    *)
+      echo "fr: $_fr_old_plan_config is ignored under placement $FR_PLACEMENT_SEEN: the plan format is read from $FR_PLAN_CONFIG_FILE" >&2
+      ;;
+  esac
 fi
 : "${FR_PLANS_DIR:=$REPO_ROOT/docs/superpowers/plans}"
 : "${FR_ARCHIVED_PLANS_DIR:=$REPO_ROOT/docs/superpowers/implemented/plans}"
@@ -91,9 +104,9 @@ if [ -z "$PROFILE" ]; then
 fi
 
 if [ -f "$PROFILE" ]; then
-  FILENAME_PATTERN=$(sed -n '/^plan:/,/^[^ ]/{ s/^  filename: *"\(.*\)"/\1/p }' "$PROFILE" | head -1)
-  REQUIRED_HEADERS=$(sed -n '/^header:/,/^[^ ]/{/^  required:/,/^  [^ ]/{/^    - /{ s/^    - //p }}}' "$PROFILE")
-  STATUS_VALUES=$(sed -n '/^header:/,/^[^ ]/{/status_values:/,/^  [^ ]/{/^    - /{ s/^    - //p }}}' "$PROFILE")
+  FILENAME_PATTERN=$(sed -n '/^plan:/,/^[^ ]/{ s/^  filename: *"\(.*\)"/\1/p; }' "$PROFILE" | head -1)
+  REQUIRED_HEADERS=$(sed -n '/^header:/,/^[^ ]/{/^  required:/,/^  [^ ]/{/^    - /{ s/^    - //p; };};}' "$PROFILE")
+  STATUS_VALUES=$(sed -n '/^header:/,/^[^ ]/{/status_values:/,/^  [^ ]/{/^    - /{ s/^    - //p; };};}' "$PROFILE")
 else
   FILENAME_PATTERN="YYYY-MM-DD-{name}.md"
   REQUIRED_HEADERS="Status"
