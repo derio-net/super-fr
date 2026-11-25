@@ -86,3 +86,8 @@ new pure helpers, and conflict_brief moved as it was plus one step-2 branch; bat
 ### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
 
 the planner logic went into queue_handback helpers from the start (wave_queue grew by the calls only); the two gitseam reads are small methods with no shared shape to extract
+
+<!-- fr:journal kind=finding scope=plan id=p1-acceptance-check-foreign-rows-resolved created=2026-11-25T02:00:28+00:00 state=open resolves=p1-acceptance-check-foreign-rows out_of_scope=true -->
+### p1-acceptance-check-foreign-rows-resolved · finding [out-of-scope] · resolves p1-acceptance-check-foreign-rows: fr acceptance check --no-fetch reports 43 errors on other features' rows
+
+Not caused by this change: the fold reads other features' rows from origin/main (triage-hardening, intake-admit), whose specs and tests this branch's base predates. Merging origin/main into the branch clears it; the run merges origin/main before deliver.
