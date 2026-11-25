@@ -715,3 +715,8 @@ legacy() is one function behind located(); the owed entry is a journal write, so
 ### p4-verify-before-unlink · decision · A cross-space move unlinks only after the fetched configuration tip holds the exact bytes (p4-r1) (phase 4)
 
 move_across re-fetches after create/ensure and reads the blob at the configuration branch's fetched tip: absent proposes (case 3), other bytes are R12, only the same bytes unlink. A stealth create-only push that loses its lease raises BranchRaceError (fr.settings); ensure_space and write_target_settings re-fetch and read what stands. A branch that still does not appear after creation refuses. Tests: tests/unit/test_config_move_verified.py (lost lease, exists() race, untracked old path).
+
+<!-- fr:journal kind=decision scope=plan id=p4-legacy-by-tip created=2026-11-25T07:29:56+00:00 phase=4 -->
+### p4-legacy-by-tip · decision · Under quiet/stealth R13's old-path fallback is decided by the configuration branch's fetched tip (p4-r2) (phase 4)
+
+fr.config.space.located: while the configuration branch has a fetched tip (branch_fetched), the product's old path is ignored and one notice names it (R4), so a feature branch adding docs/superpowers/workflows/<x>.yaml cannot shadow the space. Only while no configuration branch exists may an old file be read, and only when its bytes equal the product default branch's committed ones (read_at_default); an uncommitted or feature-branch-only edit is ignored. Executable/trust content from an old path never runs unguarded: read_checked_bytes refuses it (p4-r3 then degrades it to the shipped one). Re-closes p5-exec-manifests-guard for this path. Tests: tests/unit/test_config_legacy_by_tip.py (incl. test_quiet_old_path_shadow).
