@@ -525,10 +525,10 @@ def sticky_refusal(recorded: str, current: str, source: str) -> SettingsError:
 
     return SettingsError(
         f"{source}: this workspace was set up under placement: {recorded}, but the "
-        f"`fr` switch (origin/fr) now says placement: {current} (the `fr` branch was "
-        "deleted or renamed, or its settings changed). fr will not move a live workspace "
-        f"between placements by itself: run `fr placement migrate-branch` in it to move its "
-        f"artifacts (R28), restore origin/fr to placement: {recorded}, or finish this "
+        f"switch (origin/fr-config, or the old origin/fr) now says placement: {current} (the "
+        "branch was deleted or renamed, or its settings changed). fr will not move a live "
+        f"workspace between placements by itself: run `fr placement migrate-branch` in it to "
+        f"move its artifacts (R28), restore the switch to placement: {recorded}, or finish this "
         "workspace and start the next one with `fr isolation up`"
     )
 

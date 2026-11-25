@@ -544,7 +544,7 @@ def migrate_branch(root: Path, *, emit: Callable[[str], None] = print) -> None:
     else:
         found = _current(root)
         if found is None:
-            raise SettingsError(f"{COMMAND}: the quiet switch (origin/fr) cannot be read")
+            raise SettingsError(f"{COMMAND}: the quiet switch (origin/fr-config, or the old origin/fr) cannot be read")
         current = found
     if current == paths.STEALTH:
         _into_stealth(root, branch, emit)
