@@ -75,11 +75,11 @@ def _read_config(repo_root: Path, *, lenient: bool) -> dict[str, Any] | None:
     except Exception as exc:  # noqa: BLE001 — lenient never raises; strict refuses by name
         if lenient:
             return None
-        raise ServicesError(f"cannot read .devcontainer/fr-profiles.yaml: {exc}") from exc
+        raise ServicesError(f"cannot read .fr/profiles.yaml: {exc}") from exc
     if not isinstance(config, dict):
         if lenient:
             return None
-        raise ServicesError(".devcontainer/fr-profiles.yaml is not a mapping")
+        raise ServicesError(".fr/profiles.yaml is not a mapping")
     return config
 
 
@@ -89,7 +89,7 @@ def _refusal(exc: ValidationError, where: str) -> ServicesError:
         + str(err["msg"]).removeprefix("Value error, ")
         for err in exc.errors()
     )
-    return ServicesError(f".devcontainer/fr-profiles.yaml {where}: {reasons}")
+    return ServicesError(f".fr/profiles.yaml {where}: {reasons}")
 
 
 def _declared(config: dict[str, Any], key: str, model: type[Any], *, lenient: bool) -> Any | None:

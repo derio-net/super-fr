@@ -649,7 +649,7 @@ def resolve_profile(repo_root: Path, name: str | None) -> str:
             return available[0]
         raise IsolationError(
             f"multiple profiles ({', '.join(available)}) and no default in "
-            ".devcontainer/fr-profiles.yaml — pass --profile or set a default via fr-init."
+            ".fr/profiles.yaml — pass --profile or set a default via fr-init."
         )
     if name not in available:
         raise IsolationError(f"unknown profile {name!r}; available: {', '.join(available)}")

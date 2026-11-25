@@ -220,7 +220,7 @@ def detect_backend(repo_root: Path) -> HostBackend:
             print(
                 f"warning: origin host {hostname!r} is not a recognized forge; "
                 'assuming backend "github". Declare it as `forge: {type: gitlab}` '
-                "(or gitea) in .devcontainer/fr-profiles.yaml, or run "
+                "(or gitea) in .fr/profiles.yaml, or run "
                 "`fr init scaffold --backend <b>`.",
                 file=sys.stderr,
             )

@@ -46,7 +46,7 @@ def test_require_tracker_refuses_none_naming_the_declaration(tmp_path: Path) -> 
     with pytest.raises(TrackerRequiredError) as exc:
         require_tracker(tmp_path)
     assert "tracking: {type: none}" in str(exc.value)
-    assert ".devcontainer/fr-profiles.yaml" in str(exc.value)
+    assert ".fr/profiles.yaml" in str(exc.value)
 
 
 def test_require_tracker_passes_by_default(tmp_path: Path) -> None:
@@ -92,7 +92,7 @@ def test_closeout_tracking_none_prints_no_issue_filing(tmp_path: Path) -> None:
 def test_closeout_malformed_tracking_is_loud_not_silent(tmp_path: Path) -> None:
     _closeout_repo(tmp_path, MALFORMED)
     brief = closeout_brief(tmp_path, closeout_fixtures._state())
-    assert "bogus" in brief and "fr-profiles.yaml" in brief
+    assert "bogus" in brief and "profiles.yaml" in brief
 
 
 # --- fr apply ------------------------------------------------------------

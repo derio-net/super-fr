@@ -84,7 +84,7 @@ def spec_policy_problems(repo_root: Path, spec_path: Path) -> list[str]:
 
 
 TRACKING_NONE: Final = (
-    "tracking: none (.devcontainer/fr-profiles.yaml declares `tracking: {type: none}`)"
+    "tracking: none (.fr/profiles.yaml declares `tracking: {type: none}`)"
 )
 """Why a forge write is off when the services declaration, not a setting, turns it off."""
 

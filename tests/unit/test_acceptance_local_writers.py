@@ -212,7 +212,7 @@ def test_local_is_refused_while_fr_cannot_tell_whether_the_repo_has_ci(no_ci: Pa
     before = _acceptance_files(no_ci)
     out = _fr("set-status", "--id", "target", "--status", "local", "--notes", "n")
     assert out.exit_code == 2, out.output
-    assert "fr-profiles.yaml" in out.output and "fr services" in out.output
+    assert ".fr/profiles.yaml" in out.output and "fr services" in out.output
     assert _acceptance_files(no_ci) == before
 
 
