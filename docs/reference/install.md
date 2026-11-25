@@ -7,7 +7,7 @@ covers:
   - scripts/bootstrap.sh
   - scripts/install.sh
   - packages/fr-opencode-plugin/src/**
-reviewed: 2026-11-24 every install path installs the newest release by default; install.sh takes --version, and a clone on main installs the newest release unless --version main (fix/install-stable-by-default). 2026-11-19 install constrained to uv.lock, devcontainer CLI pinned, plugin spawns resolved bash and gh (batch hook-hardening). 2026-11-18 OpenCode gets the shipped rules; plugin handlers follow the session directory (batch consumer-delivery)
+reviewed: 2026-11-25 still true; the installer's rsync carries the one `plugins/super-fr/defaults/` tree, and the OpenCode plugin reads the switch on `fr-config` and `.fr/isolation-allow` first (S1 R5, R8, R15), with no install step changed; 2026-11-24 every install path installs the newest release by default; install.sh takes --version, and a clone on main installs the newest release unless --version main (fix/install-stable-by-default). 2026-11-19 install constrained to uv.lock, devcontainer CLI pinned, plugin spawns resolved bash and gh (batch hook-hardening). 2026-11-18 OpenCode gets the shipped rules; plugin handlers follow the session directory (batch consumer-delivery)
 ---
 
 # Install super-fr

@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/cloud.py
   - packages/fr/src/fr/commands/cloud_cmd.py
-reviewed: 2026-11-24 the setup script installs the newest release through bootstrap.sh, never main (fix/install-stable-by-default). 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 the doctor's fr check now compares release candidates and fails a version it cannot read (batch release-truth)
+reviewed: 2026-11-25 the driver's state lives in the cache repository `~/.cache/fr/triage/<scope>/`, which syncs with no product clone (S1 R17); 2026-11-24 the setup script installs the newest release through bootstrap.sh, never main (fix/install-stable-by-default). 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 the doctor's fr check now compares release candidates and fails a version it cannot read (batch release-truth)
 ---
 
 # fr in a Claude Code cloud session
@@ -130,4 +130,5 @@ another branch. It never switches a clone that has local changes; it does not ac
 A close-out session starts on the default branch, because the batch branch was deleted
 when its PR merged. A session whose start failed (its `last_init_error`) shows as blocked,
 with the error as its note, never as "working". A pass that restored the state from its ref
-says so.
+says so. The state lives in `~/.cache/fr/triage/<scope>/`, which is its own git repository.
+So a fresh container restores it from the state branch without a product clone.

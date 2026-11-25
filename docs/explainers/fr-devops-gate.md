@@ -13,7 +13,7 @@ covers:
   - packages/fr/src/fr/ops/gate.py
   - packages/fr/src/fr/commands/ops_gate_cmd.py
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-21 stage 4 needs a marker comment beside the label; 2026-11-20 stage 2 releases the PR to the merge queue by label and merges nothing, stage 4 lifts the queue's barrier (wave merge queue R26); 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
+reviewed: 2026-11-25 under quiet and stealth the gate reads `.fr/triage.yaml` and `.fr/ops.yaml` at the configuration branch's fetched tip and needs its protection for a `queue:` (S1 R7); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-21 stage 4 needs a marker comment beside the label; 2026-11-20 stage 2 releases the PR to the merge queue by label and merges nothing, stage 4 lifts the queue's barrier (wave merge queue R26); 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
 ---
 
 ## Why can a delivered PR still have work left?
@@ -84,7 +84,9 @@ default that is `~/.local/state/fr/ops-gate/`. fr commits pre-merge evidence onl
 ops branch, never to the PR head, so the reviewed head and its checks stay valid. Stage 2
 is done only when the forge reads the PR as merged. fr never records it. A repo with no
 `queue:` in `.fr/triage.yaml` has no merge queue: stage 2 says so, and you merge the PR by
-hand. A PR you merged by hand counts as stage 2 done.
+hand. A PR you merged by hand counts as stage 2 done. Under the quiet and stealth placements
+that file is on the configuration branch. The gate releases to a `queue:` there only while
+the forge enforces a pull-request rule on that branch, and refuses otherwise.
 
 ## How does the merge queue land the PR?
 

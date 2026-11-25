@@ -10,9 +10,9 @@ tldr: |
 standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/lenses/**
-  - plugins/super-fr/lenses/**
+  - plugins/super-fr/defaults/lenses/**
   - packages/fr/src/fr/commands/lenses_cmd.py
-reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; explicit run merge targets and fail-closed target alignment
+reviewed: 2026-11-25 the shipped texts move to `plugins/super-fr/defaults/lenses/` (wheel `fr/defaults/lenses/`), `FR_SHIPPED_DEFAULTS_DIR` points at another tree, and `.fr/lenses.yaml` is read from the configuration space (S1 R1, R15, R16); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; explicit run merge targets and fail-closed target alignment
 ---
 
 ## What a lens is
@@ -30,6 +30,11 @@ A feature has a **lens set**. It starts empty. Lenses get into it for a reason, 
 reason is kept, so the pull request can say why a reviewer was asked to look.
 
 ## The four texts fr ships
+
+The texts are in `plugins/super-fr/defaults/lenses/`, and the `fr` package carries a copy in
+`fr/defaults/lenses/`. `$FR_SHIPPED_DEFAULTS_DIR` points fr at another tree that holds a
+`lenses/` directory. A repo has no lens directory of its own: `.fr/lenses.yaml` is its only
+override.
 
 Each one ends the same way: a reviewer still reports a problem outside its lens, as an
 ordinary finding.
@@ -160,6 +165,11 @@ A run that began before lenses existed says so. Under `forge.pr_body: minimal`, 
 section is in the full render that is kept beside the run, not on the pull request.
 
 ## `.fr/lenses.yaml`
+
+The file is in the repo's configuration space: the product checkout under `repo`, the
+`fr-config` branch under `quiet`, and the tracking repo's `<branch>-config` branch under
+`stealth`. Under `quiet` and `stealth`, a feature branch cannot change it. A change is a pull
+request to the configuration branch.
 
 Every key is optional, and fr does not accept an unknown key:
 

@@ -5,7 +5,7 @@ tldr: |
 standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/verification/**
-reviewed: 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-23 a `settle.` line in `## Verification` overrides one `git.settle` key for the PR (pr-readiness-wait R6). 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-13 placement emitted paths fix, run/ops/pickup/verification readers now resolve a run's emitted spec and plan below the artifact root; nothing this page describes changed
+reviewed: 2026-11-25 repo strategies move to `.fr/verifications/` in the configuration space, shipped ones to `plugins/super-fr/defaults/verifications/`, `FR_SHIPPED_DEFAULTS_DIR` replaces the per-kind variable, and an unprotected quiet or stealth configuration branch's strategy or install is not used (S1 R7, R9, R15, R16); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-23 a `settle.` line in `## Verification` overrides one `git.settle` key for the PR (pr-readiness-wait R6). 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-13 placement emitted paths fix, run/ops/pickup/verification readers now resolve a run's emitted spec and plan below the artifact root; nothing this page describes changed
 ---
 
 # Verification strategies
@@ -33,10 +33,18 @@ from; `fr verification check <name>` (or `--all`) validates manifests.
 A strategy name resolves in this order, and the first hit wins. A repo file replaces a
 shipped one wholesale (fields are not merged):
 
-1. `docs/superpowers/verifications/<name>.yaml` in the repo;
-2. `$FR_SHIPPED_VERIFICATIONS_DIR/<name>.yaml`, an explicit escape;
-3. the manifests inside the `fr` wheel;
-4. the plugin clone's `plugins/super-fr/verifications/<name>.yaml`.
+1. `.fr/verifications/<name>.yaml` in the repo's configuration space (the product
+   checkout under `repo`, the `fr-config` branch under `quiet`, the tracking repo's
+   `<branch>-config` branch under `stealth`);
+2. `$FR_SHIPPED_DEFAULTS_DIR/verifications/<name>.yaml`, an explicit escape (the older
+   `$FR_SHIPPED_VERIFICATIONS_DIR` still works and prints a notice);
+3. the manifests inside the `fr` wheel, in `fr/defaults/verifications/`;
+4. the plugin clone's `plugins/super-fr/defaults/verifications/<name>.yaml`.
+
+A repo strategy can run commands. Under `quiet` and `stealth`, fr uses one only when the
+forge protects the configuration branch (see below). Otherwise fr uses the shipped strategy
+of the same name and says why. A strategy that still sits in
+`docs/superpowers/verifications/` is read until `fr migrate artifacts --yes` moves it.
 
 fr does not accept a manifest whose `verification:` does not match its file name. The
 word `none` is reserved. It is not a strategy: it marks a row verified some
@@ -116,7 +124,7 @@ so the scenario is what reaches staging. The operator gives the client wired to 
 with `--client`:
 
 ```yaml
-# docs/superpowers/verifications/staging.yaml
+# .fr/verifications/staging.yaml
 verification: staging
 schema: 1
 description: Install the PR's worktree build, then run each row's scenario in a client wired to staging.
@@ -154,12 +162,18 @@ Any strategy that installs a build goes through the repo's own executable
 A repo without it cannot use `candidate`, `client-live` or `prerelease`, and
 `fr verification walk` says so by name.
 
-Under the `quiet` and `stealth` placements, the contract is on the configuration
-branch, not in the product repo. Then the walk runs it only when the forge protects
-that branch. The ruleset must require a pull request with at least one approving
-review. It must also block force-pushes and deletion. fr reads the rules of the
-branch. fr cannot see the bypass actors of a ruleset, so a ruleset with bypass actors
-passes this check. Keep the bypass list of that ruleset empty.
+Under `quiet` and `stealth`, the contract is on the configuration branch. The walk
+runs it only when the forge protects that branch. The ruleset must require a pull
+request with at least one approving review. It must also block force-pushes and
+deletion. fr reads the rules of the branch, but it cannot see the bypass actors of a
+ruleset. Thus a ruleset with bypass actors passes this check, so keep its bypass list
+empty.
+
+GitHub does not enforce rulesets on a private repo on the free plan. There, and on a
+forge whose rules fr cannot read, the walk refuses and gives the fix. A failed read of
+the rules also refuses. When the walk runs, it first fetches the configuration branch.
+Then it runs the contract from that fetched tip, copied to a private directory. It never
+runs the files of your configuration checkout.
 
 ## What the walk checks
 
