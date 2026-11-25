@@ -27,7 +27,7 @@ import re
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Collection, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -1391,7 +1391,12 @@ def write_branch_file(
 
 
 def create_config_branch(
-    root: Path, files: dict[str, str], message: str, *, network: Network | None = None
+    root: Path,
+    files: dict[str, str],
+    message: str,
+    *,
+    network: Network | None = None,
+    executable: Collection[str] = (),
 ) -> None:
     """Create origin's `fr-config` as ONE orphan commit holding *files* (tree path ->
     text), pushed with a plain push (never forced): the migration's creation of the
@@ -1407,7 +1412,7 @@ def create_config_branch(
             f"placement quiet: `{CONFIG_BRANCH}` exists already; fr changes it only by a pull "
             "request"
         )
-    created = _orphan_commit(root, files, message)
+    created = _orphan_commit(root, files, message, executable=executable)
     _git(root, "update-ref", CONFIG_REF, created, "0" * 40)
     pushed = net(["git", "push", "--quiet", "origin", f"{CONFIG_REF}:{CONFIG_REF}"])
     if pushed.returncode != 0:
@@ -1420,9 +1425,12 @@ def create_config_branch(
     net(["git", "fetch", "--quiet", "--no-tags", "origin", CONFIG_FETCH_REFSPEC])
 
 
-def _orphan_commit(root: Path, files: dict[str, str], message: str) -> str:
+def _orphan_commit(
+    root: Path, files: dict[str, str], message: str, *, executable: Collection[str] = ()
+) -> str:
     """A parentless commit holding exactly *files* (path -> text), made with plumbing in
-    a private index, so no working tree is touched."""
+    a private index, so no working tree is touched; a path in *executable* is committed
+    `100755` (a moved `.fr/candidate-install` stays runnable)."""
     import tempfile
 
     from fr.git import git_argv
@@ -1449,6 +1457,7 @@ def _orphan_commit(root: Path, files: dict[str, str], message: str) -> str:
 
         for rel, text in files.items():
             blob = run("hash-object", "-w", "--stdin", stdin=text)
-            run("update-index", "--add", "--cacheinfo", f"100644,{blob},{rel}")
+            mode = "100755" if rel in executable else "100644"
+            run("update-index", "--add", "--cacheinfo", f"{mode},{blob},{rel}")
         tree = run("write-tree")
         return run("commit-tree", tree, "-F", "-", stdin=message)

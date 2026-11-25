@@ -29,7 +29,7 @@ import os
 import re
 import subprocess
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
@@ -717,7 +717,13 @@ def _at_tip(clone: Path, ref: StealthRef, rel_path: str) -> str | None:
 
 
 def _create_branch(
-    root: Path, wt: Path, ref: StealthRef, files: dict[str, str], message: str
+    root: Path,
+    wt: Path,
+    ref: StealthRef,
+    files: dict[str, str],
+    message: str,
+    *,
+    executable: Collection[str] = (),
 ) -> None:
     """Create *ref*'s branch on the tracking repo as one orphan commit holding *files*,
     made with plumbing in the tracking clone *wt* and pushed create-only. A branch another
@@ -726,7 +732,7 @@ def _create_branch(
     from fr.triage.gitseam import GitError, PushRefusedError, push_ref_cas
 
     check_privacy(ref, origin_url(root), target_root=root)
-    commit = _orphan_commit(wt, files, message)
+    commit = _orphan_commit(wt, files, message, executable=executable)
     try:
         landed = push_ref_cas(wt, "origin", commit, f"refs/heads/{ref.branch}", expected_old=None)
     except (PushRefusedError, GitError) as e:
@@ -743,11 +749,20 @@ def _create_branch(
         )
 
 
-def create_config_branch(root: Path, ref: StealthRef, files: dict[str, str], message: str) -> None:
+def create_config_branch(
+    root: Path,
+    ref: StealthRef,
+    files: dict[str, str],
+    message: str,
+    *,
+    executable: Collection[str] = (),
+) -> None:
     """Create the tracking repo's `<branch>-config` as one orphan commit holding *files*
     (S1 R10): the migration's creation of the stealth configuration space. A branch the
     tracking repo refuses raises `SettingsError`; nothing is forced."""
-    _create_branch(root, ensure_worktree(root, ref), config_ref(ref), files, message)
+    _create_branch(
+        root, ensure_worktree(root, ref), config_ref(ref), files, message, executable=executable
+    )
 
 
 def target_settings_texts(

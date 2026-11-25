@@ -183,14 +183,17 @@ def _run(cwd: Path, *args: str, env: dict[str, str] | None = None, stdin: str | 
     return done.stdout.strip()
 
 
-def _commit_on(cwd: Path, base_sha: str, rel: str, text: str, message: str) -> str:
+def _commit_on(
+    cwd: Path, base_sha: str, rel: str, text: str, message: str, *, executable: bool = False
+) -> str:
     """A commit whose parent is *base_sha* and whose tree is *base_sha*'s with *rel* =
     *text*, made with plumbing in a private index: no working tree is touched."""
     with tempfile.TemporaryDirectory() as tmp:
         env = {"GIT_INDEX_FILE": str(Path(tmp) / "index")}
         _run(cwd, "read-tree", base_sha, env=env)
         blob = _run(cwd, "hash-object", "-w", "--stdin", stdin=text)
-        _run(cwd, "update-index", "--add", "--cacheinfo", f"100644,{blob},{rel}", env=env)
+        mode = "100755" if executable else "100644"
+        _run(cwd, "update-index", "--add", "--cacheinfo", f"{mode},{blob},{rel}", env=env)
         tree = _run(cwd, "write-tree", env=env)
         return _run(cwd, "commit-tree", tree, "-p", base_sha, "-F", "-", stdin=message)
 
@@ -243,6 +246,7 @@ def open_change(
     rel: str,
     text: str,
     message: str,
+    executable: bool = False,
 ) -> str:
     """Propose *rel* = *text* on *base_branch* (its last fetched tip *base_ref* in the
     clone *cwd*): commit it on `change_branch(rel, text)`, push that branch to origin
@@ -257,7 +261,7 @@ def open_change(
     if earlier:
         return earlier
     approved = _approve(product, head, f"{base_sha[:12]}+{head.rsplit('-', 1)[-1]}")
-    commit = _commit_on(cwd, base_sha, rel, text, message)
+    commit = _commit_on(cwd, base_sha, rel, text, message, executable=executable)
     pushed = subprocess.run(
         ["git", "push", "--quiet", "origin", f"{commit}:refs/heads/{head}"],
         cwd=cwd,

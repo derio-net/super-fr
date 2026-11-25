@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import re
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -297,8 +297,12 @@ class SpaceWriter(Protocol):
     def fetch(self) -> None: ...
     def exists(self) -> bool: ...
     def tip(self, tree_path: str) -> str | None: ...
-    def create(self, files: dict[str, str], message: str) -> None: ...
-    def propose(self, tree_path: str, text: str, message: str) -> str: ...
+    def create(
+        self, files: dict[str, str], message: str, *, executable: Collection[str] = ()
+    ) -> None: ...
+    def propose(
+        self, tree_path: str, text: str, message: str, *, executable: bool = False
+    ) -> str: ...
     def refresh(self) -> None: ...
 
 
@@ -327,12 +331,14 @@ class QuietWriter:
         sha = _commit(self.product, f"refs/remotes/origin/{CONFIG_BRANCH}")
         return None if sha is None else show_at_commit(self.product, sha, tree_path)
 
-    def create(self, files: dict[str, str], message: str) -> None:
+    def create(
+        self, files: dict[str, str], message: str, *, executable: Collection[str] = ()
+    ) -> None:
         from fr.placement import quiet
 
-        quiet.create_config_branch(self.product, files, message)
+        quiet.create_config_branch(self.product, files, message, executable=executable)
 
-    def propose(self, tree_path: str, text: str, message: str) -> str:
+    def propose(self, tree_path: str, text: str, message: str, *, executable: bool = False) -> str:
         from fr.artifacts import paths
         from fr.config.change import open_change
         from fr.placement import quiet
@@ -342,6 +348,7 @@ class QuietWriter:
         return open_change(
             self.product, product=self.product, remote=remote, base_branch=CONFIG_BRANCH,
             base_ref=paths.SWITCH_REF, rel=tree_path, text=text, message=message,
+            executable=executable,
         )  # fmt: skip
 
     def refresh(self) -> None:
@@ -398,12 +405,14 @@ class StealthWriter:
             self.refresh()
         return _at_tip(self.clone, self.cref, tree_path)
 
-    def create(self, files: dict[str, str], message: str) -> None:
+    def create(
+        self, files: dict[str, str], message: str, *, executable: Collection[str] = ()
+    ) -> None:
         from fr.placement.stealth import create_config_branch
 
-        create_config_branch(self.product, self.ref, files, message)
+        create_config_branch(self.product, self.ref, files, message, executable=executable)
 
-    def propose(self, tree_path: str, text: str, message: str) -> str:
+    def propose(self, tree_path: str, text: str, message: str, *, executable: bool = False) -> str:
         from fr.config.change import open_change
         from fr.placement.stealth import _remote_ref, check_privacy, origin_url
 
@@ -411,7 +420,7 @@ class StealthWriter:
         return open_change(
             self.clone, product=self.product, remote=self.ref.repo,
             base_branch=self.cref.branch, base_ref=_remote_ref(self.cref), rel=tree_path,
-            text=text, message=message,
+            text=text, message=message, executable=executable,
         )  # fmt: skip
 
     def refresh(self) -> None:
@@ -439,7 +448,9 @@ def _message(product: Path, what: str) -> str:
     return fr_message(product, f"chore(fr): move {what} to the configuration space")
 
 
-def pending_files(product: Path, space: ConfigSpace) -> dict[str, str]:
+def pending_files(
+    product: Path, space: ConfigSpace, *, executable: set[str] | None = None
+) -> dict[str, str]:
     """Every file the migration would move into *space* (tree path -> text): the R9 kinds
     at their old paths and, under quiet, the product's R11 `.fr/` files. A profiles file
     goes at version 3 only when it is at version 2 already (its 1 -> 2 hop rewrites it in
@@ -466,6 +477,8 @@ def pending_files(product: Path, space: ConfigSpace) -> dict[str, str]:
             else:
                 text = source_text(product, source)
             out[space.tree_path(entry.below(source, product))] = text
+            if executable is not None and is_executable(source):
+                executable.add(space.tree_path(entry.below(source, product)))
     if space.placement == QUIET:
         for name in QUIET_FILES:
             source = product / SPACE_DIR / name
@@ -474,7 +487,16 @@ def pending_files(product: Path, space: ConfigSpace) -> dict[str, str]:
             refuse_link(product, source)
             if source.relative_to(product).as_posix() in clean:
                 out[space.tree_path(name)] = source_text(product, source)
+                if executable is not None and is_executable(source):
+                    executable.add(space.tree_path(name))
     return out
+
+
+def is_executable(source: Path) -> bool:
+    """Whether *source*'s owner may execute it: what `git add` commits as `100755`."""
+    import stat
+
+    return bool(Path(source).lstat().st_mode & stat.S_IXUSR)
 
 
 def _clean_tracked(product: Path) -> set[str]:
@@ -577,7 +599,12 @@ def profiles_body(product: Path, source: Path) -> str:
     return bom + with_stamp(v2, 3)
 
 
-def ensure_space(product: Path, *, include: dict[str, str] | None = None) -> bool:
+def ensure_space(
+    product: Path,
+    *,
+    include: dict[str, str] | None = None,
+    include_executable: Collection[str] = (),
+) -> bool:
     """Create the configuration branch when it does not exist (R10, decision
     p2-phase4-migration-creates-config): the settings (the old switch's bytes, R6) and
     every pending file, in one orphan commit, pushed before anything leaves the product.
@@ -599,12 +626,20 @@ def ensure_space(product: Path, *, include: dict[str, str] | None = None) -> boo
             f"placement {space.placement}: no switch to carry into the configuration space "
             f"(the old {SETTINGS} is missing); run `fr settings init` first"
         )
-    files = {space.tree_path(SETTINGS): settings, **pending_files(product, space)}
+    executable: set[str] = set(include_executable)
+    files = {
+        space.tree_path(SETTINGS): settings,
+        **pending_files(product, space, executable=executable),
+    }
     files.update(include or {})
     from fr.settings import BranchRaceError
 
     try:
-        writer.create(files, _message(product, f"{SPACE_DIR}/ ({len(files)} files)"))
+        writer.create(
+            files,
+            _message(product, f"{SPACE_DIR}/ ({len(files)} files)"),
+            executable=executable,
+        )
     except BranchRaceError:
         # Another host created the branch first (review p4-r1): what stands is read
         # like any existing configuration branch, never assumed to hold *files*.
@@ -640,10 +675,13 @@ def move_across(
         if transform is not None:
             body = transform(body)
     tree_path = space.tree_path(below)
+    runnable = is_executable(source)
     writer = writer_for(product)
     writer.fetch()
     if not writer.exists():
-        ensure_space(product, include={tree_path: body})
+        ensure_space(
+            product, include={tree_path: body}, include_executable=[tree_path] if runnable else []
+        )
         writer.fetch()  # read what the remote holds now, never what fr meant to push
         if not writer.exists():
             raise SettingsError(
@@ -654,7 +692,7 @@ def move_across(
     # branch's FETCHED tip holds the path with exactly the bytes moved.
     at_tip = writer.tip(tree_path)
     if at_tip is None:
-        url = writer.propose(tree_path, body, _message(product, below))
+        url = writer.propose(tree_path, body, _message(product, below), executable=runnable)
         raise ProposedError(
             f"{source} waits for review: fr proposed it as {tree_path} on the "
             f"configuration branch in {url}. The product file stays until that merges; "

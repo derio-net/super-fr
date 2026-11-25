@@ -66,13 +66,13 @@ class _Writer:
             return "placement: stealth\n"
         return self.other
 
-    def create(self, files: dict[str, str], message: str) -> None:
+    def create(self, files: dict[str, str], message: str, *, executable=()) -> None:
         self.created = files
         if self.race:
             self.made = True  # another host's branch stands
             raise BranchRaceError("lease lost")
 
-    def propose(self, tree_path: str, text: str, message: str) -> str:
+    def propose(self, tree_path: str, text: str, message: str, *, executable=False) -> str:
         self.proposed.append(tree_path)
         return "https://example.com/pr/9"
 
@@ -123,7 +123,7 @@ def test_the_stealth_creation_raises_on_a_lost_lease(
     from fr.triage import gitseam
 
     monkeypatch.setattr(stealth, "check_privacy", lambda *a, **k: None)
-    monkeypatch.setattr(quiet, "_orphan_commit", lambda *a: "0" * 40)
+    monkeypatch.setattr(quiet, "_orphan_commit", lambda *a, **k: "0" * 40)
     monkeypatch.setattr(gitseam, "push_ref_cas", lambda *a, **k: False)
     ref = stealth.StealthRef("https://example.com/t.git", "main")
     monkeypatch.setattr(stealth, "origin_url", lambda _r: "x")

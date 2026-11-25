@@ -445,6 +445,8 @@ def located(root: Path, kind: str) -> Path:
         return new
     if current.placement == _REPO or not (old.exists() or old.is_symlink()):
         return legacy(new, old)
+    if not _holds_anything(old):  # emptied by the migration: nothing to read or ignore
+        return new
     if branch_fetched(current):
         _old_ignored(old, f"{current.ref} exists, so its {SPACE_DIR}/ is read (R4)")
         return new
@@ -458,6 +460,14 @@ def located(root: Path, kind: str) -> Path:
         )
         return new
     return legacy(new, old)
+
+
+def _holds_anything(old: Path) -> bool:
+    """Whether the old path is there to read: a file or link, or a directory with any
+    entry (the migration leaves an emptied old directory behind; it says nothing)."""
+    if old.is_symlink() or old.is_file():
+        return True
+    return old.is_dir() and any(old.iterdir())
 
 
 def link_problem(root: Path, path: Path) -> str | None:

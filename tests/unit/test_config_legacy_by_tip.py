@@ -90,3 +90,15 @@ def test_an_old_path_executable_under_quiet_never_runs_from_the_worktree(
     from fr.config.degraded import usable_bytes
 
     assert usable_bytes(root, path, "run workflow shape 'mine'") is None
+
+
+def test_an_empty_old_directory_left_by_the_migration_says_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Found by the config-homes scenario (P7.T1.S1): the migration's move leaves the old
+    `docs/superpowers/workflows/` directory empty, and every later command still said it
+    was ignoring it."""
+    root = _with_config(tmp_path)
+    (root / "docs/superpowers/workflows").mkdir(parents=True)
+    assert space.located(root, "workflow") == space.config_space(root).dir / "workflows"
+    assert "ignoring" not in capsys.readouterr().err

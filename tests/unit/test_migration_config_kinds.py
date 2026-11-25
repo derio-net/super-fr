@@ -247,6 +247,37 @@ def test_under_quiet_one_creation_carries_every_moved_file(tmp_path: Path) -> No
     assert {a.kind for a in report.applied} == {"models-config", "trackers-config", "quiet-config"}
 
 
+def test_under_quiet_an_executable_file_keeps_its_mode_on_fr_config(tmp_path: Path) -> None:
+    """Found by the config-homes scenario (P7.T1.S1): the creation committed every file
+    100644, so a moved `.fr/candidate-install` was no longer executable on fr-config."""
+    root = _quiet(tmp_path)
+    path = _put(root, ".fr/candidate-install", "#!/bin/sh\necho fr\n", commit=False)
+    path.chmod(0o755)
+    _put(root, ".fr/ci.yaml", "tests: ci\n")
+    _migrate(root)
+    tree = git(_origin(tmp_path), "ls-tree", "-r", "fr-config")
+    modes = {line.split()[-1]: line.split()[0] for line in tree.splitlines()}
+    assert modes[".fr/candidate-install"] == "100755"
+    assert modes[".fr/ci.yaml"] == "100644"
+
+
+def test_a_proposed_executable_keeps_its_mode(tmp_path: Path, prs: list) -> None:
+    """Case 3 (fr-config exists without the file): the pull request's commit keeps the
+    executable bit too."""
+    root = _quiet(tmp_path)
+    from fr.config.migrate import ensure_space
+
+    ensure_space(root)
+    path = _put(root, ".fr/candidate-install", "#!/bin/sh\necho fr\n", commit=False)
+    path.chmod(0o755)
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "install")
+    run_migrations(root, dry_run=False)
+    (_remote, head, _base) = prs[0]
+    line = git(_origin(tmp_path), "ls-tree", head, ".fr/candidate-install")
+    assert line.split()[0] == "100755"
+
+
 def test_under_quiet_an_unmigratable_profiles_file_holds_back_only_itself(tmp_path: Path) -> None:
     """Found by the config-homes scenario (P7.T1.S1): a profiles file its own hop refuses
     (here version 2 with no service block) made `pending_files` raise, so EVERY cross-space
