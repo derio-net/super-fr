@@ -112,7 +112,15 @@ rows:
       as it stays added.
     origin:
     - spec:2026-11-24-wave-queue-gaps#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_operator_reads.py#test_preapproval_labels_and_comments_with_head_and_patch_id
+      - super-fr:tests/unit/test_operator_reads.py#test_preapproval_needs_an_allowed_adder_at_use_time
+      - super-fr:tests/unit/test_operator_reads.py#test_preapproval_renews_at_the_next_green_head_after_a_void
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_preapproved_pr_is_labelled_and_commented_by_the_driver
+    status: ci
+    notes: 'phase 2 of wave-queue-gaps: the driver labels a preapproved PR only with
+      an allowed adder at use time, green own checks, no forge or queue conflict and
+      a readable patch-id, comments each head and patch-id, renews after a void, writes
+      nothing in a dry run; fake forge in CI'
     verify: none
