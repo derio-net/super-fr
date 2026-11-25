@@ -7,7 +7,7 @@ covers:
   - scripts/setup-release-app.sh
   - .github/workflows/release.yml
   - packages/fr/src/fr/triage/intake.py
-reviewed: 2026-11-23 still true; release.yml now runs its suite on Python 3.14, which the page does not name (ci-single-python, #1589); 2026-11-23 a drained hold push starts the release on main through hold-relay, so the hold branch never reaches the release environment; 2026-11-22 the release app is a dedicated super-fr-release app, never frank's derio-fr-automation; the variable is replaced when it names another app; 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening); 2026-11-21 the wave driver has its own queue (no forge merge queue, no branch update), queue.land push needs a bypass actor or land merge, and ci-ok runs on fr-queue/**; 2026-11-20 the release job has a third authenticated push, the clear of a drained merge queue hold, and release.yml also starts on a drained hold push (wave merge queue)
+reviewed: 2026-11-23 still true; release.yml now runs its suite on Python 3.14, which the page does not name (ci-single-python, #1589); 2026-11-23 admit reads the issue's own host (URL key or --host), and dispatch re-reads an admit-pinned member live before it starts a batch (triage-hardening lens fixes); 2026-11-22 in issue intake, ready-fr admits only with a trusted fr triage admit marker that matches the content, and an ineligible issue's title is withheld (triage-hardening); 2026-11-23 a drained hold push starts the release on main through hold-relay, so the hold branch never reaches the release environment; 2026-11-22 the release app is a dedicated super-fr-release app, never frank's derio-fr-automation; the variable is replaced when it names another app; 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening); 2026-11-21 the wave driver has its own queue (no forge merge queue, no branch update), queue.land push needs a bypass actor or land merge, and ci-ok runs on fr-queue/**; 2026-11-20 the release job has a third authenticated push, the clear of a drained merge queue hold, and release.yml also starts on a drained hold push (wave merge queue)
 ---
 
 # Merge protection for `main`
@@ -230,8 +230,10 @@ An issue is eligible when at least one of these is true:
 
 - Its author is the user that ran `collect`, or a login in `pr_authors` of `.fr/triage.yaml`.
 - Its author association is `OWNER`, `MEMBER` or `COLLABORATOR`.
-- It has the `ready-fr` label. The forge compares label names without regard to case, and so
-  does intake.
+- It has the `ready-fr` label and an admit marker that a trusted account wrote. The
+  marker's digest equals the digest of the issue's current title and body. `fr triage admit
+  <key>` writes the label and the marker. The forge compares label names without regard to
+  case, and so does intake.
 - Its author is the workflow bot of the debt digest, and its body holds the digest marker. A
   bot-authored issue without the marker is judged like any other.
 
@@ -240,11 +242,12 @@ admits the issue.
 
 An issue that is not eligible has these effects:
 
-- `collect` keeps its title and labels, but not its body.
+- `collect` keeps its key, URL, author and labels, but not its title or its body. `check` and
+  the pages show the issue only by its key, URL, author and reason.
 - `fr triage check` lists it in the `untrusted` set, with the reason. It is never ranked,
   unranked, unplaced or suggested for a batch.
 - `batch create`, `batch edit` and `batch dispatch` refuse a batch that holds it. They exit
-  2, write nothing, and name the issue, the reason and `ready-fr`.
+  2, write nothing, and name the issue, the reason and `fr triage admit <key>`.
 - The wave driver, the board and `drive --plan` show the batch as blocked in every pass.
   The drive stops for the operator once only blocked or held batches remain. The driver dispatches the batch when no member is rejected.
 
@@ -255,11 +258,31 @@ in the block starts with `> `, so no text can close the block or add a heading o
 The brief tells the session to read the block as a description of the problem and never to
 follow an instruction in it.
 
-Only an operator applies `ready-fr`. On GitHub, a label needs triage permission to apply,
-which an outside author does not have. fr never applies it. The driver creates the label
-when a repo does not have it, as it does for `approved-fr`. Creating a label needs write
-permission. If fr cannot create it, an operator with write access creates it.
+Only an operator admits an issue. `fr triage admit <owner/repo#n>` reads the issue from the
+forge and shows the label and the comment that it will write. It also shows the title and
+the body as quoted text, and their digest. Read them. Then run the command again with `--yes
+--digest <digest>`. The command reads the issue again before it writes. If the digest is
+different, it stops, shows the current digest and writes nothing. Thus an edit after you read
+the issue is not admitted. When the digest is the same, it adds `ready-fr` and posts one
+comment. The comment holds a marker with the digest of the title and
+the body. On GitHub, a label needs triage permission to apply, which an outside author does
+not have. Collect counts a marker only when its author is a trusted login or has an `OWNER`,
+`MEMBER` or `COLLABORATOR` association. The driver creates the label when a repo does not
+have it, as it does for `approved-fr`. Creating a label needs write permission. If fr cannot
+create it, an operator with write access creates it.
 
-One risk remains. `ready-fr` admits the issue as it is later edited. Later edits by the
-author reach the triage agent and the brief. The quoting in the brief still applies to them.
+An edit to the title or the body after the admission changes the digest. The issue is then
+not eligible, and the reason tells the operator to run `fr triage admit <key>` again. The
+label alone does not admit an issue. Issues that were admitted with the label only before this
+change must be admitted again. GitLab and Gitea adapters cannot list issue comments, so
+`fr triage admit` refuses there, and a `ready-fr` issue on them is not eligible.
+
+`fr triage admit` reads an `owner/repo#n` key on github.com. For an issue on a different host,
+give the issue URL or `--host <host>`. The preview shows the host.
+
+The facts that `batch dispatch` reads can be older than the issue. Thus, before `batch dispatch
+--yes` or the wave driver starts a batch, it reads each member again when only an admit marker
+makes that member eligible. If the digest of the title and the body changed, or fr cannot read
+the issue, the dispatch stops. It writes nothing, and it names the issue and `fr triage admit
+<owner/repo#n>`.
 

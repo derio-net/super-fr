@@ -1,0 +1,2 @@
+bump: patch
+summary: OpenCode isolation gates judge in the session's own directory; the scaffolded Gitea acceptance workflow no longer persists gitea.token; Gitea reads name an SSO login page instead of reading it as absent.

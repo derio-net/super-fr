@@ -170,6 +170,7 @@ one artifact kind.
   - `fr triage check`: Report unranked issues and PRs, settled, orphaned, unreachable, stale, unplaced, duplicate candidates, duplicates, awaiting live and more.
   - `fr triage clean-labels`: Remove `fr:in-progress` and `fr:claimed` from closed issues that still carry them.
   - `fr triage backlog`: Write the Backlog and Issues pages from facts.json and judgements.yaml.
+  - `fr triage admit`: Admit an outside author's issue for batching: label it ready-fr and pin its content.
   - `fr triage batches`: Write the Batches page: one card per batch in its lifecycle column (`fr.triage.kanban.COLUMN_TITLES`), with live session status and a jump command.
   - `fr triage batch`: Batches: groups of judged issues delivered as one run.
     - `fr triage batch focus`: Switch the terminal to a batch's live session, through the runner that dispatched it.

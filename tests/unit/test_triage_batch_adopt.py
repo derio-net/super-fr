@@ -764,3 +764,17 @@ def test_the_stop_report_reruns_with_no_hold_and_checkout_when_given(
     _heal(world)
     code, out = _adopt(world[0], *_args("--yes"))
     assert code == 0, out
+
+
+def test_an_obsolete_batch_is_refused_with_its_cancel_command(
+    world: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T3: every member closed; adopt names why and how to retire it."""
+    monkeypatch.setattr(triage_batch_cmd, "derive_batch_stage", lambda b, f: "obsolete")
+    tmp_path = world[0]
+    code, out = _adopt(tmp_path, *_args("--yes"))
+    flat = " ".join(out.split())
+    assert code == 2, out
+    assert "obsolete: every member is closed" in flat
+    assert "fr triage batch cancel" in flat and "--yes" in flat
+    _refused(*world, *_args("--yes"), match="obsolete")

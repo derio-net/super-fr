@@ -1,0 +1,117 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Batches and dedupe — obsolete stage, stale members, dedupe universe (R6,
+    R8-R10)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - dedupe-set-apart
+  - batch-obsolete-stage
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/sets.py
+  - packages/fr/src/fr/triage/check.py
+  - packages/fr/src/fr/triage/dedupe.py
+  - packages/fr/src/fr/triage/batch.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/test_triage_dedupe.py
+  - tests/unit/test_triage_check.py
+  - tests/unit/test_triage_batch*.py
+  - tests/unit/test_triage_views*.py
+  - tests/unit/test_triage_render*.py
+  - tests/unit/test_triage_pages*.py
+  - docs/acceptance/features/2026-11-22-triage-hardening.yaml
+  estimate_lines: 500
+tasks:
+- number: 1
+  title: One set-apart predicate; dedupe universe (R6, spec §C)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_triage_dedupe.py — three open `fr:owed` trackers titled `Owed: Test Plan step 1 owed` / `... 2 ...` / `... 3 ...` produce no candidate group; an `fr:awaiting-live` pair with equal titles, a trusted debt digest pair and an untrusted pair produce none; two eligible issues with equal titles still group.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: new packages/fr/src/fr/triage/sets.py holding `is_awaiting_live`, `is_debt_digest`, `is_owed`, `is_set_apart` (moved from check.py:441-464); check.py imports and re-exports them; `dedupe.candidates` filters with `is_set_apart`. Tests green, including test_triage_check.py.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: grep for other copies of the owed/awaiting-live tests in triage/ and point them at sets.py, or record why not. Re-run.
+- number: 2
+  title: The obsolete stage and its readers (R8, spec §E)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests over `derive_batch_stage` — no events, all members closed → `obsolete`; all closed but one `fr:awaiting-live` → `obsolete`; one member missing from facts → `proposed`; one open → `proposed`; with a dispatch event the existing table is unchanged. `is_open` is False for obsolete. `meets_dependency("obsolete")` and `("merged")` are True; `dependency_state` of a batch after an obsolete one is `satisfied`; the drive pass dispatches a batch `after` an obsolete one and never the obsolete one; `finished_waves` counts a wave of obsolete+cancelled batches finished; `preselected_wave` skips it; `cancelled_waves` lists an all-obsolete wave; the board's waiting view does not list a batch waiting on an obsolete one.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: batch.py — `"obsolete"` in `BatchStage`/`BATCH_STAGES` after `proposed`, in `CLOSED_OUT`; `_all_closed(batch, facts)` helper; `meets_dependency`; `dependency_state` and its docstring. batch_drive.py — `finished_waves` terminal set, the :2063 test via `meets_dependency`. views.py — :612/:614 and `preselected_wave`/`cancelled_waves`. Tests green.
+  - id: P2.T2.S3
+    text: |-
+      RED then GREEN: `fr triage batch cancel <obsolete-id> --yes` appends a cancel event, touches no member (fake GhClient records no call), and the batch then derives `cancelled`; any other CLOSED_OUT stage is still refused. Change the refusal at commands/triage_batch_cmd.py:943-945.
+  - id: P2.T2.S4
+    text: |-
+      REFACTOR: grep triage/ and commands/ for other `== "merged"` / stage-set literals that should read `meets_dependency` or `CLOSED_OUT`; fix or record why. Re-run the triage tests.
+- number: 3
+  title: Check and Batches page (R9, R10)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: test_triage_check.py — `CheckResult.obsolete_batches` lists the obsolete batch; text output prints `fr triage batch cancel <id> --yes`; `stale_members` maps a proposed batch with one closed and one open member to the closed key, and the text names it; JSON carries both. Render test: the Batches page shows an obsolete heading holding the batch, not under Proposed/Waiting, and a proposed card lists its closed member.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: check.py, commands/triage_cmd.py output, render.py Batches page. Tests green.
+  - id: P2.T3.S3
+    text: |-
+      Move dedupe-set-apart and batch-obsolete-stage to `ci` with `fr acceptance set-status ... --level unit=...` naming the tests. Run the fast tier from the brief last.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-23T00:10:17+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-23T00:10:17+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-11-23T00:10:17+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-23T00:10:17+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-23T00:10:17+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-11-23T00:10:17+00:00'
+      note: null
+    P2.T2.S4:
+      state: x
+      ticked_at: '2026-11-23T00:10:17+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-23T00:10:17+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-23T00:10:17+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-11-23T00:10:17+00:00'
+      note: null
+  completion:
+    at: '2026-11-23T00:10:17+00:00'
+    note: null
+    observed_prs: []

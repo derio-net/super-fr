@@ -67,7 +67,7 @@ def _merged_issues() -> list[dict[str, Any]]:
 def test_the_columns_are_in_r17_order() -> None:
     assert COLUMNS == (
         "proposed", "waiting", "running", "needs-developer", "pr-open", "needs-reviewer",
-        "needs-tester", "needs-devops", "closing-out", "partial", "done",
+        "needs-tester", "needs-devops", "closing-out", "partial", "obsolete", "done",
     )  # fmt: skip
     assert set(get_args(kanban.Column)) == set(COLUMNS)
 
@@ -425,6 +425,7 @@ def test_the_board_has_every_column_with_counts_in_order() -> None:
         "needs-devops": 0,
         "closing-out": 1,
         "partial": 0,
+        "obsolete": 0,
         "done": 1,
     }
     assert isinstance(board, Board)
