@@ -331,7 +331,12 @@ from fr.triage.model import (
     normalize_key,
 )
 from fr.triage.operation_lock import replacement_scope_lock
-from fr.triage.operator_entries import carry_hand_back, housekeeping_reads, lineage_reads
+from fr.triage.operator_entries import (
+    carry_hand_back,
+    housekeeping_reads,
+    lineage_reads,
+    operator_reads,
+)
 from fr.triage.pacing import Pacer
 from fr.triage.privacy import VisibilityUnreadable, guard_write
 from fr.triage.probe import PassPlan
@@ -4612,6 +4617,7 @@ class _Driver:
             queue_reads["queue_housekeeping"] = self._housekeeping_reads(
                 facts, judgements, repos, {*unread, *carried}
             )
+            queue_reads.update(operator_reads(self, facts, judgements, repos, {*unread, *carried}))
             gated_in, gated_runs = self._barrier_reads(
                 facts, judgements, repos, queue, live, {*unread, *carried}
             )
@@ -6887,7 +6893,7 @@ class _Driver:
         batch = self._queue_batch(key)
         if batch is None:
             kind, _, _ = key.partition("#")
-            if kind not in ("closeout", "archive", "export", "housekeeping"):
+            if kind not in ("closeout", "archive", "export", "housekeeping", "operator"):
                 return None
             try:
                 client = self.client(facts, repo)

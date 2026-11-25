@@ -6071,3 +6071,103 @@ def test_a_non_batch_entrys_head_has_its_carry_read(
         _drive(tmp_path, "--once")
     assert captured and captured[-1].queue_head_carries[REPO]["sha-202"] == (DEAD_SHA,)
     assert "sha-101" not in captured[-1].queue_head_carries[REPO]  # b1's is by batch id
+
+
+# ----------------------------------- operator entries through the driver (wave-queue-gaps R12-R15)
+
+
+def _operator_added(tmp_path: Path, world: World, *requests: dict[str, Any], **pr: Any) -> None:
+    """b1 dispatched in wave 1 (no PR yet, so the wave is unfinished) and PR #300, no batch's,
+    put in with `fr triage queue add` (*requests*)."""
+    from fr.triage.model import Scope
+    from fr.triage.scope_config import scope_id
+
+    world.config = {"queue": {"ci": "push", "land": "push"}}
+    world.issues[1] = "open"
+    world.pr(300, "fix/typo", [], **pr)
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    _at_14(tmp_path)
+    sid = scope_id(Scope(kind="repo", target=REPO))
+    docs = [{"repo": REPO, "scope": sid, "pr": 300, "by": "operator",
+             "at": "2026-10-02T11:00:00Z", **r} for r in requests]  # fmt: skip
+    path = tmp_path / "judgements.yaml"
+    path.write_text(path.read_text("utf-8") + yaml.safe_dump({"queue_requests": docs}), "utf-8")
+
+
+def _snapshots(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    captured: list[Any] = []
+    real = triage_batch_cmd.drive_pass
+
+    def _capture(snap: Any) -> Any:
+        captured.append(snap)
+        return real(snap)
+
+    monkeypatch.setattr(triage_batch_cmd, "drive_pass", _capture)
+    return captured
+
+
+def test_an_added_approved_pr_opens_a_between_waves_queue_through_the_driver(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _operator_added(tmp_path, world, {"kind": "queue_add"})
+    snaps = _snapshots(monkeypatch)
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert snaps[-1].queue_pending[REPO].keys() == {"operator#300"}, out
+    ((live, _),) = snaps[-1].queue_operator[REPO]
+    assert (live.number, live.head, live.checks) == (300, "sha-300", "green")
+    (opened,) = [a for a in world.queue_plans if a.kind == "queue-open"]
+    assert (opened.wave, opened.entries) == (None, ("operator#300",))
+    approvals = [e for q in load_judgements(tmp_path / "judgements.yaml").queues
+                 for e in q.events if e.kind == "approval"]  # fmt: skip
+    assert [(a.entry.kind, a.entry.pr, a.head) for a in approvals] == [("operator", 300, "sha-300")]
+    assert RecordingQueue.ports is not None
+    entry = RecordingQueue.ports.entry_of("operator#300")  # the executor's build of it
+    assert entry is not None and (entry.ref.kind, entry.pr, entry.head) == (
+        "operator",
+        300,
+        "sha-300",
+    )
+
+
+def test_a_preapproved_pr_is_labelled_and_commented_by_the_driver(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+) -> None:  # fmt: skip
+    _operator_added(tmp_path, world, {"kind": "queue_add", "preapproved": True}, labels=[])
+    checkout.patch_ids = {"sha-300": "p300"}
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert "label 300" in world.calls and "comment_pr 300" in world.calls, out
+    (body,) = [c["body"] for c in world.comments[300] if "fr-queue:preapproved" in c["body"]]
+    assert "head=sha-300 patch-id=p300" in body and "fr triage queue remove --pr 300" in body
+    approvals = [e for q in load_judgements(tmp_path / "judgements.yaml").queues
+                 for e in q.events if e.kind == "approval"]  # fmt: skip
+    assert [(a.head, a.patch_id) for a in approvals] == [("sha-300", "p300")]
+
+
+def test_an_unreadable_patch_id_holds_a_preapproval_and_writes_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+) -> None:  # fmt: skip
+    _operator_added(tmp_path, world, {"kind": "queue_add", "preapproved": True}, labels=[])
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert "could not be read: held for this pass" in out
+    assert "label 300" not in world.calls and 300 not in world.comments
+
+
+def test_a_removed_pr_reaches_the_planner_as_removed_and_is_not_read(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _operator_added(tmp_path, world, {"kind": "queue_add"},
+                    {"kind": "queue_remove", "at": "2026-10-02T11:30:00Z"})  # fmt: skip
+    snaps = _snapshots(monkeypatch)
+
+    _drive(tmp_path, "--once", "--yes")
+
+    assert snaps[-1].queue_removed[REPO] == frozenset({"operator#300"})
+    assert REPO not in snaps[-1].queue_operator and "pr_view 300" not in world.calls

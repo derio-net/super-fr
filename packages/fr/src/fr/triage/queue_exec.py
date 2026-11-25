@@ -1348,10 +1348,11 @@ class QueueExecutor:
         key = action.entries[0]
         ref = _refs(record).get(key) or QueueEntryRef(batch=key)
         reason: Literal["conflict", "red", "operator"] = (
-            "conflict" if action.reason == "conflict" else "red")  # fmt: skip
+            "conflict" if action.reason == "conflict"
+            else "operator" if action.reason == "operator" else "red")  # fmt: skip
         p.record(QueueEjectEvent(kind="queue_eject", at=p.now(), entry=ref, reason=reason,
                                  detail=action.detail, head=action.head or None))  # fmt: skip
         self.conflicts.pop(key, None)
-        if p.hand_back is None:
+        if p.hand_back is None or reason == "operator":  # wave-queue-gaps R12: no hand-back
             return "ejected"
         return f"ejected; {p.hand_back(action)}"

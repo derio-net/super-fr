@@ -445,6 +445,13 @@ class Snapshot:
     queue_housekeeping: Mapping[str, tuple[tuple[LivePr, datetime | None], ...]] = field(
         default_factory=dict
     )
+    # wave-queue-gaps R12-R15 (`operator_entries.operator_reads`): repo -> the admitted
+    # operator entries, the pending ones (key -> add time) and the removed keys
+    queue_operator: Mapping[str, tuple[tuple[LivePr, datetime | None], ...]] = field(
+        default_factory=dict
+    )
+    queue_pending: Mapping[str, Mapping[str, datetime]] = field(default_factory=dict)
+    queue_removed: Mapping[str, frozenset[str]] = field(default_factory=dict)
     # R26: the batches whose DevOps `fr-queue:release` is settled at the patch-id they have
     # now, and the run id of each landed barrier still open (for its Need)
     queue_released: frozenset[str] = frozenset()
@@ -479,7 +486,7 @@ class Admitted:
     head the queue builds; *batch* is the batch it is about, *wave* the wave whose queue it
     joins (None: between waves) and *at* when it was admitted, which orders it."""
 
-    kind: Literal["closeout", "archive", "export", "housekeeping"]
+    kind: Literal["closeout", "archive", "export", "housekeeping", "operator"]
     repo: str
     pr: LivePr
     batch: str = ""
@@ -1687,7 +1694,7 @@ def queue_snapshot(
     if snap.placements.get(repo, "repo") != "repo":
         # R15: the repo keeps no fr artifacts on its default branch, so the queue holds batch
         # PRs only: no close-out, archive, export or housekeeping entry, and no wave waits on one
-        closeout, mine = None, []
+        closeout, mine = None, [a for a in mine if a.kind == "operator"]  # no fr artifact
     return QueueSnapshot(
         repo=repo, scope=snap.scope_id or snap.me, config=snap.wave_queues[repo], now=snap.now,
         batches=batches, stages=snap.stages, live={**snap.live, **{a.key: a.pr for a in mine}},
@@ -1701,7 +1708,8 @@ def queue_snapshot(
         warned=snap.warned, scope_args=snap.scope_args,
         released=snap.queue_released, runs=snap.queue_runs,
         method=snap.queue_methods.get(repo, ""), leads=snap.queue_leads.get(repo, {}),
-        carries=_carries(snap, repo, mine),
+        carries=_carries(snap, repo, mine), pending_operator=snap.queue_pending.get(repo, {}),
+        removed=snap.queue_removed.get(repo, frozenset()),
     )  # fmt: skip
 
 
@@ -2028,6 +2036,10 @@ def drive_pass(snap: Snapshot) -> Pass:
     for repo in sorted(snap.queue_housekeeping):
         admitted.extend(Admitted("housekeeping", repo, pr, at=at)
                         for pr, at in snap.queue_housekeeping[repo])  # fmt: skip
+    for repo in sorted(snap.queue_operator):  # wave-queue-gaps R12: `fr triage queue add`
+        admitted.extend(
+            Admitted("operator", repo, pr, at=at) for pr, at in snap.queue_operator[repo]
+        )
 
     # 3d. The wave merge queue: every merge the driver makes is an entry of it (R22, R32).
     queues = _queue_plans(snap, held_ids, admitted)

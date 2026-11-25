@@ -11,10 +11,17 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from datetime import datetime
-from typing import Any
+from typing import Any, Final
 
 from fr.triage.approval import is_approved, settle_entry_approval
-from fr.triage.batch import allowed_authors, batch_branch, distrust, last_dispatch
+from fr.triage.batch import (
+    allowed_authors,
+    batch_branch,
+    batch_pr,
+    batch_repo,
+    distrust,
+    last_dispatch,
+)
 from fr.triage.batch_drive import (
     ARCHIVE_PREFIXES,
     COLLECTED_PREFIX,
@@ -25,7 +32,14 @@ from fr.triage.batch_drive import (
     checks_verdict,
 )
 from fr.triage.errors import TriageError
-from fr.triage.model import Facts, Judgements, QueueApprovalEvent, QueueBuiltEvent, QueueEntryRef
+from fr.triage.model import (
+    ConflictEvent,
+    Facts,
+    Judgements,
+    QueueApprovalEvent,
+    QueueBuiltEvent,
+    QueueEntryRef,
+)
 from fr.triage.scope_config import scope_id
 
 
@@ -249,3 +263,190 @@ def carry_hand_back(
     line, _ = driver._hand_back(exc, action.detail, merge, facts, judgements, batch, repo,
                                 brief=brief)  # fmt: skip
     return str(line)
+
+
+OPERATOR_KIND: Final = "operator"
+"""The queue entry kind of a PR `fr triage queue add` put in (spec 2026-11-24-wave-queue-gaps
+R12): its entry key is `operator#<pr>`."""
+
+PREAPPROVAL_MARKER = "<!-- fr-queue:preapproved"
+"""The first line of the audit comment the driver posts each time it approves a preapproved
+PR itself (R13), naming the head and patch-id it approved."""
+
+
+def preapproval_comment(head: str, patch_id: str, by: str, command: str) -> str:
+    """The audit comment of one driver approval of a preapproved PR (R13)."""
+    return (
+        f"{PREAPPROVAL_MARKER} head={head} patch-id={patch_id} -->\n"
+        f"fr added `approved-fr` at head `{head}` (patch-id `{patch_id}`): {by} added this PR "
+        "to the wave merge queue with `fr triage queue add --preapproved`, its own checks are "
+        "green and it does not conflict. Any later green head is approved the same way while "
+        f"it stays added; `{command}` ends it."
+    )
+
+
+def _live_counts(checks: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    """`PullRequest.checks`-shaped counts of the checks on the PR's head as read now."""
+    out = {"pass": 0, "fail": 0, "pending": 0}
+    for c in checks:
+        bucket = c.get("bucket")
+        key = "fail" if bucket in ("fail", "cancel") else "pending" if bucket == "pending" \
+            else "pass"  # fmt: skip
+        out[key] += 1
+    return out
+
+
+def _queue_conflict_at(records: Iterable[Any], key: str, head: str) -> bool:
+    from fr.triage.model import QueueEjectEvent
+    from fr.triage.wave_queue import entry_key
+
+    return any(isinstance(e, QueueEjectEvent) and e.reason == "conflict" and e.head == head
+               and entry_key(e.entry) == key for r in records for e in r.events)  # fmt: skip
+
+
+def _preapprove(
+    driver: Any, facts: Facts, repo: str, n: int, view: dict[str, Any], *, by: str,
+    allowed: frozenset[str], conflicted: bool, checks: str,
+) -> dict[str, Any]:  # fmt: skip
+    """R13: add `approved-fr` to preapproved PR *n* at its head, with the audit comment, when
+    the adder *by* is an allowed author now, its own checks are green, the forge does not
+    read it as conflicting and no queue conflict is recorded at that head (*conflicted*).
+    Returns *view* with the label when it was added. Nothing is written without --yes, and
+    a patch-id git cannot read holds it for this pass, never a durable record."""
+    from fr.labels import APPROVED_FR
+    from fr.triage.approval import _labels_off, ensure_approval_label
+
+    labels = [str(x) for x in view.get("labels") or ()]
+    head = str(view.get("head_oid") or "")
+    if APPROVED_FR.name in labels:
+        return view
+    why = (
+        f"{by} who added it is not an allowed author of {repo}" if by.lower() not in allowed
+        else "its own checks are not green" if checks != "green"
+        else "the forge reads it as conflicting"
+        if view.get("mergeable") == "CONFLICTING" or view.get("merge_state") == "DIRTY"
+        else "a queue conflict is recorded at this head" if conflicted
+        else ""
+    )  # fmt: skip
+    if why:
+        driver._report_once(
+            f"preapprove\0{repo}\0{n}\0{head}\0{why}",
+            f"{repo}#{n} is preapproved but not approved at {head[:12]}: {why}",
+        )
+        return view
+    patch_id = driver._patch_id_of(facts, repo)(n, head)
+    if not patch_id:
+        driver._report_once(f"preapprove\0{repo}\0{n}\0{head}\0patch-id",
+                            f"{repo}#{n} is preapproved but its patch-id at {head[:12]} could "
+                            "not be read: held for this pass")  # fmt: skip
+        return view
+    from fr.commands.triage_drive_loop import _say
+
+    if not driver.yes:
+        _say(f"would preapprove {repo}#{n} at {head[:12]} (patch-id {patch_id[:12]})")
+        return view
+    client = driver.client(facts, repo)
+    if (off := _labels_off(client, repo)) is not None:
+        driver._report_once(f"preapprove\0{repo}\0labels", f"{repo}#{n} not preapproved: {off}")
+        return view
+    ensure_approval_label(client, repo, _say, seen=vars(driver).setdefault("_preapproved", set()))
+    client.edit_issue_labels(repo, n, add=frozenset({APPROVED_FR.name}), remove=frozenset())
+    command = " ".join(["fr", "triage", "queue", "remove", "--pr", str(n),
+                        *getattr(driver, "scope_args", ())])  # fmt: skip
+    client.comment_pr(repo, n, preapproval_comment(head, patch_id, by, command))
+    _say(f"preapproved {repo}#{n} at {head[:12]} (patch-id {patch_id[:12]}), added by {by}")
+    return {**view, "labels": [*labels, APPROVED_FR.name]}
+
+
+def operator_reads(
+    driver: Any, facts: Facts, judgements: Judgements, repos: Mapping[str, str], skip: Iterable[str]
+) -> dict[str, Any]:
+    """The Snapshot's operator-entry fields (spec 2026-11-24-wave-queue-gaps R12-R15, §C).
+
+    For each PR `fr triage queue add` put in and nothing took out: R13's preapproval, a batch
+    PR's included (only its label: the batch's own settle records the approval); then, for a
+    PR that is no batch's, the housekeeping PR's trust rule (open, same-repo branch, allowed
+    author) and its `approved-fr` settled on the queue's `approval` events as an `operator`
+    entry. `queue_operator` holds the admitted `(LivePr, at)` pairs by repo; `queue_pending`
+    every added, open, unlanded operator entry with its add time (R15: the wave's drain waits
+    on it); `queue_removed` the entry keys whose latest request is a remove (R12's eject)."""
+    from fr.commands import triage_batch_cmd as cmd  # the command layer's clock and writer
+    from fr.commands.triage_drive_loop import _say
+    from fr.triage.model import QueueRemoveEvent
+    from fr.triage.queue_requests import added
+    from fr.triage.wave_queue import landed_keys
+
+    sid = scope_id(driver.scope)
+    admitted: dict[str, tuple[tuple[LivePr, datetime | None], ...]] = {}
+    pending: dict[str, dict[str, datetime]] = {}
+    removed: dict[str, frozenset[str]] = {}
+    for repo in sorted(set(repos.values()) - set(skip)):
+        adds = added(judgements.queue_requests, repo, sid)
+        removed[repo] = frozenset(
+            f"{OPERATOR_KIND}#{e.pr}" for e in judgements.queue_requests
+            if isinstance(e, QueueRemoveEvent) and e.repo == repo and e.scope == sid
+            and e.pr not in adds
+        )  # fmt: skip
+        if not adds:
+            continue
+        records = [q for q in judgements.queues if q.repo == repo and q.scope == sid]
+        landed = landed_keys(records)
+        allowed = allowed_authors(repo, facts)
+        batches = {p.number: b for b in judgements.batches if batch_repo(b, facts) == repo
+                   and (p := batch_pr(b, facts)) is not None}  # fmt: skip
+        events = [e for q in records for e in q.events if isinstance(e, QueueApprovalEvent)]
+        client = driver.client(facts, repo)
+        found: list[tuple[LivePr, datetime | None]] = []
+        for n, request in sorted(adds.items()):
+            view = client.pr_view(repo, n)
+            head = str(view.get("head_oid") or "")
+            batch, key = batches.get(n), f"{OPERATOR_KIND}#{n}"
+            if view.get("state") != "OPEN" or not head or key in landed:
+                continue
+            known = next((p for p in facts.prs if p.repo == repo and p.number == n), None)
+            if batch is None:
+                pending.setdefault(repo, {})[key] = request.at
+                own = reserved_entry(repo, n, str(view.get("head_ref") or ""), judgements)
+                trust = f"it is fr's own {own} entry" if own else distrust(
+                    known.author if known else None, known.cross_repo if known else None, allowed
+                )  # fmt: skip
+                if known is None or trust is not None:  # never labelled, never admitted
+                    driver._report_once(
+                        f"operator\0{repo}\0{n}\0{trust}",
+                        f"{repo}#{n} was added but is not admitted: {trust}",
+                    )
+                    continue
+            checks, failing = checks_verdict(
+                client.pr_required_checks(repo, n), _live_counts(client.pr_checks(repo, n)),
+                ci_none=driver._ci_none(repo),
+            )  # fmt: skip
+            if request.preapproved:
+                conflicted = _queue_conflict_at(records, batch.id if batch else key, head) or (
+                    batch is not None and any(isinstance(e, ConflictEvent) and e.head == head
+                                              for e in batch.events))  # fmt: skip
+                view = _preapprove(driver, facts, repo, n, view, by=request.by, allowed=allowed,
+                                   conflicted=conflicted, checks=checks)  # fmt: skip
+            if batch is not None or known is None:
+                continue
+
+            def record(event: QueueApprovalEvent, repo: str = repo) -> None:
+                checkout = driver._fetched_reader(repo)
+                base = checkout.rev_parse(f"origin/{checkout.default_branch()}")
+                cmd.queue_writer(driver.target, repo, sid)(event, base=base)
+                events.append(event)
+
+            verdict, at = settle_entry_approval(
+                client, record, repo, QueueEntryRef(pr=n, kind=OPERATOR_KIND), events, view,
+                _say, now=cmd._now(), dry_run=not driver.yes,
+                patch_id_of=driver._patch_id_of(facts, repo),
+            )  # fmt: skip
+            if is_approved(verdict):
+                found.append((LivePr(
+                    number=n, state="OPEN", draft=bool(view.get("draft")), head=head,
+                    checks=checks, failing=failing, head_ref=known.head_ref, trusted=True,
+                    base=str(view.get("base_ref") or ""),
+                    labels=tuple(str(x) for x in view.get("labels") or ()),
+                ), at))  # fmt: skip
+        if found:
+            admitted[repo] = tuple(found)
+    return {"queue_operator": admitted, "queue_pending": pending, "queue_removed": removed}

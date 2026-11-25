@@ -258,6 +258,10 @@ class QueueSnapshot:
     method: str = ""
     leads: Mapping[str, bool | None] = field(default_factory=dict)
     carries: Mapping[str, tuple[str, ...] | None] = field(default_factory=dict)
+    # wave-queue-gaps R12, R15: each operator entry added, open and not removed, with its add
+    # time (a wave's drain waits on it), and the operator entries removed since (ejected)
+    pending_operator: Mapping[str, datetime] = field(default_factory=dict)
+    removed: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -439,6 +443,7 @@ class _Cand:
     at: datetime | None
     order: int | None = None
     last: bool = False  # R15: a wave's close-out is its queue's last entry
+    operator: bool = False  # wave-queue-gaps R14: any queue's, and it may open one between waves
 
 
 def _other_ready(o: OtherEntry, qs: QueueSnapshot) -> bool:
@@ -469,6 +474,9 @@ def _cands(qs: QueueSnapshot, open_wave: int | None = None) -> list[_Cand]:
     live_waves = _unfinished_waves(qs)
     for o in qs.others:
         if not _other_ready(o, qs):
+            continue
+        if o.kind == "operator":  # wave-queue-gaps R14: the open queue's, whatever its wave
+            out.append(_Cand(o.key, open_wave, o.at, operator=True))
             continue
         wave = o.wave if o.wave is not None and (o.wave in live_waves or o.wave == open_wave) \
             else None  # fmt: skip
@@ -555,21 +563,23 @@ def _plan_idle_open(qs: QueueSnapshot) -> QueuePlan:
     until then nothing opens and no hold is written, so a wave still being developed never
     holds the repo's releases (plan decision p2-queue-opens-on-first-ready). With no waved
     batch unfinished, a one-entry queue for the oldest ready between-waves entry (a batch
-    with no wave, or any other entry of R32)."""
+    with no wave, or any other entry of R32). A ready operator entry opens such a queue
+    even while a wave is unfinished, unless the lowest one has a ready entry: that wave
+    opens, and the operator entry joins it (wave-queue-gaps R14)."""
     unfinished = sorted(_unfinished_waves(qs))
     ready = _by_readiness(_cands(qs))
     # An entry a between-waves queue ejected is ejected, not waiting, until its head moves:
     # it opens none again meanwhile, or a drain, a release and a re-open would loop on the
     # same conflict (p2-r6).
     ready = [c for c in ready if c.wave is not None or not _ejected_before(c.key, qs)]
-    if unfinished:
-        wave: int | None = unfinished[0]
-        if not any(c.wave == wave for c in ready):
-            return QueuePlan(qs.repo, "idle", None, (), waiting=tuple(c.key for c in ready))
-        entries: tuple[str, ...] = ()
+    wave: int | None = unfinished[0] if unfinished else None
+    entries: tuple[str, ...] = ()
+    if unfinished and any(c.wave == wave for c in ready):
         why = f"open {qs.repo}'s merge queue for wave {wave}"
     else:
-        loose = [c for c in ready if c.wave is None]
+        # wave-queue-gaps R14: an operator entry opens a queue between waves at once, even
+        # while a wave is unfinished; any other loose entry only once every wave is done
+        loose = [c for c in ready if c.wave is None and (c.operator or not unfinished)]
         if not loose:
             return QueuePlan(qs.repo, "idle", None, (), waiting=tuple(c.key for c in ready))
         wave, entries = None, (loose[0].key,)
@@ -673,6 +683,9 @@ def replay(record: QueueRecord) -> Replay:
             order = [k for k in order if k not in done]
         elif isinstance(event, QueueEjectEvent):
             key = entry_key(event.entry)
+            if event.reason == "operator":  # taken out, not judged: it may join again at once
+                order = [k for k in order if k != key]
+                continue
             # A conflict met at build has no `queue_built` at its head: the last build's head
             # is an older one, so only the event's own head is trusted for it.
             last = "" if event.reason == "conflict" else heads.get(key, "")
@@ -913,6 +926,7 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
         # Nothing to rebuild: the queue's base is the moved `main`, and it drains or stalls
         # there like any other pass (an empty window must not hold the hold open forever).
         rep = replace(rep, base=qs.base)
+    actions += _removed_ejects(rep, qs, wave)
     by_id = {b.id: b for b in qs.batches}
     earlier: list[tuple[str, Sequence[str]]] = []
     ejects = len(actions)
@@ -988,6 +1002,46 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
     return _tail(record, rep, qs, actions, entries, waiting)
 
 
+def _removed_ejects(rep: Replay, qs: QueueSnapshot, wave: int | None) -> list[QueueAction]:
+    """wave-queue-gaps R12: an operator entry taken out with `fr triage queue remove` while it
+    is in the queue leaves it, with reason `operator` (no verdict on its head: re-added, it
+    joins again at the same head)."""
+    out = []
+    for key in rep.order:
+        if key not in qs.removed:
+            continue
+        head = next((c.heads[c.chain.index(key)] for c in rep.combos.values() if key in c.chain),
+                    "")  # fmt: skip
+        out.append(QueueAction("queue-eject", qs.repo, f"eject {key}: the operator removed it "
+                               "(`fr triage queue remove`)", wave=wave, entries=(key,),
+                               reason="operator", head=head))  # fmt: skip
+    return out
+
+
+def _operator_stall(record: QueueRecord, qs: QueueSnapshot) -> list[QueueAction] | None:
+    """wave-queue-gaps R15: the pending operator entries that hold this wave's drain (None:
+    nothing holds it), each a Need naming `queue remove` once it has held the drain for
+    `stall_hours` since the later of its add and the queue's last landing."""
+    landed = landed_keys(qs.records)
+    pending = {k: at for k, at in qs.pending_operator.items() if k not in landed}
+    if record.wave is None or not pending:
+        return None
+    lands = [e.at for e in record.events if isinstance(e, QueueLandEvent)]
+    out = []
+    args = "".join(f" {a}" for a in qs.scope_args)
+    for key, added_at in sorted(pending.items()):
+        since = max([added_at, *lands])
+        if qs.now - since < timedelta(hours=qs.config.stall_hours):
+            continue
+        n = key.rpartition("#")[2]
+        out.append(QueueAction(
+            "queue-need", qs.repo, f"{key} was added to {qs.repo}'s merge queue and has held "
+            f"wave {record.wave}'s drain for {qs.config.stall_hours} h without landing: land it "
+            f"(a valid approved-fr, green checks), or take it out with `fr triage queue remove "
+            f"--pr {n}{args}`", wave=record.wave))  # fmt: skip
+    return out
+
+
 def _tail(
     record: QueueRecord,
     rep: Replay,
@@ -1001,7 +1055,10 @@ def _tail(
     landing = any(a.kind == "queue-land" for a in actions)
     waiting_on = barrier_open([r for r in qs.records if r.scope == qs.scope])
     drained = None if entries or landing or waiting_on else _drained(record, rep, qs)
-    if drained is not None:
+    stalled = _operator_stall(record, qs) if drained is not None else None
+    if stalled is not None:  # wave-queue-gaps R15: the drain waits on an operator entry
+        actions.extend(stalled)
+    elif drained is not None:
         actions.append(drained)
     elif (need := _stall_need(record, qs, entries)) is not None:
         actions.append(need)
