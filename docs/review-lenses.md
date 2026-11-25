@@ -166,8 +166,8 @@ section is in the full render that is kept beside the run, not on the pull reque
 
 ## `.fr/lenses.yaml`
 
-The file is in the repo's configuration space: the product checkout under `repo`, the
-`fr-config` branch under `quiet`, and the tracking repo's `<branch>-config` branch under
+The file is in the repo's configuration space. That is the product checkout under `repo`,
+the `fr-config` branch under `quiet`, or the tracking repo's `<branch>-config` branch under
 `stealth`. Under `quiet` and `stealth`, a feature branch cannot change it. A change is a pull
 request to the configuration branch.
 

@@ -69,9 +69,8 @@ cycles and unknown capabilities. CI runs it on every shipped shape.
 The first hit wins:
 
 1. `.fr/workflows/<name>.yaml` in the repo's configuration space: your override, used whole.
-   The configuration space is the product checkout under `repo`, the `fr-config` branch
-   under `quiet`, and `<target-dir>/.fr/` on the tracking repo's `<branch>-config` branch
-   under `stealth`.
+   That space is the product checkout under `repo`, or the `fr-config` branch under `quiet`.
+   Under `stealth` it is `<target-dir>/.fr/` on the tracking repo's `<branch>-config`.
 2. `$FR_SHIPPED_DEFAULTS_DIR/workflows/<name>.yaml`, when that variable is set. This is the
    escape hatch for tests and for harnesses that are not Claude Code. The older
    `$FR_SHIPPED_WORKFLOWS_DIR` still works and prints a notice that names the new variable.
@@ -92,6 +91,6 @@ To change a shape for one repo, copy the shipped file to `.fr/workflows/` and ed
 command prints a notice until then.
 
 Under `quiet` and `stealth`, a shape can run commands, so it is executable configuration.
-fr uses a repo shape only when the forge enforces a pull-request rule on the configuration
+Then fr uses a repo shape only when the forge enforces a pull-request rule on the configuration
 branch. Otherwise fr uses the shipped shape of the same name and says why, once per command.
 [Isolation](../explainers/fr-isolation.md) explains the protection rule.

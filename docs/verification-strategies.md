@@ -33,13 +33,14 @@ from; `fr verification check <name>` (or `--all`) validates manifests.
 A strategy name resolves in this order, and the first hit wins. A repo file replaces a
 shipped one wholesale (fields are not merged):
 
-1. `.fr/verifications/<name>.yaml` in the repo's configuration space (the product
-   checkout under `repo`, the `fr-config` branch under `quiet`, the tracking repo's
-   `<branch>-config` branch under `stealth`);
+1. `.fr/verifications/<name>.yaml` in the repo's configuration space (see below);
 2. `$FR_SHIPPED_DEFAULTS_DIR/verifications/<name>.yaml`, an explicit escape (the older
    `$FR_SHIPPED_VERIFICATIONS_DIR` still works and prints a notice);
 3. the manifests inside the `fr` wheel, in `fr/defaults/verifications/`;
 4. the plugin clone's `plugins/super-fr/defaults/verifications/<name>.yaml`.
+
+The configuration space is the product checkout under `repo`. It is the `fr-config` branch
+under `quiet`, and the tracking repo's `<branch>-config` branch under `stealth`.
 
 A repo strategy can run commands. Under `quiet` and `stealth`, fr uses one only when the
 forge protects the configuration branch (see below). Otherwise fr uses the shipped strategy

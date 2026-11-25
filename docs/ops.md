@@ -88,12 +88,12 @@ op names in `needs`), never into a plan's default set.
 ## Identities and the probe environment
 
 `.fr/ops.yaml` runs commands, so it is executable configuration. Under the `quiet` and
-`stealth` placements it lives on the configuration branch. fr reads it there only when the
-forge enforces a pull-request rule on that branch: a ruleset that requires at least one
-approving review and blocks force-pushes and deletion. Keep the bypass list of that ruleset
-empty, because fr cannot see it. Otherwise every `fr ops` command that needs the file refuses
-and gives the fix. fr reads the file at the fetched tip of the branch, never from the local
-checkout.
+`stealth` placements it lives on the configuration branch. There the file is read only when
+the forge enforces a pull-request rule on that branch. That rule is a ruleset that requires
+at least one approving review. It also blocks force-pushes and deletion. Keep the bypass
+list of that ruleset empty, because fr cannot see it. Without the rule, each `fr ops`
+command that needs the file refuses and gives the fix. The file is read at the fetched tip
+of the branch, never from the local checkout.
 
 ```yaml
 # .fr/ops.yaml
