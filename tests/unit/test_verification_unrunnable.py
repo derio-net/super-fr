@@ -17,7 +17,7 @@ from fr.verification.spec_section import Section, SectionError, parse_section
 
 from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.record_support import RUN, commit_all, fr, write_record
-from tests.unit.requirements_support import row, seed_requirements
+from tests.unit.requirements_support import DESIGN_SHAPE_SECTION, row, seed_requirements
 
 pytestmark = pytest.mark.own_artifacts
 
@@ -319,6 +319,7 @@ def _brainstorm_root(tmp_path: Path, spec_body: str):
 
     root = _workspace(tmp_path, "feat/unrun")
     spec_rel = "docs/spec.md"
+    spec_body += DESIGN_SHAPE_SECTION  # the brainstorm resolve asks for one (show-me-visuals R8)
     (root / "docs").mkdir(parents=True, exist_ok=True)
     (root / spec_rel).write_bytes(spec_body.encode("utf-8", "surrogateescape"))
     seed_requirements(root, spec_rel)

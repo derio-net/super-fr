@@ -77,7 +77,7 @@ case "$FR_SPECS_DIR" in
   */local--origin/features/feat__s/docs/superpowers/specs) ;;
   *) fail "FR_SPECS_DIR is not the stealth feature's: $FR_SPECS_DIR" ;;
 esac
-mkdir -p "$FR_SPECS_DIR" && echo '# S' > "$FR_SPECS_DIR/2026-11-12-s-design.md"
+mkdir -p "$FR_SPECS_DIR" && printf '# S\n\n## Design shape\n\nnone — a scenario fixture\n' > "$FR_SPECS_DIR/2026-11-12-s-design.md"
 run_fr out run resolve "$sid" --step brainstorm --state done --answered-by agent \
   --emitted "spec=$FR_SPECS_DIR/2026-11-12-s-design.md"
 require_exit 0 "$out"

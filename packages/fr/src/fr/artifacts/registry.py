@@ -638,7 +638,8 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # 5: both agents say a lens can be added or suggested (review-lenses R14).
             # 6: fr-phase-executor runs the fast tier last under a declared `tests: ci`
             #    (2026-11-19-local-suite-cost R8).
-            current_version=6,
+            # 7: fr-spec-reviewer checks the spec's `## Design shape` (show-me-visuals R13).
+            current_version=7,
             locator=".claude/agents/fr-*.md",
             stamp=f"`{AGENTS_STAMP_KEY}` in the agent's front matter",
             read_stamp=_read_agents_stamp,

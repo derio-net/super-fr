@@ -210,8 +210,10 @@ def test_every_version_bump_registers_its_re_render_hop() -> None:
     (repo-feature-settings R15), and 3 when fr-phase-executor learned to push with
     `fr push` (R12), and 4 when both learned about review lenses (review-lenses R14),
     and 5 when fr-phase-executor learned the declared `tests: ci` default
-    (local-suite-cost R8): every hop from 1 to the current version is registered."""
-    assert KIND.current_version == 6
+    (local-suite-cost R8), and 6 when fr-spec-reviewer learned to check the spec's
+    `## Design shape` (show-me-visuals R13): every hop from 1 to the current version is
+    registered."""
+    assert KIND.current_version == 7
     chain = MIGRATIONS.chain("agents", 1)
     assert [m.to_version for m in chain] == list(range(2, KIND.current_version + 1))
 

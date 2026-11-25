@@ -31,15 +31,16 @@ def _body(text: str) -> str:
     return text.split("---\n", 2)[2]
 
 
-def test_it_checks_three_things_in_order() -> None:
+def test_it_checks_four_things_in_order() -> None:
     body = _body(AGENT.read_text())
-    assert "## What you check — three things, in this order" in body
+    assert "## What you check — four things, in this order" in body
     positions = [
         body.index(label)
         for label in (
             "**Decisions vs. spec.**",
             "**Codebase reality.**",
             "**Internal consistency.**",
+            "**Design shape.**",
         )
     ]
     assert positions == sorted(positions)

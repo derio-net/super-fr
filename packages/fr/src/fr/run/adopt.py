@@ -1005,7 +1005,9 @@ def adopt_run(
     effects = superseded if superseded is not None else Superseded(old=old_id)
     effects.old = old_id
     effects.holds = open_holds(old_state)
-    moved = _usage_move(repo_root, old_id, rid)
+    moves = [
+        m for m in (_usage_move(repo_root, old_id, rid), _shape_move(repo_root, old_id, rid)) if m
+    ]
     if dry_run:
         return state
     save_run_state(repo_root, state)
@@ -1013,8 +1015,7 @@ def adopt_run(
     if old_id != rid:
         run_path(repo_root, old_id).unlink()
         effects.removed.append(run_path(repo_root, old_id))
-    if moved is not None:
-        src, dst = moved
+    for src, dst in moves:
         dst.parent.mkdir(parents=True, exist_ok=True)
         src.rename(dst)
         effects.removed.append(src)
@@ -1095,14 +1096,29 @@ def _usage_move(repo_root: Path, old_id: str, new_id: str) -> tuple[Path, Path] 
     already exists."""
     from fr.usage.file import usage_path
 
+    return _file_move("usage file", usage_path, repo_root, old_id, new_id)
+
+
+def _shape_move(repo_root: Path, old_id: str, new_id: str) -> tuple[Path, Path] | None:
+    """`_usage_move` for the run's shape file (spec 2026-11-24-show-me-visuals R17)."""
+    from fr.shape import shape_path
+
+    return _file_move("shape file", shape_path, repo_root, old_id, new_id)
+
+
+def _file_move(
+    what: str, locate: Callable[[Path, str], Path], repo_root: Path, old_id: str, new_id: str
+) -> tuple[Path, Path] | None:
+    """`(old file, new file)` for a per-run file `locate` places, when the old run has
+    one; refuses, before anything is written, when the destination already exists."""
     if old_id == new_id:
         return None
-    src, dst = usage_path(repo_root, old_id), usage_path(repo_root, new_id)
+    src, dst = locate(repo_root, old_id), locate(repo_root, new_id)
     if not src.is_file():
         return None
     if dst.exists():
         raise AdoptError(
-            f"{dst} already exists — the usage file of run {old_id!r} cannot move onto it. "
+            f"{dst} already exists — the {what} of run {old_id!r} cannot move onto it. "
             "Pick another --run-id, or remove that file."
         )
     return src, dst

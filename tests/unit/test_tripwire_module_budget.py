@@ -18,7 +18,7 @@ SRC = "packages/fr/src/fr/"
 MAX_HEADROOM = 400
 
 BUDGETS: dict[str, int] = {
-    f"{SRC}commands/run_cmd.py": 9100,
+    f"{SRC}commands/run_cmd.py": 9120,  # show-me-visuals: three call sites of fr.shape
     # +25 each: batch closeout-truth (gh#1494/#1496/#1497/#1569) changes the close-out steps
     # these modules hold; the split they need is #1516 (hand-back and close-out leaves).
     f"{SRC}commands/triage_batch_cmd.py": 8225,
