@@ -10,3 +10,8 @@ Live on a self-hosted GitLab 15.3 (host redacted) during the 9.0.0 release walks
 ### 412aef2f6009 · root-cause · The job never logs glab in, and fr's trust gate (gh#1014) does not count a GITLAB_TOKEN as a login
 
 fr.glab.host_env trusts only hosts in glab's config.yml (known_hosts). The scaffold set env vars alone, so CI_SERVER_HOST is never a known host and every glab call fr makes is refused before a process starts. The gate is correct; the template is missing the login.
+
+<!-- fr:journal kind=finding scope=debug id=42c8fe2e142e created=2026-11-25T18:55:41+00:00 state=fixed -->
+### 42c8fe2e142e · finding [fixed] · DEBT_STEP_GITLAB logs glab in before the fr commands
+
+The technical-debt job's script now starts with export GLAB_CONFIG_DIR="$(mktemp -d)" and echo "$FR_DEBT_TOKEN" | glab auth login --hostname "$CI_SERVER_HOST" --stdin (the fix proven live on a self-hosted GitLab 15.3, host redacted: fr debt issue filed the issue, fr debt archive-pr pushed and opened a draft MR). The login sits in script, after every before_script line, so glab is installed by then. Pinned by tests/unit/test_acceptance_scaffold_debt_jobs.py::test_gitlab_debt_job_logs_glab_in_before_any_fr_command (red before the fix, green after); both GitLab goldens regenerated (only the two lines and the header comment changed).
