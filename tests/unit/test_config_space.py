@@ -112,9 +112,24 @@ def test_quiet_space_is_the_fr_config_worktree(tmp_path: Path, _home: Path) -> N
 def test_quiet_at_default_reads_the_fr_config_tip(tmp_path: Path) -> None:
     root = quiet_repo(tmp_path)
     _commit(root, ".fr/ci.yaml", "gate_checks: [product]\n", push=False)
-    assert config_space(root).at_default(".fr/ci.yaml") is None
     _push_orphan(root, "fr-config", {".fr/ci.yaml": "gate_checks: [config]\n"})
     assert config_space(root).at_default(".fr/ci.yaml") == "gate_checks: [config]\n"
+    assert config_space(root).at_default(".fr/docs.yaml") is None
+
+
+def test_quiet_with_no_fr_config_yet_refuses_rather_than_reading_no_configuration(
+    tmp_path: Path,
+) -> None:
+    """Review p1-r3: a configuration space that does not exist yet is not "no
+    configuration", or lens rules, docs.yaml and gate_checks would vanish."""
+    from fr.settings import SettingsError
+
+    root = quiet_repo(tmp_path)
+    space = config_space(root)
+    with pytest.raises(SettingsError, match=r"origin/fr-config.*fr migrate artifacts --yes"):
+        space.at_default(".fr/ci.yaml")
+    with pytest.raises(SettingsError, match="origin/fr-config"):
+        space.at_pair(".fr/ci.yaml", "main", "HEAD")
 
 
 def test_stealth_space_is_the_configuration_clone(tmp_path: Path, _home: Path) -> None:
@@ -130,7 +145,6 @@ def test_stealth_at_default_reads_the_config_branch_in_the_clone(
     tmp_path: Path, _home: Path
 ) -> None:
     root, clone = stealth_repo(tmp_path, _home)
-    assert config_space(root).at_default(".fr/ci.yaml") is None
     track = tmp_path / "track.git"
     seed = tmp_path / "seed"
     git(tmp_path, "init", "-q", "-b", "main-config", str(seed))
@@ -138,6 +152,26 @@ def test_stealth_at_default_reads_the_config_branch_in_the_clone(
     _commit(seed, "local--work/.fr/ci.yaml", "gate_checks: [stealth]\n")
     git(tmp_path, "clone", "-q", "-b", "main-config", str(track), str(clone))
     assert config_space(root).at_default(".fr/ci.yaml") == "gate_checks: [stealth]\n"
+    assert config_space(root).at_default(".fr/docs.yaml") is None
+
+
+def test_stealth_with_no_configuration_clone_refuses(tmp_path: Path, _home: Path) -> None:
+    from fr.settings import SettingsError
+
+    root, clone = stealth_repo(tmp_path, _home)
+    with pytest.raises(SettingsError, match=r"configuration clone.*fr migrate artifacts --yes"):
+        config_space(root).at_default(".fr/ci.yaml")
+    with pytest.raises(SettingsError, match="configuration clone"):
+        config_space(root).at_pair("ci.yaml", "main", "HEAD")
+
+
+def test_stealth_clone_without_its_config_branch_refuses(tmp_path: Path, _home: Path) -> None:
+    from fr.settings import SettingsError
+
+    root, clone = stealth_repo(tmp_path, _home)
+    git(tmp_path, "init", "-q", "-b", "main-config", str(clone))
+    with pytest.raises(SettingsError, match="origin/main-config"):
+        config_space(root).at_default(".fr/ci.yaml")
 
 
 # --- at_pair and the feature-branch rule (R3) -------------------------------------------
@@ -177,22 +211,25 @@ def test_stealth_at_pair_reads_the_config_tip_for_both_sides(tmp_path: Path, _ho
 
 
 def test_quiet_declared_gates_ignore_the_branch_and_read_the_config_tip(tmp_path: Path) -> None:
-    from fr.run.ci_evidence import declared_gates
+    from fr.run.ci_evidence import CiEvidenceRefused, declared_gates
 
     root = quiet_repo(tmp_path)
     _commit(root, ".fr/ci.yaml", "gate_checks: [branch]\n", push=False)
-    assert declared_gates(root, "main") is None
+    with pytest.raises(CiEvidenceRefused, match="origin/fr-config"):
+        declared_gates(root, "main")
     _push_orphan(root, "fr-config", {".fr/ci.yaml": "gate_checks: [config]\n"})
     assert declared_gates(root, "main") == ["config"]
 
 
 def test_quiet_lens_rules_ignore_the_branch_and_read_the_config_tip(tmp_path: Path) -> None:
+    from fr.lenses.model import LensError
     from fr.lenses.rules import rules_in_force_at
 
     root = quiet_repo(tmp_path)
     rule = "require:\n  - paths: ['src/**']\n    lenses: [security]\n"
     _commit(root, ".fr/lenses.yaml", rule, push=False)
-    assert rules_in_force_at(root) == ()
+    with pytest.raises(LensError, match="origin/fr-config"):
+        rules_in_force_at(root)
     _push_orphan(root, "fr-config", {".fr/lenses.yaml": rule})
     assert [r.lenses for r in rules_in_force_at(root)] == [("security",)]
 
@@ -441,3 +478,21 @@ def test_triage_config_read_propagates_a_forge_error_on_the_switch_probe() -> No
 
     with pytest.raises(ForgeError, match="HTTP 500"):
         read_config_lenient(_Failing(ForgeError("HTTP 500: boom")), "o/r")  # type: ignore[arg-type]
+
+
+def test_the_queue_refuses_its_required_checks_when_fr_config_is_missing(
+    tmp_path: Path,
+) -> None:
+    """Review p1-r3: the merge queue's `gate_checks` read refuses as a triage error the
+    drive reports for that repo, never falls back to the base's required checks."""
+    from fr.triage.errors import TriageError
+    from fr.triage.gitseam import Checkout
+    from fr.triage.queue_exec import required_names
+
+    class _Client:
+        def required_check_names(self, repo: str, base: str) -> list[str]:
+            raise AssertionError("a missing configuration space never falls back")
+
+    root = quiet_repo(tmp_path)
+    with pytest.raises(TriageError, match="origin/fr-config"):
+        required_names(_Client(), Checkout(root), "o/r", "main")  # type: ignore[arg-type]

@@ -744,15 +744,21 @@ class ChecksForge(Protocol):
 def required_names(client: ChecksForge, checkout: Checkout, repo: str, default: str) -> list[str]:
     """The checks that gate *default* (R7): `.fr/ci.yaml`'s `gate_checks` at
     `origin/<default>`, else the base's `required_check_names`. Under quiet and stealth
-    `ci.yaml` is the configuration branch's (`fr.config.space.at_default`)."""
+    `ci.yaml` is the configuration branch's (`fr.config.space.at_default`); a space that
+    cannot be read raises `TriageError`, never falls back to the base's checks."""
     from fr.config.space import config_space, rel
+    from fr.settings import SettingsError
+    from fr.triage.errors import TriageError
 
-    space = config_space(checkout.path)
-    text = (
-        checkout.show(f"origin/{default}", rel("ci"))
-        if space.ref is None
-        else space.at_default("ci")
-    )
+    try:
+        space = config_space(checkout.path)
+        text = (
+            checkout.show(f"origin/{default}", rel("ci"))
+            if space.ref is None
+            else space.at_default("ci")
+        )
+    except SettingsError as exc:
+        raise TriageError(f"{repo}: its {rel('ci')} cannot be read: {exc}") from exc
     declared = gate_checks_of(text)
     return declared if declared is not None else list(client.required_check_names(repo, default))
 

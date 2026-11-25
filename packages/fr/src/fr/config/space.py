@@ -36,6 +36,8 @@ from typing import TYPE_CHECKING, Final
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from fr.settings import SettingsError
+
 _REPO: Final = "repo"
 _QUIET: Final = "quiet"
 _STEALTH: Final = "stealth"
@@ -130,8 +132,10 @@ class ConfigSpace:
         return f"{self.prefix}/{below}" if below else self.prefix
 
     def at_default(self, name: str) -> str | None:
-        """*name* as the default ref has it (None: absent, or no such ref yet). Raises
-        `SettingsError` on a git failure, which never reads as absent."""
+        """*name* as the default ref has it (None: absent from it). Raises `SettingsError`
+        on a git failure, which never reads as absent, and under `quiet` and `stealth` when
+        the configuration space does not exist yet (review p1-r3): a missing space is not
+        "no configuration", or lens rules, `docs.yaml` and `gate_checks` would vanish."""
         from fr.settings.load import read_at_default, show_at_commit
 
         path = self.tree_path(name)
@@ -139,9 +143,22 @@ class ConfigSpace:
             return read_at_default(self.product, path)
         repo = self._git_repo()
         if repo is None:
-            return None
+            raise self._missing(f"its configuration clone {self.checkout} does not exist")
         sha = _commit(repo, f"refs/remotes/{self.ref}")
-        return None if sha is None else show_at_commit(repo, sha, path)
+        if sha is None:
+            raise self._missing(f"`{self.ref}` is not in {repo}")
+        return show_at_commit(repo, sha, path)
+
+    def _missing(self, why: str) -> SettingsError:
+        from fr.settings import SettingsError
+
+        branch = self.ref.removeprefix("origin/") if self.ref else CONFIG_BRANCH
+        return SettingsError(
+            f"the {self.placement} configuration space is not there yet: {why}, so fr "
+            f"cannot read the repo's configuration and will not read it as none. Create it "
+            f"with `fr migrate artifacts --yes` (it moves the switch and `{SPACE_DIR}/` to "
+            f"`{branch}`), or fetch it: `git fetch origin {branch}`"
+        )
 
     def at_pair(self, name: str, base: str, head: str) -> tuple[str | None, str | None]:
         """*name* at *base* and at *head* (R3). Under `repo` those are the two commits;

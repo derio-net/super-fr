@@ -7060,8 +7060,14 @@ class _Driver:
             if record is None or queue_config(block).ci == "none":
                 continue
             client = self.client(facts, repo)
+            try:  # review p1-r3: an unreadable configuration space is said, not a crash
+                required = required_names(client, checkout, repo, default)
+            except TriageError as exc:
+                self._report_once(f"checks-unread\0{repo}\0{exc}",
+                                  f"{repo}: required checks unread: {exc}")  # fmt: skip
+                continue
             read, needs = read_slots(
-                client, repo, record, required_names(client, checkout, repo, default),
+                client, repo, record, required,
                 now=_now(), wait_minutes=block.check_wait_minutes,
             )  # fmt: skip
             slots.update(read)
