@@ -360,7 +360,7 @@ def batch_readiness(batch: Batch, qs: QueueSnapshot) -> Readiness:
         next_action=action,
         link=link,
     )
-    admits = d.ok and _admission(batch, pr, qs, approved)
+    admits = d.ok and qs.config.ci is not None and _admission(batch, pr, qs, approved)
     return Readiness(kind, _LINES[kind].format(r=reason), reason, facts, admits, d, approved)
 
 

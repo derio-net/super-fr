@@ -164,4 +164,6 @@ def test_a_repo_with_no_queue_block_still_leads_its_card_with_a_verdict() -> Non
     f = facts([issue(1, prs=[p])])
     jd = judgements({"widgets#1": j(1)}, [mk_batch("a", [1], events=[dispatch("a")])])
     card = build_board(f, jd, {}).card("a")
-    assert card.readiness is not None and card.readiness.admits
+    assert card.readiness is not None
+    assert card.readiness.kind == "queue-held" and not card.readiness.admits
+    assert card.readiness.verdict.startswith("Not ready: queue held: queue not configured")

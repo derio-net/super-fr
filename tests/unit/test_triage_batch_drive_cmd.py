@@ -4772,6 +4772,7 @@ def test_the_drivers_board_asks_for_the_label_in_a_ci_none_repo(
 ) -> None:  # fmt: skip
     """p1-r2: the driver holds a `ci none` repo's unlabelled PR, so its board says so (no
     run cursor at its head: a delivered one asks to approve it from the Reviewer lane)."""
+    world.config = {"queue": {"ci": "none"}}
     _pr_open(world, tmp_path, labels=[], delivered=False)
     world.checks[101] = []
     world.all_checks[101] = {"pass": 0, "fail": 0, "pending": 0}

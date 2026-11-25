@@ -394,7 +394,10 @@ def held_by_other(qs: QueueSnapshot) -> Hold | None:
 
 def queue_held_reason(qs: QueueSnapshot) -> str:
     """Why *qs*'s queue lands nothing now, "" when it may (batch-merge-readiness R5): another
-    scope holds its hold (R31), or this scope's open queue is halted (R11, R28)."""
+    scope holds its hold (R31), this scope's open queue is halted (R11, R28), or the repo's
+    `.fr/triage.yaml` names no `queue.ci`, so the driver plans no queue for it (R7, R22)."""
+    if qs.config.ci is None:
+        return "queue not configured: no `queue.ci` in .fr/triage.yaml, so the driver merges nothing"
     hold = held_by_other(qs)
     if hold is not None:
         return f"held by scope {hold.scope} (hold {hold.state})"

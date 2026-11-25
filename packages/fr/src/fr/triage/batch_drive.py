@@ -1792,7 +1792,7 @@ def queue_snapshot(
         closeout, mine, refused = None, [], []
     return QueueSnapshot(
         repo=repo, scope=snap.scope_id or snap.me, now=snap.now, cursors=snap.cursors,
-        config=snap.wave_queues.get(repo) or QueueConfig(),
+        config=snap.wave_queues.get(repo) or QueueConfig(ci=None),
         batches=batches, stages=snap.stages,
         live={**snap.live, **{a.key: a.pr for a in mine}, **{r.key: r.pr for r in refused}},
         approvals=snap.approvals, records=records,
