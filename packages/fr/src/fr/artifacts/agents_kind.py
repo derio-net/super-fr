@@ -100,6 +100,10 @@ MIGRATIONS.register(rerender_migration(5, 6))
 `tests_log: none`, when its brief carries `tests.mode: ci` (spec
 2026-11-19-local-suite-cost R8)."""
 
+MIGRATIONS.register(rerender_migration(6, 7))
+"""6 -> 7: `fr-spec-reviewer` checks the spec's `## Design shape` against the codebase and
+the spec's own Design (spec 2026-11-24-show-me-visuals R13)."""
+
 MIGRATIONS.register(
     Repair(
         kind=KIND,

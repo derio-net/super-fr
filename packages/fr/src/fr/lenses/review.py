@@ -97,7 +97,10 @@ def lens_review_rule(lens: str) -> str:
         "worse than it needs to be; `out` = true, but not caused by this change. fr "
         "refuses the lens-review resolve while your block names another lens, names no "
         "file the feature changed or a file it did not change, or a returned id is "
-        "missing from the plan journal or carries another scope there:\n"
+        "missing from the plan journal or carries another scope there. When the brief "
+        "names a `shape` file, read it: any way it contradicts the diff is a finding of "
+        "your lens; do not list the shape file under `examined` (the feature diff leaves "
+        "it out):\n"
         f"```{FENCE}\nlens: {lens}\nexamined: <changed file>, <changed file>\n```\n"
         f"```{FINDINGS_FENCE}\nl-{lens}-r1 | in | <one-line summary>\n```"
     )
@@ -121,15 +124,18 @@ def why_line(entry: LensEntry) -> str:
     return "; ".join(parts)
 
 
-def lens_review_brief(root: Path, lens_set: LensSet) -> dict[str, Any]:
+def lens_review_brief(root: Path, lens_set: LensSet, shape: Path | None = None) -> dict[str, Any]:
     """The brief's `lens_review` key (R8): per lens its title, instruction text,
-    reasons or rule and file, and return rule, beside the diff's merge-base. An
-    empty set is `{"set": [], "note": ...}`."""
+    reasons or rule and file, and return rule, beside the diff's merge-base, and
+    `shape`, the run's shape file's absolute path or `None` when it does not exist
+    (spec 2026-11-24-show-me-visuals R16). An empty set is `{"set": [], "note": ...}`:
+    it dispatches no reviewer, so it names no shape."""
     if not lens_set.lenses:
         return {"set": [], "note": EMPTY_SET_NOTE}
     effective = lens_set.definitions
     out: dict[str, Any] = {
         "merge_base": lens_set.merge_base,
+        "shape": str(shape.resolve()) if shape is not None and shape.is_file() else None,
         "set": [
             {
                 "lens": e.lens,

@@ -11,7 +11,7 @@ description: >
   NOT a general-purpose reviewer and NOT for code review — `review-phase` owns
   that.
 tools: Read, Grep, Glob
-fr_artifact_version: 6
+fr_artifact_version: 7
 ---
 
 # fr-spec-reviewer
@@ -45,7 +45,7 @@ the journal's `decision` entries — and this step's own record is the YAML you
 return. A missing file under `docs/superpowers/runs/<run-id>.records/` is
 expected, never a finding.
 
-## What you check — three things, in this order
+## What you check — four things, in this order
 
 1. **Decisions vs. spec.** Every `decision` entry in the spec journal is honoured
    by the spec, and the spec decides nothing the operator decided otherwise. Quote
@@ -61,6 +61,15 @@ expected, never a finding.
    nothing the design promises is missing from the Test Plan. The Test Plan's
    heading is exactly `## Test Plan`: a numbered or suffixed one (`## 6. Test
    Plan (post-merge)`) is a finding, because fr reads no Test Plan from it.
+4. **Design shape.** The spec's `## Design shape` is a picture of the change
+   (a file tree, a diff or a sequence), and a picture is a claim. Check it against the
+   codebase: every file, function or module it names exists, cite it as
+   `path:line`, or the spec creates it. Check it against the spec's own
+   `## Design`: what it draws (added and removed entries, the order of events)
+   is what the Design text describes, no more and no less. A name that does not
+   exist, or a drawing the text contradicts, is a finding. A `none — <reason>`
+   shape is a finding only when the Design moves files or boundaries a picture
+   would show.
 
 Review against the settings. Under `artifacts.test_plan: off` a missing Test Plan
 is not a finding (a present one is: fr refuses it); under `artifacts.acceptance:
@@ -74,7 +83,7 @@ Do not review prose style, and do not propose features the spec does not need.
 
 On the light shape (`fr-goal-light`) one dispatch reviews the spec AND its
 one-phase plan together, after the plan is written — the brief names the plan
-directory beside the spec. Run the three checks above on the spec, then check
+directory beside the spec. Run the four checks above on the spec, then check
 the plan:
 
 - **Reads back against the spec.** Every requirement the spec builds is built

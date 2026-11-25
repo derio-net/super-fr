@@ -16,6 +16,7 @@ from fr.cli import app
 from fr.usage.file import archived_usage_path, host_label, load_usage, usage_path
 from typer.testing import CliRunner
 
+from tests.unit.requirements_support import DESIGN_SHAPE_SECTION, write_shape_file
 from tests.unit.test_run_cli import _repo, _write_shape
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "usage"
@@ -80,10 +81,13 @@ def _setup(tmp_path: Path) -> tuple[Path, Path]:
     _write_shape(shipped, "capture", SHAPE)
     spec_dir = repo / "docs" / "superpowers" / "specs"
     spec_dir.mkdir(parents=True, exist_ok=True)
-    (spec_dir / "2026-09-30-fixture-design.md").write_text("# Fixture\n")
+    (spec_dir / "2026-09-30-fixture-design.md").write_text("# Fixture\n" + DESIGN_SHAPE_SECTION)
     plan_dir = repo / "docs" / "superpowers" / "plans" / "2026-09-30-fixture"
     plan_dir.mkdir(parents=True, exist_ok=True)
     (plan_dir / "_meta.yaml").write_text("plan: 2026-09-30-fixture\n")
+    shape = write_shape_file(repo, RUN)  # what `deliver` asks of a spec with a design shape
+    _git(repo, "add", "--", str(shape))
+    _git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "shape")
     started = _invoke(repo, shipped, ["run", "start", "capture", "--branch", "b", "--run-id", RUN])
     assert started.exit_code == 0, started.output
     return repo, shipped

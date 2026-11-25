@@ -679,3 +679,45 @@ def test_supersede_moves_a_branch_derived_id_to_the_plan_slug_with_its_usage(
     assert load_run_state(repo, PLAN_SLUG).run == PLAN_SLUG
     assert not usage.exists()
     assert (usage.parent / f"{PLAN_SLUG}.yaml").is_file()
+
+
+def test_supersede_moves_the_shape_file_with_the_run(tmp_path: Path, repo_root: Path) -> None:
+    """Spec 2026-11-24-show-me-visuals R17: `<old>.shape.md` becomes `<new>.shape.md`."""
+    from fr.shape import shape_path
+
+    repo, shipped, plan_dir = _old_run(tmp_path, repo_root)
+    old = shape_path(repo, "old-run")
+    old.write_text("none — nothing to draw\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "shape")
+
+    result = _supersede(repo, shipped, plan_dir, "--yes")
+
+    assert result.exit_code == 0, result.output
+    assert not old.exists()
+    assert shape_path(repo, "new-run").read_text() == "none — nothing to draw\n"
+    assert _git_status(repo) == ""
+
+
+def test_supersede_refuses_onto_an_existing_shape_file_before_any_write(
+    tmp_path: Path, repo_root: Path
+) -> None:
+    from fr.shape import shape_path
+
+    repo, shipped, plan_dir = _old_run(tmp_path, repo_root)
+    old, new = shape_path(repo, "old-run"), shape_path(repo, "new-run")
+    old.write_text("none — old\n")
+    new.write_text("none — someone else's\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "shapes")
+    before = run_path(repo, "old-run").read_bytes()
+    commits = _commit_count(repo)
+
+    result = _supersede(repo, shipped, plan_dir, "--yes")
+
+    assert result.exit_code == 2, result.output
+    assert "already exists" in result.output and "new-run.shape.md" in _squash(result.output)
+    assert run_path(repo, "old-run").read_bytes() == before
+    assert not run_path(repo, "new-run").exists()
+    assert (old.read_text(), new.read_text()) == ("none — old\n", "none — someone else's\n")
+    assert _commit_count(repo) == commits

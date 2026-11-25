@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/skills/fr-execute/SKILL.md
   - packages/fr/src/fr/commands/plan_cmd.py
   - packages/fr/src/fr/commands/pickup_cmd.py
-reviewed: 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-14 still true after VK support was removed; fr-execute's PR-format note names runners, not VK
+reviewed: 2026-11-24 the spec carries a `## Design shape`, drawn with fr-show-me (show-me-visuals R7, R14); 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-14 still true after VK support was removed; fr-execute's PR-format note names runners, not VK
 ---
 
 ## Why write the idea down twice?
@@ -111,7 +111,7 @@ brainstorm that turns into a build never has to move. One that dies leaves your 
 as it was. In devcontainer mode a repo with no profile is a hard stop (the skill offers
 the [fr-init](fr-init.md) interview); a docker-less host skips that.
 
-It adds four things to a plain brainstorm:
+It adds five things to a plain brainstorm:
 
 - **The brief, recorded.** The skill saves the operator's request verbatim as a
   spec-journal entry (`fr journal add --scope spec --slug <spec-slug> --kind discovery --input
@@ -120,6 +120,10 @@ It adds four things to a plain brainstorm:
   state.
 - **A `## Requirements` section** before `## Design`: one line each, `R1. ...`, `R2. ...`.
   Plans and acceptance rows cite these ids.
+- **A `## Design shape` section**: a small picture of the change, drawn with
+  [fr-show-me](fr-show-me.md)'s views, such as the files it touches as an annotated tree.
+  When no picture would help, the section is one line, `none — <reason>`. fr refuses a
+  spec without a valid one when the brainstorm and the spec review close.
 - **The verification question.** Every brainstorm asks once how you will prove the change
   before merge. `fr verification list` shows the available strategies. The answer goes in
   the spec's `## Verification` section. See

@@ -67,7 +67,7 @@ case "$FR_SPECS_DIR" in
   */.cache/fr/worktrees/$repo/fr/features/feat__q/docs/superpowers/specs) ;;
   *) fail "FR_SPECS_DIR is not the quiet feature's: $FR_SPECS_DIR" ;;
 esac
-mkdir -p "$FR_SPECS_DIR" && echo '# Q' > "$FR_SPECS_DIR/2026-11-12-q-design.md"
+mkdir -p "$FR_SPECS_DIR" && printf '# Q\n\n## Design shape\n\nnone — a scenario fixture\n' > "$FR_SPECS_DIR/2026-11-12-q-design.md"
 run_fr out run resolve "$run_id" --step brainstorm --state done --answered-by agent \
   --emitted spec=docs/superpowers/specs/2026-11-12-q-design.md
 require_exit 0 "$out"

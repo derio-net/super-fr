@@ -28,6 +28,7 @@ from fr.run import units
 from fr.run.model import load_run_state
 from fr.run.telemetry import parse_timestamp
 
+from tests.unit.requirements_support import DESIGN_SHAPE_SECTION
 from tests.unit.test_run_cli import (
     _invoke,
     _invoke_measurable,
@@ -447,7 +448,7 @@ def _at_the_spec_review(
     _write_shape(shipped, "specshape", shape)
     spec = repo / _SPEC_REL
     spec.parent.mkdir(parents=True, exist_ok=True)
-    spec.write_text("# x\n")
+    spec.write_text("# x\n" + DESIGN_SHAPE_SECTION)
     start = ["run", "start", "specshape", "--branch", "b", "--run-id", "r1"]
     assert _run(repo, shipped, start, root, session).exit_code == 0
     assert _run(repo, shipped, ["run", "advance", "r1"], root, session).exit_code == 0
