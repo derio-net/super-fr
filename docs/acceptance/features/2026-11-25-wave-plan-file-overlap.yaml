@@ -1,0 +1,38 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-25-wave-plan-file-overlap
+repo: derio-net/super-fr
+rows:
+  - id: plan-overlap-check
+    capability: triage wave planning
+    acceptance: '`fr triage check` lists every pair of unmerged batches (not linked
+      by an after-chain) whose plans name the same non-generated file, with the shared
+      paths and the fix (merge, --after or a later wave), and the batches it could not
+      compare with why'
+    origin:
+    - spec:2026-11-25-wave-plan-file-overlap#R1
+    - spec:2026-11-25-wave-plan-file-overlap#R2
+    - spec:2026-11-25-wave-plan-file-overlap#R3
+    - spec:2026-11-25-wave-plan-file-overlap#R4
+    - spec:2026-11-25-wave-plan-file-overlap#R5
+    - spec:2026-11-25-wave-plan-file-overlap#R6
+    - spec:2026-11-25-wave-plan-file-overlap#R8
+    - spec:2026-11-25-wave-plan-file-overlap#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: plan-overlap-board
+    capability: triage Batches page
+    acceptance: The Batches page shows each plan overlap on both batches' cards, naming
+      the other batch, the shared paths and the fix
+    origin:
+    - spec:2026-11-25-wave-plan-file-overlap#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none

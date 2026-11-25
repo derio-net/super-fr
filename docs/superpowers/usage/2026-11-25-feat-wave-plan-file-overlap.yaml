@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-25-feat-wave-plan-file-overlap
+captures:
+- host: h-fe45e3c4
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-25T13:12:31+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 0b0df376-70ba-43e5-92da-54c79b85d954
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 84
+        cache_write: 185980
+        cache_read: 6434727
+        output: 26793
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 21
+      other:
+        usd: null
+        turns: 10
+      paperwork:
+        usd: null
+        turns: 9
+    steps:
+      (outside run):
+        usd: null
+        turns: 3
+        input: 6
+        cache_write: 104573
+        cache_read: 279999
+        output: 810
+      brainstorm:
+        usd: null
+        turns: 37
+        input: 78
+        cache_write: 81407
+        cache_read: 6154728
+        output: 25983
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 3
+          input: 6
+          cache_write: 104573
+          cache_read: 279999
+          output: 810
+        brainstorm:
+          usd: null
+          turns: 37
+          input: 78
+          cache_write: 81407
+          cache_read: 6154728
+          output: 25983

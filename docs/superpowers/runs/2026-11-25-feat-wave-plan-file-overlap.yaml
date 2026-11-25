@@ -3,11 +3,14 @@ run: 2026-11-25-feat-wave-plan-file-overlap
 workflow: fr-goal@1
 branch: feat/wave-plan-file-overlap
 started: '2026-11-25T12:55:25+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-25T12:55:34+00:00'
+    state: done
+    at: '2026-11-25T13:12:30+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-25-wave-plan-file-overlap-design.md
   spec-review:
     state: pending
   plan:
