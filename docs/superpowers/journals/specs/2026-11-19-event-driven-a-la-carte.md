@@ -342,3 +342,8 @@ While the configuration branch has a fetched tip the product's old path is ignor
 ### spec-r10-stealth-keeps-product · decision · R10 amended: unlink only after the fetched tip holds the bytes; under stealth the product file stays (p4-r1, p4-r6)
 
 A cross-space move removes the product file only once the configuration branch's fetched tip holds it with exactly the bytes moved. Under stealth it never commits a deletion on the target's branch: the file moves to the tracking repo's configuration branch, the product file stays (R4: ignored; a kept copy held byte-for-byte no longer reads as stale), and fr prints once the exact git rm. Plan decisions p4-verify-before-unlink, p4-stealth-keeps-product-file.
+
+<!-- fr:journal kind=decision scope=spec id=p6-stealth-ignores-declared created=2026-11-25T11:07:10+00:00 -->
+### p6-stealth-ignores-declared · decision · R20 amended: under stealth the declared state repo is never read from the product repo
+
+Under stealth the stealth tracking repo (R19) wins over any declaration; triage.state_repo is never read from the product repo, and only from the operator's stealth configuration space when it exists, behind R7's protection guard. Outside stealth R20 is unchanged. leak_risk (R21) applies everywhere. Plan decision p6-stealth-ignores-declared.
