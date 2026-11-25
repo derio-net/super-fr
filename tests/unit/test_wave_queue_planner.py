@@ -749,7 +749,7 @@ def test_a_halt_lifts_when_the_default_branch_moves_and_the_queue_rebuilds() -> 
 
 
 def test_a_halt_is_a_blocked_action_of_the_pass_so_needs_you_lists_it() -> None:
-    from fr.triage.batch_drive import _queue_reports
+    from fr.triage.queue_reports import queue_reports as _queue_reports
 
     plan = plan_queue(_abc(_built(1, "s1", "a"), _halt("held"), slots=_green("s1")))
     (action,) = _queue_reports(plan)

@@ -235,6 +235,10 @@ class QueueSnapshot:
     # The open wave's close-out: None, it has none; False, not landed yet; True, landed.
     closeout_landed: bool | None = None
     others: tuple[OtherEntry, ...] = ()  # the non-batch entries admitted this pass (R32)
+    # The candidates a trust rule refused (batch-merge-readiness R8): never entries, only
+    # verdicts. `refused` is key -> the rule's reason; `refused_entries` says what each is.
+    refused: Mapping[str, str] = field(default_factory=dict)
+    refused_entries: tuple[OtherEntry, ...] = ()
     warned: frozenset[str] = frozenset()  # report keys said already
     # R26: the entries whose `fr-queue:release` label is settled to a `queue_release` at the
     # patch-id they have now. A `gate:devops` entry is ready only then.
@@ -442,12 +446,10 @@ class _Cand:
 
 def _other_ready(o: OtherEntry, qs: QueueSnapshot) -> bool:
     """R3, R32: its trust rule admitted it (it is listed), its PR is open and its own
-    head's checks are green."""
-    pr = qs.live.get(o.key)
-    return (
-        pr is not None and pr.state == "OPEN" and pr.checks == "green"
-        and not base_refusal(pr, qs)
-    )  # fmt: skip
+    head's checks are green. Decided by `fr.triage.readiness.other_readiness` alone."""
+    from fr.triage.readiness import other_readiness
+
+    return other_readiness(o.key, qs).admits
 
 
 def _unfinished_waves(qs: QueueSnapshot) -> frozenset[int]:
@@ -1178,10 +1180,13 @@ def plan_queue(qs: QueueSnapshot) -> QueuePlan:
 def _readiness(plan: QueuePlan, qs: QueueSnapshot) -> dict[str, Readiness]:
     """batch-merge-readiness R4, R5: every open batch PR's verdict, an approved one placed in
     the plan's own entry order (its entries, then the entries waiting on a later queue)."""
-    from fr.triage.readiness import batch_readiness, in_queue_order
+    from fr.triage.readiness import batch_readiness, in_queue_order, other_readiness
 
     order = (*plan.entries, *(k for k in plan.waiting if k not in plan.entries))
-    out: dict[str, Readiness] = {}
+    out: dict[str, Readiness] = {
+        o.key: in_queue_order(other_readiness(o.key, qs), o.key, order, qs)
+        for o in (*qs.others, *qs.refused_entries)
+    }
     for b in qs.batches:
         pr = qs.live.get(b.id)
         if pr is not None and pr.state == "OPEN":

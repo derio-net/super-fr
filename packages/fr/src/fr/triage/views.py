@@ -41,7 +41,6 @@ from fr.triage.batch_drive import (
     DEFAULT_MAX_INFLIGHT,
     IN_FLIGHT,
     LANDED,
-    QUEUE_REPORT_KEY,
     LivePr,
     Snapshot,
     checks_verdict,
@@ -76,6 +75,7 @@ from fr.triage.model import (
     Severity,
 )
 from fr.triage.queue_exec import queue_config
+from fr.triage.queue_reports import QUEUE_REPORT_KEY
 from fr.triage.readiness import NO_CURSOR_ACTION, fact_cursors, snapshot_readiness
 from fr.triage.scope_config import scope_id
 from fr.triage.timestamps import parse_aware
