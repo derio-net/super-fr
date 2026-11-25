@@ -254,8 +254,9 @@ def _one(*, labels: list[str] | None, events: list[dict[str, Any]] | None = None
          **kw: Any) -> tuple[Facts, Judgements]:  # fmt: skip
     # Its run delivered (batch-merge-readiness R1) unless a test says otherwise.
     the_pr = pr(20, "feat/batch-x", labels=labels, **{**DELIVERED, **kw})
-    f = facts([issue(1, prs=[the_pr])], prs=[the_pr], schema=10,
-              config={REPO: {"queue": {"ci": "push"}}})  # a repo with no queue block holds all
+    f = facts(
+        [issue(1, prs=[the_pr])], prs=[the_pr], schema=10, config={REPO: {"queue": {"ci": "push"}}}
+    )  # a repo with no queue block holds all
     jd = judgements(
         {"widgets#1": j(1)},
         [batch("x", [1], wave=1, events=[dispatch("x"), *(events or [])])],

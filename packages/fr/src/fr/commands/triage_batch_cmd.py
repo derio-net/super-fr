@@ -674,7 +674,7 @@ def event_writer(target: Path, facts: Facts, *, read_errors: bool = False) -> Ev
 
 
 _REPORTED_AS = {"queue-held": "held", "queue-need": "blocked", "queue-warn": "warn"}
-"""The pass action each queue report becomes (`batch_drive._queue_reports`)."""
+"""The pass action each queue report becomes (`fr.triage.queue_reports.queue_reports`)."""
 
 
 def queue_writer(target: Path, repo: str, scope: str) -> QueueWriter:
