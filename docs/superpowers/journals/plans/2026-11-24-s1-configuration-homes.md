@@ -1559,3 +1559,18 @@ d47cf978a: open_pr_in_repo, and a found PR into another base refuses.
 ### l-tests-r6-resolved · finding [out-of-scope] · resolves l-tests-r6: fr.repos.DEFAULT_MANIFEST takes Path.home() at import
 
 DEFAULT_MANIFEST in fr/repos.py predates S1; S1 did not change how it is computed, and its test sets FR_REPOS_MANIFEST. Filed at deliver.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r6-resolved-2 created=2026-11-25T18:45:57+00:00 phase=3 state=open resolves=p3-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1699 -->
+### p3-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1699] · resolves p3-r6: workflow kind:cli run: and verification argv become configuration-branch executables once phase 5 moves them into .fr/ (phase 3)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1699.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4-resolved-2 created=2026-11-25T18:45:57+00:00 phase=5 state=open resolves=p5-r4 tracked_by=https://github.com/derio-net/super-fr/issues/1700 -->
+### p5-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1700] · resolves p5-r4: about 20 test sites still set the old FR_SHIPPED_*_DIR variables (phase 5)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1700.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved-2 created=2026-11-25T18:45:57+00:00 state=open resolves=l-tests-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1701 -->
+### l-tests-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1701] · resolves l-tests-r6: fr.repos.DEFAULT_MANIFEST takes Path.home() at import
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1701.
