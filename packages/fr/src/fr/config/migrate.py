@@ -458,13 +458,14 @@ def pending_files(
     from fr.artifacts.paths import QUIET
 
     clean = _clean_tracked(product)
+    landed = _landed(product, clean)
     out: dict[str, str] = {}
     for entry in all_moved():
         if not entry.across:
             continue
         for source in sorted(product.glob(entry.old)):
             refuse_link(product, source)
-            if not source.is_file() or source.relative_to(product).as_posix() not in clean:
+            if not source.is_file() or source.relative_to(product).as_posix() not in landed:
                 continue
             if entry.kind == "profiles":
                 from fr.artifacts.profiles_services import UnmigratableProfilesError
@@ -485,7 +486,7 @@ def pending_files(
             if not (source.is_file() or source.is_symlink()):
                 continue
             refuse_link(product, source)
-            if source.relative_to(product).as_posix() in clean:
+            if source.relative_to(product).as_posix() in landed:
                 out[space.tree_path(name)] = source_text(product, source)
                 if executable is not None and is_executable(product, source):
                     executable.add(space.tree_path(name))
@@ -494,22 +495,68 @@ def pending_files(
 
 def is_executable(product: Path, source: Path) -> bool:
     """Whether *source* goes onto the configuration branch as `100755`. A tracked file's
-    bytes are HEAD's blob (`source_text`), so its mode is HEAD's too: under
-    `core.fileMode=false` a chmod is no change to git, and the working tree's bit must not
-    make a committed 100644 file executable (review p7-r3). An untracked file's mode is
-    its owner's execute bit, what `git add` would commit."""
+    bytes are the default branch's blob (`source_text`), so its mode is the default
+    branch's too (review p7-r3, lens review l-security-r2): under `core.fileMode=false` a
+    chmod is no change to git, and neither the working tree's bit nor a chmod committed
+    only on this branch may make a reviewed 100644 file executable. An untracked file's
+    mode is its owner's execute bit, what `git add` would commit."""
     import stat
 
     rel_path = Path(source).relative_to(product).as_posix()
-    listed = subprocess.run(
-        ["git", "-C", str(product), "ls-tree", "HEAD", "--", rel_path],
+    tracked = subprocess.run(
+        ["git", "-C", str(product), "ls-files", "--error-unmatch", "--", rel_path],
+        capture_output=True,
+        check=False,
+    )
+    if tracked.returncode == 0:
+        found = _default_commit(product)
+        if found is None:
+            return False
+        listed = subprocess.run(
+            ["git", "-C", str(product), "ls-tree", found[1], "--", rel_path],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return (
+            listed.returncode == 0
+            and bool(listed.stdout.strip())
+            and listed.stdout.split()[0] == "100755"
+        )
+    return bool(Path(source).lstat().st_mode & stat.S_IXUSR)
+
+
+def _default_commit(product: Path) -> tuple[str, str] | None:
+    from fr.settings.load import default_commit
+
+    return default_commit(product)
+
+
+def _landed(product: Path, clean: set[str]) -> set[str]:
+    """The *clean* tracked files whose HEAD blob is exactly the default branch's (lens
+    review l-security-r2): only these ride along in the creation, so a change committed on
+    a feature branch, unreviewed, never becomes the configuration branch's first commit
+    (its own hop refuses it, `source_text`). Untracked files are not in *clean*."""
+    found = _default_commit(product)
+    if found is None:
+        return set()
+    done = subprocess.run(
+        ["git", "-C", str(product), "diff", "--name-only", found[1], "HEAD", "--"],
         capture_output=True,
         text=True,
         check=False,
     )
-    if listed.returncode == 0 and listed.stdout.strip():
-        return listed.stdout.split()[0] == "100755"
-    return bool(Path(source).lstat().st_mode & stat.S_IXUSR)
+    if done.returncode != 0:
+        return set()
+    differ = {line for line in done.stdout.splitlines() if line}
+    present = subprocess.run(
+        ["git", "-C", str(product), "ls-tree", "-r", "--name-only", found[1]],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    on_default = set(present.stdout.splitlines()) if present.returncode == 0 else set()
+    return {p for p in clean if p not in differ and p in on_default}
 
 
 def _clean_tracked(product: Path) -> set[str]:
@@ -546,9 +593,11 @@ def refuse_link(product: Path, source: Path) -> str:
 
 def source_text(product: Path, source: Path) -> str:
     """The bytes a cross-space hop pushes for *source* (review p4-sec-symlink): never a
-    symlink; a tracked file's COMMITTED blob, refused while it has uncommitted changes
-    (pushing the blob and deleting the edit would lose it); an untracked one (a regular
-    file, checked above) as it is on disk."""
+    symlink; a tracked file's blob as the product's DEFAULT branch committed it (lens review
+    l-security-r2, like `fr.config.space.located`), refused while it has uncommitted
+    changes (pushing the blob and deleting the edit would lose it) or while HEAD's blob
+    differs from the default branch's (an unreviewed change must land there first); an
+    untracked one (a regular file, checked above) as it is on disk."""
     from fr.settings import SettingsError
 
     rel_path = refuse_link(product, source)
@@ -568,7 +617,37 @@ def source_text(product: Path, source: Path) -> str:
     shown = git("show", f"HEAD:{rel_path}")
     if shown.returncode != 0:
         raise SettingsError(f"cannot read {rel_path} at HEAD: {shown.stderr.decode().strip()}")
-    return shown.stdout.decode("utf-8")
+    return _as_default_has_it(product, rel_path, shown.stdout.decode("utf-8"))
+
+
+def _as_default_has_it(product: Path, rel_path: str, committed: str) -> str:
+    """*committed* (HEAD's blob of *rel_path*) when the product's default branch has
+    exactly those bytes; otherwise `SettingsError` (lens review l-security-r2)."""
+    from fr.settings import SettingsError
+    from fr.settings.load import read_at_default
+
+    found = _default_commit(product)
+    if found is None:
+        raise SettingsError(
+            f"{rel_path}: fr cannot name the default branch, so it cannot tell whether this "
+            "file was reviewed; fetch origin, then run `fr migrate artifacts --yes` again "
+            "(S1 R10)"
+        )
+    ref = found[0].removeprefix("refs/remotes/").removeprefix("refs/heads/")
+    at_default = read_at_default(product, rel_path)
+    if at_default is None:
+        raise SettingsError(
+            f"{rel_path} is not on the default branch ({ref}): fr moves only what the "
+            "default branch has committed; land the change there first, then run "
+            "`fr migrate artifacts --yes` again (S1 R10)"
+        )
+    if at_default != committed:
+        raise SettingsError(
+            f"{rel_path} differs from the default branch's copy ({ref}): fr moves only what "
+            "the default branch has committed; land the change there first, then run "
+            "`fr migrate artifacts --yes` again (S1 R10)"
+        )
+    return at_default
 
 
 _STAMP_LINES = re.compile(r"^schema_version\s*:[^\r\n]*(\r?\n)?", re.MULTILINE)
@@ -595,7 +674,7 @@ def profiles_body(product: Path, source: Path) -> str:
         shown = git("show", f"HEAD:{rel_path}")
         if shown.returncode != 0:
             raise SettingsError(f"cannot read {rel_path} at HEAD: {shown.stderr.decode().strip()}")
-        committed = shown.stdout.decode("utf-8")
+        committed = _as_default_has_it(product, rel_path, shown.stdout.decode("utf-8"))
     else:
         committed = disk
     bom = "\ufeff" if committed.startswith("\ufeff") else ""

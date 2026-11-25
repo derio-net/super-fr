@@ -67,14 +67,25 @@ def prs(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str, str]]:
     return opened
 
 
-def _put(root: Path, rel: str, text: str, *, commit: bool = True) -> Path:
+def _put(root: Path, rel: str, text: str, *, commit: bool = True, land: bool = True) -> Path:
+    """Write *rel*; with *commit*, commit it and (*land*) push that commit to origin's
+    default branch, as a reviewed change would be: a cross-space move carries only what the
+    default branch has committed (lens review l-security-r2)."""
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     if commit:
         git(root, "add", "-A")
         git(root, "commit", "-qm", f"add {rel}")
+        if land:
+            _land(root)
     return path
+
+
+def _land(root: Path) -> None:
+    """Push HEAD to origin's `main` and fetch it (the change landed on the default branch)."""
+    git(root, "push", "-q", "origin", "HEAD:refs/heads/main")
+    git(root, "fetch", "-q", "origin")
 
 
 def _feature(root: Path) -> None:
@@ -289,6 +300,7 @@ def test_a_proposed_executable_keeps_its_mode(tmp_path: Path, prs: list) -> None
     path.chmod(0o755)
     git(root, "add", "-A")
     git(root, "commit", "-qm", "install")
+    _land(root)
     run_migrations(root, dry_run=False)
     (_remote, head, _base) = prs[0]
     line = git(_origin(tmp_path), "ls-tree", head, ".fr/candidate-install")
@@ -535,3 +547,57 @@ def test_a_cross_space_hop_pushes_the_committed_bytes_and_refuses_a_dirty_file(
     with pytest.raises(SettingsError, match="uncommitted"):
         move_across(root, src, "models.yaml")
     assert src.read_text() == "opencode:\n  hard: edited\n"
+
+
+# --- lens review l-security-r2: only what the default branch committed moves ----------
+
+
+def test_a_moved_file_the_default_branch_lacks_is_held_back_and_its_hop_refuses(
+    tmp_path: Path,
+) -> None:
+    """An unreviewed `.fr/candidate-install` committed only on a feature branch must not
+    become the configuration branch's first commit: the creation leaves it out, and its own
+    move refuses, saying the change must land on the default branch first."""
+    from fr.config.migrate import ensure_space, move_across
+    from fr.settings import SettingsError
+
+    root = _quiet(tmp_path)
+    _put(root, ".fr/ci.yaml", "tests: ci\n")
+    src = _put(root, ".fr/candidate-install", "#!/bin/sh\necho evil\n", land=False)
+    assert ensure_space(root)
+    tree = git(_origin(tmp_path), "ls-tree", "-r", "--name-only", "fr-config").split()
+    assert ".fr/candidate-install" not in tree
+    assert ".fr/ci.yaml" in tree
+    with pytest.raises(SettingsError, match="default branch"):
+        move_across(root, src, "candidate-install")
+    assert src.exists()
+
+
+def test_a_moved_file_edited_on_the_branch_pushes_nothing_until_it_lands(tmp_path: Path) -> None:
+    from fr.config.migrate import move_across
+    from fr.settings import SettingsError
+
+    root = _quiet(tmp_path)
+    src = _put(root, "docs/superpowers/models.yaml", "opencode:\n  hard: m\n")
+    _put(root, "docs/superpowers/models.yaml", "opencode:\n  hard: edited\n", land=False)
+    with pytest.raises(SettingsError, match="differs from the default branch"):
+        move_across(root, src, "models.yaml")
+    assert src.read_text() == "opencode:\n  hard: edited\n"
+
+
+def test_the_mode_of_a_moved_file_is_the_default_branchs(tmp_path: Path) -> None:
+    """A chmod committed only on the feature branch does not make the configuration
+    branch's copy executable (p7-r3's ls-tree now reads the default ref)."""
+    root = _quiet(tmp_path)
+    path = _put(root, ".fr/candidate-install", "#!/bin/sh\necho fr\n")
+    path.chmod(0o755)
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "chmod")
+    assert git(root, "ls-tree", "HEAD", ".fr/candidate-install").split()[0] == "100755"
+    from fr.config.migrate import ensure_space, is_executable
+
+    assert not is_executable(root, path)  # origin's main still has the 100644 commit
+    ensure_space(root)
+    tree = git(_origin(tmp_path), "ls-tree", "-r", "fr-config")
+    modes = {line.split()[-1]: line.split()[0] for line in tree.splitlines()}
+    assert modes.get(".fr/candidate-install") != "100755"  # a mode change is held back too

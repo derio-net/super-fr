@@ -69,7 +69,7 @@ def test_without_a_configuration_branch_only_the_default_branchs_bytes_count(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     root = _quiet(tmp_path)
-    _put(root, MODELS, "opencode:\n  hard: feature\n")  # on the feature branch only
+    _put(root, MODELS, "opencode:\n  hard: feature\n", land=False)  # feature branch only
     assert space.located(root, "models") != root / MODELS
     assert "ignoring" in capsys.readouterr().err
 

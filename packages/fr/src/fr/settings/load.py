@@ -191,6 +191,19 @@ def _resolve_source(root: Path) -> tuple[str | None, str | None, str, Source]:
     return None, None, "no default branch found: defaults", "defaults"
 
 
+def default_commit(repo_root: Path) -> tuple[str, str] | None:
+    """`(qualified ref, commit sha)` of the default ref `read_at_default` reads (None: no
+    default ref). Raises `SettingsError` like it."""
+    root = Path(repo_root)
+    try:
+        if git_answer(root, "rev-parse", "--git-dir").returncode != 0:
+            return None
+        ref, sha, _, _ = _resolve_source(root)
+    except GitUnavailableError:
+        return None
+    return None if sha is None or ref is None else (ref, sha)
+
+
 def read_at_default(repo_root: Path, path: str) -> str | None:
     """*path* as the default ref's commit has it (None: absent, or no default ref).
 
