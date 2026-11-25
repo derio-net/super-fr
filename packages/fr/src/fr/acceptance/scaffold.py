@@ -543,7 +543,9 @@ DEBT_STEP_GITLAB = """\
 # Its own job, so a failing `fr acceptance check` above never skips the debt run.
 # It needs a masked CI/CD variable FR_DEBT_TOKEN with the `api` scope: the job's own
 # token cannot file issues or merge requests through `glab`, so the job stops with one
-# line naming the variable when it is unset.
+# line naming the variable when it is unset. fr points glab only at a host glab is
+# logged into (a GITLAB_TOKEN alone is not a login), so the script logs glab in to this
+# server first, with a config dir of its own.
 technical-debt:
   stage: acceptance
   image: python:3.14
@@ -564,6 +566,8 @@ technical-debt:
     - |
       @@GLAB_INSTALL@@
   script:
+    - export GLAB_CONFIG_DIR="$(mktemp -d)"
+    - echo "$FR_DEBT_TOKEN" | glab auth login --hostname "$CI_SERVER_HOST" --stdin
     - fr debt issue --yes
     - fr debt archive-pr --yes
 """
