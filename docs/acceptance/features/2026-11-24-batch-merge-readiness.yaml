@@ -49,9 +49,13 @@ rows:
       from the function the queue admits them by, their trust rule in place of delivered.
     origin:
     - spec:2026-11-24-batch-merge-readiness#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_readiness_others.py#test_a_refused_candidate_reads_its_refusal_and_is_never_admitted
+      - super-fr:tests/unit/test_triage_kanban_render_readiness.py#test_a_close_out_archive_pr_line_renders_on_its_card
+    status: ci
+    notes: 'phase 2: other_readiness gives close-out, archive and export PRs a verdict,
+      their trust rule in place of delivered'
     verify: none
   - id: gc-keeps-running-run
     capability: gc keeps a workspace whose run is still running
