@@ -75,7 +75,7 @@ from fr.triage.model import (
     state_dir,
 )
 from fr.triage.pacing import Pacer
-from fr.triage.plan_overlap import fix_text, plan_overlap_report, report_json, source_for_clones
+from fr.triage.plan_overlap import checked_report, fix_text, report_json, source_for_clones
 from fr.triage.probe import PassPlan, Prober, judgements_digest
 from fr.triage.quota import is_rate_limited
 from fr.triage.render import (
@@ -810,7 +810,7 @@ def check_command(
         err_console.print(f"[yellow]warning:[/yellow] {escape(str(exc))}", soft_wrap=True)
         me = None
     result = classify(facts, judgements, me=me, now=datetime.now(UTC))
-    overlap = plan_overlap_report(judgements, facts, source_for_clones(Path.cwd(), None))
+    overlap = checked_report(judgements, facts, source_for_clones(Path.cwd(), None))
     if as_json:
         document = {**result.to_json(), "plan_overlap": report_json(overlap)}
         print(json.dumps(document, indent=2, ensure_ascii=False))

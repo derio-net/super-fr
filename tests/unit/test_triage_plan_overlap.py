@@ -160,6 +160,16 @@ def test_invalid_yaml_in_a_phase_file_is_unreadable() -> None:
     assert found.reason.startswith(f"unreadable {PLAN}/01.yaml: ")
 
 
+def test_a_yaml_scalar_that_is_not_a_real_date_is_unreadable_never_raised() -> None:
+    # PyYAML raises a plain ValueError (not a YAMLError) for a date-shaped scalar such as
+    # 2020-13-45; a branch's file is untrusted, so it must read as unreadable (p1-r1).
+    src = world("feat/batch-x", {"1": ["a.py"]})
+    src.refs["refs/remotes/origin/feat/batch-x"][f"{PLAN}/01.yaml"] = "created: 2020-13-45\n"
+    found = read_plan_paths(src, "feat/batch-x")
+    assert isinstance(found, Unread)
+    assert found.reason.startswith(f"unreadable {PLAN}/01.yaml: ")
+
+
 def test_a_git_failure_is_unreadable_never_raised() -> None:
     src = world("feat/batch-x", {"1": ["a.py"]})
     cursor_path = f"{RUNS}/2026-11-25-feat-batch-x.yaml"
@@ -203,6 +213,13 @@ def test_a_path_both_name_literally_is_shared() -> None:
 def test_a_glob_of_one_matching_a_literal_of_the_other_is_shared_both_ways() -> None:
     assert shared(["tests/**/*.py"], ["tests/unit/t.py", "src/a.py"]) == ("tests/unit/t.py",)
     assert shared(["tests/unit/t.py", "src/a.py"], ["tests/**/*.py"]) == ("tests/unit/t.py",)
+
+
+def test_a_bracketed_literal_path_is_a_literal_not_a_glob() -> None:
+    # `[` is common in real paths (route segments such as app/[id]/page.tsx); only `*` and
+    # `?` make a plan path a glob (p1-r2).
+    assert shared(["app/[id]/page.tsx"], ["app/[id]/page.tsx"]) == ("app/[id]/page.tsx",)
+    assert shared(["app/**"], ["app/[id]/page.tsx"]) == ("app/[id]/page.tsx",)
 
 
 def test_two_globs_are_never_shared() -> None:

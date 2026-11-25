@@ -112,7 +112,9 @@ def _load(source: PlanSource, ref: str, path: str) -> object | Unread:
     try:
         text = source.show(ref, path)
         return None if text is None else yaml.safe_load(text)
-    except (TriageError, yaml.YAMLError) as exc:
+    # A branch's file is untrusted: PyYAML raises a plain ValueError for a date-shaped scalar
+    # that is no real date (`2020-13-45`), and RecursionError on deep nesting.
+    except (TriageError, yaml.YAMLError, ValueError, RecursionError) as exc:
         return Unread(f"unreadable {path}: {' '.join(str(exc).split()) or type(exc).__name__}")
 
 
@@ -159,7 +161,8 @@ def read_plan_paths(source: PlanSource, branch: str) -> PlanPaths | Unread:
 
 
 def _is_glob(path: str) -> bool:
-    return any(c in path for c in "*?[")
+    # `[` alone is no glob: real paths carry it (route segments such as `app/[id]/page.tsx`).
+    return any(c in path for c in "*?")
 
 
 def _matches(path: str, globs: Sequence[str]) -> bool:
@@ -247,6 +250,23 @@ def plan_overlap_report(
         mine = [e for e in entries if e.repo == repo]
         found.extend(overlaps(mine, ignore=_ignore_globs(facts, repo)))
     return OverlapReport(tuple(found), tuple(unread))
+
+
+ALL_BATCHES = "(all batches)"
+
+
+def checked_report(
+    judgements: Judgements,
+    facts: Facts,
+    source_for: Callable[[str], PlanSource | str],
+) -> OverlapReport:
+    """`plan_overlap_report`, for a caller that must never fail on it (`fr triage check`
+    always exits 0, R6): an unexpected exception is one not-compared line, never raised."""
+    try:
+        return plan_overlap_report(judgements, facts, source_for)
+    except Exception as exc:  # noqa: BLE001 - advisory read inside an always-exit-0 command
+        cause = " ".join(str(exc).split()) or type(exc).__name__
+        return OverlapReport((), ((ALL_BATCHES, f"plan overlap not checked: {cause}"),))
 
 
 def source_for_clones(

@@ -782,3 +782,22 @@ def test_check_exits_zero_when_every_batch_is_unread(
         )
         assert out.exit_code == 0, out.output
         assert "no clone here" in out.output
+
+
+def test_check_exits_zero_when_the_overlap_read_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `check` always exits 0 (R6): an unexpected failure in the plan overlap read is one
+    # line saying so, never a traceback (p1-r1's backstop).
+    _overlap_state(tmp_path)
+
+    def broken(repo: str) -> str:
+        raise RuntimeError("source exploded")
+
+    monkeypatch.setattr("fr.commands.triage_cmd.source_for_clones", lambda cwd, checkouts: broken)
+    for extra in ([], ["--json"]):
+        out = CliRunner().invoke(
+            app, ["triage", "check", "--repo", REPO, "--dir", str(tmp_path), *extra]
+        )
+        assert out.exit_code == 0, out.output
+        assert "source exploded" in out.output
