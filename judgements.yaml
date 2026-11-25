@@ -9847,6 +9847,11 @@ exports:
   pr: 1666
   head: cb0f3e4f38d6e2d21d1cc2cc94c64477ae71d686
   merged: true
+- wave: '23'
+  repo: derio-net/super-fr
+  at: '2026-11-25T10:16:16.465160Z'
+  pr: 1685
+  head: 95ff894e31fa07a7d6023dd84941669cd19e6568
 closeouts:
 - repo: derio-net/super-fr
   item: derio-net/super-fr/run/closeout-2026-11-15-1
@@ -10624,3 +10629,6 @@ queues:
   - kind: queue_drain
     at: '2026-11-25T10:09:49.048336Z'
     main: 0e389e2efc43e10a1f343b907ef0c638cccc0b2e
+  - kind: queue_cleared
+    at: '2026-11-25T10:16:03.904358Z'
+    detail: the release cleared the hold
