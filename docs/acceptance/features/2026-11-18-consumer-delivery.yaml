@@ -120,3 +120,35 @@ rows:
     notes: every tea/glab JSON read names an SSO login page, fixture-pinned; the guard
       flags any raw json.loads outside a reasoned allowlist
     verify: none
+amendments:
+  - row: opencode-rules-delivered
+    op: set-status
+    base: 0
+    status: walked
+    notes: 'walked live 2026-11-25 on OpenCode 2.3.2 (model github-copilot/claude-haiku-5.5),
+      env cleared of every Claude Code key and FR_HARNESS*: the installed fr-opencode-plugin
+      (install.sh 9.0.0-rc.8) holds exactly the five rules ~/.claude/rules holds, byte-identical;
+      opencode.jsonc names no instructions for them. In a scratch consumer repo with
+      no rules of its own, a session quoted the fr-isolation-required heading verbatim
+      with no tool on turn 1 and again on turn 2, and a child session started by the
+      subagent tool on turn 3 returned it too. An observer plugin on the same context
+      hook counted each of the five rule headings exactly once in all six requests (three
+      top-level, the child, two follow-ups).'
+    walk:
+      strategy: live
+      harness: opencode
+      model: github-copilot/claude-haiku-5.5
+      outcome: pass
+      at: '2026-11-25T00:00:00Z'
+      evidence: opencode run --standalone on 2.3.2 in a scratch repo, session ses_ruleswalk1795603839
+        plus child ses_dedaa75b7ffebZnTJIHCHpdeKT; observer counts [1,1,1,1,1] on every
+        request (scratch log, not kept)
+    why: 'walked live 2026-11-25 on OpenCode 2.3.2 (model github-copilot/claude-haiku-5.5),
+      env cleared of every Claude Code key and FR_HARNESS*: the installed fr-opencode-plugin
+      (install.sh 9.0.0-rc.8) holds exactly the five rules ~/.claude/rules holds, byte-identical;
+      opencode.jsonc names no instructions for them. In a scratch consumer repo with
+      no rules of its own, a session quoted the fr-isolation-required heading verbatim
+      with no tool on turn 1 and again on turn 2, and a child session started by the
+      subagent tool on turn 3 returned it too. An observer plugin on the same context
+      hook counted each of the five rule headings exactly once in all six requests (three
+      top-level, the child, two follow-ups).'
