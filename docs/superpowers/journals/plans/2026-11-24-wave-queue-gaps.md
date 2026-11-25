@@ -176,3 +176,111 @@ tests/unit/test_operator_entries_lineage.py covers the land/method filter, the b
 ### p1-r8-resolved · finding [fixed] · resolves p1-r8: fr-triage SKILL.md still describes the pre-R1 conflict hand-back (phase 1)
 
 plugins/super-fr/skills/fr-triage/SKILL.md's conflict hand-back sentence now names the stack target and onto, the free re-issue (never for a held one), the carry brief and its force-push, the non-batch Need and the R5 pass hold; sync-opencode.py and sync-hermes.py regenerated the mirrors.
+
+<!-- fr:journal kind=decision scope=plan id=p2-default-branch-read created=2026-11-25T03:35:45+00:00 phase=2 -->
+### p2-default-branch-read · decision · queue add reads the default branch from the forge (new GhClient.repo_default_branch) (phase 2)
+
+The verb runs with no clone, and facts carry no default branch, so R11's base check
+needs a forge read. `repo_default_branch(repo)` is on the GhClient protocol, both GitHub
+adapters (`GET repos/{repo}`) and the unsupported mixin (glab/tea raise). It raises when
+unread, and the verb refuses on any forge error, so no refusal or admission rests on an
+unread answer. The driver keeps its own base check (`base_refusal`) at admission.
+
+<!-- fr:journal kind=decision scope=plan id=p2-verb-push-now created=2026-11-25T03:35:45+00:00 phase=2 -->
+### p2-verb-push-now · decision · queue add/remove push the state ref inside the command and restore the file on a refused push (phase 2)
+
+R11 says a refused push exits 2. The deferred push of `_sync_with_ref` only warns on a
+remote refusal, so the verb calls `push_now` after the write; any `TriageError` (a CAS
+conflict, a refusal, the privacy guard) restores judgements.yaml byte for byte and exits
+2 with "nothing changed, run the command again". Re-running then never meets "already
+added" for a write that never left the host.
+
+<!-- fr:journal kind=decision scope=plan id=p2-trust-before-preapproval created=2026-11-25T03:35:45+00:00 phase=2 -->
+### p2-trust-before-preapproval · decision · An added non-batch PR is trust-checked before any preapproval write (phase 2)
+
+R13 lists the adder's trust, green checks and no conflict; R12's admission also needs a
+same-repo PR by an allowed author. `operator_reads` checks the PR's own trust (and that it
+is no reserved close-out/archive/export/housekeeping PR) first, so the driver never adds
+`approved-fr` to a fork or a stranger's PR that collect now reads differently. Such a PR
+stays pending (R15: added, open, unlanded), so it holds the drain and, after
+`stall_hours`, gives the Need naming `queue remove`.
+
+<!-- fr:journal kind=decision scope=plan id=p2-live-checks created=2026-11-25T03:35:45+00:00 phase=2 -->
+### p2-live-checks · decision · Preapproval and operator admission read the PR's checks live (phase 2)
+
+`checks_verdict` falls back to the collected counts when no check is required; for an
+operator PR those can be the counts of an older head. `operator_reads` builds the counts
+from `pr_checks` read now, so a preapproval never approves a new head on its
+predecessor's green.
+
+<!-- fr:journal kind=decision scope=plan id=p2-operator-eject-no-verdict created=2026-11-25T03:35:45+00:00 phase=2 -->
+### p2-operator-eject-no-verdict · decision · An operator eject is no verdict on the head: replay drops it from the order only (phase 2)
+
+A `queue_eject` with reason `operator` removes the key from `Replay.order` and records
+nothing in `ejected`, so a PR removed and added again joins at once at the same head
+rather than waiting for a push. The executor records the event and hands nothing back.
+
+<!-- fr:journal kind=decision scope=plan id=p2-operator-under-placement created=2026-11-25T03:35:45+00:00 phase=2 -->
+### p2-operator-under-placement · decision · Operator entries stay queue entries in a repo that keeps no fr artifacts (phase 2)
+
+`queue_snapshot` drops every non-batch entry when the repo's placement is not `repo`
+(no close-out, archive, export or housekeeping PR lands there). An operator PR is no fr
+artifact, so it is kept; the filter keeps `kind == "operator"` admissions.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-entry-builder-kinds created=2026-11-25T03:35:45+00:00 phase=2 -->
+### p2-entry-builder-kinds · discovery · The executor's entry builder refused every kind it did not list (phase 2)
+
+`_Driver._queue_entry` returned None for a non-batch key whose kind was not closeout,
+archive, export or housekeeping, so an admitted operator entry would have been planned
+and never built. The planner and RecordingQueue tests could not see it; the driver seam
+test now calls `RecordingQueue.ports.entry_of("operator#300")`. Like a close-out, an
+operator draft is readied when the queue builds it.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-t3-test-order created=2026-11-25T03:35:45+00:00 phase=2 -->
+### p2-t3-test-order · discovery · The T3.S1 operator_reads tests were written after operator_reads (phase 2)
+
+Red was not observed for tests/unit/test_operator_reads.py: the module was written
+first. They assert forge writes, recorded approval events and the snapshot fields the
+read returns, which only the new code produces. The T1, T2 and T4 tests were red first;
+the driver seam test's entry build was red with the command wiring stashed.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-archive-docstring created=2026-11-25T03:35:45+00:00 phase=2 -->
+### p2-archive-docstring · discovery · archive_conflict_decision's 'never twice' docstring was accurate; reworded, not changed (phase 2)
+
+The free re-issue is the batch PR's `conflict_decision` only; an archive PR's conflict is
+still skipped at any head that has an `archive_conflict` event. Both docstrings now say
+which rule re-issues. The merge of origin/main resolved six conflicts (skill by a
+token-level three-way merge, mirrors regenerated; three explainer stamps keep both
+sides; batch_dispatch keeps main's `unicodedata` and drops the `shlex` the move left
+unused); every module stays within its budget.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-fast-tier-tripwires created=2026-11-25T03:35:45+00:00 phase=2 -->
+### p2-fast-tier-tripwires · discovery · The fast tier caught two tripwires: the archive preview's method sets and the approval-label prose (phase 2)
+
+`fr.archive_preview.READS` must name every GhClient method, so `repo_default_branch`
+joined it. `test_tripwire_approval_label_prose` refuses a shipped sentence asking anyone
+but the operator to add `approved-fr`; the skill's preapproval sentence now says the
+operator approves in advance and the driver labels on the operator's behalf, which is
+what R13 grants. The first fast tier run (10252 passed, these 2 failed) covered the whole
+branch; after the fix the tier was run again over the fix commit's delta.
+
+<!-- fr:journal kind=lens scope=plan id=lens-security-1 created=2026-11-25T03:35:45+00:00 phase=2 lens=security step=implement-phase -->
+### lens-security-1 · lens · preapproval lets the driver add approved-fr itself; check the adder, PR trust, conflict and patch-id gates and the audit comment (phase 2)
+
+<!-- fr:journal kind=lens scope=plan id=lens-errors-2 created=2026-11-25T03:35:45+00:00 phase=2 lens=errors step=implement-phase -->
+### lens-errors-2 · lens · queue add's forge reads and state push, and operator_reads' unreadable patch-id, must fail closed for the pass, never write a durable event (phase 2)
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-25T03:35:45+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+two closed-world event models, a ten-line pure fold and a writer that is the sibling of save_queues over the shared _rewrite; nothing duplicated to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-25T03:35:45+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+the verb imports _load_state, _scope, fail and push_now from triage_cmd and the trust helpers from batch; its one new forge read (repo_default_branch) sits in each adapter beside repo_visibility; the reserved-entry check lives in operator_entries, shared with the driver
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-25T03:35:45+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+operator_reads follows housekeeping_reads' shape on purpose (same settle, same writer) so the two trust rules read side by side; the preapproval conditions are one function (_preapprove) the batch and operator paths both call

@@ -88,7 +88,7 @@ steps:
           visual: none
           findings: p1-acceptance-check-foreign-rows,p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6,p1-r7,p1-r8
       phase/2/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-25T02:00:33+00:00'
           agent: a554f123174eaa0c2
@@ -98,6 +98,10 @@ steps:
           tier: hard
           bound: claude-opus-5-5
           session: e4ba8d5a-76b8-46bb-aa9a-81b12b1286eb
+          returned: '2026-11-25T03:35:46+00:00'
+          outcome: done
+        evidence:
+          visual: none
   journal-check:
     state: pending
   lens-review:
