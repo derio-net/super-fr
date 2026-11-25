@@ -730,3 +730,8 @@ Under quiet/stealth the repo's workflow shapes, verification strategies and prof
 ### p4-v1-profiles-one-move · decision · A v1 profiles file moves across spaces in one hop with its final v3 bytes (p4-r4) (phase 4)
 
 Under quiet/stealth the 2->3 relocation builds the pushed bytes in memory from the COMMITTED file (fr.artifacts.profiles_services.services_text, then schema_version: 3; fr.config.migrate.profiles_body). A working tree that differs only by fr's own in-flight 1->2 rewrite (same text, runner's stamp 2) is accepted; any other difference is an operator edit and refuses as uncommitted. pending_files carries a v1 file at v3, so the configuration branch is created with the final bytes. Tests: test_config_profiles_v1_across.py.
+
+<!-- fr:journal kind=decision scope=plan id=p4-config-checkout-by-structure created=2026-11-25T08:03:43+00:00 phase=4 -->
+### p4-config-checkout-by-structure · decision · A configuration checkout is told by structure, never by a -config name (p4-r5) (phase 4)
+
+_config_checkout: quiet's fr-config worktree (HEAD refs/heads/fr-config at fr.config.space.quiet_checkout's path) or the migrating product's own quiet/stealth configuration space (MIGRATING_ROOT -> space_root). A product clone named ci-config finishes its profiles crash window in place. Tests: test_config_checkout_by_structure.py, stealth case in test_config_stealth_keeps_product.py.
