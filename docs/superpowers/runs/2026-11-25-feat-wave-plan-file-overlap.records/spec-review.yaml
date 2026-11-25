@@ -1,0 +1,21 @@
+schema_version: 12
+run: 2026-11-25-feat-wave-plan-file-overlap
+step: spec-review
+outcome: done
+journal:
+  - {kind: finding, id: s1, review_scope: in, title: "The run cursor has no `artifacts.plan` key; the plan folder is in `steps.<step>.emitted.plan`", body: "check: codebase. run/model.py:278,317 and a real cursor (2026-11-24-feat-ci-economy.yaml:34-38) hold the plan at steps.plan.emitted.plan. The spec's reader would find no plan in any real cursor."}
+  - {kind: finding, id: s2, review_scope: in, title: "PlanSource cannot tell no-ref from no-cursor", body: "check: consistency. gitseam.py:960-966 list_dir returns [] for a missing ref, so R2's separate reasons are untestable with list_dir/show alone."}
+  - {kind: finding, id: s3, review_scope: in, title: "Unknown batch repo and a clone with no origin have no stated reason", body: "check: consistency. batch.py:108-113 batch_repo may return None; gitseam.py:651-655 origin_repo raises without an origin; unstated they crash fr triage check, which must exit 0."}
+  - {kind: finding, id: s4, review_scope: in, title: "The driver's board reads cwd, but the driver works through --checkout clones", body: "check: codebase. triage_batch_cmd.py:3961-3990 and :5822-5836: group/org scopes would show every repo but the cwd's as not compared."}
+  - {kind: finding, id: s5, review_scope: in, title: "build_board's overlap input and the board's unread display are undefined", body: "check: consistency. kanban.py:804-815; triage_kanban_cmd.py:424-436 notes. Type of overlaps= and where unread reasons show were unstated."}
+  - {kind: review, id: spec-review-1, title: "independent spec review: 5 findings", body: "Dispatched fr-spec-reviewer reviewed spec and journal against the 7 decisions and the codebase; 5 findings (s1-s5), all in scope, all fixed in the spec. Every other named helper was verified with file:line (last_dispatch, dependency_state, with_forecast, planned_merge_order, read_cursor, KIND_DIRS, toplevel, Checkout.origin_repo/show/list_dir, TriageConfig.generated, VersionBlock.files, Facts.config_for, PhaseHeader.files, Card, build_board, write_board, check_command, batch edit --wave/--after). Suggested lenses: errors, tests."}
+  - {kind: lens, lens: errors, title: "The not-compared path must turn every git and YAML failure into a reason inside a command that always exits 0"}
+  - {kind: lens, lens: tests, title: "The reader's fixtures must match the real cursor and phase-file shapes"}
+resolves:
+  - {id: s1, state: fixed, body: "Background, R1 and Design A now read the plan folder from the `plan` value of any step's `emitted` mapping; the quiet/stealth case is named; the Test Plan fixture uses the real cursor shape."}
+  - {id: s2, state: fixed, body: "PlanSource gains exists_at(ref, path), which Checkout has (gitseam.py:944); the reader checks the ref first, so `no ref origin/<branch>` is its own reason."}
+  - {id: s3, state: fixed, body: "R2 names `repo of batch unknown` (batch_repo None); R9 names `no clone here` for a cwd outside a clone or without origin; source_for_clones turns GitError into that reason; both are in the Test Plan."}
+  - {id: s4, state: fixed, body: "write_board takes an optional checkouts map; the driver's _write_board passes checkout_paths (one line, inside the module budget: 8223 of 8225); R9 states the driver's board reads its own clones."}
+  - {id: s5, state: fixed, body: "build_board takes overlaps: Mapping[str, tuple[str, ...]] from card_lines(report); each not-compared batch is one page note; R7's Test Plan line covers it."}
+acceptance: []
+evidence: {review: spec-review-1, reviewer: af1d959892b1abe47}
