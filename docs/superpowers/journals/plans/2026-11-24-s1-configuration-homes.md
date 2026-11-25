@@ -346,3 +346,143 @@ f4a29583a: tests/fixtures/isolation-decision-cases.json drives both the bash lib
 ### p2-config-writes-not-prs-resolved · finding [fixed] · resolves p2-config-writes-not-prs: write_settings pushes the configuration branch directly; spec §B wants a pull request for every change after creation (phase 2)
 
 Answered by p2-r7's fix: decision p2-config-changes-by-pr, commits 8b7a28a57 and aa5c5c255.
+
+<!-- fr:journal kind=decision scope=plan id=p3-protected-means-pr-and-no-rewrite created=2026-11-25T04:52:07+00:00 phase=3 -->
+### p3-protected-means-pr-and-no-rewrite · decision · Enforced means pull_request, non_fast_forward and deletion rules on the exact branch (phase 3)
+
+`fr.config.protection.branch_protection` reads `GET repos/<repo>/rules/branches/<b>` (the
+branch's effective rules, `GhClient.branch_rules`) and answers `Enforced` only when the
+list holds a `pull_request`, a `non_fast_forward` and a `deletion` rule: a force-push or a
+deletion would replace or remove what was reviewed (orchestrator brief). The free-plan 403
+(`FREE_PLAN_RULESETS_NOTICE`, recognised through `ForgeError` wrapping too), an `HTTP 404`,
+`[]`, a partial list, an unparseable reply and a forge whose adapter raises
+`UnsupportedForgeOperation` (GitLab, Gitea) or has no `branch_rules` are `NotEnforced(reason)`.
+Every other failure (5xx, 401, a non-plan 403, network, a host gh is not logged into) is
+`ProtectionReadError`, never cached, and refuses. Under quiet the target is `fr-config` on
+origin's slug (a non-forge origin is not enforced); under stealth `<branch>-config` on the
+tracking repo (a local tracking path is not enforced). Fixtures: `tests/fixtures/github_rest/rules/`
+(captured 2026-11-25; the one third-party reply redacted, said in its README).
+
+<!-- fr:journal kind=decision scope=plan id=p3-cache-by-forge-identity created=2026-11-25T04:52:07+00:00 phase=3 -->
+### p3-cache-by-forge-identity · decision · The protection cache is keyed by forge identity and host, and cleared per command and per collect (phase 3)
+
+Orchestrator note from an automated security review: a cache keyed on `(repo, branch)` let
+one forge's answer stand for another's (a GitHub Enterprise host and github.com, or a glab
+client, with the same slug), a fail-open. `_CACHE` is keyed `(adapter class[:backend],
+host, repo.lower(), branch)`, seeing through triage's `ClientForge`; it lives in memory only,
+`fr.cli.main` clears it at every command's start and `collect_into` at every collect (so
+every driver pass), and tests clear it per test. Test:
+`test_two_forges_with_the_same_slug_get_their_own_answers`.
+
+<!-- fr:journal kind=decision scope=plan id=p3-guarded-triage-keys created=2026-11-25T04:52:07+00:00 phase=3 -->
+### p3-guarded-triage-keys · decision · The guarded triage keys are post_merge, version, mirrors, pr_authors, queue, exit and export (phase 3)
+
+`GUARDED_TRIAGE_KEYS` are the `.fr/triage.yaml` keys that run a command (`post_merge`, the
+`version` set/relock commands, `mirrors`) or decide whose PRs are trusted or how they merge
+(`pr_authors`, the merge `queue`, the `exit` gate remap, the `export` PR the driver lands).
+Each one's absence is the safe default (no command, the viewer only, no queue so nothing
+lands, the strategies' own gates, no export). `merge_method`, `defaults.launch`,
+`post_merge_restart` and the thresholds stay readable from an unprotected branch. Readers:
+collect's `read_config_lenient` drops them from an unprotected `fr-config` (said once per
+repo and reason) and refuses that repo on a failed protection read; `verification.rows.load_remap`
+ignores `exit:` with the reason; the driver's freshness check reads the configuration
+branch and leaves the guarded keys out of the comparison when collect dropped them.
+
+<!-- fr:journal kind=decision scope=plan id=p3-executors-guarded created=2026-11-25T04:52:07+00:00 phase=3 -->
+### p3-executors-guarded · decision · Where each executor asks (phase 3)
+
+`fr verification walk`: `run_walk` asks before `_contract` when the install or scenario program
+is a `.fr/` path (and again wherever a program is resolved into the space), and runs it from the configuration space (`effective.install_path`, also used
+by `install_problem`); `run_walk(forge=...)` takes the client. The driver: `_post_merge`
+returns `post_merge held: <reason>` before running; `_queue_refusal` holds a repo whose config declares a `queue:`
+(`queue-held`) right after the forge refusal, before the base rules, covering gate_checks,
+the version commands and post_merge; `queue_exec.required_names` refuses gate_checks after
+reading them. `fr ops`: `load_ops_config` refuses a present `.fr/ops.yaml`; the ops gate's
+`queue_configured` refuses a `queue:` it would release to. Under repo none asks.
+
+<!-- fr:journal kind=decision scope=plan id=p3-sync-without-expect-only-when-protected created=2026-11-25T04:52:07+00:00 phase=3 -->
+### p3-sync-without-expect-only-when-protected · decision · Only fr settings sync gains a no-confirmation path; readers never auto-sync (phase 3)
+
+Discovery p2-phase3-sync-needs-protection. `fr settings sync --yes` without `--expect` now
+writes the old copy from the configuration branch's tip when `require_protected` passes
+for `fr-config` (stealth: `<branch>-config`), printing that it did; otherwise it refuses,
+naming the reason and the preview plus `--yes --expect <tip>` (exit 2, nothing written).
+Readers still refuse while the copies differ and write nothing: a configuration read must
+not have side effects (`fr.config.space.config_space`) or push from a hook's context, and
+this keeps the hooks unchanged (they keep naming `fr settings sync`). The smaller change.
+
+<!-- fr:journal kind=finding scope=plan id=p3-stealth-protection-from-product-forge created=2026-11-25T04:52:07+00:00 phase=3 state=fixed review_scope=in -->
+### p3-stealth-protection-from-product-forge · finding [fixed] (reviewer: in scope) · Under stealth the driver asked the product repo's client for the tracking repo's protection (phase 3)
+
+Automated security review (orchestrator). `refusal_at(checkout.path, self.client(facts,
+repo), ...)` in the driver's post_merge and merge-queue guards passed the product repo's
+client, but under stealth the configuration branch lives in the tracking repo, possibly on
+another forge, so the answer could come from the wrong forge's rules. Fixed in 1dd0cf180:
+`protection_of` never asks a given client under stealth and builds the tracking repo's
+own (`_default_client`); a given client is used only under quiet, where `fr-config` is on
+the product's origin. Test:
+`test_under_stealth_the_tracking_repos_forge_answers_never_the_given_client`.
+
+<!-- fr:journal kind=finding scope=plan id=p3-walk-scenario-program-unguarded created=2026-11-25T04:52:07+00:00 phase=3 state=fixed review_scope=in -->
+### p3-walk-scenario-program-unguarded · finding [fixed] (reviewer: in scope) · The walk guarded only install[0], yet resolved any template program into the configuration space (phase 3)
+
+Automated security review (orchestrator). `render_template` sent every repo-relative
+argv[0] that `in_space` names (a scenario template's program too) to the configuration
+space, while `_protected` checked only `manifest.install[0]`. Fixed in 1dd0cf180: the
+up-front check covers the install and scenario templates' programs (before the install
+runs), and `_program`, where the path is resolved, asks `require_protected` for any
+program in the space, so no caller reaches it unguarded. Test:
+`test_a_scenario_program_in_the_configuration_space_is_refused_before_anything_runs`.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-rules-hide-bypass-actors created=2026-11-25T04:52:07+00:00 phase=3 -->
+### p3-rules-hide-bypass-actors · discovery · rules/branches does not say who may bypass the rule (phase 3)
+
+The effective-rules route lists rule types, not a ruleset's bypass actors or enforcement
+exemptions, so a ruleset requiring pull requests that lets an admin or an app bypass it
+still reads as `Enforced`. Reading `rulesets/<id>` for `bypass_actors` needs admin on a
+repo ruleset and is not readable for org rulesets with a plain token; left out of S1.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-docs-owed-p7 created=2026-11-25T04:52:07+00:00 phase=3 -->
+### p3-docs-owed-p7 · discovery · The pages describing quiet, walk, ops and triage config owe the protection rule (phase 3)
+
+This phase changed paths covered by `docs/verification-strategies.md`, `docs/ops.md`,
+the triage and isolation explainers and `docs/reference/`; the protection rule and its
+fix line belong in them with phase 7's page update (as p1-docs-stale-owed-p7).
+
+<!-- fr:journal kind=lens scope=plan id=lens-security-2 created=2026-11-25T04:52:07+00:00 phase=3 lens=security step=implement-phase -->
+### lens-security-2 · lens · a trust boundary: which configuration-branch keys run commands or decide merges, and the forge-protection read that gates them (phase 3)
+
+<!-- fr:journal kind=lens scope=plan id=lens-errors-2 created=2026-11-25T04:52:07+00:00 phase=3 lens=errors step=implement-phase -->
+### lens-errors-2 · lens · new forge reads whose failure must refuse, never read as unprotected or protected (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=sec-1-self-attesting-config-branch-resolved created=2026-11-25T04:52:07+00:00 phase=3 state=fixed resolves=sec-1-self-attesting-config-branch -->
+### sec-1-self-attesting-config-branch-resolved · finding [fixed] · resolves sec-1-self-attesting-config-branch: A self-declared fr-config branch must not supply executable or trust keys unless its protection is enforced (phase 3)
+
+Fixed in a8d58494e (the protection read) and a7355fac8 (the guards). Every reader that takes
+executable or trust keys from a configuration branch asks first: collect's
+`read_config_lenient` (forge side) drops `GUARDED_TRIAGE_KEYS` (post_merge, version,
+mirrors, pr_authors, queue, exit, export) from an fr-config without an enforced
+pull-request rule, saying the reason once, and refuses that repo when the read fails;
+the local executors (walk, driver post_merge, the queue and its gate_checks, ops, the ops
+gate, the exit remap) refuse or ignore with the reason. Tests:
+`test_forge_side_triage_config_follows_the_quiet_switch` (flipped: no post_merge, no
+pr_authors), `..._from_a_protected_fr_config_supplies_every_key`,
+`..._refuses_when_the_protection_read_fails`, and `tests/unit/test_config_protection_executors.py`.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-25T04:52:07+00:00 phase=3 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: triage collect's read_config_lenient takes post_merge, version commands and pr_authors from a self-declared unprotected fr-config; phase 3's guard must cover trust keys and the forge-side reader, and flip test_forge_side_triage_config_follows_the_quiet_switch (phase 3)
+
+Same fix as sec-1-self-attesting-config-branch: `read_config_lenient` no longer takes
+post_merge, the version commands or pr_authors from a self-declared unprotected
+fr-config; `test_forge_side_triage_config_follows_the_quiet_switch` is flipped and a
+protected-branch test supplies them (a7355fac8).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-25T04:52:07+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+the rules route was folded into GhClient.branch_rules while writing GREEN: RealGhRestClient.required_check_names and base_rules now read it there, so the one rules read has no second copy left to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-25T04:52:07+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+every executor calls the one guard (require_protected, or refusal_at over it) and every reader of .fr/triage.yaml drops the same GUARDED_TRIAGE_KEYS through without_guarded; there was no per-executor copy of the rule left to fold
