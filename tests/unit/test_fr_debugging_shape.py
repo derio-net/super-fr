@@ -21,6 +21,8 @@ from fr.workflow.resolve import resolve_workflow
 from tests.integration.test_fr_goal_shape import SHIPPED_WORKFLOWS_DIR, _fr, _workspace
 from tests.unit.record_support import write_record
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUN = "r1"
 SLUG = "2026-11-25-broken-thing"
