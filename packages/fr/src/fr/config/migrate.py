@@ -250,11 +250,12 @@ def _config_settings_for_legacy(path: Path) -> str | None:
     ).stdout.strip()
     if not head:
         return None
-    top = Path(head)
-    if path.parent == top:  # quiet: the root settings.yaml of `fr`
+    top = Path(head).resolve()
+    parent = path.parent.resolve()  # git answers the toplevel's real path (a symlinked HOME)
+    if parent == top:  # quiet: the root settings.yaml of `fr`
         found = sha(top, f"refs/remotes/origin/{CONFIG_BRANCH}")
         return None if found is None else show_at_commit(top, found, rel(SETTINGS))
-    target = path.parent.relative_to(top).as_posix()
+    target = parent.relative_to(top).as_posix()
     branch = subprocess.run(
         ["git", "-C", str(top), "symbolic-ref", "--short", "-q", "HEAD"],
         capture_output=True,
@@ -455,12 +456,13 @@ def pending_files(product: Path, space: ConfigSpace) -> dict[str, str]:
             if not source.is_file() or source.relative_to(product).as_posix() not in clean:
                 continue
             if entry.kind == "profiles":
+                from fr.artifacts.profiles_services import UnmigratableProfilesError
                 from fr.settings import SettingsError
 
                 try:
                     text = profiles_body(product, source)
-                except SettingsError:
-                    continue  # its own hop refuses it, naming why
+                except SettingsError, UnmigratableProfilesError:
+                    continue  # its own hop refuses it, naming why; the rest still move
             else:
                 text = source_text(product, source)
             out[space.tree_path(entry.below(source, product))] = text

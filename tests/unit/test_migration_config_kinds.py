@@ -247,6 +247,22 @@ def test_under_quiet_one_creation_carries_every_moved_file(tmp_path: Path) -> No
     assert {a.kind for a in report.applied} == {"models-config", "trackers-config", "quiet-config"}
 
 
+def test_under_quiet_an_unmigratable_profiles_file_holds_back_only_itself(tmp_path: Path) -> None:
+    """Found by the config-homes scenario (P7.T1.S1): a profiles file its own hop refuses
+    (here version 2 with no service block) made `pending_files` raise, so EVERY cross-space
+    hop failed with the profiles error. It must refuse only its own hop."""
+    root = _quiet(tmp_path)
+    old, new, text = FILES["models-config"]
+    _put(root, old, text)
+    _put(root, ".devcontainer/fr-profiles.yaml", "schema_version: 2\nprofiles: {}\n")
+    report = run_migrations(root, dry_run=False)
+    assert {f.kind for f in report.failed} == {"profiles"}, report.failed
+    assert git(_origin(tmp_path), "show", f"fr-config:{new}") == text
+    assert ".fr/profiles.yaml" not in git(
+        _origin(tmp_path), "ls-tree", "-r", "--name-only", "fr-config"
+    )
+
+
 def test_under_quiet_a_refused_push_removes_nothing(tmp_path: Path) -> None:
     old, _new, text = FILES["models-config"]
     root = _quiet(tmp_path)
@@ -318,6 +334,26 @@ def test_under_quiet_settings_location_creates_fr_config_from_the_old_switch(
     assert git(_origin(tmp_path), "show", "fr-config:.fr/settings.yaml") == QUIET
     assert not is_stale(root)
     assert commit_migration(root, report, fr_version="9.9.9").committed is False
+
+
+def test_settings_location_works_when_home_is_reached_through_a_symlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Found by the config-homes scenario (P7.T1.S1): with HOME spelled through a symlink
+    (macOS `/var` -> `/private/var`), the old switch's path and git's toplevel differ in
+    spelling, and the stamp read raised ValueError for every quiet repo."""
+    real = tmp_path / "real-home"
+    real.mkdir()
+    (tmp_path / "link-home").symlink_to(real)
+    monkeypatch.setenv("HOME", str(tmp_path / "link-home"))
+    root = _quiet(tmp_path)
+    from fr.placement.quiet import ensure_worktree
+
+    ensure_worktree(root)
+    report = run_migrations(root, dry_run=False)
+    assert report.ok, report.failed
+    assert [a.kind for a in report.applied] == ["settings-location"]
+    assert not is_stale(root)
 
 
 def test_an_fr_config_holding_identical_settings_reads_as_migrated(tmp_path: Path) -> None:
