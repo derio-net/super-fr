@@ -44,9 +44,18 @@ rows:
     - spec:2026-11-19-event-driven-a-la-carte#R12
     - spec:2026-11-19-event-driven-a-la-carte#R13
     - spec:2026-11-19-event-driven-a-la-carte#R14
-    levels: {}
-    status: not-implemented
-    notes: candidate walk scenario, built in plan phase 7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_config_kinds.py
+      - super-fr:tests/unit/test_config_move_verified.py
+      - super-fr:tests/unit/test_config_legacy_by_tip.py
+      - super-fr:tests/unit/test_config_stealth_keeps_product.py
+      - super-fr:tests/unit/test_config_profiles_v1_across.py
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_config_homes
+    status: ci
+    notes: unit tests in CI (phases 1-6); candidate scenario tests/scenarios/config-homes.sh
+      runs in CI's scenario tier and is the deliver walk
     verify: candidate
     scenario: tests/scenarios/config-homes.sh
   - id: s1-switch-moved
