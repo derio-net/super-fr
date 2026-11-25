@@ -146,7 +146,7 @@ steps:
           visual: none
           findings: p3-r1
       phase/4/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-25T05:44:55+00:00'
           agent: a27f41d6be3d72aba
@@ -156,6 +156,10 @@ steps:
           tier: standard
           bound: claude-sonnet-5
           session: 1fe5a340-bc55-41b6-a9a1-b81e47aa1f3c
+          returned: '2026-11-25T07:03:09+00:00'
+          outcome: done
+        evidence:
+          visual: none
   journal-check:
     state: pending
   lens-review:

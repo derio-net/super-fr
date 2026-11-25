@@ -224,3 +224,33 @@ Reviewer traced every reap path (_reap_or_classify is the only caller for both m
 ### p3-r1-resolved · finding [fixed] · resolves p3-r1: gc-level tests leave gaps: unreadable cursor dry-run only with a loose assertion; no gc test for a running unit, non-mapping steps, or a merged workspace with no cursor (phase 3)
 
 c17291c30: test_gc_keeps_merged_workspace_with_an_unreadable_cursor is parametrized over dry run/live and broken-YAML/steps-not-a-mapping, pushes the cursor so only the R9 guard keeps it, and asserts the 'is unreadable' detail; new test_gc_keeps_merged_workspace_with_a_running_unit (dry run and live) and test_gc_still_reaps_merged_workspace_with_no_cursor. test_isolation.py + test_isolation_preserve.py: 321 passed.
+
+<!-- fr:journal kind=decision scope=plan id=p4-debug-journal-module created=2026-11-25T07:03:08+00:00 phase=4 -->
+### p4-debug-journal-module · decision · The debug journal's slug lives in fr.run.debug_journal (phase 4) (phase 4)
+
+run_cmd.py sits exactly at its 9100-line budget, so `debug_slug` and `require_debug_slug`
+(the emitted `debug` path's stem) are a sibling module that apply.py, run_cmd's review-entry
+lookup and tests share. `debug` joins REPO_TRACKED_ARTIFACTS, so `--emitted debug=` is
+path-normalised and must exist; pr_body._journals reads `debug` the same way. No artifact
+shape changed (the `emitted` map and `journal:<scope>` vocabulary already admitted it), so no
+stamp bump or migration.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-skill-line-cap created=2026-11-25T07:03:08+00:00 phase=4 -->
+### p4-skill-line-cap · discovery · The fr-debugging skill sat at the 120-line cap (phase 4) (phase 4)
+
+The run steps were folded into long lines in sections 0, 3 and 4; the skill is now 110 lines.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-11-25T07:03:08+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+a new manifest and one vocabulary token; nothing existing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-11-25T07:03:08+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+the readers gained one branch each, the slug logic sits in the new fr.run.debug_journal; run_cmd.py stayed at its 9100 budget by trimming two comments
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t3 created=2026-11-25T07:03:08+00:00 phase=4 -->
+### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
+
+prose rewritten to fit the 120-line skill cap; mirrors regenerated
