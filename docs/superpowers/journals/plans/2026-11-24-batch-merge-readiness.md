@@ -456,3 +456,8 @@ f0f78c421: catches only WorkflowError/OSError and renders 'fr could not read the
 ### l-docs-accuracy-r3-resolved · finding [fixed] · resolves l-docs-accuracy-r3: AGENTS.md says both shipped shapes run lens-review; fr-debugging has none
 
 5c63c10e1: AGENTS.md says fr-goal and fr-goal-light run lens-review and fr-debugging has none.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved-2 created=2026-11-25T15:24:42+00:00 phase=4 state=open resolves=p4-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1692 -->
+### p4-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1692] · resolves p4-r8: a reviewer's fenced review-findings block is validated only for phase targets, so the skill's d-r<k> block is unchecked (phase 4)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1692.
