@@ -55,3 +55,30 @@ def test_a_clean_current_worktree_moves(tmp_path: Path) -> None:
     root, src, worktree = _with_models_on_fr_config(tmp_path)
     m.move_across(root, src, "models.yaml")
     assert not src.exists() and (worktree / ".fr/models.yaml").read_text() == TEXT
+
+
+def test_a_failed_fast_forward_of_the_config_worktree_is_said(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Lens review l-errors-r10: a `merge --ff-only` that fails (here an untracked file in
+    the way) left the fr-config worktree behind silently, so readers read the old file."""
+    from fr.placement import quiet
+
+    from tests.unit.test_config_protection_executors import _quiet_with_config
+
+    root = _quiet_with_config(tmp_path, {".fr/models.yaml": "opencode:\n  hard: a\n"})
+    where = quiet.config_worktree_path(root)
+    other = tmp_path / "other"
+    git(tmp_path, "clone", "-q", "-b", "fr-config", str(tmp_path / "origin.git"), str(other))
+    (other / ".fr/trackers.yaml").write_text("{}\n")
+    git(other, "add", "-A")
+    git(other, "-c", "user.name=o", "-c", "user.email=o@example.invalid",
+        "commit", "-qm", "trackers")  # fmt: skip
+    git(other, "push", "-q", "origin", "fr-config")
+    git(root, "fetch", "-q", "origin", "+refs/heads/fr-config:refs/remotes/origin/fr-config")
+    (where / ".fr/trackers.yaml").write_text("local\n")  # untracked, in the way
+    capsys.readouterr()
+
+    quiet.ensure_config_worktree(root)
+    err = " ".join(capsys.readouterr().err.split())
+    assert str(where) in err and "fast-forward" in err and "stash -u" in err

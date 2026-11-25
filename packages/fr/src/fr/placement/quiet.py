@@ -950,7 +950,16 @@ def _fast_forward_linked(root: Path, path: Path, branch: str, tracking: str) -> 
         return
     behind = _git(path, "merge-base", "--is-ancestor", "HEAD", tracking)
     if behind.returncode == 0:
-        _git(path, "merge", "--ff-only", "--quiet", tracking)
+        done = _git(path, "merge", "--ff-only", "--quiet", tracking)
+        if done.returncode != 0:  # lens review l-errors-r10: never left behind silently
+            why = (done.stderr or done.stdout or "git merge failed").strip().splitlines()
+            print(
+                f"fr: the `{branch}` worktree {path} could not fast-forward to {tracking} "
+                f"({why[0] if why else 'git merge failed'}), so fr reads it as it was. Set "
+                f"the local changes aside (`git -C {path} stash -u`) and run the command "
+                "again",
+                file=sys.stderr,
+            )
 
 
 def owner_of(fr_root: Path, fid: str) -> str | None:
