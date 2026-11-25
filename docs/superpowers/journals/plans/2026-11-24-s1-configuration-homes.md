@@ -238,3 +238,8 @@ write_settings is one dispatcher over two per-placement writers (quiet.write_swi
 ### p2-create-at-init-and-migration · decision · fr creates fr-config / <branch>-config only at the migration and at fr settings init (phase 2)
 
 Spec §B, review p2-r3 (orchestrator decision). Entering a workspace fetches and never pushes: a fetching `fr isolation up` / `fr run start` no longer calls `quiet.ensure_config_branch`, and stealth `enter` only adopts an existing `<branch>-config` (`stealth.adopt_config_clone`); `up --no-fetch` pushes nothing under quiet or stealth (p2-r4). Until the space exists, a configuration read refuses and names `fr migrate artifacts --yes` and `fr settings init --quiet` / `--stealth <repo>@<branch>` (`ConfigSpace._missing`). `fr settings init --quiet` on a repo whose switch is only `origin/fr:settings.yaml` creates `fr-config` holding those bytes; `init --stealth` with only the old `<target>/settings.yaml` carries it onto a new orphan `<branch>-config`. Replaces p2-up-creates-config-space.
+
+<!-- fr:journal kind=decision scope=plan id=p2-up-creates-config-space-replaced created=2026-11-25T03:20:19+00:00 phase=2 -->
+### p2-up-creates-config-space-replaced · decision · p2-up-creates-config-space is replaced by p2-create-at-init-and-migration (phase 2)
+
+The earlier decision (up and run start create the configuration branch from the old switch) contradicted spec §B and pushed on every workspace entry (review p2-r3, p2-r4). It no longer holds; see p2-create-at-init-and-migration. p2-phase4-settings-already-moved is void with it: no quiet repo or stealth target gets a configuration branch from `up` any more.
