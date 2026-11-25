@@ -1282,3 +1282,71 @@ prose, front matter and generated mirrors only, plus message strings; the mirror
 ### p7-commit-notice-counts-paths-resolved · finding [fixed] · resolves p7-commit-notice-counts-paths: The gate's `fr: migrated and committed <n> artifact(s)` counts paths, so a rename of 7 artifacts says 14
 
 a08dbae95: the notice takes the commit subject's artifact count (a move is one artifact); pinned by test_migration_trigger.py::test_the_commit_notice_counts_artifacts_as_the_commit_subject_does
+
+<!-- fr:journal kind=review scope=plan id=review-p7 created=2026-11-25T15:59:23+00:00 phase=7 -->
+### review-p7 · review · Phase 7 review: the candidate walk, pages, skills, rules and mirrors (phase 7)
+
+Independent read-only review of b3392d8..ad20405e4 (a first reviewer died in a host
+reboot; this is the rerun). Six findings, all in scope: one deterministic test failure
+caused by S1's .fr/profiles.yaml (p7-r1), the P7.T2.S2 tick claiming a green fast tier
+that never finished (p7-r2), the exec bit read from the working tree while the bytes
+come from HEAD (p7-r3), scaffold help naming the old profiles path (p7-r4), the
+isolation rules overclaiming that fr-config only changes through a pull request (p7-r5),
+and four weak scenario assertions (p7-r6).
+Clean: the scenario passes on the installed candidate and exercises all six S1 rows in
+repo, quiet and stealth, with fr run start/advance under quiet; the fake gh replays the
+captured approved and free-plan replies; every row level ref exists and `ci` is honest
+(CI's full lane runs the scenario tier); page claims match the code; mirrors, harness
+parity and fr docs check are clean; no third-party identity.
+Fast tier: it did not finish on this host (stopped at 59%, 15 F/E marks unnamed). The
+fixer's sweeps over every test file naming a path S1 moved found five S1 failures
+(p7-r1 and four host tests), now fixed; the rest are unidentified. CI's test shards are
+the suite evidence for this phase, not a local run.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r1 created=2026-11-25T15:59:23+00:00 phase=7 state=open review_scope=in -->
+### p7-r1 · finding [open] (reviewer: in scope) · test_ops_gate_review fails: the ops gate's profile diff now names .fr/profiles.yaml (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r2 created=2026-11-25T15:59:23+00:00 phase=7 state=open review_scope=in -->
+### p7-r2 · finding [open] (reviewer: in scope) · P7.T2.S2 ticked although its --fr-scope green condition was not met (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r3 created=2026-11-25T15:59:23+00:00 phase=7 state=open review_scope=in -->
+### p7-r3 · finding [open] (reviewer: in scope) · A moved file's executable bit comes from the working tree, its bytes from HEAD (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r4 created=2026-11-25T15:59:23+00:00 phase=7 state=open review_scope=in -->
+### p7-r4 · finding [open] (reviewer: in scope) · fr init scaffold help still names fr-profiles.yaml (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r5 created=2026-11-25T15:59:23+00:00 phase=7 state=open review_scope=in -->
+### p7-r5 · finding [open] (reviewer: in scope) · Isolation rules claim fr-config changes only as a pull request; a direct push is possible (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r6 created=2026-11-25T15:59:23+00:00 phase=7 state=open review_scope=in -->
+### p7-r6 · finding [open] (reviewer: in scope) · Scenario: some assertions are weaker than they read (phase 7)
+
+<!-- fr:journal kind=finding scope=plan id=p7-r1-resolved created=2026-11-25T15:59:23+00:00 phase=7 state=fixed resolves=p7-r1 -->
+### p7-r1-resolved · finding [fixed] · resolves p7-r1: test_ops_gate_review fails: the ops gate's profile diff now names .fr/profiles.yaml (phase 7)
+
+eb69baab1, 0b2b39f58: the expectation carries .fr/profiles.yaml; 8830abf17: four host tests that S1's legacy-location notice broke write .fr/profiles.yaml. Sweeps of every test file naming a moved path found no other failure.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r2-resolved created=2026-11-25T15:59:23+00:00 phase=7 state=fixed resolves=p7-r2 -->
+### p7-r2-resolved · finding [fixed] · resolves p7-r2: P7.T2.S2 ticked although its --fr-scope green condition was not met (phase 7)
+
+The claim is corrected here: no complete local fast-tier run exists for this phase; the failures that could be identified (p7-r1 and four host tests) are fixed, and CI's test shards are the suite evidence.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r3-resolved created=2026-11-25T15:59:23+00:00 phase=7 state=fixed resolves=p7-r3 -->
+### p7-r3-resolved · finding [fixed] · resolves p7-r3: A moved file's executable bit comes from the working tree, its bytes from HEAD (phase 7)
+
+704117a98: a tracked file's mode comes from git ls-tree HEAD; lstat only for untracked files; test with core.fileMode=false fails before, passes after.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r4-resolved created=2026-11-25T15:59:23+00:00 phase=7 state=fixed resolves=p7-r4 -->
+### p7-r4-resolved · finding [fixed] · resolves p7-r4: fr init scaffold help still names fr-profiles.yaml (phase 7)
+
+ad16282f2: scaffold help names the profile declarations (.fr/profiles.yaml); docs/reference/cli.md regenerated.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r5-resolved created=2026-11-25T15:59:23+00:00 phase=7 state=fixed resolves=p7-r5 -->
+### p7-r5-resolved · finding [fixed] · resolves p7-r5: Isolation rules claim fr-config changes only as a pull request; a direct push is possible (phase 7)
+
+4f30e0443: both rule files say fr's own changes go through a pull request and only the forge's rule stops a direct push; OpenCode and Hermes mirrors regenerated.
+
+<!-- fr:journal kind=finding scope=plan id=p7-r6-resolved created=2026-11-25T15:59:23+00:00 phase=7 state=fixed resolves=p7-r6 -->
+### p7-r6-resolved · finding [fixed] · resolves p7-r6: Scenario: some assertions are weaker than they read (phase 7)
+
+1a7fa90d4: grep fr's own refusal wording; the unreadable case stays synthetic with a comment (both captured errors classify as not enforced, no 5xx captured); the cache is asserted a standalone repo with no state-repo branch or remote, as designed; every gate call checks its exit code.
