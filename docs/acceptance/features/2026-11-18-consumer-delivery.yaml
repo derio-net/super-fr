@@ -187,3 +187,40 @@ amendments:
       the host trust gate refuses (#1691); a probe adding glab auth login made it create
       the issue, push the branch and open the draft MR. Owed: re-walk GitLab on the
       released fix.'
+  - row: debt-credentials-gitea-gitlab
+    op: set-status
+    base: 1
+    status: walked
+    notes: 'walked 2026-11-25 on the released 9.0.0-rc.11 scaffold. GitLab (self-hosted
+      GitLab 15.3, host redacted; throwaway private project, locked project runner,
+      both deleted after): fr acceptance init --with-ci and --refresh-ci wrote the technical-debt
+      job pinned to rc.11, whose script logs glab in from FR_DEBT_TOKEN (the #1691 fix,
+      shipped in #1703) before the fr commands, unpatched. A schedule pipeline with
+      masked FR_DEBT_TOKEN set ran it green: fr debt issue --yes created the Technical
+      debt issue and fr debt archive-pr --yes archived the merged plan and opened a
+      draft MR (chore/debt-archive-sweep). With the variable removed, the next schedule
+      run failed the job with the one-line remedy ''Set the masked CI/CD variable FR_DEBT_TOKEN
+      (api scope).'' Gitea passed earlier on 2026-11-25 on a throwaway local instance
+      (issue written and refreshed, archive branch pushed; the PR is opened by hand
+      there, gh#611). The earlier failed GitLab walk is #1691, now fixed.'
+    walk:
+      strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-25T19:38:24Z'
+      evidence: 'GitLab schedule pipeline on rc.11 scaffold: technical-debt job green
+        with FR_DEBT_TOKEN (issue created, draft MR opened), failed with the one-line
+        remedy without it; Gitea walk earlier the same day'
+    why: 'walked 2026-11-25 on the released 9.0.0-rc.11 scaffold. GitLab (self-hosted
+      GitLab 15.3, host redacted; throwaway private project, locked project runner,
+      both deleted after): fr acceptance init --with-ci and --refresh-ci wrote the technical-debt
+      job pinned to rc.11, whose script logs glab in from FR_DEBT_TOKEN (the #1691 fix,
+      shipped in #1703) before the fr commands, unpatched. A schedule pipeline with
+      masked FR_DEBT_TOKEN set ran it green: fr debt issue --yes created the Technical
+      debt issue and fr debt archive-pr --yes archived the merged plan and opened a
+      draft MR (chore/debt-archive-sweep). With the variable removed, the next schedule
+      run failed the job with the one-line remedy ''Set the masked CI/CD variable FR_DEBT_TOKEN
+      (api scope).'' Gitea passed earlier on 2026-11-25 on a throwaway local instance
+      (issue written and refreshed, archive branch pushed; the PR is opened by hand
+      there, gh#611). The earlier failed GitLab walk is #1691, now fixed.'
