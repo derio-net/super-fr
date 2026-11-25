@@ -1,0 +1,30 @@
+schema_version: 12
+run: 2026-11-24-feat-batch-merge-readiness
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: review
+    id: p1-review
+    phase: 1
+    title: "Phase 1 code review: merge gate sound (no undelivered batch is readied, admitted or merged); 7 in-scope findings"
+    body: |
+      Reviewer checked R2 (no bypass of batch_readiness: _ready, _entries re-filter, _queue_entry pr_ready, queue_exec pr_merge, foreground batch merge), R1 (fold_positions fails closed, distinct reasons, live pr_view head vs facts head_oid), R5 order and admits = old _ready + delivered, R3 voiding sha from ApprovalEvent.voided_at, R12 wording, FACTS_READS 3-17 with cursor_read None reading unread, and readiness.py purity. All held. Findings p1-r1..p1-r7 below.
+  - {kind: finding, id: p1-r1, phase: 1, review_scope: in, title: "`fr triage batch merge <id>` refuses an approved-but-undelivered batch as \"not approved\", because approved-not-delivered now lands in Pass.awaiting"}
+  - {kind: finding, id: p1-r2, phase: 1, review_scope: in, title: "_member_reports no longer reports a gated approved PR as held/awaiting while CI is pending or the queue is held (reads r.kind, not the gate)"}
+  - {kind: finding, id: p1-r3, phase: 1, review_scope: in, title: "in_queue_order leaves an admitted batch absent from the plan's order (e.g. ejected) reading \"Approved, merges next\""}
+  - {kind: finding, id: p1-r4, phase: 1, review_scope: in, title: "_voided_sha reads a stale voided_at for a Held verdict, so a re-labelled PR still says \"Approval voided ... re-label\""}
+  - {kind: finding, id: p1-r5, phase: 1, review_scope: in, title: "no driver-level test that facts head_oid != live pr_view head holds the PR"}
+  - {kind: finding, id: p1-r6, phase: 1, review_scope: in, title: "no test that an old-facts PR (deliver-done cursor, cursor_read None) reads not delivered"}
+  - {kind: finding, id: p1-r7, phase: 1, review_scope: in, title: "the approve-pr Need still asks to label a green PR approved-fr while its run has not delivered (contradicts R4, invites an approval R3 voids)"}
+resolves:
+  - {id: p1-r1, state: fixed, body: "276f12b64: readiness.merge_refusal decides 'not approved' from the verdict; an approved hold names its readiness reason. Test test_triage_batch_merge.py::test_a_named_approved_batch_whose_run_has_not_delivered_is_held_for_that_reason."}
+  - {id: p1-r2, state: fixed, body: "d8d17cd75: _member_reports holds an approved PR when not delivered or readiness.gated(...), whatever CI/queue state. Test test_triage_readiness_queue.py::test_the_driver_holds_a_gated_approved_pr_for_devops_whatever_its_ci."}
+  - {id: p1-r3, state: fixed, body: "d8d17cd75: new not-queued verdict (eject reason at live head, else 'not in the queue this pass'). Tests test_triage_readiness.py::test_an_admitted_batch_outside_the_plans_order_is_not_merges_next and ::test_an_ejected_batch_outside_the_order_reads_its_eject_reason."}
+  - {id: p1-r4, state: fixed, body: "d8d17cd75: _voided_sha returns None for Held. Test test_triage_readiness.py::test_a_held_approval_never_reads_an_older_void."}
+  - {id: p1-r5, state: fixed, body: "2241610b9: test_triage_batch_drive_cmd.py::test_a_pr_whose_head_moved_since_the_cursor_was_read_is_held_with_both_heads (no queue-open, no pr_ready, no merge, both heads named)."}
+  - {id: p1-r6, state: fixed, body: "2241610b9: test_triage_cursor_read.py::test_a_cursor_with_no_read_status_is_never_delivered and ::test_a_schema_16_facts_files_delivered_cursor_is_not_admitted."}
+  - {id: p1-r7, state: fixed, body: "c2549b27a: needs_you reads readiness.snapshot_readiness over the board's snapshot; no label Need while undelivered, R12 Need for a PR with no cursor. Test test_merge_train_label_board.py::test_a_green_pr_whose_run_has_not_delivered_is_never_asked_for_the_label."}
+evidence:
+  review: p1-review
+  reviewer: a7d48866a68afd069
