@@ -13,7 +13,6 @@ reviewed: 2026-11-24 still true after ci-economy phase 1 (a cancelled check now 
 
 A plan's manual operations used to be prose: "create the deploy key", "rotate the
 
-Walk-only broken link: [missing](no-such-walk-page.md).
 token after merge". Nothing checked them and nothing ran them. At delivery, someone
 found out by hand which ones were done, and in what order the others should run.
 
