@@ -17,6 +17,8 @@ from typer.testing import CliRunner
 
 from tests.unit.acceptance_helpers import fragments_text, write_matrix_fragments
 
+pytestmark = pytest.mark.own_artifacts
+
 SLUG = "2026-09-25-verbs"
 PLAN_REL = f"docs/superpowers/plans/{SLUG}"
 

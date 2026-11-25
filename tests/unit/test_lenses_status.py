@@ -7,6 +7,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from tests.unit.record_support import (
     RUN,
     SLUG,
@@ -17,6 +19,8 @@ from tests.unit.record_support import (
     started_run,
     write_record,
 )
+
+pytestmark = pytest.mark.own_artifacts
 
 ITEM = {"kind": "lens", "lens": "security", "title": "the retry path builds a shell command"}
 

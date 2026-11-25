@@ -1293,3 +1293,90 @@ def test_gh1275_stage_7_passes_nothing_when_the_pr_has_no_gate_tester(ops_root: 
 
     assert _gate_passes(tree) == []
     assert 7 in _host(ops_root).stages()
+
+
+def test_the_merges_check_read_reports_a_cancelled_check_pending_not_failed() -> None:
+    """Spec 2026-11-24-ci-economy R3: `_checks_green` reads the `cancel` bucket as pending."""
+    from types import SimpleNamespace
+
+    from fr.ops.gate import StageFailed, _checks_green
+
+    class Forge:
+        def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            return [{"name": "ci", "bucket": "cancel"}, {"name": "x", "bucket": "pass"}]
+
+        def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            return []
+
+    gate = SimpleNamespace(target=SimpleNamespace(repo=REPO, pr=5), forge=Forge())
+    with pytest.raises(StageFailed) as exc:
+        _checks_green(gate)  # type: ignore[arg-type]
+    assert "failing" not in str(exc.value)
+
+
+@pytest.mark.parametrize("required", [False, True])
+def test_the_merges_check_read_names_cancelled_unreplaced_checks(required: bool) -> None:
+    """Review #1647: nothing still runs and a check was cancelled with no newer run: the
+    stage says so by name, with the remedy, never "checks are pending"."""
+    from types import SimpleNamespace
+
+    from fr.ops.gate import StageFailed, _checks_green
+
+    checks = [{"name": "test (1)", "bucket": "cancel"}, {"name": "x", "bucket": "pass"}]
+
+    class Forge:
+        def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            return checks
+
+        def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            return checks if required else []
+
+    gate = SimpleNamespace(target=SimpleNamespace(repo=REPO, pr=5), forge=Forge())
+    with pytest.raises(StageFailed) as exc:
+        _checks_green(gate)  # type: ignore[arg-type]
+    assert str(exc.value) == (
+        "PR #5's checks were cancelled with no newer run: test (1); re-run the workflow"
+    )
+
+
+def test_the_merges_check_read_says_pending_while_a_check_still_runs() -> None:
+    from types import SimpleNamespace
+
+    from fr.ops.gate import StageFailed, _checks_green
+
+    class Forge:
+        def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            return [{"name": "a", "bucket": "cancel"}, {"name": "b", "bucket": "pending"}]
+
+        def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            return []
+
+    gate = SimpleNamespace(target=SimpleNamespace(repo=REPO, pr=5), forge=Forge())
+    with pytest.raises(StageFailed) as exc:
+        _checks_green(gate)  # type: ignore[arg-type]
+    assert "checks are pending" in str(exc.value)
+
+
+class LoginPageForge(FakeForge):
+    """A forge whose default-branch read meets an SSO login page (gh#1554)."""
+
+    def default_branch(self, *, cwd: Path, run: Any = None) -> str | None:
+        from fr.tea import TeaError
+
+        raise TeaError(
+            "HTTP 200 with an HTML body, not the forge's JSON: an SSO or forward-auth "
+            "login page, most likely; exempt the instance's /api/ paths or use an internal URL"
+        )
+
+
+def test_a_forge_error_on_the_default_branch_read_is_a_refusal_naming_it(
+    ops_root: Path,
+) -> None:
+    """R7 (spec 2026-11-19-consumer-followups): a raised forge error is the gate's
+    exit-2 refusal, naming the cause, never a traceback."""
+    gate, *_ = _gate(ops_root, forge=LoginPageForge())
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        _ = gate.default
+    assert exc.value.code == 2
+    assert "cannot read the default branch from the forge" in exc.value.why
+    assert "SSO or forward-auth login page" in exc.value.why

@@ -12,6 +12,10 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).parent.parent.parent
 BOOTSTRAP_SH = REPO_ROOT / "scripts" / "bootstrap.sh"
 

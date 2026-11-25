@@ -34,6 +34,8 @@ from tests.integration.test_install_sh import (  # noqa: F401  (fake_home is a f
     fake_home,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 
 @pytest.fixture()
 def home_with_opencode_config(fake_home: Path) -> Path:  # noqa: F811

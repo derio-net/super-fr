@@ -16,10 +16,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 from fr.run.model import parse_run_state
+
+pytestmark = pytest.mark.own_artifacts
 
 _V1_RUN = """\
 run: r1

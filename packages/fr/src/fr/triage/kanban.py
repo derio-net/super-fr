@@ -85,6 +85,7 @@ Column = Literal[
     "needs-devops",
     "closing-out",
     "partial",
+    "obsolete",
     "done",
 ]
 
@@ -103,6 +104,9 @@ COLUMN_TITLES: Mapping[Column, str] = {
     # A merged batch with a member still open, owed its close-out (gh#985): the driver
     # still acts on it, so it is not Done until that close-out is archived.
     "partial": "Partial",
+    # A never-dispatched batch with nothing left to do (2026-11-22-triage-hardening R8):
+    # the operator retires it with `batch cancel`.
+    "obsolete": "Obsolete",
     "done": "Done",
 }
 """The columns, left to right (R2): the one ordered table every other read derives from."""
@@ -169,6 +173,7 @@ HINT_REVIEW = "awaiting review"
 HINT_ARCHIVE_PENDING = "archive PR pending"
 HINT_CLOSEOUT_NOT_RECORDED = "close-out not recorded"
 HINT_FINISHED = "finished"
+HINT_OBSOLETE = "obsolete: every member closed, retire it with batch cancel"
 # A ready PR of a repo whose `.fr/triage.yaml` has no `queue.ci`: the queue holds it.
 HINT_QUEUE_UNCONFIGURED = "queue held: add `queue: {ci: push}` to .fr/triage.yaml"
 
@@ -350,7 +355,9 @@ class Card:
     def terminal(self) -> bool:
         """Merged (archived or not), cancelled or abandoned, or a close-out that archived
         (R18): the engine's own stage and close-out state, never the column the card sits
-        in, so a merged batch still owed its close-out is terminal."""
+        in, so a merged batch still owed its close-out is terminal. An `obsolete` batch is
+        not: it waits for the operator's `batch cancel` (2026-11-22-triage-hardening R9), so
+        the cutoff never hides it, though `finished_waves` lets the next wave start."""
         return self.stage in _TERMINAL_STAGES or closeout_state(self.batch) == "archived"
 
     @property
@@ -433,6 +440,8 @@ def column_of(
     """R2's table, from `derive_batch_stage`, `dependency_state` and `closeout_state`; a
     batch `lane_of` places is in that Needs-you lane instead (exit-gates R17). *stop* is
     the batch's live merge stop."""
+    if derive_batch_stage(batch, facts) == "obsolete":
+        return "obsolete"
     if not batch.events:
         waiting = any(dependency_state(d, batches, facts) != "satisfied" for d in batch.after)
         return "waiting" if waiting else "proposed"
@@ -579,6 +588,8 @@ def fallback_hint(
         return HINT_REVIEW
     if column in ("closing-out", "partial"):
         return HINT_ARCHIVE_PENDING if closeout_event(batch) else HINT_CLOSEOUT_NOT_RECORDED
+    if column == "obsolete":
+        return HINT_OBSOLETE
     return pill_of(batch, facts) or HINT_FINISHED
 
 

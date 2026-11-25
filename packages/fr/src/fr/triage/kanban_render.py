@@ -70,7 +70,7 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
 .meta, .hint, .notes { color: var(--muted); font-size: .85rem; }
 .notes { margin: 8px 0; padding-left: 18px; }
 .empty { margin: 32px 0; color: var(--muted); }
-.board { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 12px;
+.board { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px;
   align-items: start; margin-top: 16px; }
 .col { background: color-mix(in srgb, var(--line) 35%, transparent); border-radius: 8px;
   padding: 10px; min-width: 0; }
@@ -446,6 +446,9 @@ def _body(card: Card, scope_args: Sequence[str], collected_at: str = "") -> str:
     if card.readiness is not None:
         parts.append(_readiness(card.readiness, collected_at))
     parts.append("<h4>Issues</h4><ul>" + "".join(_member(m) for m in card.members) + "</ul>")
+    closed = [m.key for m in card.members if m.stage == "closed"]
+    if closed and card.column in ("proposed", "waiting"):
+        parts.append(f'<p class="meta">already closed: {esc(", ".join(closed))}</p>')
     if card.others:
         items = "".join(_other_pr(r, collected_at) for r in card.others)
         parts.append(f"<h4>Related PRs</h4><ul>{items}</ul>")

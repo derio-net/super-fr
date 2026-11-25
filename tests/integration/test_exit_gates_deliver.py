@@ -27,6 +27,8 @@ from tests.unit.record_support import (
 )
 from tests.unit.test_deliver_pr_body import _body, _deliver
 
+pytestmark = pytest.mark.own_artifacts
+
 
 class StubForge(FakeGhClient):
     def viewer_login(self) -> str:

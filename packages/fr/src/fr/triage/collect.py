@@ -24,18 +24,21 @@ from pydantic import ValidationError
 
 from fr import real_ghclient
 from fr.artifacts.paths import KIND_DIRS
+from fr.checkstate import verdict_of
 from fr.ghclient import GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
-from fr.labels import FR_CLAIMED, FR_IN_PROGRESS, READY_FR, held_gates
+from fr.labels import FR_CLAIMED, FR_IN_PROGRESS, held_gates
+from fr.triage.admit import content_digest, latest_admit
 from fr.triage.claims import read_claims, to_issue_claim
 from fr.triage.errors import ForgeError, TriageError
-from fr.triage.intake import intake_reason, intake_trusted
+from fr.triage.intake import ADMIT_UNSUPPORTED, intake_trusted, needs_admit_read, stored_reason
 from fr.triage.model import (
     BATCH_MARKER_PREFIX,
     FACTS_SCHEMA,
     CursorReader,
     Facts,
     GatedUnread,
+    IgnoredClaims,
     InProgressState,
     Issue,
     IssueClaim,
@@ -108,6 +111,8 @@ class Forge(Protocol):
     def list_prs_by_head(self, *, repo: str, branch: str) -> list[dict[str, Any]]: ...
 
     def pr_labels(self, *, repo: str, number: int) -> list[str]: ...
+
+    def view_pr(self, *, repo: str, number: int) -> dict[str, Any]: ...
 
     def viewer_login(self) -> str: ...
 
@@ -215,6 +220,11 @@ class ClientForge:
         (exit-gates R14), which no list read carries."""
         with _forge_errors():
             return [str(n) for n in self._client.pr_view(repo, number).get("labels") or [] if n]
+
+    def view_pr(self, *, repo: str, number: int) -> dict[str, Any]:
+        """One PR's `pr_view` record: a judged PR past the PR list's limit (R11)."""
+        with _forge_errors():
+            return self._client.pr_view(repo, number)
 
     def viewer_login(self) -> str:
         with _forge_errors():
@@ -351,12 +361,12 @@ _SEVERITY = {"pass": 0, "pending": 1, "fail": 2}
 
 
 def _bucket(check: dict[str, Any]) -> str:
+    """A check's count bucket: `fr.checkstate`'s verdict, so a cancelled check is pending
+    (spec 2026-11-24-ci-economy R3). `SUCCEEDED`/`PASS`/`PASSED` are other forges' passes."""
     state = str(check.get("conclusion") or check.get("state") or "").upper()
-    if state in {"SUCCESS", "SUCCEEDED", "PASS", "PASSED", "SKIPPED", "NEUTRAL"}:
+    if state in {"SUCCEEDED", "PASS", "PASSED"}:
         return "pass"
-    if state in {"FAILURE", "FAILED", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"}:
-        return "fail"
-    return "pending"
+    return verdict_of(state)
 
 
 def _checks(raw: Iterable[dict[str, Any]]) -> dict[str, int]:
@@ -459,6 +469,7 @@ def _body(body: str) -> str:
 
 
 def _issue(repo: str, raw: dict[str, Any], prs: list[PullRequest], *, state: IssueState) -> Issue:
+    body = raw.get("body") or ""
     return Issue(
         repo=repo,
         number=raw["number"],
@@ -469,10 +480,12 @@ def _issue(repo: str, raw: dict[str, Any], prs: list[PullRequest], *, state: Iss
         created_at=raw.get("createdAt"),
         updated_at=raw.get("updatedAt"),
         closed_at=raw.get("closedAt"),
-        body=_body(raw.get("body") or ""),
+        body=_body(body),
         prs=prs,
         author=_login(raw),
         author_association=str(raw.get("authorAssociation") or "").upper() or None,
+        # Over the forge's full record, before `_body` cuts it (2026-11-22 R3, R5).
+        content_digest=content_digest(raw["title"], body),
     )
 
 
@@ -482,11 +495,11 @@ reads each repo's associations at most once however many issues need them."""
 
 
 def _admitted(raw: dict[str, Any], trusted: frozenset[str]) -> bool:
-    """Whether R2's login or label clause already admits *raw*, so its association cannot
-    change the outcome."""
+    """Whether R2's login clause already admits *raw*, so its association cannot change the
+    outcome. The `ready-fr` label does not: it admits only with an admit marker, which is read
+    only when no other clause admits the issue (2026-11-22-triage-hardening R5)."""
     login = _login(raw)
-    names = {str(label.get("name") or "").lower() for label in raw.get("labels") or []}
-    return (login is not None and login.lower() in trusted) or READY_FR.name.lower() in names
+    return login is not None and login.lower() in trusted
 
 
 def _association_read(
@@ -533,7 +546,7 @@ def _with_associations(
     (spec 2026-11-17-triage-intake R1).
 
     One read per repo, and none when every record carries the field or every record without
-    it is admitted by its author's login or the `ready-fr` label (R2's other clauses), so the
+    it is admitted by its author's login (R2's login clause), so the
     read is made only for an issue whose answer can change the outcome. A failed or
     unsupported read leaves the association unread: never admitted.
     """
@@ -550,26 +563,20 @@ def _with_associations(
     ]
 
 
-def _withhold_untrusted_bodies(
+def _withhold_untrusted_text(
     issues: list[Issue], config: Mapping[str, TriageConfig], viewer: str | None
 ) -> list[Issue]:
-    """Every issue about to be written with its body cleared when intake finds it ineligible
-    (spec 2026-11-17-triage-intake R3): listed, viewed and carried alike, judged on its stored
-    fields, so an outside author's text is never kept. Title, labels and the rest stay."""
+    """Every issue about to be written with its title and body cleared when intake finds it
+    ineligible (spec 2026-11-17-triage-intake R3, 2026-11-22-triage-hardening R1): listed,
+    viewed and carried alike, judged on its stored fields, so an outside author's text is
+    never kept. Labels, URL, author and the digests stay; the next collect that finds the
+    issue eligible stores its text again."""
     out: list[Issue] = []
     for issue in issues:
-        trusted = intake_trusted(config.get(issue.repo, TriageConfig()), viewer)
-        reason = intake_reason(
-            issue.author, issue.author_association, issue.labels, trusted, issue.body
-        )
-        out.append(issue.model_copy(update={"body": ""}) if reason and issue.body else issue)
+        reason = stored_reason(issue, config.get(issue.repo, TriageConfig()), viewer)
+        withheld = reason and (issue.body or issue.title)
+        out.append(issue.model_copy(update={"title": "", "body": ""}) if withheld else issue)
     return out
-
-
-PR_PAST_LIMIT = (
-    "a pull request, not an issue, and past the PR list's limit: "
-    "re-run `fr triage collect` with a higher --pr-limit"
-)
 
 
 def _judged_elsewhere(
@@ -594,8 +601,9 @@ class CollectStats:
     """What one collect cost in single-issue reads (gh#911).
 
     *viewed* counts every `view_issue` call, failures and PR-past-limit answers
-    included; *carried* counts judged closed issues taken from the previous
-    facts instead of being viewed.
+    included, plus the `view_pr` call each PR past the list limit then costs (R11);
+    *carried* counts judged closed issues taken from the previous facts instead of
+    being viewed.
     """
 
     viewed: int = 0
@@ -740,8 +748,7 @@ def collect_facts_counted(
     config: dict[str, TriageConfig] = {}
     associations: Associations = {}
     ignored: dict[str, tuple[str, ...]] = {}
-    markers: dict[tuple[str, int], str] = {}
-    claims: dict[tuple[str, int], list[IssueClaim]] = {}
+    comment_facts: dict[tuple[str, int], CommentFacts] = {}
     closed_hits: list[StaleInProgress] = []
     gated: list[PullRequest] = []
     gated_unread: list[GatedUnread] = []
@@ -762,12 +769,11 @@ def collect_facts_counted(
                 issue_limit,
                 associations,
             )
-            for raw in issues:
-                at, found = _comment_facts(forge, repo, raw, trusted)
-                if at:
-                    markers[(repo, raw["number"])] = at
-                if found:
-                    claims[(repo, raw["number"])] = found
+            # Kept local until the repo succeeds: a later claim-read failure skips the repo,
+            # and none of its issues may then reach facts (review p1-r2).
+            repo_comments = {
+                (repo, raw["number"]): _comment_facts(forge, repo, raw, trusted) for raw in issues
+            }
         except TriageError as exc:
             # A forge failure, or a config the repo's owner broke (review r2p-f4):
             # either way that one repo is skipped in org scope, never the collect.
@@ -776,6 +782,7 @@ def collect_facts_counted(
             skipped.append(Skipped(repo=repo, reason=str(exc)))
             continue
         collected.append(repo)
+        comment_facts.update(repo_comments)
         closed_hits.extend(_closed_in_progress(forge, repo, scope, trusted, issue_limit, warnings))
         gated_found, gated_miss = _gated_prs(forge, repo, pr_limit, warnings)
         gated.extend(gated_found)
@@ -821,12 +828,14 @@ def collect_facts_counted(
 
     out = [
         _issue(repo, i, linked(repo, i["number"]), state="open").model_copy(
-            update={
-                "dispatch_marker_at": markers.get((repo, i["number"])),
-                "claims": claims.get((repo, i["number"]), []),
-            }
+            update=comment_facts.get((repo, i["number"]), CommentFacts()).issue_update()
         )
         for repo, i in raw_issues
+    ]
+    ignored_claims = [
+        IgnoredClaims(repo=repo, number=number, authors=found.ignored)
+        for (repo, number), found in comment_facts.items()
+        if found.ignored
     ]
     prior = previous if keep else None
     if prior is not None:
@@ -841,6 +850,11 @@ def collect_facts_counted(
     viewed = carried_n = 0
     unviewed: list[Unviewed] = []
     judged_prs: list[PullRequest] = []
+    finished_prs = {
+        (p.repo.lower(), p.number): p
+        for p in (previous.judged_prs if previous else [])
+        if p.state != "OPEN"
+    }
     for repo, number in _judged_elsewhere(judged, open_keys, [*collected, *sorted(keep)]):
         if prior is not None and repo in keep:
             known = _carried_judgement(prior, issue_key(repo, number))
@@ -853,6 +867,9 @@ def collect_facts_counted(
                 continue
         if (listed := listed_prs.get(issue_key(repo, number))) is not None:
             judged_prs.append(listed)
+            continue
+        if (done := finished_prs.get((repo.lower(), number))) is not None:
+            judged_prs.append(done)
             continue
         if repo not in truncated and (hit := carry.get((repo.lower(), number))) is not None:
             out.append(
@@ -871,8 +888,24 @@ def collect_facts_counted(
             unviewed.append(Unviewed(key=issue_key(repo, number), reason=str(exc)))
             continue
         if "/pull/" in str(raw.get("url", "")):
-            # A PR past the PR list's limit: `gh issue view` resolves it anyway.
-            unviewed.append(Unviewed(key=issue_key(repo, number), reason=PR_PAST_LIMIT))
+            # A PR past the PR list's limit: `gh issue view` resolves it anyway (R11).
+            viewed += 1  # the second single read this PR costs
+            try:
+                view = forge.view_pr(repo=repo, number=number)
+            except ForgeError as exc:
+                unviewed.append(Unviewed(key=issue_key(repo, number), reason=str(exc)))
+                continue
+            judged_prs.append(
+                PullRequest(
+                    repo=repo,
+                    number=number,
+                    title=str(raw.get("title", "")),
+                    state=str(view.get("state", "OPEN")).upper(),  # type: ignore[arg-type]
+                    is_draft=bool(view.get("draft")),
+                    url=str(raw["url"]),
+                    head_ref=str(view.get("head_ref") or ""),
+                )
+            )
             continue
         state: IssueState = "open" if str(raw.get("state", "")).upper() == "OPEN" else "closed"
         raw = _with_association(
@@ -883,7 +916,17 @@ def collect_facts_counted(
             issue_limit,
             associations,
         )
-        out.append(_issue(repo, raw, linked(repo, number), state=state))
+        trusted_here = intake_trusted(config.get(repo, TriageConfig()), viewer)
+        admission = _comment_facts(forge, repo, raw, trusted_here, claims=False)
+        out.append(
+            _issue(repo, raw, linked(repo, number), state=state).model_copy(
+                update={
+                    "admit_read": admission.admit_read,
+                    "admit_digest": admission.admit_digest,
+                    "admit_unread": admission.admit_unread,
+                }
+            )
+        )
     linked_prs = {(p.repo, p.number) for issue in out for p in issue.prs}
     unlinked = [
         p
@@ -893,6 +936,7 @@ def collect_facts_counted(
     if prior is not None:
         unlinked += [p for p in prior.prs if p.repo in keep]
         config.update({r: c for r, c in prior.config.items() if r in keep})
+        ignored_claims += [c for c in prior.ignored_claims if c.repo in keep]
     batch_prs = _batch_prs(
         forge,
         batch_branches,
@@ -922,7 +966,7 @@ def collect_facts_counted(
         kind=scope.kind,
         collected_at=now.isoformat(timespec="seconds"),
         repos=repos,
-        issues=_withhold_untrusted_bodies(out, config, viewer),
+        issues=_withhold_untrusted_text(out, config, viewer),
         prs=unlinked,
         skipped=skipped,
         unviewed=unviewed,
@@ -938,6 +982,7 @@ def collect_facts_counted(
         config_ignored={r: list(keys) for r, keys in ignored.items()},
         gated_prs=gated,
         gated_unread=gated_unread,
+        ignored_claims=ignored_claims,
     )
     return facts, CollectStats(
         viewed=viewed, carried=carried_n, ignored=ignored, carried_repos=keep
@@ -1102,20 +1147,84 @@ def read_config_lenient(forge: Forge, repo: str) -> tuple[TriageConfig | None, t
         raise TriageError(f"{repo}: {CONFIG_PATH} is not valid triage config: {exc}") from exc
 
 
-def _comment_facts(
-    forge: Forge, repo: str, raw: dict[str, Any], trusted: frozenset[str]
-) -> tuple[str | None, list[IssueClaim]]:
-    """An issue's latest fr-batch marker time (§3.E) and its claims (triage-claims §3.H).
+@dataclass(frozen=True)
+class CommentFacts:
+    """What one issue's comment read gave: its latest fr-batch marker time (§3.E), its
+    claims (triage-claims §3.H) and the logins of the claim markers ignored as untrusted
+    (2026-11-22-triage-hardening R7), and its admission (R5): whether the comments were
+    read for it, the latest trusted admit marker's digest, and the read's failure text."""
 
-    One comment read per issue labelled `fr:in-progress` or `fr:claimed`, none for the
-    rest: both facts come from the same read. Only *trusted* authors' claim markers
-    count (R17). Called inside the per-repo collect, so a failing read skips that repo
-    in org scope.
+    marker_at: str | None = None
+    claims: list[IssueClaim] = field(default_factory=list)
+    ignored: list[str] = field(default_factory=list)
+    admit_read: bool = False
+    admit_digest: str | None = None
+    admit_unread: str | None = None
+
+    def issue_update(self) -> dict[str, Any]:
+        """The `Issue` fields this read sets."""
+        return {
+            "dispatch_marker_at": self.marker_at,
+            "claims": self.claims,
+            "admit_read": self.admit_read,
+            "admit_digest": self.admit_digest,
+            "admit_unread": self.admit_unread,
+        }
+
+
+def _comment_needs(raw: dict[str, Any], trusted: frozenset[str]) -> tuple[bool, bool]:
+    """(claim read, admit read): whether *raw*'s comments must be read for its claims (it is
+    labelled `fr:in-progress` or `fr:claimed`) and for an admit marker (intake's
+    `needs_admit_read`, judged once its association is known). The ONE decision; a single
+    read serves both."""
+    names = [str(label.get("name") or "") for label in raw.get("labels") or []]
+    claim = bool(set(names) & {FR_IN_PROGRESS.name, FR_CLAIMED.name})
+    association = str(raw.get("authorAssociation") or "").upper() or None
+    admit = needs_admit_read(_login(raw), association, names, trusted, raw.get("body") or "")
+    return claim, admit
+
+
+def _unread(exc: BaseException) -> str:
+    """The text recorded for a failed admit read: `ADMIT_UNSUPPORTED` when the adapter
+    cannot list comments at all (`ClientForge` wraps that as a `ForgeError`)."""
+    if isinstance(exc, UnsupportedForgeOperation) or isinstance(
+        exc.__cause__, UnsupportedForgeOperation
+    ):
+        return ADMIT_UNSUPPORTED
+    return str(exc) or type(exc).__name__
+
+
+def _comment_facts(
+    forge: Forge,
+    repo: str,
+    raw: dict[str, Any],
+    trusted: frozenset[str],
+    *,
+    claims: bool = True,
+) -> CommentFacts:
+    """One comment read per issue that needs it (`_comment_needs`), none for the rest.
+
+    Only *trusted* authors' claim and admit markers count (R17, 2026-11-22 R4). When the
+    claim read needs the list, a failing read raises: called inside the per-repo collect,
+    it skips that repo in org scope. When only the admit read needs it, a failure leaves
+    `admit_read` False on this issue and nothing else changes. *claims* False (a viewed
+    issue) reads for the admission only.
     """
-    names = {label["name"] for label in raw.get("labels") or []}
-    if not names & {FR_IN_PROGRESS.name, FR_CLAIMED.name}:
-        return None, []
-    comments = forge.list_issue_comments(repo=repo, number=raw["number"])
+    claim, admit = _comment_needs(raw, trusted)
+    claim = claim and claims
+    if not (claim or admit):
+        return CommentFacts()
+    try:
+        comments = forge.list_issue_comments(repo=repo, number=raw["number"])
+    except _READ_FAILURES as exc:
+        if claim:
+            raise
+        return CommentFacts(admit_unread=_unread(exc))
+    admission: dict[str, Any] = (
+        {"admit_read": True, "admit_digest": latest_admit(comments, trusted)} if admit else {}
+    )
+    if not claim:
+        return CommentFacts(**admission)
     stamps = [
         stamp
         for c in comments
@@ -1130,8 +1239,12 @@ def _comment_facts(
             f"{read.malformed} malformed claim marker(s)",
             file=sys.stderr,
         )
-    claims = [to_issue_claim(c) for c in read.claims]
-    return (max(stamps) if stamps else None), claims
+    return CommentFacts(
+        marker_at=max(stamps) if stamps else None,
+        claims=[to_issue_claim(c) for c in read.claims],
+        ignored=read.untrusted_authors,
+        **admission,
+    )
 
 
 def _closed_labelled(
@@ -1216,7 +1329,10 @@ def _closed_in_progress(
         out.append(
             StaleInProgress(
                 key=issue_key(repo, i["number"]),
-                title=i["title"],
+                # Outside-author text: this list reads no association, so only a trusted
+                # login keeps its title; any other is withheld, as an ineligible issue's is
+                # (2026-11-22-triage-hardening R1, review p1-r1).
+                title=i["title"] if _admitted(i, trusted) else "",
                 url=i["url"],
                 closed_at=i.get("closedAt"),
                 state=state,

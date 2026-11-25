@@ -24,6 +24,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Literal
 
 from fr.artifacts.paths import KIND_DIRS
+from fr.checkstate import bucket_verdict
 from fr.labels import awaiting_devops, held_gates
 from fr.settle.managed import MANAGED_SENTENCE
 from fr.triage.approval import ApprovalVerdict, Approved
@@ -35,6 +36,7 @@ from fr.triage.batch import (
     batch_item_id,
     batch_pr,
     last_dispatch,
+    meets_dependency,
     recorded_branch,
 )
 from fr.triage.batch_dispatch import title_block
@@ -152,8 +154,6 @@ CONFLICTING = "CONFLICTING"
 ARCHIVED_BY_UNKNOWN_PR = 0
 """`CloseoutEvent.archived` for a close-out found archived on the default branch with
 no PR to name: every reader only asks whether `archived` is set (gh#900)."""
-
-_FAILING_BUCKETS = frozenset({"fail", "cancel"})
 
 
 @dataclass(frozen=True)
@@ -666,21 +666,19 @@ def checks_verdict(
 
     *required* is `GhClient.pr_required_checks`; *all_checks* is the collected
     `PullRequest.checks` counts (`pass`, `fail`, `pending`). `SKIPPED` and
-    `NEUTRAL` read as passed. No check reported at all is `pending`, never green: a
+    `NEUTRAL` read as passed, a cancelled check as pending (`fr.checkstate`, spec
+    2026-11-24-ci-economy R3). No check reported at all is `pending`, never green: a
     head the driver just pushed, or a PR just readied, has no check registered yet
     (review rg-4); only a `ci none` repo merges without one.
     """
     if ci_none:
         return "green", ()
     if required:
-        failing = tuple(
-            sorted(str(c.get("name")) for c in required if c.get("bucket") in _FAILING_BUCKETS)
-        )
+        verdicts = [(bucket_verdict(c.get("bucket")), str(c.get("name"))) for c in required]
+        failing = tuple(sorted(name for v, name in verdicts if v == "fail"))
         if failing:
             return "failing", failing
-        pending = tuple(
-            sorted(str(c.get("name")) for c in required if c.get("bucket") == "pending")
-        )
+        pending = tuple(sorted(name for v, name in verdicts if v == "pending"))
         return ("pending", pending) if pending else ("green", ())
     if all_checks.get("fail", 0):
         return "failing", (f"{all_checks['fail']} failing check(s)",)
@@ -1329,16 +1327,16 @@ def closeout_event(batch: Batch) -> CloseoutEvent | None:
 
 def finished_waves(batches: Iterable[Batch], stages: Mapping[str, str]) -> frozenset[str]:
     """The wave keys (`str(batch.wave)`) whose every batch is terminal: derived stage
-    `cancelled` or `abandoned`, or a close-out event whose `archived` is set. *stages* maps
-    batch id to its derived stage. A batch with no wave never makes one, and a wave with a
-    batch that is not terminal (a merged one still owed its archive, say) is not finished.
-    The board, the history page and the driver all read this one predicate."""
+    `cancelled`, `abandoned` or `obsolete`, or a close-out event whose `archived` is set.
+    *stages* maps batch id to its derived stage. A batch with no wave never makes one, and a
+    wave with a batch that is not terminal (a merged one still owed its archive, say) is not
+    finished. The board, the history page and the driver all read this one predicate."""
     wave_ok: dict[str, bool] = {}
     for b in batches:
         if b.wave is None:
             continue
         event = closeout_event(b)
-        terminal = stages.get(b.id) in {"cancelled", "abandoned"} or (
+        terminal = stages.get(b.id) in {"cancelled", "abandoned", "obsolete"} or (
             event is not None and event.archived is not None
         )
         key = str(b.wave)
@@ -1743,7 +1741,7 @@ def _wave_of(batch: Batch) -> int | None:
 
 def wave_landings_done(snap: Snapshot, repo: str, wave: int | None) -> bool:
     """R15: whether *wave*'s collected close-out may start: every batch of it is terminal (the
-    wave's landings are over: landed, cancelled, abandoned or deferred), so one close-out takes
+    wave is done: landed, cancelled, abandoned, obsolete or deferred), so one close-out takes
     all of its ungated landed batches. The repo's `post_merge` for the last landing is planned
     before it in the same pass (`post-merge` actions come first), and the close-out itself is
     held while a landed batch has none recorded (`_Driver._close_out`). A batch with no wave
@@ -1845,7 +1843,7 @@ def drive_pass(snap: Snapshot) -> Pass:
         if not members:
             continue
         held_ids.add(batch.id)
-        if batch in chosen and stages.get(batch.id) not in ("cancelled", "abandoned"):
+        if batch in chosen and stages.get(batch.id) not in ("cancelled", "abandoned", "obsolete"):
             held_by.append((batch.id, tuple(sorted({c.signer for _, c in members}))))
             detail = "; ".join(held_line(k, c, snap.now) for k, c in members)
             actions.append(Action("held", batch.id, detail))
@@ -2158,7 +2156,7 @@ def drive_pass(snap: Snapshot) -> Pass:
             blocked += 1
             actions.append(Action("blocked", batch.id, f"waits on {'; '.join(dead)}"))
             continue
-        if any(stages.get(d) != "merged" for d in batch.after):
+        if any(not meets_dependency(stages.get(d)) for d in batch.after):
             pending += 1
             continue
         if batch.id in snap.refused:

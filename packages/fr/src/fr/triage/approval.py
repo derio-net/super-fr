@@ -627,11 +627,12 @@ def ensure_approval_label(
     client: Any, repo: str, say: Callable[[str], None], *, seen: set[str]
 ) -> None:
     """Create the operator labels on *repo* when they are missing, saying so: `approved-fr`
-    (§A "Label creation", R4) and `ready-fr`, which admits an outside author's issue
-    (spec 2026-11-17-triage-intake R8). Each is checked and created on its own, so one that
-    cannot be created never hides the other. At most one check per repo per *seen* (a pass or
+    (§A "Label creation", R4) and `ready-fr`, which, with a matching admit marker, admits an
+    outside author's issue (spec 2026-11-17-triage-intake R8, 2026-11-22-triage-hardening
+    R4). Each is checked and created on its own, so one that cannot be created never hides
+    the other. At most one check per repo per *seen* (a pass or
     a command). A forge that cannot check or create labels is a warning per label, never a
-    failure. fr only creates `ready-fr`; it never applies it."""
+    failure. Here fr only creates `ready-fr`; `fr triage admit` is what applies it."""
     if repo in seen:
         return
     seen.add(repo)

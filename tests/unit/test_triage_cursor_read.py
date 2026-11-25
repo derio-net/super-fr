@@ -2,7 +2,7 @@
 
 `read_cursor` folds every run cursor at an open batch PR's head that names its branch:
 delivered only when every one is, and it tells "read, none found" from "could not read".
-`collect` stores the fold and the status on the PR; facts move to schema 17.
+`collect` stores the fold and the status on the PR; facts move to schema 19.
 """
 
 from __future__ import annotations
@@ -177,13 +177,13 @@ def test_collect_stores_the_fold_its_read_status_and_its_cause() -> None:
     assert (pr.cursor, pr.cursor_read, pr.cursor_detail) == (None, "no-clone", None)
 
 
-def test_facts_are_schema_17_and_still_read_3_to_16(tmp_path: Path) -> None:
-    assert FACTS_SCHEMA == 17
-    assert set(range(3, 17)) <= set(FACTS_READS)
-    old = {"schema": 16, "scope": REPO, "kind": "repo", "collected_at": "2026-09-25T06:00:00Z",
+def test_facts_are_schema_19_and_still_read_3_to_18(tmp_path: Path) -> None:
+    assert FACTS_SCHEMA == 19
+    assert set(range(3, 19)) <= set(FACTS_READS)
+    old = {"schema": 18, "scope": REPO, "kind": "repo", "collected_at": "2026-09-25T06:00:00Z",
            "repos": [REPO], "issues": []}  # fmt: skip
     (tmp_path / "facts.json").write_text(json.dumps(old))
-    assert load_facts(tmp_path / "facts.json").schema_ == 16
+    assert load_facts(tmp_path / "facts.json").schema_ == 18
     pr = _pr()
     assert pr.cursor_read is None  # never asked
 
@@ -260,9 +260,10 @@ def test_a_cursor_with_no_read_status_is_never_delivered() -> None:
     assert not got.admits
 
 
-def test_a_schema_16_facts_files_delivered_cursor_is_not_admitted(tmp_path: Path) -> None:
-    """p1-r6, R1: a schema-16 facts file carries a batch PR's `cursor` but no `cursor_read`;
-    its deliver-done cursor was never asked at this head, so the queue does not admit it."""
+def test_a_schema_18_facts_files_delivered_cursor_is_not_admitted(tmp_path: Path) -> None:
+    """p1-r6, R1: a schema-18 facts file (the last before 19) carries a batch PR's `cursor`
+    but no `cursor_read`; its deliver-done cursor was never asked at this head, so the
+    queue does not admit it."""
     from fr.triage.batch import QueueEntry
     from fr.triage.readiness import batch_readiness, fact_cursors
 
@@ -272,7 +273,7 @@ def test_a_schema_16_facts_files_delivered_cursor_is_not_admitted(tmp_path: Path
     pr = {"repo": REPO, "number": 101, "title": "b1", "state": "OPEN", "is_draft": True,
           "url": f"https://github.com/{REPO}/pull/101", "head_ref": BRANCH, "head_oid": R_HEAD,
           "cursor": {"run": "r1", "step": "deliver", "kind": "deliver-done"}}  # fmt: skip
-    old = {"schema": 16, "scope": REPO, "kind": "repo", "collected_at": "2026-09-25T06:00:00Z",
+    old = {"schema": 18, "scope": REPO, "kind": "repo", "collected_at": "2026-09-25T06:00:00Z",
            "repos": [REPO], "issues": [], "batch_prs": [pr]}  # fmt: skip
     (tmp_path / "facts.json").write_text(json.dumps(old))
     facts = load_facts(tmp_path / "facts.json")

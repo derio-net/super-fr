@@ -77,7 +77,7 @@ walk_run() {
   spec="$slug-design.md"
   mkdir -p "$FR_SPECS_DIR"
   {
-    printf '# %s\n\n## Requirements\n\n' "$slug"
+    printf '# %s\n\n## Design shape\n\nnone — a scenario fixture\n\n## Requirements\n\n' "$slug"
     for n in $(seq 1 "$phases"); do printf 'R%s. Requirement %s holds.\n' "$n" "$n"; done
     printf '\n## Test Plan\n\n- unit: every requirement has a test.\n\n## Verification\n\nstrategy: none\n'
     for n in $(seq 1 "$phases"); do printf -- '- %s-r%s: none — proven by its unit test\n' "$slug" "$n"; done
@@ -276,6 +276,8 @@ EOF
   # deliver: each row is gated for a live walk (the rows are unwired), the first
   # resolve renders the PR body and stops at the forge, the fake forge serves it back.
   walk_expect deliver
+  # the run's shape file, beside its cursor wherever the placement keeps it (show-me R9, R11)
+  printf '%s\n' 'none — a scenario fixture' > "$FR_RUNS_DIR/$run.shape.md"
   for n in $(seq 1 "$phases"); do
     run_fr out verification set --run "$run" --row "$slug-r$n" --gate tester --reason "a live walk"
     require_exit 0 "$out"

@@ -14,6 +14,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.own_artifacts
+
 ROOT = Path(__file__).resolve().parents[2]
 AGENT = ROOT / "plugins/super-fr/agents/fr-spec-reviewer.md"
 SKILL = ROOT / "plugins/super-fr/skills/fr-goal/SKILL.md"

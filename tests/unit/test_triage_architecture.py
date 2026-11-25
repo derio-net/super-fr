@@ -42,6 +42,8 @@ from typer.testing import CliRunner
 
 from tests.unit.triage_board_fixtures import busy
 
+pytestmark = pytest.mark.own_artifacts
+
 SCOPE = "example-org/widgets"
 DASH = "—"
 

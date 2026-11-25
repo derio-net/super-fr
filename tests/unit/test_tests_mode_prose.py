@@ -10,7 +10,11 @@ phases that use `tests: ci`, and §8 names the declared default and `-m ""`.
 
 from __future__ import annotations
 
+import pytest
+
 from tests.unit.test_fr_goal_ci_evidence_prose import AGENT, _section
+
+pytestmark = pytest.mark.own_artifacts
 
 
 def _agent() -> str:

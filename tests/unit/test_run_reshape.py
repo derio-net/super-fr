@@ -11,6 +11,8 @@ from fr.run.reshape import ReshapeError, reshape
 from fr.workflow.model import WorkflowManifest
 from fr.workflow.resolve import resolve_workflow
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 
 

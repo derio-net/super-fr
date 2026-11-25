@@ -19,10 +19,13 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LIB = REPO_ROOT / "plugins" / "super-fr" / "hooks" / "lib" / "fr-isolation-decision.sh"
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("git") is None,
-    reason="decision core needs git",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        shutil.which("git") is None,
+        reason="decision core needs git",
+    ),
+    pytest.mark.own_artifacts,
+]
 
 
 def _git(repo: Path, *args: str) -> None:

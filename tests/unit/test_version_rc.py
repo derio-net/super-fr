@@ -19,6 +19,8 @@ from types import ModuleType
 import pytest
 from fr.version_floor import admits
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 SCRIPTS = REPO / "scripts"
 sys.path.insert(0, str(SCRIPTS))

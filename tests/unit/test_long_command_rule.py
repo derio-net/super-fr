@@ -20,6 +20,8 @@ from fr.harness.long_commands import (
     long_command_rule,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 AGENT = REPO_ROOT / "plugins" / "super-fr" / "agents" / "fr-phase-executor.md"
 FR_GOAL = REPO_ROOT / "plugins" / "super-fr" / "skills" / "fr-goal" / "SKILL.md"

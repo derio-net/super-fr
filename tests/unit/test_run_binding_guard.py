@@ -16,6 +16,7 @@ from fr.journal.model import JournalEntry, append_journal_entry, journal_path, p
 from fr.run.model import load_run_state, run_path
 
 from tests.unit import binding_fakes as bf
+from tests.unit.requirements_support import DESIGN_SHAPE_SECTION
 from tests.unit.test_run_cli import (
     _GROUPED_SHAPE,
     _attempts_by_unit,
@@ -79,7 +80,7 @@ def _flat(tmp_path: Path):
     _write_shape(shipped, "flat", _FLAT_SHAPE)
     spec = repo / SPEC_REL
     spec.parent.mkdir(parents=True, exist_ok=True)
-    spec.write_text("# x\n")
+    spec.write_text("# x\n" + DESIGN_SHAPE_SECTION)
     _invoke(repo, shipped, ["run", "start", "flat", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
     result = _invoke(

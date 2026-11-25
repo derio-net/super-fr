@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import importlib.util
 
+import pytest
+
 from tests.conftest import REPO_ROOT
+
+pytestmark = pytest.mark.own_artifacts
 
 FIXTURES = REPO_ROOT / "tests" / "scenarios" / "fixtures"
 

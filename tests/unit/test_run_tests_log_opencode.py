@@ -35,6 +35,8 @@ from tests.unit.opencode_v2 import to_v2
 from tests.unit.test_run_cli import _invoke_as_harness, _squash
 from tests.unit.test_run_evidence_separate_context import _at_deliver
 
+pytestmark = pytest.mark.own_artifacts
+
 SINCE = "2026-09-26T10:00:00+00:00"
 
 

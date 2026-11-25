@@ -11,6 +11,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.own_artifacts
+
 COMMANDS = Path(__file__).resolve().parents[2] / "packages" / "fr" / "src" / "fr" / "commands"
 # The driver and its pass live in the command module; the loop, its waits and its failure
 # boundary in `triage_drive_loop`. The guard reads both, as one.

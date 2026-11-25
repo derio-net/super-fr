@@ -17,6 +17,8 @@ from fr.workflow.resolve import resolve_workflow
 
 from tests.unit.test_run_adopt import BRANCH, _commit_all, _git, _repo, _write_plan, _write_spec
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 URL = "https://github.com/derio-net/super-fr/pull/451"
 

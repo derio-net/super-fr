@@ -67,7 +67,7 @@ def test_seven_columns_with_their_counts_in_order() -> None:
         ("Proposed", "2"), ("Waiting", "2"), ("Running", "3"),
         ("Needs you · Developer", "0"), ("PR open", "3"), ("Needs you · Reviewer", "0"),
         ("Needs you · Tester", "0"), ("Needs you · DevOps", "0"),
-        ("Closing out", "3"), ("Partial", "1"), ("Done", "3"),
+        ("Closing out", "3"), ("Partial", "1"), ("Obsolete", "0"), ("Done", "3"),
     ]  # fmt: skip
 
 
@@ -88,7 +88,7 @@ def test_a_column_holds_a_card_element_exactly_when_its_count_is_not_zero() -> N
         page,
         re.S,
     )
-    assert len(cols) == 11
+    assert len(cols) == 12
     for key, count, body in cols:
         assert (re.search(r'class="card[ "]', body) is None) == (count == "0"), key
     assert {count == "0" for _, count, _ in cols} == {True, False}
@@ -120,7 +120,7 @@ def _columns(page: str) -> list[tuple[str, str, str, str]]:
 
 def test_every_column_header_holds_a_toggle_that_says_whether_it_is_expanded() -> None:
     cols = _columns(_page())
-    assert len(cols) == 11
+    assert len(cols) == 12
     for classes, key, h2, body in cols:
         button = re.search(r"<button([^>]*)>", h2)
         assert button, key

@@ -128,6 +128,7 @@ from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolve
 from fr.services import ServicesError
 from fr.services.resolve import resolve_services
 from fr.triage import batch_closeout as collected
+from fr.triage.admit_recheck import recheck_admitted
 from fr.triage.approval import (
     ApprovalVerdict,
     EventWriter,
@@ -189,6 +190,7 @@ from fr.triage.batch_dispatch import (
     dispatch_comment,
     dispatched_already,
     live_reservations,
+    obsolete_refusal,
     red_brief,
     render_brief,
     worker_remedy,
@@ -1074,7 +1076,9 @@ def batch_cancel_command(
     target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     batch = _find(judgements.batches, batch_id)
     stage = derive_batch_stage(batch, facts)
-    if stage in CLOSED_OUT:
+    # An obsolete batch (never dispatched, every member closed) is cancelled to retire it:
+    # it withdraws nothing, so only the cancel event is appended (2026-11-22-triage-hardening R9).
+    if stage in CLOSED_OUT and stage != "obsolete":
         _fail(f"batch {batch.id!r} is {stage}; there is nothing to cancel")
     owner_repo = batch_repo(batch, facts)
     if owner_repo is None:
@@ -1094,7 +1098,7 @@ def batch_cancel_command(
     # a proposed batch reached the forge only when its claims were written; a wave owes
     # claims from the moment it is set, so ones written since the last collect may
     # exist whatever facts say (p1-r8)
-    touches_forge = stage != "proposed" or claimed or batch.wave is not None
+    touches_forge = stage not in {"proposed", "obsolete"} or claimed or batch.wave is not None
     if dispatched:
         # gh#803: withdrawing writes labels and comments to the tracker, so it
         # is gated as dispatch is; a never-dispatched batch withdraws nothing.
@@ -2223,6 +2227,8 @@ def dispatch_batch(
         return
     # Step 6, in the spec's order: every gate before the first backend call.
     stage = derive_batch_stage(batch, facts)
+    if stage == "obsolete":  # never dispatched, every member closed: cancel retires it
+        _fail(obsolete_refusal(batch.id, "dispatch"))
     if stage not in DISPATCHABLE:
         last = last_dispatch(batch)
         _fail(
@@ -2231,6 +2237,10 @@ def dispatch_batch(
             f"{last.handle if last else '?'}). To complete its forge writes, run "
             f"`fr triage batch dispatch {batch.id} --repair --yes`"
         )
+    try:  # §B: an admit-pinned member is read live again; an edit since collect refuses
+        recheck_admitted(batch, facts, client)
+    except TriageError as exc:
+        _fail(f"batch {batch.id!r} cannot be dispatched: {exc}")
     try:
         taken = stage == "proposed" and checkout.remote_branch_exists(branch)
     except TriageError as exc:  # a forge read: the driver's boundary (gh#1025, review)
@@ -2431,6 +2441,8 @@ def adopt_batch(
     recorded = isinstance(last, DispatchEvent) and last.handle == tab and last.branch == new
     if not recorded:
         stage = derive_batch_stage(batch, facts)
+        if stage == "obsolete":
+            _fail(obsolete_refusal(batch.id, "adopt"))
         if stage not in DISPATCHABLE:
             _fail(
                 f"batch {batch.id!r} is {stage}; adopt takes a batch `batch dispatch` would "
@@ -6812,6 +6824,7 @@ class _Driver:
             if runs_post_merge else None,
             hand_back=lambda action: self._queue_hand_back(action, facts, repo),
             landed=lambda landings: self._queue_landed(facts, repo, landings),
+            mirrors=tuple(tuple(m) for m in config.mirrors), generated=tuple(config.generated),
         )  # fmt: skip
         executor = self._queue_execs.get(repo)
         if executor is None:

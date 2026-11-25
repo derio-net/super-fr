@@ -92,3 +92,42 @@ def test_verify_merge_refuses_rather_than_guessing(workspace) -> None:
     target, state = workspace
     with pytest.raises(IsolationError, match="gh auth login --hostname ghe.example"):
         target.verify_merge(state, "dev")
+
+
+_LOGIN_PAGE = "<!doctype html><html><head><title>Sign in</title></head><body></body></html>\n"
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "HTTP/2 200 OK\ncontent-type: text/html\n",
+        "HTTP/2 302\nlocation: https://sso.example.com/login\n",
+    ],
+    ids=["html-200", "redirect-302"],
+)
+def test_a_gitea_login_page_is_refused_by_name_not_read_as_main_or_no_pr(
+    workspace, monkeypatch: pytest.MonkeyPatch, stderr: str
+) -> None:
+    """R7 (spec 2026-11-19-consumer-followups, gh#1554): the tea adapter re-raises a
+    login page, so `up`'s default-branch read and the PR lookup of gc/down/status
+    refuse naming it, where they used to base on `main` or read "no PR"."""
+    import subprocess
+
+    from fr.real_teaclient import RealTeaClient
+
+    target, state = workspace
+    real_run = target.run
+
+    def login_page(argv: list[str], **kw: Any):  # noqa: ANN202
+        if argv[:2] == ["git", "symbolic-ref"]:
+            return subprocess.CompletedProcess(argv, 1, stdout="", stderr="")
+        if argv[:3] == ["tea", "api", "-i"]:
+            return subprocess.CompletedProcess(argv, 0, stdout=_LOGIN_PAGE, stderr=stderr)
+        return real_run(argv, **kw)
+
+    monkeypatch.setattr(target, "run", login_page)
+    monkeypatch.setattr(local_mod, "client_for", lambda _root: RealTeaClient())
+    with pytest.raises(IsolationError, match="cannot ask the forge: .*SSO or forward-auth"):
+        target._resolve_default_branch()
+    with pytest.raises(IsolationError, match="cannot ask the forge: .*SSO or forward-auth"):
+        target._pr_from(state.worktree, state.branch)

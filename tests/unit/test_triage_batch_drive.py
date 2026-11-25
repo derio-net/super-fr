@@ -41,6 +41,8 @@ from fr.triage.batch_drive import (
 from fr.triage.model import Batch, CursorPosition, Export, PullRequest
 from fr.triage.wave_queue import QueueConfig
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = "derio-net/super-fr"
 SID = "s-11111111"  # this scope's id: the export head names it (gh#1101)
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
@@ -1910,3 +1912,13 @@ def test_p3_r9_the_queue_never_takes_a_pr_held_by_gate_devops() -> None:
     assert not [a for q in plan.queues for a in q.actions if a.kind == "queue-open"]
     (held,) = [a for a in plan.actions if a.kind == "held"]
     assert "awaiting DevOps" in held.detail and "gate:devops-passed" in held.detail
+
+
+def test_checks_verdict_reads_a_cancelled_required_check_as_pending() -> None:
+    """Spec 2026-11-24-ci-economy R3: a cancelled check was superseded, never failing."""
+    from fr.triage.batch_drive import checks_verdict
+
+    required = [{"name": "test", "bucket": "cancel"}, {"name": "lint", "bucket": "pass"}]
+    assert checks_verdict(required, {}, ci_none=False) == ("pending", ("test",))
+    failing = [{"name": "test", "bucket": "cancel"}, {"name": "lint", "bucket": "fail"}]
+    assert checks_verdict(failing, {}, ci_none=False) == ("failing", ("lint",))

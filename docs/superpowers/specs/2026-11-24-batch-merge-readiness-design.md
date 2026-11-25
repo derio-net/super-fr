@@ -56,7 +56,7 @@ R12. A batch PR whose head can never carry a cursor (one opened before this chan
 (None: never asked). `read_cursor` returns every cursor naming the branch and tells "read,
 none found" from "could not read"; the stored position folds them (R1: delivered only when
 all are). The head it was read at is `PullRequest.head_oid`, which the driver compares with
-its live `pr_view` head. `FACTS_SCHEMA` moves 16 → 17 (`FACTS_READS` keeps 3–16).
+its live `pr_view` head. `FACTS_SCHEMA` moves 18 → 19 (`FACTS_READS` keeps 3–18; main took 17 and 18 while this branch was open).
 
 ### B. Readiness — one pure function (R1–R6)
 

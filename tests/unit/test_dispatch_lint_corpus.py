@@ -18,7 +18,10 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import NamedTuple
 
+import pytest
 from fr.parser import Plan, PlanSchemaError, parse
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LIVE_PLANS = REPO_ROOT / "docs" / "superpowers" / "plans"

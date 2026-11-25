@@ -125,6 +125,7 @@ class World:
         git(self.seed, "fetch", "--quiet", "origin")
         git(self.seed, "checkout", "--quiet", "-B", "main", "origin/main")
         for path, text in files.items():
+            (self.seed / path).parent.mkdir(parents=True, exist_ok=True)
             (self.seed / path).write_text(text)
         git(self.seed, "add", "--all")
         git(self.seed, "commit", "--quiet", "-m", "foreign")

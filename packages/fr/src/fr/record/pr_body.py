@@ -44,6 +44,7 @@ __all__ = [
     "OWED_ROW_STATUSES",
     "DURABLE_PR_BODY_SUFFIX",
     "HEADING_OWED_DISCHARGED",
+    "HEADING_SHAPE",
     "OWED_NOT_APPLICABLE",
     "DischargedOwed",
     "UnreadableDischargeError",
@@ -78,9 +79,12 @@ __all__ = [
 
 PR_BODY_NAME = "pr-body.md"
 
+HEADING_SHAPE = "## Shape of the change"
+
 REQUIRED_SECTIONS = (
     "## Findings",
     "## Out-of-scope findings",
+    HEADING_SHAPE,
     "## Pre-merge verification owed",
     "## Post-merge verification owed",
     "## Manual operations",
@@ -95,7 +99,8 @@ run after merge can move; `Pre-merge verification owed` (spec
 before it, each with its exact walk command; `Manual operations` (spec
 2026-10-22-fr-ops R13) the plan's ops with their recorded state, `None.` when
 it has none; `PR settle` (spec 2026-11-23-pr-readiness-wait R7) each `git.settle` key's
-effective mode, its source and an override's reason."""
+effective mode, its source and an override's reason; `Shape of the change` (spec
+2026-11-24-show-me-visuals R10) the run's shape file, or why there is none."""
 
 HEADING_REVIEW_LENSES = "## Review lenses"
 """Rendered after the findings sections, never required: a live body older than the
@@ -176,6 +181,14 @@ def _prose_lines(body: str, *, as_github: bool = False) -> Iterator[tuple[str, s
             yield None
             continue
         yield raw, _LINK.sub(_one_ref_per_link, _CODE_SPAN.sub("", raw)).replace("*", "")
+
+
+def leaves_fence_open(text: str) -> bool:
+    """True when *text*, read as `_prose_lines` reads a PR body, ends inside a fence:
+    a block placed verbatim above more of the body would then hide the rest from
+    the closing-keyword gate (`fr.shape`, lens l-security-r1)."""
+    sentinel = "\n\nfr-fence-sentinel"
+    return list(_prose_lines(text + sentinel, as_github=True))[-1] is None
 
 
 def _closing_lines(
@@ -1526,6 +1539,8 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
     """The PR body fr owns: every `REQUIRED_SECTIONS` heading, in order, plus
     `## Historical reviews` when the run has any. The agent may add a summary
     above it; it may not drop a section."""
+    from fr.shape import shape_section
+
     inside, outside = _findings(repo_root, state)
     parts = [
         f"{_RENDER_MARKER}{state.run}; edit above this line only -->",
@@ -1533,6 +1548,8 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
         "\n".join(inside) if inside else "None.",
         "## Out-of-scope findings",
         render_out_of_scope(outside),
+        HEADING_SHAPE,
+        shape_section(repo_root, state),
     ]
     parts += [HEADING_REVIEW_LENSES, _review_lenses(repo_root, state)]
     historical = _historical(state)

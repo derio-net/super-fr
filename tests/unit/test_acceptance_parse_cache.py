@@ -10,6 +10,8 @@ import yaml
 from fr.acceptance import model
 from fr.acceptance.model import AcceptanceError, parse_matrix
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 
 ROW = """\
