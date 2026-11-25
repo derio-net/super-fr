@@ -185,3 +185,8 @@ Kept out of scope per the reviewer's tag (the closure's cycle and unknown-id saf
 ### l-docs-accuracy-r1-resolved-2 · finding [fixed] · resolves l-docs-accuracy-r1: fr-triage.md said the Batches page reads every driver clone; a standalone fr triage batches reads only the cwd clone
 
 operator chose fixed: the fix is in PR #1694
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved-2 created=2026-11-25T17:34:47+00:00 state=fixed resolves=l-tests-r5 answered_by=operator -->
+### l-tests-r5-resolved-2 · finding [fixed] · resolves l-tests-r5: No test for a cycle or an unknown id in the after closure
+
+operator chose fixed: the fix is in PR #1694
