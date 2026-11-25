@@ -206,3 +206,57 @@ def test_validate_plans_ignores_the_old_plan_config_under_quiet_and_stealth(
     assert "is ignored under placement " + placement in done.stderr, done.stderr
     assert done.returncode == 0, done.stderr + done.stdout
     assert OWNER_MISSING not in done.stdout + done.stderr
+
+
+def _remote_ref(root: Path, name: str) -> None:
+    """A remote-tracking `origin/<name>` in *root* (one empty commit points it somewhere)."""
+    env = {
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.com",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.com",
+        "PATH": "/usr/bin:/bin",
+    }
+    tree = subprocess.run(
+        ["git", "-C", str(root), "mktree"], input="", capture_output=True, text=True, check=True
+    ).stdout.strip()
+    sha = subprocess.run(
+        ["git", "-C", str(root), "commit-tree", tree, "-m", "x"],
+        capture_output=True,
+        text=True,
+        check=True,
+        env=env,
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "-C", str(root), "update-ref", f"refs/remotes/origin/{name}", sha], check=True
+    )
+
+
+@pytest.mark.parametrize("branch", ["fr-config", "fr"])
+def test_validate_plans_without_fr_reads_no_old_file_beside_a_configuration_branch(
+    root: Path, branch: str
+) -> None:
+    """Verification v-r2: with no `fr` to name the placement, the old file is read only when
+    the placement is certainly `repo`. A fetched `origin/fr-config` or `origin/fr` says it
+    may be quiet or stealth, so the old file's rules do not take effect."""
+    plan = _old_plan_config(root)
+    _remote_ref(root, branch)
+    done = _validate(root, plan)
+    assert NOTICE not in done.stderr, done.stderr
+    assert "is ignored" in done.stderr, done.stderr
+    assert done.returncode == 0, done.stderr + done.stdout
+    assert OWNER_MISSING not in done.stdout + done.stderr
+
+
+def test_validate_plans_whose_fr_fails_reads_no_old_file_beside_a_configuration_branch(
+    root: Path, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """v-r2: an `fr settings paths` that fails without a refusal names no placement either."""
+    plan = _old_plan_config(root)
+    _remote_ref(root, "fr-config")
+    stub = tmp_path_factory.mktemp("bin") / "fr"
+    stub.write_text("#!/bin/sh\necho boom >&2\nexit 1\n")
+    stub.chmod(0o755)
+    done = _validate(root, plan, {"FR_HARNESS_FR": str(stub)})
+    assert NOTICE not in done.stderr, done.stderr
+    assert OWNER_MISSING not in done.stdout + done.stderr

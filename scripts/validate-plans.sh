@@ -67,8 +67,19 @@ for _fr_key in FR_PLAN_CONFIG_FILE FR_PLANS_DIR FR_ARCHIVED_PLANS_DIR FR_LEGACY_
   _fr_val="$(_fr_answer "$_fr_key")"
   if [ -n "$_fr_val" ]; then printf -v "$_fr_key" '%s' "$_fr_val"; fi
 done
-# The placement, read like the paths above; empty (no `fr` to ask) is the `repo` layout.
+# The placement, read like the paths above. Empty (no `fr` to ask, or an `fr` that failed
+# without a refusal) is the `repo` layout only when no configuration branch was fetched:
+# a remote-tracking `fr-config` or `fr` means quiet or stealth may hold, and then the old
+# product file must not be read (verification v-r2).
 FR_PLACEMENT_SEEN="$(printf '%s\n' "$FR_PATHS" | sed -n 's/^FR_PLACEMENT=//p' | head -n 1)"
+if [ -z "$FR_PLACEMENT_SEEN" ]; then
+  for _fr_ref in refs/remotes/origin/fr-config refs/remotes/origin/fr; do
+    if git -C "$REPO_ROOT" rev-parse --verify -q "$_fr_ref" >/dev/null 2>&1; then
+      FR_PLACEMENT_SEEN="unknown (fr could not name it, and ${_fr_ref#refs/remotes/} exists)"
+      break
+    fi
+  done
+fi
 : "${FR_PLAN_CONFIG_FILE:=$REPO_ROOT/.fr/plan-config.yaml}"
 # The plan format moved to `.fr/plan-config.yaml` (S1 R9); until the release named by
 # the owed entry s1-refuse-old-paths, the old path is read while only it exists (R13).
