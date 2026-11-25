@@ -26,6 +26,13 @@ REQUIREMENTS_SECTION = """
 R1. The widget is built.
 """
 
+DESIGN_SHAPE_SECTION = """
+## Design shape
+
+none — a test fixture has no structure to draw
+"""
+"""Spec 2026-11-24-show-me-visuals R7: a spec past `brainstorm` carries one."""
+
 
 def now() -> str:
     return datetime.now().replace(microsecond=0).isoformat()
@@ -66,14 +73,32 @@ def row(
 
 
 def seed_requirements(repo: Path, spec_rel: str, *, status: str = "unwired") -> None:
-    """Give `spec_rel` a Requirements list and one matrix row (status
-    `status`) citing R1 — what phase sizing and the post-merge section read."""
+    """Give `spec_rel` a Requirements list, a `## Design shape` and one matrix
+    row (status `status`) citing R1 — what phase sizing, the spec gate and the
+    post-merge section read."""
     spec = repo / spec_rel
     spec.parent.mkdir(parents=True, exist_ok=True)
     text = spec.read_text() if spec.exists() else "# spec\n"
     if "## Requirements" not in text:
-        spec.write_text(text.rstrip("\n") + "\n" + REQUIREMENTS_SECTION)
+        text = text.rstrip("\n") + "\n" + REQUIREMENTS_SECTION
+    if "## Design shape" not in text:
+        text = text.rstrip("\n") + "\n" + DESIGN_SHAPE_SECTION
+    spec.write_text(text)
     write_matrix(repo, [row(spec_rel, status=status)])
+
+
+SHAPE_FILE = "```text\nwidget/\n  built.py   # the widget (R1)\n```\n"
+
+
+def write_shape_file(repo: Path, run_id: str, text: str = SHAPE_FILE) -> Path:
+    """The run's shape file (spec 2026-11-24-show-me-visuals R9), which `deliver`
+    asks of a run whose spec carries a `## Design shape` (R11)."""
+    from fr.shape import shape_path
+
+    path = shape_path(repo, run_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return path
 
 
 def write_phase_splits(repo: Path, spec_rel: str, plan_slug: str, reasons: dict[int, str]) -> None:

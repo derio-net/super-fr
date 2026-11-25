@@ -29,7 +29,7 @@ from tests.unit.record_support import (
     started_run,
     write_record,
 )
-from tests.unit.requirements_support import seed_requirements
+from tests.unit.requirements_support import DESIGN_SHAPE_SECTION, seed_requirements
 
 pytestmark = pytest.mark.own_artifacts
 
@@ -687,7 +687,7 @@ def _at_spec_review_with_acceptance(tmp_path: Path) -> Path:
     workflows_dir.mkdir(parents=True, exist_ok=True)
     (workflows_dir / "fr-goal.yaml").write_text(_spec_review_emits_acceptance_manifest())
     (root / "docs").mkdir(parents=True, exist_ok=True)
-    (root / "docs" / "spec.md").write_text("# spec\n")
+    (root / "docs" / "spec.md").write_text("# spec\n" + DESIGN_SHAPE_SECTION)
     (root / "docs" / "acceptance").mkdir(parents=True, exist_ok=True)
     write_matrix_fragments(root, "org: t\nrepo: t\nrows:\n")
     commit_all(root, "spec, matrix and manifest override")

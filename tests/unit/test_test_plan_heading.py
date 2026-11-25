@@ -255,7 +255,9 @@ def test_demoting_h1_moves_its_siblings_and_keeps_keyword_sections(tmp_path) -> 
     assert [s.text for s in test_plan_steps(out)] == ["Run it."]
 
 
-@pytest.mark.parametrize("kw", ["Implementation Plans", "Requirements", "Verification"])
+@pytest.mark.parametrize(
+    "kw", ["Implementation Plans", "Requirements", "Verification", "Design shape"]
+)
 def test_demotion_stops_at_each_keyword_section(kw: str, tmp_path) -> None:  # noqa: ANN001
     out = _repaired(tmp_path, f"# Test Plan\n\n1. Run it.\n\n## Notes\n\n## {kw}\n\n## Tail\n")
     assert f"\n## {kw}\n" in out and "\n## Tail\n" in out and "\n### Notes\n" in out

@@ -797,9 +797,10 @@ def _archive_run(repo_root: Path, plan_rel: Path) -> None:
 
 def archive_run_cursor(repo_root: Path, run_id: str) -> None:
     """Move run `run_id`'s cursor to implemented/runs/, carrying its usage
-    file (`_archive_usage`). With the cursor already archived, a usage file
-    left live is moved on its own. A no-op when the destination already holds
-    a cursor (a re-run) — the caller sees the live file remain.
+    file (`_archive_usage`). With the cursor already archived, a usage file,
+    PR body render or shape file left live is moved on its own. A no-op when the
+    destination already holds a cursor (a re-run) — the caller sees the live file
+    remain.
 
     Public so `fr archive --branch` can move an orphan cursor — one whose
     `emitted.plan` is already archived (2026-09-28-closeout-always §C's
@@ -810,6 +811,8 @@ def archive_run_cursor(repo_root: Path, run_id: str) -> None:
     if not src.exists():
         if dst.exists():
             _archive_usage(repo_root, dst, run_id)
+            _archive_pr_body(repo_root, run_id)
+            _archive_shape(repo_root, run_id)
         return
     if dst.exists():
         return
@@ -817,15 +820,29 @@ def archive_run_cursor(repo_root: Path, run_id: str) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
     _git_mv(repo_root, src.relative_to(repo_root), dst.relative_to(repo_root))
     _archive_pr_body(repo_root, run_id)
+    _archive_shape(repo_root, run_id)
 
 
 def _archive_pr_body(repo_root: Path, run_id: str) -> None:
     """Carry the run's durable PR body render (`forge.pr_body: minimal`, spec
-    2026-11-04-repo-feature-settings R10) to implemented/runs/ beside its cursor. Staged
-    first, like the usage file, so an uncommitted render moves too."""
+    2026-11-04-repo-feature-settings R10) to implemented/runs/ beside its cursor."""
     from fr.record.pr_body import durable_pr_body_path
 
-    src = durable_pr_body_path(repo_root, run_id)
+    _archive_beside_cursor(repo_root, run_id, durable_pr_body_path(repo_root, run_id))
+
+
+def _archive_shape(repo_root: Path, run_id: str) -> None:
+    """Carry the run's shape file (spec 2026-11-24-show-me-visuals R12) to
+    implemented/runs/ beside its cursor."""
+    from fr.shape import shape_path
+
+    _archive_beside_cursor(repo_root, run_id, shape_path(repo_root, run_id))
+
+
+def _archive_beside_cursor(repo_root: Path, run_id: str, src: Path) -> None:
+    """Move `src`, a file kept beside the run's live cursor, beside the archived one.
+    Staged first, like the usage file, so an uncommitted file moves too; an existing
+    destination is left alone (a re-run)."""
     if not src.is_file():
         return
     dst = archived_run_path(repo_root, run_id).with_name(src.name)

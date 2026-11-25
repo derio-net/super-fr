@@ -34,7 +34,7 @@ from fr.workflow.model import Step
 from fr.workflow.resolve import resolve_workflow
 from typer.testing import CliRunner
 
-from tests.unit.requirements_support import seed_requirements, write_phase_splits
+from tests.unit.requirements_support import seed_requirements, write_phase_splits, write_shape_file
 from tests.unit.spec_review_support import spec_review_evidence
 
 pytestmark = pytest.mark.own_artifacts
@@ -412,6 +412,7 @@ def _drive_to_implement(root: Path, run_id: str, branch: str, spec_rel: str, pla
     assert _fr(root, ["run", "start", "fr-goal", "--branch", branch, "--run-id", run_id])
     _fr(root, ["run", "advance", run_id])  # brainstorm: gate + brief
     seed_requirements(root, spec_rel)  # what `requirements` derives (2026-09-28 §C)
+    write_shape_file(root, run_id)  # what `deliver` asks of a spec with a design shape
     assert (
         _fr(
             root,

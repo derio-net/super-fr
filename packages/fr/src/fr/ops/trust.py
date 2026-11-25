@@ -55,6 +55,7 @@ TRUST_EXCLUDED: tuple[str, ...] = (
     f"{KIND_DIRS['run']}/<run-id>.records/*.yaml",
     f"{KIND_DIRS['run']}/<run-id>.records/pr-body.md",
     f"{KIND_DIRS['run']}/<run-id>.pr-body.md",
+    f"{KIND_DIRS['run']}/<run-id>.shape.md",
     f"{KIND_DIRS['acceptance-fragment']}/<feature>.yaml",
     f"{_ACC}/matrix.yaml",
     f"{_ACC}/report_local.html",
@@ -205,7 +206,7 @@ def is_trust_excluded(path: str, mode: str | None = None) -> bool:
             return len(parts) == 5 and parts[3] in _JOURNAL_SCOPES and parts[4].endswith(".md")
         if parts[2] == "runs":
             if len(parts) == 4:
-                return parts[3].endswith((".yaml", ".pr-body.md"))
+                return parts[3].endswith((".yaml", ".pr-body.md", ".shape.md"))
             if len(parts) == 5 and parts[3].endswith(".records"):
                 return parts[4].endswith(".yaml") or parts[4] == "pr-body.md"
     return False
