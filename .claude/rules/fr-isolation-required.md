@@ -58,7 +58,8 @@ To work here:
 - Enter isolation — `fr isolation up --branch <branch>` (or run fr-goal /
   fr-brainstorming / fr-debugging) and edit in the worktree.
 - For base-clone paths that are operator-managed (data, caches, memory), list
-  them in `.fr-isolation-allow` at the repo root (`*` spans `/`).
+  them in `.fr/isolation-allow` (`.fr-isolation-allow` at the root while it is
+  absent; `*` spans `/`). No line exempts either allowlist file itself.
 - For a deliberate one-off base edit, set `FR_BASE_OK=1`.
 
 **Carve-out — `fr-phase-executor` must NOT get its own worktree.** The org

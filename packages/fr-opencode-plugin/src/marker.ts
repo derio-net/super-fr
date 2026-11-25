@@ -408,6 +408,19 @@ function globMatch(pattern: string, value: string): boolean {
   return new RegExp(`^${escaped}$`).test(value);
 }
 
+/**
+ * Whether no allowlist may exempt *rel* (review p2-r5): either allowlist file itself
+ * (`.fr/isolation-allow`, `.fr-isolation-allow`, compared case-insensitively, since a
+ * case-insensitive filesystem writes the same file), or a path holding an empty, `.` or
+ * `..` segment. Otherwise a `*` or `.fr/**` line lets an edit tool rewrite the allowlist,
+ * and with it every later decision. Bash: `_fr_allowlist_protected`.
+ */
+export function allowlistProtected(rel: string): boolean {
+  const lc = rel.toLowerCase();
+  if (/\/\/|\/\.\.?\//.test(`/${lc}/`)) return true;
+  return lc === ".fr/isolation-allow" || lc === ".fr-isolation-allow";
+}
+
 function matchesAllowlist(toplevel: string, file: string): boolean {
   // `.fr/isolation-allow` in the working tree (S1 R8), never read from a ref; the old
   // `.fr-isolation-allow` only while it is absent (R13). Bash: the same two-path lookup.
@@ -424,6 +437,7 @@ function matchesAllowlist(toplevel: string, file: string): boolean {
   const rfile = `${rdir}${tail}`;
   const rel = relative(toplevel, rfile);
   if (rel.startsWith("..")) return false;
+  if (allowlistProtected(rel)) return false;
   const lines = readFileSync(allowPath, "utf-8").split("\n");
   for (const raw of lines) {
     const pattern = raw.trim();

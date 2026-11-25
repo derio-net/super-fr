@@ -815,3 +815,17 @@ describe("S1: the allowlist is .fr/isolation-allow (R8, R13)", () => {
     expect(matchesAllowlist(top, join(top, "projects", "x.md"))).toBe(false);
   });
 });
+
+describe("review p2-r5: the allowlist never unlocks itself", () => {
+  for (const allowAt of [".fr/isolation-allow", ".fr-isolation-allow"]) {
+    for (const edited of [".fr/isolation-allow", ".fr-isolation-allow", ".FR/Isolation-Allow"]) {
+      test(`${allowAt} with '*' does not allow an edit to ${edited}`, () => {
+        const top = realpathSync(repo);
+        mkdirSync(join(top, ".fr"), { recursive: true });
+        writeFileSync(join(top, allowAt), "*\n.fr/**\n.fr-isolation-allow\n");
+        expect(matchesAllowlist(top, join(top, "anything.ts"))).toBe(true);
+        expect(matchesAllowlist(top, join(top, edited))).toBe(false);
+      });
+    }
+  }
+});

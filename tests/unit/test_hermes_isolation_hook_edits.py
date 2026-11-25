@@ -265,3 +265,18 @@ def test_hermes_reads_the_new_switch_targets_and_allowlist(tmp_path: Path) -> No
     (tmp_path / "s").mkdir()
     config = stealth_config_setup(tmp_path / "s", shome)
     assert allowed(run_hook(payload(config / "target" / ".fr" / "ci.yaml"), {"HOME": str(shome)}))
+
+
+def test_hermes_never_lets_the_allowlist_unlock_itself(tmp_path: Path) -> None:
+    """Review p2-r5: the same library, so Hermes refuses an edit to either allowlist."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    (repo / ".devcontainer" / "dev").mkdir(parents=True)
+    (repo / ".devcontainer" / "dev" / "devcontainer.json").write_text("{}\n")
+    (repo / ".fr").mkdir()
+    (repo / ".fr" / "isolation-allow").write_text("*\n")
+    env = {"PATH": "/usr/bin:/bin"}
+    assert allowed(run_hook(payload(repo / "x.py"), env))
+    assert blocked(run_hook(payload(repo / ".fr" / "isolation-allow"), env))
+    assert blocked(run_hook(payload(repo / ".fr-isolation-allow"), env))

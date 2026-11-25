@@ -812,6 +812,19 @@ fr_sentinel_unlock() {
   rmdir "$1.lock" 2>/dev/null || true
 }
 
+# _fr_allowlist_protected <repo-relative path> — 0 when no allowlist may exempt the path
+# (review p2-r5): either allowlist file itself (`.fr/isolation-allow`, `.fr-isolation-allow`,
+# compared case-insensitively, since a case-insensitive filesystem writes the same file), or
+# a path holding an empty, `.` or `..` segment, which the glob would match unnormalised.
+# Otherwise a `*` or `.fr/**` line lets an edit tool rewrite the allowlist, and with it
+# every later decision. The OpenCode plugin's marker.ts `allowlistProtected` is the same rule.
+_fr_allowlist_protected() {
+  _fr_lc=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  case "/$_fr_lc/" in *//* | */./* | */../*) return 0 ;; esac
+  case "$_fr_lc" in .fr/isolation-allow | .fr-isolation-allow) return 0 ;; esac
+  return 1
+}
+
 # fr_isolation_decide_edit <file>
 #   0 -> ALLOW the edit; 1 -> BLOCK it.
 # An fr-enabled base-clone edit is blocked unless `.fr/isolation-allow` (or the old
@@ -880,7 +893,7 @@ fr_isolation_decide_edit() {
     _fr_rfile="$_fr_rdir${_fr_file#"$_fr_dir"}"
     _fr_rel=""
     case "$_fr_rfile" in "$_fr_rtop"/*) _fr_rel=${_fr_rfile#"$_fr_rtop"/} ;; esac
-    if [ -n "$_fr_rel" ]; then
+    if [ -n "$_fr_rel" ] && ! _fr_allowlist_protected "$_fr_rel"; then
       while IFS= read -r _fr_pattern || [ -n "$_fr_pattern" ]; do
         [ -n "$_fr_pattern" ] || continue
         case "$_fr_pattern" in \#*) continue ;; esac

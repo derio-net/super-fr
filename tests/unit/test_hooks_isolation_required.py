@@ -316,3 +316,22 @@ def test_the_fr_config_worktree_is_a_write_target_and_its_switch_is_read(
     assert allowed(run_hook(payload(wt / ".fr" / "ci.yaml"), env))
     # the product checkout, quiet through fr-config alone, stays blocked
     assert decision(run_hook(payload(tmp_path / "q" / "prod" / "src.py"), env)) == "deny"
+
+
+# --- review p2-r5: the allowlist never unlocks itself -------------------------------------
+
+
+@pytest.mark.parametrize("allow_at", [".fr/isolation-allow", ".fr-isolation-allow"])
+@pytest.mark.parametrize("edited", [".fr/isolation-allow", ".fr-isolation-allow"])
+def test_no_allowlist_allows_an_edit_to_either_allowlist(
+    tmp_path: Path, allow_at: str, edited: str
+) -> None:
+    """A `*` (or `.fr/**`) line would otherwise let an edit tool rewrite the allowlist
+    itself, and with it every later decision: both files are outside every allowlist."""
+    repo = fr_repo(tmp_path)
+    allow = repo / allow_at
+    allow.parent.mkdir(exist_ok=True)
+    allow.write_text("*\n.fr/**\n.fr-isolation-allow\n")
+    assert allowed(run_hook(payload(repo / "anything.py")))
+    assert decision(run_hook(payload(repo / edited))) == "deny"
+    assert decision(run_hook(payload(repo / edited, tool="Write"))) == "deny"
