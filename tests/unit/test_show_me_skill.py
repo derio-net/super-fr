@@ -15,6 +15,8 @@ import pytest
 import yaml
 from fr.commands import skills_cmd
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 SKILL = REPO / "plugins" / "super-fr" / "skills" / "fr-show-me" / "SKILL.md"
 

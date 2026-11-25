@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 SKILLS = REPO / "plugins" / "super-fr" / "skills"
 BRAINSTORMING = SKILLS / "fr-brainstorming" / "SKILL.md"

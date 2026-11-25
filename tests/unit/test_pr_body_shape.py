@@ -17,6 +17,8 @@ from tests.unit.lens_repo import lens_repo
 from tests.unit.record_support import RUN, commit_all
 from tests.unit.test_deliver_pr_body import _at_deliver, _body, _deliver, live
 
+pytestmark = pytest.mark.own_artifacts
+
 __all__ = ["live"]
 
 HEADING = "## Shape of the change"

@@ -14,6 +14,8 @@ from fr.shape import TWO_FORMS
 
 from tests.unit.record_support import RUN, commit_all, fr, head, snapshot, write_record
 
+pytestmark = pytest.mark.own_artifacts
+
 SPEC_REL = "docs/spec.md"
 NO_SECTION = "# spec\n\n## Requirements\n\nR1. The widget is built.\n"
 PROSE_SECTION = NO_SECTION + "\n## Design shape\n\nWe add a widget to the module.\n"
