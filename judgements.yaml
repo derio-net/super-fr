@@ -10560,3 +10560,14 @@ queues:
     main: 555f38f71caf0d6cf2d06cd5a2512841b35cc933
     entries:
     - batch: consumer-followups
+  - kind: queue_built
+    at: '2026-11-25T09:07:09.292312Z'
+    slot: 1
+    sha: 2e310c24c0a58a6c1a2958b4bf33c5bb3f130baf
+    entry:
+      pr: 1684
+      kind: closeout
+    head: d5328379d9e905cd1754da8271f40200fcd26fc5
+    patch_id: 124766fe9135e3fbf373709add0780e5462bda34
+    base: 555f38f71caf0d6cf2d06cd5a2512841b35cc933
+    parent: 555f38f71caf0d6cf2d06cd5a2512841b35cc933
