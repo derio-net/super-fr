@@ -246,6 +246,113 @@ def test_under_repo_the_queue_reads_gate_checks_without_asking(tmp_path: Path) -
     assert got == ["mine"]
 
 
+# --- `.fr/ci.yaml`'s gate_checks, tests and fast_tier (review p3-r1) --------------------
+
+CI_ALL = "gate_checks: [config-gate]\ntests: ci\nfast_tier: pytest --since {base}\n"
+
+
+def _executor_step() -> Any:
+    from fr.workflow.model import Step
+
+    return Step.model_validate(
+        {"id": "implement-phase", "kind": "agent", "agent": "super-fr:fr-phase-executor"}
+    )
+
+
+def _deliver_step() -> Any:
+    from fr.workflow.model import Step
+
+    return Step.model_validate({"id": "deliver", "kind": "agent", "evidence": ["tests", "docs"]})
+
+
+def test_unprotected_ci_keys_are_ignored_and_said_once(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Under quiet an unprotected `fr-config` cannot relax `deliver`'s suite evidence, put a
+    command into a brief, or choose the gate set: the keys are ignored, with the reason."""
+    from fr.commands.run_cmd import _tests_brief
+    from fr.run.ci_evidence import declared_fast_tier, declared_gates, declared_tests_mode
+
+    root = _quiet_with_config(tmp_path, {".fr/ci.yaml": CI_ALL})
+    capsys.readouterr()
+    assert declared_tests_mode(root) is None
+    assert declared_fast_tier(root) is None
+    assert declared_gates(root, "main") is None
+    assert _tests_brief(root, _executor_step()) == {}
+    assert _tests_brief(root, _deliver_step()) == {}
+    err = capsys.readouterr().err
+    said = [line for line in err.splitlines() if "ignoring" in line and "ci.yaml" in line]
+    assert len(said) == 1, err
+    assert "gate_checks, tests, fast_tier" in said[0] and FIX in said[0]
+    assert "local full-suite log" in said[0]
+
+
+def test_unprotected_gate_checks_fall_back_to_the_bases_required_checks(tmp_path: Path) -> None:
+    from fr.run.ci_evidence import _gate_names
+
+    root = _quiet_with_config(tmp_path, {".fr/ci.yaml": CI_ALL})
+    assert _gate_names(root, _Rules(), "o/r", "main") == ["from-the-base"]
+
+
+def test_protected_ci_keys_are_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from fr.commands.run_cmd import _tests_brief
+    from fr.run.ci_evidence import declared_fast_tier, declared_gates, declared_tests_mode
+
+    root = _quiet_with_config(tmp_path, {".fr/ci.yaml": CI_ALL})
+    monkeypatch.setattr(protection, "_origin_slug", lambda r: SLUG)
+    client = _Rules()
+    monkeypatch.setattr(protection, "_default_client", lambda space: client)
+    assert declared_tests_mode(root) == "ci"
+    assert declared_fast_tier(root) == "pytest --since {base}"
+    assert declared_gates(root, "main") == ["config-gate"]
+    assert _tests_brief(root, _executor_step())["tests"]["mode"] == "ci"
+    assert client.asked and set(client.asked) == {(SLUG, "fr-config")}
+
+
+def test_a_failed_protection_read_refuses_the_ci_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr import gh as _gh
+    from fr.run.ci_evidence import CiEvidenceRefused, declared_gates, declared_tests_mode
+
+    class _Broken:
+        def branch_rules(self, repo: str, branch: str) -> Any:
+            raise _gh.GhError("gh: Server Error (HTTP 502)", stderr="x")
+
+    root = _quiet_with_config(tmp_path, {".fr/ci.yaml": CI_ALL})
+    monkeypatch.setattr(protection, "_origin_slug", lambda r: SLUG)
+    monkeypatch.setattr(protection, "_default_client", lambda space: _Broken())
+    with pytest.raises(CiEvidenceRefused, match="HTTP 502"):
+        declared_tests_mode(root)
+    with pytest.raises(CiEvidenceRefused, match="HTTP 502"):
+        declared_gates(root, "main")
+
+
+def test_a_ci_yaml_without_guarded_keys_asks_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.run.ci_evidence import declared_tests_mode
+
+    root = _quiet_with_config(tmp_path, {".fr/ci.yaml": "other: 1\n"})
+    monkeypatch.setattr(protection, "_default_client", lambda space: _NeverAsked())
+    monkeypatch.setattr(protection, "_origin_slug", lambda r: SLUG)
+    assert declared_tests_mode(root) is None
+
+
+def test_under_repo_the_ci_keys_are_read_without_asking(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.run.ci_evidence import declared_tests_mode
+
+    root = make_repo(tmp_path)
+    (root / ".fr").mkdir()
+    (root / ".fr/ci.yaml").write_text(CI_ALL)
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "ci")
+    monkeypatch.setattr(protection, "_default_client", lambda space: _NeverAsked())
+    assert declared_tests_mode(root) == "ci"
+
+
 # --- the driver: post_merge and the queue's hold -------------------------------------
 
 

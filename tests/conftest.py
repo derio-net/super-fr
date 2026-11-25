@@ -93,10 +93,12 @@ def _fresh_protection_cache() -> None:
     """`fr.config.protection` keeps a branch's protection answer for the command; a test's
     fake forge must never meet an answer a previous test's forge gave."""
     from fr.config.protection import forget
+    from fr.run.ci_evidence import _IGNORED_SAID as _CI_IGNORED_SAID
     from fr.triage.collect import _IGNORED_SAID
 
     forget()
     _IGNORED_SAID.clear()
+    _CI_IGNORED_SAID.clear()
 
 
 @pytest.fixture(autouse=True)

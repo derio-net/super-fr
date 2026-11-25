@@ -4883,7 +4883,9 @@ def _tests_brief(repo_root: Path, step: Step) -> dict[str, Any]:
     the repo's own command (`.fr/ci.yaml`'s `fast_tier`, `{base}` made the run's
     default ref), present only when the repo names one: fr ships none. A value
     fr refuses refuses the brief (exit 2), never read as "not declared", and so
-    does a `fast_tier` whose default ref git cannot name: never a blank base."""
+    does a `fast_tier` whose default ref git cannot name: never a blank base. Under quiet
+    and stealth both keys come from the configuration branch only when the forge protects
+    it (`ci_evidence._at_tip`, review p3-r1): unprotected, this brief carries neither."""
     from fr.git import GitRefusal, remote_default_ref
     from fr.run.ci_evidence import CiEvidenceRefused, declared_fast_tier, declared_tests_mode
 

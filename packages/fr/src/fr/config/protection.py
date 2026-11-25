@@ -2,8 +2,9 @@
 R7, §C).
 
 Configuration that runs commands or decides merges (`.fr/candidate-install`, `.fr/ops.yaml`,
-`.fr/ci.yaml`'s `gate_checks`, and the keys of `.fr/triage.yaml` that run a command or decide
-whose PRs are trusted or merged, `GUARDED_TRIAGE_KEYS`) is read under `quiet` and `stealth`
+`.fr/ci.yaml`'s `gate_checks`, `tests` and `fast_tier` (`fr.run.ci_evidence.GUARDED_CI_KEYS`),
+and the keys of `.fr/triage.yaml` that run a command or decide whose PRs are trusted or
+merged, `GUARDED_TRIAGE_KEYS`) is read under `quiet` and `stealth`
 from a configuration branch anyone able to push to the repository could write. fr runs or
 gates on it only when the forge enforces, on that exact branch, a rule requiring a pull
 request with at least one approving review, and blocks force-pushes and deletion.

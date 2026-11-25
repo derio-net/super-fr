@@ -210,9 +210,12 @@ def test_stealth_at_pair_reads_the_config_tip_for_both_sides(tmp_path: Path, _ho
     assert config_space(root).at_pair("ci.yaml", "main", head) == (tip, tip)
 
 
-def test_quiet_declared_gates_ignore_the_branch_and_read_the_config_tip(tmp_path: Path) -> None:
+def test_quiet_declared_gates_ignore_the_branch_and_read_the_config_tip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from fr.run.ci_evidence import CiEvidenceRefused, declared_gates
 
+    _enforced(monkeypatch)
     root = quiet_repo(tmp_path)
     _commit(root, ".fr/ci.yaml", "gate_checks: [branch]\n", push=False)
     with pytest.raises(CiEvidenceRefused, match="origin/fr-config"):
@@ -371,7 +374,10 @@ class _RulesForge(_Forge):
 
 
 def _protected_rules() -> list[dict[str, object]]:
-    rules = Path(__file__).resolve().parents[1] / "fixtures/github_rest/rules/pull-request-approved.json"
+    rules = (
+        Path(__file__).resolve().parents[1]
+        / "fixtures/github_rest/rules/pull-request-approved.json"
+    )
     return list(json.loads(rules.read_text()))
 
 
