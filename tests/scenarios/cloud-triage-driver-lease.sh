@@ -13,7 +13,8 @@
 # the candidate install carries (phase 5): workspace A seeds the ref with one pending
 # dispatch request, which B's pass, restored from the ref alone, re-emits in its outbox
 # (R14); the executor answers it with a session, and `drive record` moves it into the
-# ref's sessions.yaml.
+# ref's sessions.yaml. Each workspace stands for its own host, with its own HOME: the state
+# lives in the host cache ~/.cache/fr/triage/<scope>/ (spec 2026-11-19 R17).
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 export FR_HOST_ID=0123456789abcdef FR_FORGE_API=rest
@@ -36,7 +37,7 @@ ref_sha() { git -C "$world/state.git" for-each-ref --format='%(objectname)' refs
 
 # Workspace A (the fixture) seeds the ref.
 a="$PWD"
-seed="$a/.fr/triage-state/$scope"
+seed="$HOME/.cache/fr/triage/$scope"
 mkdir -p "$seed"
 printf 'schema: 6\ntiers: [{n: 1, title: Now}]\nissues: {}\n' > "$seed/judgements.yaml"
 printf 'state_repo: %s\n' "$repo" > "$seed/scope-durable.yaml"
@@ -62,9 +63,11 @@ seeded="$(ref_sha)"
 
 # Workspace B: empty, restored from the ref by its first pass.
 b="$world/b"
+export HOME="$world/home-b"
+mkdir -p "$HOME"
 git init -q "$b" && git -C "$b" remote add origin "git@github.com:$repo.git" || fail "workspace B"
 cd "$b" || fail "cd B"
-state="$b/.fr/triage-state/$scope"
+state="$HOME/.cache/fr/triage/$scope"
 run_fr out triage drive pass --repo "$repo" --state-repo "$repo" --outbox "$world/outbox.json"
 require_exit 0 "$out"
 cmp -s "$seed/judgements.yaml" "$state/judgements.yaml" || fail "the pass did not restore the state"
@@ -107,11 +110,13 @@ expect_grep -- '--yes' "$out" "lease take without --yes says how to take it"
 # Workspace C (p4-r8): a host driver on the SAME host id, restored from the ref alone, is
 # refused by the cloud driver's lease the ref carries, naming it; it writes nothing.
 c="$world/c"
+export HOME="$world/home-c"
+mkdir -p "$HOME"
 git init -q "$c" && git -C "$c" remote add origin "git@github.com:$repo.git" || fail "workspace C"
 cd "$c" || fail "cd C"
 run_fr out triage state fetch --repo "$repo" --state-repo "$repo"
 require_exit 0 "$out"
-cstate="$c/.fr/triage-state/$scope"
+cstate="$HOME/.cache/fr/triage/$scope"
 cmp -s "$state/lease.yaml" "$cstate/lease.yaml" || fail "workspace C did not restore the lease"
 held_ref="$(ref_sha)"
 run_fr out triage batch drive --once --yes --repo "$repo"

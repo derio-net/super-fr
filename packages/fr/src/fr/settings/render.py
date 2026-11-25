@@ -20,6 +20,8 @@ _PLAIN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def _scalar(value: Any) -> str:
+    if value is None:
+        return "null"
     if isinstance(value, int):
         return str(value)
     return str(value) if _PLAIN.match(str(value)) else json.dumps(str(value))
@@ -33,7 +35,7 @@ def _allowed(name: str, field: FieldInfo) -> str | None:
         usable = PLACEHOLDERS if name == "with_issue" else PLACEHOLDERS - {"issue"}
         return "text using " + " ".join(f"{{{p}}}" for p in sorted(usable))
     if name == "schema_":
-        return "1"
+        return "1, 2 (2 is needed only by the triage section)"
     return None
 
 

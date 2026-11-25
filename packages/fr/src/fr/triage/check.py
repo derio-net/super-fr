@@ -209,6 +209,10 @@ class CheckResult:
     closed_in_progress: list[StaleInProgress] = field(default_factory=list)
     skipped: list[tuple[str, str]] = field(default_factory=list)
     config_ignored: list[tuple[str, list[str]]] = field(default_factory=list)
+    # (repo, declared, recorded): a one-repo scope whose settings name a state repo other
+    # than the one its `scope-durable.yaml` records (spec 2026-11-19 R20); fr keeps the
+    # recorded one.
+    state_repo_mismatch: list[tuple[str, str, str]] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         def row(i: Issue) -> dict[str, Any]:
@@ -226,6 +230,10 @@ class CheckResult:
         return {
             "skipped": [{"repo": r, "reason": why} for r, why in self.skipped],
             "config_ignored": {r: list(keys) for r, keys in self.config_ignored},
+            "state_repo_mismatch": [
+                {"repo": r, "declared": d, "recorded": rec}
+                for r, d, rec in self.state_repo_mismatch
+            ],
             "unranked": [row(i) for i in self.unranked],
             "unranked_prs": [pr_row(pr) for pr in self.unranked_prs],
             "settled": [row(i) for i in self.settled],
@@ -493,15 +501,30 @@ def unplaced_issues(facts: Facts, judgements: Judgements) -> list[Issue]:
     ]
 
 
+def state_repo_mismatches(facts: Facts, recorded: str | None) -> list[tuple[str, str, str]]:
+    """`(repo, declared, recorded)` for each repo whose declared `triage.state_repo` is not
+    the state repo the scope records (spec 2026-11-19 R20). Nothing while none is recorded:
+    the next explicit collect applies the declared one."""
+    if recorded is None:
+        return []
+    return [
+        (repo, declared, recorded)
+        for repo, declared in sorted(facts.state_repo_declared.items())
+        if declared.lower() != recorded.lower()
+    ]
+
+
 def classify(
     facts: Facts,
     judgements: Judgements,
     *,
     me: str | None = None,
     now: datetime | None = None,
+    recorded_state_repo: str | None = None,
 ) -> CheckResult:
     """Sort issues into their sets and report open PRs without a judgement. Given this
-    scope's id *me* and the clock *now*, also the claim sets (triage-claims R7)."""
+    scope's id *me* and the clock *now*, also the claim sets (triage-claims R7); given the
+    state repo the scope records, the state-repo mismatch set (spec 2026-11-19 R20)."""
     judged = {normalize_key(k) for k in judgements.issues}
     found = {i.key: i for i in facts.issues}
     unranked = [
@@ -540,6 +563,7 @@ def classify(
             unreachable.append(Unreachable(key=key, reason=reason))
     ignored_keys, skipped_repos = skew_entries(facts)
     return CheckResult(
+        state_repo_mismatch=state_repo_mismatches(facts, recorded_state_repo),
         skipped=skipped_repos,
         config_ignored=ignored_keys,
         unranked=unranked,

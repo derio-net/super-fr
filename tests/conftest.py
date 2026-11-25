@@ -267,6 +267,33 @@ def _fixed_triage_host_id(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FR_HOST_ID", "feedfacefeedface")
 
 
+def _main_checkout(root: Path) -> Path:
+    """The main checkout of the clone at *root* (the parent of its git common dir)."""
+    import subprocess
+
+    done = subprocess.run(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    return Path(done.stdout.strip()).parent if done.returncode == 0 else root
+
+
+_PROTECTED_CLONES = (REPO_ROOT, _main_checkout(REPO_ROOT))
+
+
+@pytest.fixture(autouse=True)
+def _never_move_this_checkouts_triage_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The checkout under test and its main checkout are clones whose old triage state
+    (`.fr/triage-state/`) the S1 move must never take into a sandbox home (spec 2026-11-19
+    R18): a suite run from the operator's clone would otherwise move live state into a tmp
+    dir that is then deleted."""
+    from fr.triage import state_home
+
+    monkeypatch.setattr(state_home, "PROTECTED_SOURCES", list(_PROTECTED_CLONES))
+
+
 @pytest.fixture(autouse=True)
 def _home_off_the_operators_machine(
     monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory

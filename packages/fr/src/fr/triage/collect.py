@@ -1121,6 +1121,53 @@ def read_config_lenient(forge: Forge, repo: str) -> tuple[TriageConfig | None, t
 _IGNORED_SAID: set[tuple[str, str]] = set()
 """(repo, line) pairs this process has said, so a driver's passes say each once."""
 
+SETTINGS_PATH = rel("settings")
+
+
+def read_declared_state_repo(forge: Forge, repo: str) -> str | None:
+    """The state repo *repo*'s `.fr/settings.yaml` names as `triage.state_repo` (spec
+    2026-11-19 R20), read through the forge from the repo's configuration space: its default
+    branch under `repo`, `fr-config` under quiet (`forge_ref`). The key decides where private
+    issue data is pushed, so it is trust configuration: from `fr-config` it counts only while
+    the forge enforces a pull-request rule there (R7, sec-1), and is otherwise ignored, said
+    once. None when the file or the key is absent, and when the file cannot be read or used
+    (said once): the state repo is then decided by the other rules, never guessed."""
+    from fr.config import protection
+    from fr.settings import SettingsError
+    from fr.settings.load import parse_settings_text
+
+    where = f"{repo}:{SETTINGS_PATH}"
+    try:
+        ref = forge_ref(forge, repo) or DEFAULT_BRANCH_REF
+        body = forge.read_file_at_ref(repo=repo, path=SETTINGS_PATH, ref=ref)
+        state_repo = parse_settings_text(body, source=where, servable=False).triage.state_repo
+    except ForgeError as exc:
+        if _NOT_FOUND in str(exc):
+            return None
+        _say_once(repo, f"triage.state_repo of {where} not read: {exc}")
+        return None
+    except (SettingsError, UnsupportedForgeOperation) as exc:
+        _say_once(repo, f"triage.state_repo of {where} not used: {exc}")
+        return None
+    if state_repo is None or ref == DEFAULT_BRANCH_REF:
+        return state_repo
+    at = f"{repo}:{ref}:{SETTINGS_PATH}"
+    try:
+        answer = protection.branch_protection(forge, repo, ref)
+    except protection.ProtectionReadError as exc:
+        _say_once(repo, f"triage.state_repo of {at} not used: {exc}")
+        return None
+    if isinstance(answer, protection.Enforced):
+        return state_repo
+    _say_once(repo, protection.ignored_line(["triage.state_repo"], answer, at))
+    return None
+
+
+def _say_once(repo: str, line: str) -> None:
+    if (repo, line) not in _IGNORED_SAID:
+        _IGNORED_SAID.add((repo, line))
+        print(f"fr triage: {line}", file=sys.stderr)
+
 
 def _guarded(forge: Forge, repo: str, ref: str, data: object) -> object:
     """*data* read from the configuration branch *ref* (spec 2026-11-19 R7, findings sec-1 and

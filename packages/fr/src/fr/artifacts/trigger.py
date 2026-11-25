@@ -129,8 +129,8 @@ with no super-fr checkout at all, which is the case where blocking it behind
 the command's whole purpose is to work where there is no checkout to be
 stale. `fr triage` (2026-09-21 fr-triage, spec §3.F′) meets the promise
 strictly: it never reads or writes a registered artifact, and every file it
-writes is under its own state directory (`<workspace>/.fr/triage-state/<scope>/`,
-kept out of git by an `info/exclude` line, or `--dir`; 2026-10-07 cloud-triage R4),
+writes is under its own state directory (`~/.cache/fr/triage/<scope>/`, its own git
+repository, or `--dir`; 2026-11-19 R17, moved there from a clone's `.fr/triage-state/`),
 plus its own state ref, the orphan branch `refs/heads/fr-triage/<scope-id>` (R5), which
 shares no history with the code and holds no registered artifact. Its batch verbs
 (2026-09-25 triage-batches, spec §5) also write the forge — labels, marker comments,

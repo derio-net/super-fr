@@ -1,8 +1,8 @@
 """`fr triage` CLI — backlog triage (spec 2026-09-21-fr-triage-design).
 
 `collect` reads the forge and writes `facts.json` under the scope's state
-directory (the workspace's `.fr/triage-state/<scope>/`, or `~/.cache/fr/triage/<scope>/`
-outside a clone; `--dir` names one outright). `check` reports the
+directory (`~/.cache/fr/triage/<scope>/`, a git repository of its own, spec 2026-11-19 R17;
+`--dir` names one outright). `check` reports the
 four sets (unranked, settled, orphaned, unreachable) and always exits 0.
 `backlog` writes the Backlog and Issues pages (`render` is its old name), and `--open`
 hands the Backlog to `webbrowser`.
@@ -51,6 +51,7 @@ from fr.triage.collect import (
     CollectStats,
     Forge,
     collect_facts_counted,
+    read_declared_state_repo,
 )
 from fr.triage.components import fragment_dir, page, pages_present, refresh_navs, remove_legacy
 from fr.triage.drive_errors import fail_exit
@@ -163,7 +164,7 @@ DirOpt = Annotated[
     Path | None,
     typer.Option(
         "--dir",
-        help="State directory, outright (default: <workspace>/.fr/triage-state/<scope>/).",
+        help="State directory, outright (default: ~/.cache/fr/triage/<scope>/).",
     ),
 ]
 QuotaFloorOpt = Annotated[
@@ -178,7 +179,8 @@ WorkspaceOpt = Annotated[
     Path | None,
     typer.Option(
         "--workspace",
-        help="The clone that holds the state (default: the clone of the working directory); "
+        help="The clone whose old .fr/triage-state/ copy is moved to the cache, and whose "
+        "stealth marker names the state repo (default: the working directory's clone); "
         "--dir wins over it.",
     ),
 ]
@@ -237,9 +239,9 @@ def _sync_with_ref(
     it included), as a compare-and-swap on the ref fetched here; a conflict refuses (exit
     2) with the fetch-and-retry line, while a push the remote refuses (a permission, a
     proxy's HTTP 403) is a warning: the command's own work is done, and the state stays
-    local until a push succeeds. A state directory in no git clone (the legacy
-    `~/.cache` one, or a `--dir` outside any clone) has nowhere to hold the ref: it is used
-    as before, unsynced, and the command says so."""
+    local until a push succeeds. The default state directory is its own git repository (the
+    cache, spec 2026-11-19 R17), so it always syncs; a `--dir` outside any clone has nowhere
+    to hold the ref: it is used as before, unsynced, and the command says so."""
     from fr.triage.state_ref import fetch_state, local_tree
 
     command = _COMMAND.get()
@@ -478,7 +480,11 @@ def collect_command(
     scope = _scope(repo, org)
     try:
         facts, out, _ = collect_into(
-            scope, resolve_state_dir(scope, dir_override, workspace), pr_limit=pr_limit, settle=True
+            scope,
+            resolve_state_dir(scope, dir_override, workspace),
+            pr_limit=pr_limit,
+            settle=True,
+            workspace=workspace,
         )
     except TriageError as exc:
         err_console.print(f"[red]error:[/red] {escape(str(exc))}", soft_wrap=True)
@@ -507,6 +513,7 @@ def collect_into(
     only: Iterable[str] | None = None,
     after_write: Callable[[Facts, frozenset[str]], None] | None = None,
     cursor_at: CursorReader | None = None,
+    workspace: Path | None = None,
 ) -> tuple[Facts, Path, CollectStats]:
     """Collect *scope* through `make_forge()` and write `<target_dir>/facts.json`.
 
@@ -530,6 +537,11 @@ def collect_into(
     Every batch not yet finished (no close-out recorded archived) is a gate-ledger branch
     (exit-gates §D Facts): its merged PR's labels are read, and its open PR's run cursor
     position is read through *cursor_at* (the drive's `gitseam` reader; None reads none).
+
+    A one-repo scope's `triage.state_repo` (spec 2026-11-19 R20) is read by a *settle*
+    collect only, and carried from the previous facts by the loops, so a paced pass spends no
+    read on it; *workspace* (else the working directory) is where the stealth rule (R19)
+    looks for a stealth marker.
     """
     from fr.config.protection import forget
 
@@ -569,6 +581,14 @@ def collect_into(
         cursor_at=cursor_at,
         known_labels=known_settled_labels(previous),
     )
+    if scope.kind == "repo":
+        declared = (
+            read_declared_state_repo(make_forge(), scope.target)
+            if settle
+            else (previous.state_repo_declared.get(scope.target) if previous else None)
+        )
+        if declared is not None:
+            facts = facts.model_copy(update={"state_repo_declared": {scope.target: declared}})
     target_dir.mkdir(parents=True, exist_ok=True)
     out = target_dir / "facts.json"
     out.write_text(
@@ -577,7 +597,7 @@ def collect_into(
     if after_write is not None:
         after_write(facts, stats.carried_repos)
     if settle:
-        _settle_state_repo(target_dir, facts)
+        _settle_state_repo(target_dir, facts, workspace=workspace)
     elif load_durable(target_dir).state_repo is None:
         err_console.print(f"warning: {NO_STATE_REPO}", markup=False, soft_wrap=True)
     return facts, out, stats
@@ -654,16 +674,32 @@ def state_repo_prompt() -> Ask | None:
     return ask
 
 
-def _settle_state_repo(target_dir: Path, facts: Facts) -> None:
-    """Decide where the scope's state ref lives on its first collect (R6, R7, §B), from the
-    scope's repos and the visibility collect just recorded, and write it to
-    `scope-durable.yaml` and the `scope.yaml` mirror. Decided once: an existing
-    `state_repo` is never asked again. Undecided (non-interactive), it warns, once per
-    collect, and the state stays local."""
+def _settle_state_repo(target_dir: Path, facts: Facts, *, workspace: Path | None = None) -> None:
+    """Decide where the scope's state ref lives on its first collect (R6, R7, §B; spec
+    2026-11-19 R19, R20), from the scope's repos, the visibility collect just recorded, a
+    one-repo scope's declared `triage.state_repo` and the stealth workspace it is collected
+    from, and write it to `scope-durable.yaml` and the `scope.yaml` mirror. Decided once: an
+    existing `state_repo` is never asked again (a different declared one is `fr triage
+    check`'s mismatch). Undecided (non-interactive, or a stealth tracking repo that is no
+    forge repo), it warns, once per collect, and the state stays local."""
+    from fr.triage.state_home import stealth_tracking
+
     durable = load_durable(target_dir)
     if durable.state_repo:
         return
-    chosen = decide_state_repo(facts.repos, facts.visibility, state_repo_prompt())
+    declared = next(iter(facts.state_repo_declared.values()), None)
+    stealthy, tracking = stealth_tracking(workspace if workspace is not None else Path.cwd())
+    if stealthy and tracking is None and declared is None:
+        err_console.print(
+            f"warning: this stealth workspace's tracking repo is no forge repo, so it cannot "
+            f"keep the state ref, and the product repo may not. {NO_STATE_REPO}",
+            markup=False,
+            soft_wrap=True,
+        )
+        return
+    chosen = decide_state_repo(
+        facts.repos, facts.visibility, state_repo_prompt(), declared=declared, stealth=tracking
+    )
     if chosen is None:
         err_console.print(f"warning: {NO_STATE_REPO}", markup=False, soft_wrap=True)
         return
@@ -802,10 +838,25 @@ def check_command(
     except TriageError as exc:  # a broken host id: the claim sets are left out, never fatal
         err_console.print(f"[yellow]warning:[/yellow] {escape(str(exc))}", soft_wrap=True)
         me = None
-    result = classify(facts, judgements, me=me, now=datetime.now(UTC))
+    target = resolve_state_dir(scope, dir_override, workspace, sync=False, prepare=False)
+    try:
+        recorded = load_durable(target).state_repo
+    except TriageError as exc:  # a broken scope-durable.yaml: the mismatch set is left out
+        err_console.print(f"[yellow]warning:[/yellow] {escape(str(exc))}", soft_wrap=True)
+        recorded = None
+    result = classify(facts, judgements, me=me, now=datetime.now(UTC), recorded_state_repo=recorded)
     if as_json:
         print(json.dumps(result.to_json(), indent=2, ensure_ascii=False))
         return
+    console.print(
+        f"[bold]state repo mismatch[/bold] ({len(result.state_repo_mismatch)}) — the repo's "
+        "settings name another state repo; the recorded one is kept"
+    )
+    for repo_name, declared, kept in result.state_repo_mismatch:
+        console.print(
+            f"  {escape(repo_name)}  declares {escape(declared)}, records {escape(kept)}",
+            soft_wrap=True,
+        )
     console.print(f"[bold]skipped repos[/bold] ({len(result.skipped)}) — not collected")
     for repo, why in result.skipped:
         console.print(f"  {escape(repo)}  {escape(why)}", soft_wrap=True)

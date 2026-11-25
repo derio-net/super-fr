@@ -217,6 +217,64 @@ def ensure_excluded(root: Path, entry: str) -> bool:
     return True
 
 
+def remove_excluded(root: Path, entry: str) -> bool:
+    """Drop every line that says exactly *entry* from `<common dir>/info/exclude`; whether
+    it wrote. The file is rewritten atomically, so a crash leaves the old or the new one."""
+    exclude = common_dir(root) / "info" / "exclude"
+    try:
+        text = exclude.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return False
+    lines = text.splitlines(keepends=True)
+    kept = [line for line in lines if line.rstrip("\r\n") != entry]
+    if len(kept) == len(lines):
+        return False
+    tmp = exclude.with_name(f".{exclude.name}.{os.getpid()}.tmp")
+    tmp.write_text("".join(kept), encoding="utf-8")
+    os.replace(tmp, exclude)
+    return True
+
+
+STATE_REPO_EXCLUDE = "*\n"
+"""The cache repository's whole `info/exclude` (spec 2026-11-19 R17): it ignores every file,
+because the repository exists only to hold the state ref's objects."""
+
+
+def init_state_repo(path: Path) -> None:
+    """Make *path* a git repository of its own whose `info/exclude` ignores everything (spec
+    2026-11-19 R17, §G); nothing when it already is one. No template is copied, so no hook a
+    user's `init.templateDir` names ever runs in it."""
+    if (path / ".git").is_dir():
+        return
+    path.mkdir(parents=True, exist_ok=True)
+    _run(["git", "init", "--quiet", "--template=", str(path)], path, timeout=GIT_TIMEOUT_SECONDS)
+    info = path / ".git" / "info"
+    info.mkdir(parents=True, exist_ok=True)
+    (info / "exclude").write_text(STATE_REPO_EXCLUDE, encoding="utf-8")
+
+
+def remove_worktree(path: Path) -> bool:
+    """`git worktree remove --force` *path*, run in the repository that registered it (read
+    from the worktree itself), then `git worktree prune` there. Whether git took it; a
+    directory that is no linked worktree is left to the caller."""
+    if not (path / ".git").is_file():
+        return False
+    try:
+        common = Path(git(["rev-parse", "--git-common-dir"], path).strip())
+    except GitError:
+        return False
+    common = common if common.is_absolute() else (path / common).resolve()
+    if not git_ok(["worktree", "remove", "--force", str(path)], common):
+        return False
+    git_ok(["worktree", "prune"], common)
+    return True
+
+
+def prune_worktrees(root: Path) -> None:
+    """`git worktree prune` in the clone at *root*: forget worktrees whose directory is gone."""
+    git_ok(["worktree", "prune"], root)
+
+
 # ------------------------------------------------- the state ref (a branch, CAS-pushed)
 
 _REF_IDENTITY = {

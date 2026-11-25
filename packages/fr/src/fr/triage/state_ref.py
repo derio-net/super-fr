@@ -405,17 +405,30 @@ def is_private(visibility: str | None) -> bool:
 
 
 def decide_state_repo(
-    repos: Iterable[str], visibility: Mapping[str, str], ask: Ask | None
+    repos: Iterable[str],
+    visibility: Mapping[str, str],
+    ask: Ask | None,
+    *,
+    declared: str | None = None,
+    stealth: str | None = None,
 ) -> str | None:
-    """Where a scope's state ref lives (R6, R7). Pure; the prompt is *ask*.
+    """Where a scope's state ref lives (R6, R7; spec 2026-11-19 R19, R20). Pure; the prompt
+    is *ask*. The privacy guard (`fr.triage.privacy`) judges every push to the answer,
+    whichever rule chose it (R21).
 
-    One repo: that repo, and no question. Several, at least one private: the operator
+    *declared* (a one-repo scope's `triage.state_repo`, R20) wins; then *stealth* (the
+    tracking repo of the stealth workspace the scope is first collected from, R19); then:
+    one repo: that repo, and no question. Several, at least one private: the operator
     picks one of the private ones. All public (a repo whose visibility is unknown counts
     as public here: it is never offered as the safe choice): the operator picks between
     a new repo for the refs and each public repo, warned of the leak. None when *ask*
     is None (non-interactive) or gives no answer: the state then stays local. An answer
     outside the choices is refused (`TriageError`)."""
     ordered = sorted(set(repos))
+    if declared is not None and len(ordered) == 1:
+        return declared
+    if stealth is not None:
+        return stealth
     if len(ordered) == 1:
         return ordered[0]
     if not ordered or ask is None:

@@ -37,7 +37,7 @@ printf 'fr_version: 4.9.0\n' >> "$DRIFT_CURSORS/r-b1.yaml"
 printf 'fr_version: 5.17.0\n' >> "$DRIFT_CURSORS/r-b2.yaml"
 
 # The scope's state, pushed to the ref: three dispatched batches and their sessions.
-state="$PWD/.fr/triage-state/$scope"
+state="$HOME/.cache/fr/triage/$scope"  # the host cache (spec 2026-11-19 R17)
 mkdir -p "$state"
 {
   printf 'schema: 6\ntiers: [{n: 1, title: Now}]\nissues:\n'

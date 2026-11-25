@@ -14,7 +14,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import shutil
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date
@@ -86,7 +85,10 @@ from fr.triage.stage import Stage, derive_stage
 # 16 adds (2026-11-19-wave-merge-queue §Config) per-config `TriageConfig.queue`, the wave merge
 # queue's block: `to_json` dumps it, `null` included, which a closed-world schema-15 reader
 # rejects; a file below 16 reads it as None, so no repo is driven by the queue until collect.
-FACTS_SCHEMA: Final[int] = 16
+# 17 adds (2026-11-19-event-driven-a-la-carte R20) `state_repo_declared`, the state repo a
+# one-repo scope's settings name: `to_json` dumps it, which a closed-world schema-16 reader
+# rejects; a file below 17 reads it as empty, so no mismatch is reported until collect.
+FACTS_SCHEMA: Final[int] = 17
 FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
 # The version this fr WRITES: every engine write stamps 13 (the wave merge queue's
 # `queues:` list and its events, a batch's `deferred` and `requeued` events and an
@@ -210,13 +212,15 @@ class Scope:
 
 
 STATE_EXCLUDE = f"{PRODUCT_TRIAGE_STATE}/"
-"""The `info/exclude` line that keeps every scope's workspace state out of git (R4)."""
+"""The `info/exclude` line an fr below S1 wrote into a clone to keep its state out of git;
+the move removes it (spec 2026-11-19 R18 rule 4, `fr.triage.state_home`)."""
 
 
 def legacy_state_dir(scope: Scope) -> Path:
-    """`$HOME/.cache/fr/triage/<scope>/`: where state lived before it moved into the
-    workspace (spec 2026-10-07-cloud-triage R4). Resolved through `_home()` like every
-    other fr cache path; `XDG_CACHE_HOME` is deliberately not read (spec-review r1)."""
+    """`$HOME/.cache/fr/triage/<scope>/`: the scope's state directory, a git repository of
+    its own (spec 2026-11-19 R17), and where `drive.lock` always lived. Resolved through
+    `_home()` like every other fr cache path; `XDG_CACHE_HOME` is deliberately not read
+    (spec-review r1). The name predates S1, when the state lived in the workspace."""
     return _home() / ".cache" / "fr" / "triage" / scope.name
 
 
@@ -227,76 +231,43 @@ def state_dir(
     workspace: Path | None = None,
     prepare: bool = True,
 ) -> Path:
-    """`--dir` if given, else `<workspace>/.fr/triage-state/<scope>/` (spec
-    2026-10-07-cloud-triage R4, §B).
+    """`--dir` if given, else `~/.cache/fr/triage/<scope>/` (spec 2026-11-19 R17, §G), from
+    any working directory.
 
-    The workspace is *workspace* (`--workspace`), else the clone holding the working
-    directory, each taken at its git toplevel. A `--workspace` that is no clone is
-    refused (`TriageError` naming it); with no `--workspace` and a working directory in
-    no clone, the state directory is `legacy_state_dir`, exactly as before (p3-r3: a host
-    command typed from `$HOME` keeps working, for every scope kind). The workspace
-    directory is kept out of git by one `info/exclude` line under the git common dir, so a
-    linked worktree is covered and no tracked file changes. The first time it is asked
-    for and does not exist, an existing `legacy_state_dir`'s durable files are copied in
-    (`import_legacy`) and the legacy directory is left where it is; once it exists,
-    nothing is copied again.
-    With `prepare=False`, only resolve the path: neither exclusion nor legacy import
-    occurs. Replacement previews use this without changing other commands' defaults.
+    The clone of *workspace* (`--workspace`), else of the working directory, is only where an
+    fr below S1 may have left the scope's state (`<clone>/.fr/triage-state/<scope>/`): the
+    first use moves it into the cache (R18, `fr.triage.state_home.settle`), and refuses
+    (`TriageError`) when it may not. A `--workspace` that is no clone is refused, naming it.
+    The cache's first use makes it a git repository whose `info/exclude` ignores everything,
+    so the state ref is built and pushed there with no product clone.
+    With `prepare=False`, only resolve the path: nothing is moved or created. Replacement
+    previews use this without changing other commands' defaults.
     """
-    from fr.triage import gitseam
+    from fr.triage import gitseam, state_home
 
     if override is not None:
         return override
     start = workspace if workspace is not None else Path.cwd()
     root = gitseam.toplevel(start) if start.is_dir() else None
-    if root is None:
-        if workspace is None:
-            return legacy_state_dir(scope)
+    if root is None and workspace is not None:
         raise TriageError(
-            f"{workspace} is in no git clone, and --workspace names the clone that holds the "
-            "state: pass a clone, or --dir to name a directory outright"
+            f"{workspace} is in no git clone, and --workspace names the clone whose old "
+            "triage state is moved: pass a clone, or --dir to name a directory outright"
         )
-    target = root / PRODUCT_TRIAGE_STATE / scope.name
+    target = legacy_state_dir(scope)
     if not prepare:
-        return target  # pure resolution: no exclude update or legacy import
-    gitseam.ensure_excluded(root, STATE_EXCLUDE)
-    legacy = legacy_state_dir(scope)
-    if not target.exists() and legacy.is_dir():
-        import_legacy(legacy, target)
+        return target  # pure resolution: nothing moved, nothing created
+    if root is not None and not _same_dir(root, target):
+        state_home.settle(scope.name, root, target)
+    state_home.ensure_repo(target)
     return target
 
 
-LEGACY_IMPORTED = ("facts.json", "scope.yaml")
-"""What a workspace takes from a legacy `~/.cache` state directory beside the
-`REF_FILES` entries (p3-r2): facts (rebuilt by the next collect anyway, but the board
-reads them now) and the host's own settings."""
-
-
-def import_legacy(legacy: Path, target: Path) -> None:
-    """Copy *legacy*'s durable files into the not-yet-existing *target* (p3-r2): every
-    `REF_FILES` entry that exists as a regular file, plus `LEGACY_IMPORTED`. Never the
-    `merge/` scratch worktrees, a `drive.lock` or a rendered page. Built beside *target*
-    and renamed into place, so a crash never leaves a half import that counts as done.
-    Nothing durable, nothing created."""
-    import os
-    import uuid
-
-    from fr.triage.state_ref import ref_entries
-
-    rels = [*ref_entries(legacy)]
-    rels += [n for n in LEGACY_IMPORTED if (legacy / n).is_file() and not (legacy / n).is_symlink()]
-    if not rels:
-        return
-    target.parent.mkdir(parents=True, exist_ok=True)
-    staging = target.parent / f".{target.name}.import-{uuid.uuid4().hex}"
+def _same_dir(a: Path, b: Path) -> bool:
     try:
-        for rel in rels:
-            (staging / rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(legacy / rel, staging / rel)
-        os.rename(staging, target)
-    except BaseException:
-        shutil.rmtree(staging, ignore_errors=True)
-        raise
+        return a.resolve() == b.resolve()
+    except OSError:
+        return False
 
 
 def issue_key(repo: str, number: int) -> str:
@@ -710,6 +681,10 @@ class Facts(_Strict):
     # (gate-backfill §I, schema 13).
     gated_prs: list[PullRequest] = []
     gated_unread: list[GatedUnread] = []
+    # OWNER/REPO -> the state repo that repo's `.fr/settings.yaml` names as
+    # `triage.state_repo` (spec 2026-11-19 R20, schema 17): read for a one-repo scope by an
+    # explicit collect, carried by the loops; `fr triage check` compares it with the record.
+    state_repo_declared: dict[str, str] = {}
 
     @field_validator("schema_")
     @classmethod
