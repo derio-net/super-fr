@@ -1429,9 +1429,11 @@ def create_config_branch(
     """Create origin's `fr-config` as ONE orphan commit holding *files* (tree path ->
     text), pushed with a plain push (never forced): the migration's creation of the
     configuration space (S1 R10, plan decision p2-create-at-init-and-migration). A push
-    origin refuses raises `SettingsError` and leaves no local branch behind. Refuses when
-    origin or this clone already has a `fr-config`: a change to an existing one is a pull
-    request (`fr.config.change.open_change`)."""
+    origin refuses raises `SettingsError` and leaves no local branch behind, or
+    `BranchRaceError` when origin now has a `fr-config` (another host created it first,
+    as stealth's `_create_branch` says). Refuses when origin or this clone already has a
+    `fr-config`: a change to an existing one is a pull request
+    (`fr.config.change.open_change`)."""
     net = network or _default_network(root)
     common = paths._common_dir(root)
     local = _git(root, "rev-parse", "--verify", "--quiet", f"{CONFIG_REF}^{{commit}}")
@@ -1445,6 +1447,14 @@ def create_config_branch(
     pushed = net(["git", "push", "--quiet", "origin", f"{CONFIG_REF}:{CONFIG_REF}"])
     if pushed.returncode != 0:
         _git(root, "update-ref", "-d", CONFIG_REF, created)
+        probe = net(["git", "ls-remote", "--exit-code", "origin", CONFIG_REF])
+        if probe.returncode == 0:  # lens review l-errors-r2: another host created it first
+            from fr.settings import BranchRaceError
+
+            raise BranchRaceError(
+                f"placement quiet: another host created `{CONFIG_BRANCH}` on origin first "
+                "(this clone's push was refused); nothing was forced (review p4-r1)"
+            )
         raise SettingsError(
             f"placement quiet: origin refused the push of the new `{CONFIG_BRANCH}`: "
             f"{(pushed.stderr or pushed.stdout or 'git push failed').strip()}. Nothing was "

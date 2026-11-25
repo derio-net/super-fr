@@ -601,3 +601,28 @@ def test_the_mode_of_a_moved_file_is_the_default_branchs(tmp_path: Path) -> None
     tree = git(_origin(tmp_path), "ls-tree", "-r", "fr-config")
     modes = {line.split()[-1]: line.split()[0] for line in tree.splitlines()}
     assert modes.get(".fr/candidate-install") != "100755"  # a mode change is held back too
+
+
+def test_a_quiet_creation_lost_to_another_host_is_a_branch_race(tmp_path: Path) -> None:
+    """Lens review l-errors-r2: another clone created `fr-config` between this clone's
+    probe and its push. The refusal is `BranchRaceError` (what `ensure_space` reads as "the
+    other one stands"), like stealth's, and no local branch is left behind."""
+    from fr.placement import quiet
+    from fr.settings import BranchRaceError
+
+    root = _quiet(tmp_path)
+    real = quiet._default_network(root)
+    other = tmp_path / "other"
+    git(tmp_path, "clone", "-q", str(_origin(tmp_path)), str(other))
+
+    def racing(argv: list[str]):  # type: ignore[no-untyped-def]
+        if "push" in argv:
+            git(other, "checkout", "-q", "--orphan", "fr-config")
+            git(other, "-c", "user.name=o", "-c", "user.email=o@example.invalid",
+                "commit", "-q", "--allow-empty", "-m", "theirs")  # fmt: skip
+            git(other, "push", "-q", "origin", "fr-config")
+        return real(argv)
+
+    with pytest.raises(BranchRaceError, match="another"):
+        quiet.create_config_branch(root, {".fr/settings.yaml": QUIET}, "m", network=racing)
+    assert git(root, "branch", "--list", "fr-config").strip() == ""
