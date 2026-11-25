@@ -6,7 +6,11 @@ Configuration that runs commands or decides merges (`.fr/candidate-install`, `.f
 whose PRs are trusted or merged, `GUARDED_TRIAGE_KEYS`) is read under `quiet` and `stealth`
 from a configuration branch anyone able to push to the repository could write. fr runs or
 gates on it only when the forge enforces, on that exact branch, a rule requiring a pull
-request and blocking force-pushes and deletion.
+request with at least one approving review, and blocks force-pushes and deletion.
+
+The limit, said wherever fr claims protection: fr reads the branch's effective rules, which
+do not name a ruleset's bypass actors, so a ruleset that lets someone bypass it still reads
+as enforced. The operator keeps the configuration branch's bypass lists empty.
 
 `branch_protection` asks the forge once per command (`GET repos/<repo>/rules/branches/<b>`,
 the effective rules) and answers `Enforced` or `NotEnforced(reason)`. The free-plan 403
@@ -58,17 +62,28 @@ merge `queue`, the `exit` gate remap, the `export` PR the driver lands). Read fr
 unprotected configuration branch, they are ignored: each one's absence is the safe default."""
 
 
+BYPASS_LIMIT: Final = (
+    "fr reads the branch's rules and cannot see bypass actors, so keep the ruleset's bypass "
+    "list empty"
+)
+"""What fr cannot check (review p3-r3), said with every fix and every claim of protection."""
+
+APPROVAL_MISSING: Final = "the pull-request rule requires no approving review"
+
+
 def fix_text(branch: str) -> str:
-    """What to change (spec §C)."""
+    """What to change (spec §C), with the limit of what fr checks."""
     return (
-        f"protect {branch} with a ruleset requiring pull requests (and blocking force-pushes "
-        "and deletion); GitHub needs a public repo or a paid plan for a private one"
+        f"protect {branch} with a ruleset requiring pull requests with at least one approving "
+        f"review (and blocking force-pushes and deletion); {BYPASS_LIMIT}; GitHub needs a "
+        "public repo or a paid plan for a private one"
     )
 
 
 @dataclass(frozen=True)
 class Enforced:
-    """The forge enforces a pull-request rule on *branch* of *repo*."""
+    """The forge enforces an approved-pull-request rule on *branch* of *repo* (bypass actors
+    unseen: `BYPASS_LIMIT`)."""
 
     repo: str
     branch: str
@@ -163,7 +178,20 @@ def _judge(reply: object) -> str | None:
         return "the branch has no rules"
     types = {r.get("type") for r in reply}
     missing = [said for kind, said in REQUIRED_RULES.items() if kind not in types]
+    if "pull_request" in types and not any(_approving(r) for r in reply):
+        missing.append(APPROVAL_MISSING)
     return "; ".join(missing) if missing else None
+
+
+def _approving(rule: dict[str, Any]) -> bool:
+    """A `pull_request` rule that needs at least one approving review (review p3-r3). Every
+    rule the forge returns applies, so one such rule is enough; a count that is not a
+    positive integer is none."""
+    if rule.get("type") != "pull_request":
+        return False
+    params = rule.get("parameters")
+    count = params.get("required_approving_review_count") if isinstance(params, dict) else None
+    return isinstance(count, int) and not isinstance(count, bool) and count >= 1
 
 
 def branch_protection(client: object, repo: str, branch: str) -> Answer:

@@ -182,7 +182,11 @@ the OpenCode plugin and the Hermes hook.
 
 `fr/config/protection.py` answers one question: does the forge enforce a pull-request rule on the
 configuration branch? On GitHub it reads `GET repos/<repo>/rules/branches/<branch>` through the
-forge adapter and answers **enforced** only when the effective rules include `pull_request`. A 403
+forge adapter and answers **enforced** only when the effective rules include `pull_request` with
+`required_approving_review_count` of at least 1, `non_fast_forward` and `deletion` (review p3-r3). fr
+reads the branch's rules, not who may bypass them: a ruleset with bypass actors still reads as
+enforced, so the operator keeps the configuration branch's bypass lists empty, and every refusal
+and every claim of protection says so. A 403
 that `_plan_lacks_rulesets` recognises, a 404, an empty rule list, an unreadable answer, and a
 forge whose adapter cannot read rules (GitLab, Gitea today) answer **not enforced**, each with its
 reason. The answer is cached for the command, never on disk.
@@ -191,8 +195,8 @@ Each executor of executable configuration asks it first under `quiet` and `steal
 `verification/walk.py` (runs `candidate-install`), the driver's `post_merge` and version commands
 (`triage/gitseam.py`), the ops probes and the ops gate (`ops/`), and the queue's `gate_checks`
 (`triage/queue_exec.py`). **Not enforced** refuses that action with the reason and the fix
-("protect `fr-config` with a ruleset requiring pull requests; GitHub needs a public repo or a paid
-plan for a private one"). Under `repo` nothing changes: the default branch's protection is the
+("protect `fr-config` with a ruleset requiring pull requests with at least one approving review;
+keep its bypass list empty; GitHub needs a public repo or a paid plan for a private one"). Under `repo` nothing changes: the default branch's protection is the
 repo owner's business today, and S1 does not change it (see Non-goals).
 
 ### D. The moved files and their migration (R8 to R13)

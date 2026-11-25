@@ -176,7 +176,7 @@ def test_sync_yes_without_expect_writes_on_a_protected_fr_config(
     done = _sync(repo, "--yes")
     assert done.exit_code == 0, done.output
     assert git(_origin(tmp_path), "show", "fr:settings.yaml") == NEW
-    assert "forge-protected" in done.output
+    assert "require an approved pull request" in done.output and "bypass" in done.output
     assert protection.config_target(quiet_config_space(repo)) == (
         "example-org/example-repo",
         "fr-config",

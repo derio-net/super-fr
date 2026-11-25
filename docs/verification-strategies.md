@@ -154,6 +154,13 @@ Any strategy that installs a build goes through the repo's own executable
 A repo without it cannot use `candidate`, `client-live` or `prerelease`, and
 `fr verification walk` says so by name.
 
+Under the `quiet` and `stealth` placements, the contract is on the configuration
+branch, not in the product repo. Then the walk runs it only when the forge protects
+that branch. The ruleset must require a pull request with at least one approving
+review. It must also block force-pushes and deletion. fr reads the rules of the
+branch. fr cannot see the bypass actors of a ruleset, so a ruleset with bypass actors
+passes this check. Keep the bypass list of that ruleset empty.
+
 ## What the walk checks
 
 `fr verification walk --run <run-id> --model <m>` always runs a baseline smoke

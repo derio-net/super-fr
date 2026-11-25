@@ -373,9 +373,11 @@ def _sync_placement(root: Path) -> str | None:
 
 def _protected_tip(root: Path, placement: str) -> str:
     """`--yes` without `--expect` (plan discovery p2-phase3-sync-needs-protection): the
-    configuration branch's tip, when the forge enforces a pull-request rule on it, so every
-    change there was reviewed; otherwise the refusal naming the preview (spec R6, R7)."""
-    from fr.config.protection import ProtectionReadError, require_protected
+    configuration branch's tip, when the forge's rules for it require a pull request with an
+    approving review and block force-pushes and deletion (what fr checked; it cannot see
+    bypass actors, `protection.BYPASS_LIMIT`); otherwise the refusal naming the preview (spec
+    R6, R7)."""
+    from fr.config.protection import BYPASS_LIMIT, ProtectionReadError, require_protected
     from fr.config.space import quiet_config_space, stealth_config_space
     from fr.placement import quiet, stealth
 
@@ -399,7 +401,10 @@ def _protected_tip(root: Path, placement: str) -> str:
         tip = quiet.sync_plan(root).tip
     else:
         tip = stealth.sync_plan_target(root, ref, target).tip
-    typer.echo(f"the configuration branch is forge-protected: writing from its tip {tip}")
+    typer.echo(
+        "the forge's rules for the configuration branch require an approved pull request and "
+        f"block force-pushes and deletion ({BYPASS_LIMIT}): writing from its tip {tip}"
+    )
     return str(tip)
 
 

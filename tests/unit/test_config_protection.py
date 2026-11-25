@@ -58,13 +58,51 @@ def _rest(reply: str | Exception) -> tuple[RealGhRestClient, _Gh]:
 
 
 def test_a_pull_request_rule_with_force_push_and_deletion_blocked_is_enforced() -> None:
-    client, fake = _rest(_reply("pull-request.json"))
+    client, fake = _rest(_reply("pull-request-approved.json"))
     assert protection.branch_protection(client, REPO, "fr-config") == Enforced(REPO, "fr-config")
     assert fake.calls == [f"repos/{REPO}/rules/branches/fr-config"]
 
 
+def test_a_pull_request_rule_needing_no_approval_is_not_enforced() -> None:
+    """Review p3-r3: a pull-request rule with `required_approving_review_count: 0` lets the
+    author merge their own unreviewed change, so it proves no review."""
+    client, _ = _rest(_reply("pull-request.json"))
+    answer = protection.branch_protection(client, REPO, "fr-config")
+    assert isinstance(answer, NotEnforced)
+    assert "requires no approving review" in answer.reason
+
+
+@pytest.mark.parametrize("count", [None, "1", True, -1])
+def test_an_unreadable_approval_count_is_not_enforced(count: object) -> None:
+    rules = json.loads(_reply("pull-request-approved.json"))
+    for r in rules:
+        if r["type"] == "pull_request":
+            if count is None:
+                del r["parameters"]["required_approving_review_count"]
+            else:
+                r["parameters"]["required_approving_review_count"] = count
+    client, _ = _rest(json.dumps(rules))
+    answer = protection.branch_protection(client, REPO, "fr-config")
+    assert isinstance(answer, NotEnforced)
+    assert "requires no approving review" in answer.reason
+
+
+def test_one_approving_pull_request_rule_among_several_is_enforced() -> None:
+    """Every rule GitHub returns applies, so the strictest pull-request rule decides."""
+    rules = json.loads(_reply("pull-request-approved.json"))
+    loose = next(r for r in json.loads(_reply("pull-request.json")) if r["type"] == "pull_request")
+    client, _ = _rest(json.dumps([loose, *rules]))
+    assert isinstance(protection.branch_protection(client, REPO, "fr-config"), Enforced)
+
+
+def test_every_refusal_says_fr_cannot_see_bypass_actors() -> None:
+    text = protection.fix_text("fr-config")
+    assert "at least one approving review" in text
+    assert "bypass" in text and "cannot see" in text
+
+
 def test_the_branch_is_quoted_in_the_route() -> None:
-    client, fake = _rest(_reply("pull-request.json"))
+    client, fake = _rest(_reply("pull-request-approved.json"))
     protection.branch_protection(client, REPO, "main-config/x")
     assert fake.calls == [f"repos/{REPO}/rules/branches/main-config%2Fx"]
 
@@ -90,7 +128,7 @@ def test_a_branch_with_no_rules_is_not_enforced() -> None:
 def test_a_pull_request_rule_alone_is_not_enforced(drop: str, said: str) -> None:
     """Protected means the branch takes changes only by pull request: a force-push or a
     deletion would replace or remove what was reviewed."""
-    rules = [r for r in json.loads(_reply("pull-request.json")) if r["type"] != drop]
+    rules = [r for r in json.loads(_reply("pull-request-approved.json")) if r["type"] != drop]
     client, _ = _rest(json.dumps(rules))
     answer = protection.branch_protection(client, REPO, "fr-config")
     assert isinstance(answer, NotEnforced)
@@ -171,7 +209,7 @@ def test_a_failed_read_through_triage_forge_errors_is_still_a_failed_read() -> N
 
 
 def test_the_graphql_client_reads_the_same_route() -> None:
-    fake = _Gh(_reply("pull-request.json"))
+    fake = _Gh(_reply("pull-request-approved.json"))
 
     class _Rest(RealGhRestClient):
         def __init__(self, host: str | None = None, run: Any = None) -> None:
@@ -189,7 +227,7 @@ def test_the_graphql_client_reads_the_same_route() -> None:
 
 
 def test_the_answer_is_cached_for_the_command_and_a_failure_is_not() -> None:
-    client, fake = _rest(_reply("pull-request.json"))
+    client, fake = _rest(_reply("pull-request-approved.json"))
     protection.branch_protection(client, REPO, "fr-config")
     protection.branch_protection(client, REPO, "fr-config")
     assert len(fake.calls) == 1
@@ -216,7 +254,7 @@ def test_two_forges_with_the_same_slug_get_their_own_answers() -> None:
         def branch_rules(self, repo: str, branch: str) -> Any:
             return json.loads(self.gh(["api", f"repos/{repo}/rules/branches/{branch}"]))
 
-    enforced = _Gh(_reply("pull-request.json"))
+    enforced = _Gh(_reply("pull-request-approved.json"))
     bare = _Gh(_reply("empty.json"))
     ghe = _Hosted("ghe.example.com", enforced)
     dotcom = _Hosted(None, bare)
@@ -303,7 +341,7 @@ def test_a_failed_read_refuses_naming_the_error(
 
 def test_enforced_lets_the_action_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(protection, "_origin_slug", lambda root: REPO)
-    client, _ = _rest(_reply("pull-request.json"))
+    client, _ = _rest(_reply("pull-request-approved.json"))
     protection.require_protected(_space("quiet", tmp_path), client, "run post_merge")
 
 
@@ -326,7 +364,7 @@ def test_under_stealth_the_tracking_repos_forge_answers_never_the_given_client(
 ) -> None:
     """Security review: under stealth the configuration branch lives in the tracking repo
     (maybe on another host); a product-repo client saying "protected" never answers for it."""
-    product_client, product_calls = _rest(_reply("pull-request.json"))
+    product_client, product_calls = _rest(_reply("pull-request-approved.json"))
     tracking_client, tracking_calls = _rest(_reply("empty.json"))
     monkeypatch.setattr(protection, "_default_client", lambda space: tracking_client)
     space = _space("stealth", tmp_path, tracking="git@github.com:example-org/track.git@main")

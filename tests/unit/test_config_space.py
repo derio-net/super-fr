@@ -371,7 +371,7 @@ class _RulesForge(_Forge):
 
 
 def _protected_rules() -> list[dict[str, object]]:
-    rules = Path(__file__).resolve().parents[1] / "fixtures/github_rest/rules/pull-request.json"
+    rules = Path(__file__).resolve().parents[1] / "fixtures/github_rest/rules/pull-request-approved.json"
     return list(json.loads(rules.read_text()))
 
 

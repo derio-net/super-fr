@@ -9,6 +9,11 @@ P3.T1.S1). Each `.json` file is the command's stdout; each `.error.json` is
   `non_fast_forward` and `pull_request`. **Redacted**: the org and repo names in
   `ruleset_source` are replaced by `example-org` / `example-org/example-repo`, and the
   `ruleset_id` / `integration_id` numbers by 1001-1003. Nothing else was edited.
+- `pull-request-approved.json` — captured **2026-11-25** the same way: a public third-party repo
+  whose effective rules are exactly `deletion`, `non_fast_forward` and `pull_request` with
+  `required_approving_review_count: 1` (review p3-r3: the only reply fr reads as enforced).
+  **Redacted**: `ruleset_source` is `example-org/example-repo` and `ruleset_id` is 1004.
+  Nothing else was edited. `pull-request.json` (0 approvals) is the negative case.
 - `no-pull-request.json` — `derio-net/super-fr` `main`: `deletion`, `non_fast_forward` and
   `required_status_checks`, no `pull_request` rule.
 - `empty.json` — `derio-net/super-fr` `fr-config`, a branch with no rules (`[]`).
