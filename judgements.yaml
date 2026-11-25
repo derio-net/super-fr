@@ -8513,6 +8513,12 @@ batches:
     - super-fr#1402
   - kind: post_merge
     at: '2026-11-19T09:20:05.023239Z'
+  - kind: closeout
+    at: '2026-11-25T20:26:11.124160Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -10451,6 +10457,33 @@ closeouts:
   handle: w3N:p3
   planned:
   - consumer-delivery
+  pr: 1704
+  head: 290e5d293af8be718e0434a258e41d52565e25e5
+  members:
+  - consumer-delivery
+  files:
+  - "A\tdocs/superpowers/implemented/journals/plans/2026-11-18-consumer-delivery.md"
+  - "A\tdocs/superpowers/implemented/journals/specs/2026-11-18-consumer-delivery.md"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-18-consumer-delivery/01.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-18-consumer-delivery/02.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-18-consumer-delivery/03.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-18-consumer-delivery/_meta.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-18-consumer-delivery/_prose.md"
+  - "A\tdocs/superpowers/implemented/runs/2026-11-18-feat-batch-consumer-delivery.yaml"
+  - "A\tdocs/superpowers/implemented/specs/2026-11-18-consumer-delivery-design.md"
+  - "A\tdocs/superpowers/implemented/usage/2026-11-18-feat-batch-consumer-delivery.yaml"
+  - "D\tdocs/superpowers/journals/plans/2026-11-18-consumer-delivery.md"
+  - "D\tdocs/superpowers/journals/specs/2026-11-18-consumer-delivery.md"
+  - "D\tdocs/superpowers/plans/2026-11-18-consumer-delivery/01.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-18-consumer-delivery/02.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-18-consumer-delivery/03.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-18-consumer-delivery/_meta.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-18-consumer-delivery/_prose.md"
+  - "D\tdocs/superpowers/runs/2026-11-18-feat-batch-consumer-delivery.yaml"
+  - "D\tdocs/superpowers/specs/2026-11-18-consumer-delivery-design.md"
+  - "D\tdocs/superpowers/usage/2026-11-18-feat-batch-consumer-delivery.yaml"
+  closes:
+  - derio-net/super-fr#1691
 queues:
 - repo: derio-net/super-fr
   wave: 22
