@@ -195,3 +195,52 @@ def test_run_advance_resolves_its_shape_through_the_guard(
     _enforce(monkeypatch)
     shape = run_cmd._resolve_manifest_checked_schema(root, state)  # type: ignore[arg-type]
     assert "REPO-OVERRIDE" in shape.description
+
+
+# --- lens review l-errors-r7: a branch never fetched is not a branch that is absent ------
+
+
+def _never_fetched(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A quiet checkout whose origin HAS fr-config, which this clone never fetched, and whose
+    fetch now fails."""
+    root = _root(tmp_path)
+    git(root, "update-ref", "-d", "refs/remotes/origin/fr-config")
+    _enforce(monkeypatch)
+
+    def down(repo: Path, branch: str, ref: str, what: str, command: str | None) -> None:
+        raise protection.UncheckedTipError(f"fr will not {what}: cannot fetch (connection reset)")
+
+    monkeypatch.setattr(protection, "_fetch", down)
+    return root
+
+
+def test_a_failed_first_fetch_refuses_an_executor_instead_of_reading_no_profiles(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.isolation.types import profiles_config
+
+    root = _never_fetched(tmp_path, monkeypatch)
+    with pytest.raises(protection.UncheckedTipError, match="connection reset"):
+        profiles_config(root)
+
+
+def test_a_failed_first_fetch_is_said_by_the_read_only_view(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from fr.services.resolve import resolve_services
+
+    root = _never_fetched(tmp_path, monkeypatch)
+    resolve_services(root)
+    err = capsys.readouterr().err
+    assert "protection unknown" in err and "connection reset" in err
+
+
+def test_no_configuration_branch_on_origin_reads_no_profiles_silently(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from fr.isolation.types import profiles_config
+
+    root = _never_fetched(tmp_path, monkeypatch)
+    git(tmp_path / "origin.git", "update-ref", "-d", "refs/heads/fr-config")
+    assert profiles_config(root) == {}
+    assert "protection unknown" not in capsys.readouterr().err

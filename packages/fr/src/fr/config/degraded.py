@@ -119,6 +119,22 @@ def degrade_profiles(data: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     return kept, dropped
 
 
+def _origin_lacks_branch(space: ConfigSpace) -> bool:
+    """Whether *space*'s configuration branch is known to be absent: its clone does not
+    exist yet (stealth before creation), or origin answers `ls-remote` with no such branch
+    (exit 2). A failed probe is not "absent" (lens review l-errors-r7)."""
+    from fr.placement.quiet import _default_network
+
+    repo = space.checkout if space.placement == "stealth" else space.product
+    if space.ref is None or not (repo / ".git").exists():
+        return True
+    branch = space.ref.removeprefix("origin/")
+    probe = _default_network(repo)(
+        ["git", "ls-remote", "--exit-code", "origin", f"refs/heads/{branch}"]
+    )
+    return probe.returncode == 2
+
+
 def read_profiles(space: ConfigSpace, cfg: Path, *, unknown_ok: bool = False) -> Any:
     """The profile declarations *cfg* under quiet or stealth (see the module docstring): the
     fetched tip's file in the configuration space, or an old path's file as the product's
@@ -137,10 +153,13 @@ def read_profiles(space: ConfigSpace, cfg: Path, *, unknown_ok: bool = False) ->
         try:
             protection.fetch_tip(space, what)
         except protection.UncheckedTipError as exc:
-            if not known:
+            if not known and _origin_lacks_branch(space):
                 return {}  # no configuration branch yet: the space declares nothing
-            if not unknown_ok:
+            if not unknown_ok:  # lens review l-errors-r7: unknown is not absent
                 raise
+            if not known:
+                _say(f"reading no profile declarations: protection unknown ({exc})")
+                return {}
             unknown = str(exc)
         except protection.ProtectionError:
             pass  # no forge protects the branch, so fr never fetches it: the last fetched tip
