@@ -572,7 +572,16 @@ def ensure_space(product: Path, *, include: dict[str, str] | None = None) -> boo
         )
     files = {space.tree_path(SETTINGS): settings, **pending_files(product, space)}
     files.update(include or {})
-    writer.create(files, _message(product, f"{SPACE_DIR}/ ({len(files)} files)"))
+    from fr.settings import BranchRaceError
+
+    try:
+        writer.create(files, _message(product, f"{SPACE_DIR}/ ({len(files)} files)"))
+    except BranchRaceError:
+        # Another host created the branch first (review p4-r1): what stands is read
+        # like any existing configuration branch, never assumed to hold *files*.
+        writer.fetch()
+        writer.refresh()
+        return False
     writer.refresh()
     return True
 
@@ -603,22 +612,29 @@ def move_across(
     writer.fetch()
     if not writer.exists():
         ensure_space(product, include={tree_path: body})
-    else:
-        at_tip = writer.tip(tree_path)
-        if at_tip is None:
-            url = writer.propose(tree_path, body, _message(product, below))
-            raise ProposedError(
-                f"{source} waits for review: fr proposed it as {tree_path} on the "
-                f"configuration branch in {url}. The product file stays until that merges; "
-                "then run `fr migrate artifacts --yes` again (S1 R10)"
-            )
-        if at_tip != body:
+        writer.fetch()  # read what the remote holds now, never what fr meant to push
+        if not writer.exists():
             raise SettingsError(
-                f"both {source} and {tree_path} on the configuration branch exist, with "
-                "different contents: fr will not choose between them. Keep the one you "
-                "want (a pull request to the configuration branch, or delete the product "
-                "file) and run `fr migrate artifacts --yes` again (S1 R12)"
+                f"the configuration branch did not appear after its creation: {source} "
+                "stays. Run `fr migrate artifacts --yes` again (S1 R10, review p4-r1)"
             )
-        writer.refresh()
+    # The one gate before a product file leaves (review p4-r1): the configuration
+    # branch's FETCHED tip holds the path with exactly the bytes moved.
+    at_tip = writer.tip(tree_path)
+    if at_tip is None:
+        url = writer.propose(tree_path, body, _message(product, below))
+        raise ProposedError(
+            f"{source} waits for review: fr proposed it as {tree_path} on the "
+            f"configuration branch in {url}. The product file stays until that merges; "
+            "then run `fr migrate artifacts --yes` again (S1 R10)"
+        )
+    if at_tip != body:
+        raise SettingsError(
+            f"both {source} and {tree_path} on the configuration branch exist, with "
+            "different contents: fr will not choose between them. Keep the one you "
+            "want (a pull request to the configuration branch, or delete the product "
+            "file) and run `fr migrate artifacts --yes` again (S1 R12)"
+        )
+    writer.refresh()
     source.unlink()
     return space.file(below)

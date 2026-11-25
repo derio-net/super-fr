@@ -24,6 +24,11 @@ class SettingsError(Exception):
     """The settings file (or the fr reading it) cannot be served; names file and key."""
 
 
+class BranchRaceError(SettingsError):
+    """A create-only push lost its lease: another host created the branch first
+    (review p4-r1). Nothing was forced; the caller re-fetches and reads what stands."""
+
+
 def load_settings(repo_root: Path) -> EffectiveSettings:
     """The effective settings of *repo_root* (see `fr.settings.load`)."""
     from fr.settings.load import load_settings as _load

@@ -728,12 +728,19 @@ def _create_branch(
     check_privacy(ref, origin_url(root), target_root=root)
     commit = _orphan_commit(wt, files, message)
     try:
-        push_ref_cas(wt, "origin", commit, f"refs/heads/{ref.branch}", expected_old=None)
+        landed = push_ref_cas(wt, "origin", commit, f"refs/heads/{ref.branch}", expected_old=None)
     except (PushRefusedError, GitError) as e:
         raise SettingsError(
             f"placement stealth: the tracking repo {ref.repo} refused the new branch "
             f"{ref.branch!r} ({str(e).strip()}); nothing was written (R24)"
         ) from e
+    if not landed:
+        from fr.settings import BranchRaceError
+
+        raise BranchRaceError(
+            f"placement stealth: another host created {ref.branch!r} on {ref.repo} first "
+            "(the create-only lease was lost); nothing was forced (review p4-r1)"
+        )
 
 
 def create_config_branch(root: Path, ref: StealthRef, files: dict[str, str], message: str) -> None:
@@ -852,10 +859,18 @@ def write_target_settings(
     cref = config_ref(ref)
     wt = ensure_worktree(root, ref)
     new_rel = f"{target}/{TARGET_SETTINGS}"
+    created = False
     if not (worktree_path(root, cref) / ".git").exists() and not _remote_has(cref, root):
-        _create_branch(root, wt, cref, {new_rel: text}, message)
-        ensure_worktree(root, cref)
-    else:
+        from fr.settings import BranchRaceError
+
+        try:
+            _create_branch(root, wt, cref, {new_rel: text}, message)
+            created = True
+        except BranchRaceError:
+            pass  # another host's branch stands: read it like any existing one
+        else:
+            ensure_worktree(root, cref)
+    if not created:
         check_config_branch(root, ref)
         clone = ensure_worktree(root, cref)
         if _at_tip(clone, cref, new_rel) != text:
