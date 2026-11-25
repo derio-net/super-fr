@@ -115,11 +115,54 @@ class ArtifactKind:
     """No `fr` reads this kind any more: its last migration deleted it (spec
     `2026-11-04-repo-feature-settings-design` R19, the matrix). Any file still
     under the locator is stale, and `fr validate artifacts` says so."""
+    locators: tuple[str, ...] = ()
+    """A kind that MOVED (spec 2026-11-19-event-driven-a-la-carte S1 §D): every locator
+    it has had, oldest first, the last one equal to `locator`. Empty for a kind that
+    never moved, whose `locator` is its one place. A location-stamped kind
+    (`location_stamp`) reads its version from which of them a file matched."""
+    roots: Callable[[Path, int], list[Path]] | None = None
+    """Where `locators[i]` (or `locator`, as index 0, for a kind with no `locators`) is
+    globbed for the checkout at the given repo root; None reads `search_roots`. A moved
+    kind's newest locator is rooted at the configuration space (`fr.config.space`)."""
 
     def read_version(self, path: Path) -> int:
         """The version `path` is on — `PRE_FRAMEWORK_VERSION` when unstamped."""
         declared = self.read_stamp(path)
         return PRE_FRAMEWORK_VERSION if declared is None else declared
+
+    @property
+    def all_locators(self) -> tuple[str, ...]:
+        """Every locator this kind is globbed at, oldest first."""
+        return self.locators or (self.locator,)
+
+
+# --- location stamps (moved kinds, S1 §D) ----------------------------------
+#
+# A kind that moved and has no stamp of its own carries its version in WHERE it is: the
+# file at its first locator is version 1, at its second version 2. Writing the stamp is
+# the move itself, so the writer is a no-op (the runner never stamps a relocating hop).
+
+
+def location_stamp(*locators: str) -> Callable[[Path], int | None]:
+    """The stamp reader of a kind moved through *locators* (oldest first): the 1-based
+    index of the NEWEST locator the path matches, so a more specific new locator
+    (`.fr/settings.yaml`) wins over an old one it also matches (`settings.yaml`)."""
+    patterns = tuple(f"**/{loc}" for loc in locators)
+
+    def read(path: Path) -> int | None:
+        for i in range(len(patterns) - 1, -1, -1):
+            if Path(path).full_match(patterns[i]):
+                return i + 1
+        raise ArtifactStampError(
+            f"{path}: at none of this kind's locations ({', '.join(locators)})"
+        )
+
+    return read
+
+
+def no_stamp_write(path: Path, version: int) -> None:
+    """A location-stamped kind's stamp writer: the move is the stamp (S1 §D.2)."""
+    del path, version
 
 
 # --- YAML-carried stamps (plan / run / matrix) ---------------------------
@@ -676,14 +719,22 @@ def iter_paths_of(repo_root: Path, kind: ArtifactKind) -> Iterator[Path]:
     """
     # Under quiet a placement-bound kind lives below every feature root of the fr
     # worktree, the same relative layout (review p3-r4); repo output is unchanged.
-    for root in search_roots(repo_root, kind.locator):
-        for path in sorted(root.glob(kind.locator)):
-            if ARCHIVE_SEGMENT in path.relative_to(root).parts:
-                continue
-            if kind.owns is not None and not kind.owns(path):
-                continue
-            if path.is_file():
-                yield path
+    seen: set[Path] = set()
+    for index, locator in enumerate(kind.all_locators):
+        roots = (
+            kind.roots(repo_root, index)
+            if kind.roots is not None
+            else search_roots(repo_root, locator)
+        )
+        for root in roots:
+            for path in sorted(root.glob(locator)):
+                if path in seen or ARCHIVE_SEGMENT in path.relative_to(root).parts:
+                    continue
+                if kind.owns is not None and not kind.owns(path):
+                    continue
+                if path.is_file():
+                    seen.add(path)
+                    yield path
 
 
 def own_feature(repo_root: Path) -> Callable[[Path], bool]:
