@@ -30,21 +30,31 @@ Before ANY command — reproduction, evidence-gathering, instrumentation, reads
 included; "just check X first" never reorders this:
 
 - **Already inside an active fr isolation workspace?** (e.g. a bug found
-  mid-fr-goal implementation) — **reuse it.** The failing test + fix land on
-  that feature's branch and ride its existing PR; a bug found while building a
-  feature must not spawn a competing PR. Confirm with `fr isolation status`.
-- **Cold start** (standalone bug, no active workspace):
+  mid-fr-goal implementation) — **reuse it, and start no run.** The failing
+  test + fix land on that feature's branch and ride its existing PR and its
+  existing run (`fr run start` keeps refusing a second run on a branch); a bug
+  found while building a feature must not spawn a competing PR. Confirm with
+  `fr isolation status`. The steps below that resolve `debug`, `review` and
+  `deliver` apply to a run this skill started; in a reused workspace the host
+  run's own steps carry the work and the debug journal stays a journal.
+- **Cold start** (standalone bug, no active workspace): start the run, which
+  ensures the workspace itself:
   ```bash
-  fr isolation up --branch fix/<slug> [--profile <name>]
+  fr run start fr-debugging --branch fix/<slug>
   ```
-  Name the branch for the bug now (`fix/<slug>`); the worktree, PR, and
-  cleanup key off it. A cold-start `fix/<slug>` is cut from freshly-fetched
-  `origin/<default>` (#322), so the fix is clean of whatever the base checkout
-  is parked on — to debug on the current branch by intent, add `--base HEAD`.
+  Name the branch for the bug now (`fix/<slug>`); the worktree, run, PR, and
+  cleanup key off it. The run is the shipped `fr-debugging` shape: `debug`,
+  then `review`, then `deliver` (§3–§4 resolve each with a step record), so the
+  PR's head carries a cursor whose `deliver` a batch driver can read. To pick a
+  devcontainer profile or debug on the current branch by intent, bring the
+  workspace up first and start the run on it: `fr isolation up --branch
+  fix/<slug> [--profile <name>] [--base HEAD]`, then the `fr run start` above. A
+  cold-start `fix/<slug>` is cut from freshly-fetched `origin/<default>` (#322),
+  so the fix is clean of whatever the base checkout is parked on.
   **No devcontainer profile → HARD STOP** — offer the fr-init interview; there
   is no unisolated fallback. (Under fr-goal: treat as a blocker — pause,
   fr-init, resume.)
-- **Stealth (`mode=stealth <tracking-repo>@<branch>`, or from the tracking repo `mode=stealth target=<path>`):** add `--stealth <tracking-repo>@<branch>` (or `--target <path>`) to that `fr isolation up`. The debug journal and every fr artifact then live in the tracking repo, never in the target; push with `fr push`, open the one draft PR with `fr pr create` (a plain-summary body), and never write the target's forge (no label, comment or issue). **Where the files go (quiet and stealth).** Under the default `repo` placement fr's artifacts live in the checkout, at the `docs/superpowers/…` paths named here. Under quiet or stealth they do not: run `fr settings paths --shell` in the workspace and use its answers — `FR_SPECS_DIR`, `FR_PLANS_DIR`, `FR_PLAN_JOURNALS_DIR`, `FR_DEBUG_JOURNALS_DIR` and the rest — for every path a skill names below `docs/superpowers/`. They point into the repo's `fr` worktree (quiet) or the tracking clone (stealth), the two places outside the workspace where the edit gate lets you write. A file you write by hand there (the spec) is committed in that checkout, never in the product worktree, where `fr push` refuses it. fr's own commands (`fr plan create`, `fr journal add`, `fr run …`) already follow the placement.
+- **Stealth (`mode=stealth <tracking-repo>@<branch>`, or from the tracking repo `mode=stealth target=<path>`):** add `--stealth <tracking-repo>@<branch>` (or `--target <path>`) to that `fr run start` (and to `fr isolation up`, if you bring the workspace up first). The debug journal and every fr artifact then live in the tracking repo, never in the target; push with `fr push`, open the one draft PR with `fr pr create` (a plain-summary body), and never write the target's forge (no label, comment or issue). **Where the files go (quiet and stealth).** Under the default `repo` placement fr's artifacts live in the checkout, at the `docs/superpowers/…` paths named here. Under quiet or stealth they do not: run `fr settings paths --shell` in the workspace and use its answers — `FR_SPECS_DIR`, `FR_PLANS_DIR`, `FR_PLAN_JOURNALS_DIR`, `FR_DEBUG_JOURNALS_DIR` and the rest — for every path a skill names below `docs/superpowers/`. They point into the repo's `fr` worktree (quiet) or the tracking clone (stealth), the two places outside the workspace where the edit gate lets you write. A file you write by hand there (the spec) is committed in that checkout, never in the product worktree, where `fr push` refuses it. fr's own commands (`fr plan create`, `fr journal add`, `fr run …`) already follow the placement.
 
 From here on follow fr-isolation's exec-bridge discipline: read/edit files in
 the worktree, run every command through `fr isolation exec -- …`. A broken
@@ -99,13 +109,30 @@ searchable:
 - `--kind finding --state fixed` — the source change + the failing test pinning
   it.
 
+**Resolve `debug` once the cause is confirmed and the fix is in.** With the run this
+skill started, `debug` is the first step (`fr run advance <run-id>` briefs it): resolve
+it with a step record whose `emitted: {debug: <the journal's path>}` names the debug
+journal (the file must exist), plus the entries of this investigation not yet flushed.
+That path is how every later reader finds the journal, so resolve `debug` before
+reviewing.
+
+**Review, then resolve `review`.** Dispatch ONE reviewer (`superpowers:requesting-code-review`)
+over the fix, brief it to end with a fenced `review-findings` block whose ids are
+`d-r<k>` (`in` scope: this fix is wrong or incomplete; `out`: true but not caused by it),
+and receive it (`superpowers:receiving-code-review`): fix each in-scope finding with a
+test or refute it with reasoning, never drop it. Resolve `review` with a record holding
+the reviewer's `kind: review` journal entry, the findings as `finding` entries, their
+resolutions, and `evidence: {review: <that entry's id>, reviewer: <the reviewer's
+dispatch id>}`. Resolve is refused while a `d-r<k>` finding is open.
+
 ## 4. Deliver
 
-Verify first (`superpowers:verification-before-completion`: failing test now passes, no others broken). In a repo with `.fr/docs.yaml`, run `fr docs check` before opening the PR: a page covering a path the fix changed needs an edit, or its `reviewed` stamp updated when it is still true.
-Open ONE PR via `superpowers:finishing-a-development-branch`, pushing with `fr push` and opening the draft with `fr pr create --title <t> --body-file <f>` — never `git push` or the forge CLI: they apply the repo's git policy (`git.*` in `fr settings show --json`; under `push`/`pr: ask` each refuses once, printing a request id and the `fr journal add --scope debug … --answered-by operator` line for this session's debug journal (the one journal the branch added): ask the operator with your question tool, the request id in the question text and the exact option `Approve <request-id>` (plus a decline) offered, record the line once they approve, then run the command again). The body is derived from
+Verify first (`superpowers:verification-before-completion`: failing test now passes, no others broken). In a repo with `.fr/docs.yaml`, run `fr docs check` before opening the PR (`deliver` derives it too): a page covering a path the fix changed needs an edit, or its `reviewed` stamp updated when it is still true.
+Open ONE PR via `superpowers:finishing-a-development-branch`, pushing with `fr push` and opening the draft with `fr pr create --title <t> --body-file <f>` — never `git push` or the forge CLI: they apply the repo's git policy (`git.*` in `fr settings show --json`; under `push`/`pr: ask` each refuses once, printing a request id and the `fr journal add --scope debug … --answered-by operator` line for this session's debug journal (the one journal the branch added): ask the operator with your question tool, the request id in the question text and the exact option `Approve <request-id>` (plus a decline) offered, record the line once they approve, then run the command again). The provisional body is derived from
 `fr journal render --scope debug` (root cause + fix + the failing-test-first narrative).
-Record the review — `fr journal add --scope debug --slug <s> --kind review` naming the findings raised, or that none were. There is no cursor here to enforce it as fr-goal's `journal-check` does, so nothing fails if you skip it; that is precisely why it is written down rather than assumed.
-Then `fr push` (`uv run fr push` in a worktree; on the host, never through `exec`) and confirm `git rev-list --count @{u}..HEAD` prints `0`. Every `fr journal add` is a local commit that nothing pushes, and the review record is written after the PR opened: left unpushed, the PR merges without it and the close-out's `verify-merge` refuses, when recovery already takes a second PR (#871). Your last step is `fr pr settle --wait <s>`: exit 4 → fix by merging `origin/<base>` for a conflict, never rebase or force-push, or an ordinary commit for a red check, else what the printed line says, `fr push`, re-run; exit 75 → re-run; exit 2 → fix what it names and re-run, not a fix round; after three fix rounds stop and report. To relax a concern, add a debug-journal decision `settle-conflicts` or `settle-ci` (title the mode, body the reason), then `fr push` it.
+The review is already recorded by the `review` step's record (§3): the run's cursor refuses `review` without a dispatched reviewer's entry or while a `d-r<k>` finding is open, and offers `deliver` only after it resolves.
+Then `fr push` (`uv run fr push` in a worktree; on the host, never through `exec`) and confirm `git rev-list --count @{u}..HEAD` prints `0`. Every `fr journal add` is a local commit that nothing pushes, and the review record is written after the PR opened: left unpushed, the PR merges without it and the close-out's `verify-merge` refuses, when recovery already takes a second PR (#871). Then `fr pr settle --wait <s>`: exit 4 → fix by merging `origin/<base>` for a conflict, never rebase or force-push, or an ordinary commit for a red check, else what the printed line says, `fr push`, re-run; exit 75 → re-run; exit 2 → fix what it names and re-run, not a fix round; after three fix rounds stop and report. To relax a concern, add a debug-journal decision `settle-conflicts` or `settle-ci` (title the mode, body the reason), then `fr push` it.
+Your last step is resolving `deliver` with a step record: `emitted: {pr: <the PR's url>}` and `evidence: {tests: <the log of the full suite you ran yourself after the resolve that opened `deliver`, or ci>}`. `docs` (`fr docs check`) and `settle` are derived, never passed, and the refusal names what to fix. Resolve renders the PR body from the debug journal (in-scope and out-of-scope findings) to `docs/superpowers/runs/<run-id>.records/pr-body.md`, and refuses until the live PR carries it, with the command that does it (`gh pr edit --body-file …` on GitHub); an out-of-scope finding is refused until deferred with `fr journal file`. Then `fr push` the cursor commits and confirm `git rev-list --count @{u}..HEAD` prints `0`. A debug run needs no plan, so `proportionality` is not owed.
 Once the PR is open, relay `closeout: fr pickup --branch <branch>` to the operator verbatim, as the last line of your final message with nothing after it — after merge, a NEW session runs it from the base clone (for a triage batch, the batch's driver, `fr triage batch drive`, starts that session through the batch's runner). The PR stays a draft: review approval and the ready transition are the operator's.
 Stop — the operator merges. Cleanup: that close-out brief is the route, ending in `fr isolation down` — immediate teardown when this skill brought the
 workspace up cold, otherwise `fr isolation gc` reaps the merged workspace automatically (fired on any up/down), so a missed `down` no longer leaks it.
