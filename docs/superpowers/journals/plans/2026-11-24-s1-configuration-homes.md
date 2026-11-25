@@ -735,3 +735,8 @@ Under quiet/stealth the 2->3 relocation builds the pushed bytes in memory from t
 ### p4-config-checkout-by-structure · decision · A configuration checkout is told by structure, never by a -config name (p4-r5) (phase 4)
 
 _config_checkout: quiet's fr-config worktree (HEAD refs/heads/fr-config at fr.config.space.quiet_checkout's path) or the migrating product's own quiet/stealth configuration space (MIGRATING_ROOT -> space_root). A product clone named ci-config finishes its profiles crash window in place. Tests: test_config_checkout_by_structure.py, stealth case in test_config_stealth_keeps_product.py.
+
+<!-- fr:journal kind=decision scope=plan id=p4-stealth-keeps-product-file created=2026-11-25T08:03:45+00:00 phase=4 -->
+### p4-stealth-keeps-product-file · decision · Under stealth the migration keeps the product file; supersedes discovery p4-stealth-product-deletion (p4-r6) (phase 4)
+
+Relocating hops declare SchemaMigration.keeps (stealth): the file goes to the tracking repo's <branch>-config, the product file stays (a v1 profiles file is restored to its committed bytes after fr's in-flight rewrite), fr prints once 'git -C <product> rm -- <rel>', commit_migration stages nothing for it, and a kept copy whose bytes the configuration branch's fetched tip holds is not owned by its kind (fr.config.migrate.moved_owns/kept_copy), so it never reads as stale. Spec R10 amended. Discovery p4-stealth-product-deletion is superseded. Tests: test_config_stealth_keeps_product.py.
