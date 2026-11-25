@@ -30,6 +30,9 @@ FR_BRANCH_PUSHERS = {
     # quiet's `fr` and `fr-config` (spec 2026-11-19-event-driven-a-la-carte R5, R6): the
     # creation of the configuration branch and the legacy switch on `fr`, plain pushes
     ("fr.placement.quiet", "write_branch_file"),
+    # the creation of `fr-config` by the migration and `fr settings init` (S1 R10): ONE
+    # orphan commit, a plain push that is never forced, refused when the branch exists
+    ("fr.placement.quiet", "create_config_branch"),
     # a configuration change's `fr-config-change/<slug>` branch, the head of its pull
     # request (plan decision p2-config-changes-by-pr); never the configuration branch
     ("fr.config.change", "open_change"),
