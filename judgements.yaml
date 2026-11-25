@@ -10475,3 +10475,13 @@ queues:
   - kind: queue_drain
     at: '2026-11-24T23:59:18.688376Z'
     main: 4b1f8bf3081ccea7c2fbeddf9bdff72d777ce80a
+  - kind: queue_cleared
+    at: '2026-11-25T00:17:55.362106Z'
+    detail: the release cleared the hold
+- repo: derio-net/super-fr
+  wave: 24
+  scope: s-f7ea4061
+  base: e3e25316b6975853a9fe325adac08728c31c395d
+  events:
+  - kind: queue_open
+    at: '2026-11-25T00:17:58.104472Z'
