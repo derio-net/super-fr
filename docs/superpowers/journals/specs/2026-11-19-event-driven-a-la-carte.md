@@ -337,3 +337,8 @@ Under quiet/stealth the repo's workflow shapes, verification strategies and prof
 ### spec-r13-legacy-by-tip · decision · R13 amended: under quiet/stealth the old-path fallback is decided by the configuration branch's fetched tip (p4-r2)
 
 While the configuration branch has a fetched tip the product's old path is ignored (R4 notice names it); only without one may an old file be read, and only at the product default branch's committed bytes. Executable/trust content from an old path degrades as R7 (amended) says. Implemented in fr.config.space.located; plan decision p4-legacy-by-tip.
+
+<!-- fr:journal kind=decision scope=spec id=spec-r10-stealth-keeps-product created=2026-11-25T08:04:03+00:00 -->
+### spec-r10-stealth-keeps-product · decision · R10 amended: unlink only after the fetched tip holds the bytes; under stealth the product file stays (p4-r1, p4-r6)
+
+A cross-space move removes the product file only once the configuration branch's fetched tip holds it with exactly the bytes moved. Under stealth it never commits a deletion on the target's branch: the file moves to the tracking repo's configuration branch, the product file stays (R4: ignored; a kept copy held byte-for-byte no longer reads as stale), and fr prints once the exact git rm. Plan decisions p4-verify-before-unlink, p4-stealth-keeps-product-file.
