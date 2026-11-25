@@ -7,9 +7,11 @@ with `ast`, as `test_import_direction.py` does, and collects every path-shaped s
 literal naming `.fr` or `.fr/...`: an argument of `Path(...)`, an operand of `/`, an
 argument of `open`, `read_text` or `show_at_commit`, an element of a `git show` argument
 list, and also a literal bound to a name or used as a default (a named path constant is a
-construction too; it belongs in `fr.config.space`). Messages are not constructions: a
-docstring, an f-string, and the arguments of `print`, the echo helpers, a logger, and an
-exception constructor are skipped.
+construction too; it belongs in `fr.config.space`). An f-string is one when a literal
+piece of it names `.fr` as a path segment (`f"{root}/.fr/ci.yaml"`, `f"{rev}:.fr/ci.yaml"`).
+Messages are not constructions: a docstring, and the arguments (f-strings included) of
+`print`, the echo helpers, a logger, `warnings.warn`, and an exception constructor are
+skipped (review p1-r5: an f-string anywhere else is a path until it is a message's).
 """
 
 from __future__ import annotations
@@ -36,6 +38,12 @@ ALLOWED_GLOBS = (
 PATH_SHAPED = re.compile(r"\.fr(/[^\s:]*)?")
 """`.fr` or `.fr/<path>`: no whitespace or colon, so a sentence that starts with a path
 (`.fr/ops.yaml settings:`) is a message, and `.fr-isolation` is another name."""
+
+FSTRING_PATH = re.compile(r"(?:^|[/:])\.fr(?:/[^\s:]*)?$")
+"""A literal piece of an f-string naming `.fr` as a path segment: at the piece's start or
+after `/` or `:` (a `<rev>:` prefix), running to the piece's end (a formatted value or the
+string's end follows), so `{root}/.fr/ci.yaml` and `{rev}:.fr/` match and a sentence does
+not."""
 
 MESSAGE_CALLS = frozenset(
     {
@@ -102,12 +110,15 @@ def constructions(source: str, name: str = "<module>") -> list[tuple[int, str]]:
     for node in ast.walk(tree):
         if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
             continue
-        if id(node) in skip or not PATH_SHAPED.fullmatch(node.value):
+        if id(node) in skip:
+            continue
+        piece = isinstance(parents.get(id(node)), ast.JoinedStr)
+        if not (FSTRING_PATH.search if piece else PATH_SHAPED.fullmatch)(node.value):
             continue
         up = parents.get(id(node))
         message = False
         while up is not None:
-            if isinstance(up, ast.JoinedStr) or (isinstance(up, ast.Call) and _is_message_call(up)):
+            if isinstance(up, ast.Call) and _is_message_call(up):
                 message = True
                 break
             up = parents.get(id(up))
@@ -143,7 +154,7 @@ from pathlib import Path
 def read(root):
     print(".fr/ci.yaml")
     raise ValueError(".fr/ci.yaml")
-    note = f"{root}/.fr/ci.yaml"
+    log.info(f"{root}/.fr/ci.yaml")
     return (root / ".fr/ci.yaml").read_text()
 '''
 
@@ -173,3 +184,19 @@ def test_the_scan_sees_each_construction_shape() -> None:
         ".fr/e",
         ".fr/f",
     ]
+
+
+def test_an_f_string_building_a_path_is_a_construction() -> None:
+    """Review p1-r5: an f-string is a message only as an argument of a message call."""
+    source = (
+        'Path(f"{root}/.fr/ci.yaml")\n'
+        'git(root, "show", f"{rev}:.fr/ci.yaml")\n'
+        'p = f"{root}/.fr/{name}"\n'
+        'raise ValueError(f"{root}/.fr/ci.yaml is bad")\n'
+        'log.warning(f"read {root}/.fr/ci.yaml")\n'
+        'typer.secho(f"{rev}:.fr/ci.yaml")\n'
+        'warnings.warn(f"{root}/.fr/ci.yaml")\n'
+        'print(f"{root}/.fr")\n'
+        'x = f"the product checkout\'s .fr/ under {p}"\n'
+    )
+    assert [line for line, _ in constructions(source)] == [1, 2, 3]

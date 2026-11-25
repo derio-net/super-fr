@@ -496,3 +496,18 @@ def test_the_queue_refuses_its_required_checks_when_fr_config_is_missing(
     root = quiet_repo(tmp_path)
     with pytest.raises(TriageError, match="origin/fr-config"):
         required_names(_Client(), Checkout(root), "o/r", "main")  # type: ignore[arg-type]
+
+
+def test_the_ops_gate_reads_the_queue_block_from_the_configuration_space(
+    tmp_path: Path,
+) -> None:
+    """Review p1-r5 found `queue_configured` building `<rev>:.fr/triage.yaml` itself: under
+    quiet it reads `fr-config`, and refuses while that space is missing."""
+    from fr.commands.ops_gate_cmd import HostCheckout
+    from fr.ops.gate import StageFailed
+
+    root = quiet_repo(tmp_path)
+    with pytest.raises(StageFailed, match="origin/fr-config"):
+        HostCheckout(root).queue_configured("main")
+    _push_orphan(root, "fr-config", {".fr/triage.yaml": "queue:\n  ci: push\n"})
+    assert HostCheckout(root).queue_configured("main") is True
