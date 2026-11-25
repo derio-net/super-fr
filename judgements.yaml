@@ -9852,6 +9852,7 @@ exports:
   at: '2026-11-25T10:16:16.465160Z'
   pr: 1685
   head: 95ff894e31fa07a7d6023dd84941669cd19e6568
+  merged: true
 closeouts:
 - repo: derio-net/super-fr
   item: derio-net/super-fr/run/closeout-2026-11-15-1
@@ -10655,3 +10656,15 @@ queues:
     entries:
     - pr: 1685
       kind: export
+  - kind: queue_drain
+    at: '2026-11-25T10:40:35.892839Z'
+    main: e7564c69e9eb50a1a7074f7baba0dac5a6a5167a
+  - kind: queue_halt
+    at: '2026-11-25T10:40:48.211228Z'
+    state: held
+    detail: "hold write refused: the drained hold: `git push --quiet --no-verify --force-with-lease=refs/heads/fr-hold/queue:6ef97a116af493a5e9473bdec8d7f7a77ba6f68d\
+      \ origin fae6f7ffa97cc7afa703a9148e1727061dab5954:refs/heads/fr-hold/queue` failed in /Users/idermitzakis/Docs/projects/super-fr:\
+      \ To https://github.com/derio-net/super-fr\n ! [remote rejected]     fae6f7ffa97cc7afa703a9148e1727061dab5954\
+      \ -> fr-hold/queue (failed)\nerror: failed to push some refs to 'https://github.com/derio-net/super-fr'"
+    land: push
+    main: e7564c69e9eb50a1a7074f7baba0dac5a6a5167a
