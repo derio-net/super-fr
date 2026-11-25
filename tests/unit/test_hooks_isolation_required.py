@@ -335,3 +335,36 @@ def test_no_allowlist_allows_an_edit_to_either_allowlist(
     assert allowed(run_hook(payload(repo / "anything.py")))
     assert decision(run_hook(payload(repo / edited))) == "deny"
     assert decision(run_hook(payload(repo / edited, tool="Write"))) == "deny"
+
+
+def _star_allow(repo: Path) -> None:
+    (repo / ".fr").mkdir(exist_ok=True)
+    (repo / ".fr" / "isolation-allow").write_text("*\n")
+
+
+def test_no_allowlist_allows_an_edit_to_the_isolation_marker(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    _star_allow(repo)
+    assert decision(run_hook(payload(repo / ".fr-isolation"))) == "deny"
+    assert decision(run_hook(payload(repo / ".FR-Isolation"))) == "deny"
+
+
+def test_an_alias_of_a_protected_file_is_refused_by_identity(tmp_path: Path) -> None:
+    """A symlink or hard link names the allowlist under another name: dev+inode decides."""
+    repo = fr_repo(tmp_path)
+    _star_allow(repo)
+    (repo / "notes").mkdir()
+    (repo / "notes" / "link").symlink_to(repo / ".fr" / "isolation-allow")
+    os.link(repo / ".fr" / "isolation-allow", repo / "notes" / "hard")
+    assert decision(run_hook(payload(repo / "notes" / "link"))) == "deny"
+    assert decision(run_hook(payload(repo / "notes" / "hard"))) == "deny"
+    assert allowed(run_hook(payload(repo / "notes" / "plain.md")))
+
+
+@pytest.mark.parametrize("name", [".fr-isolatİon", ".fr/isolatıon-allow", "ﬁle"])
+def test_a_non_ascii_name_beside_the_protected_files_is_refused(tmp_path: Path, name: str) -> None:
+    """Unicode case folding or normalisation could name a protected file: fail closed."""
+    repo = fr_repo(tmp_path)
+    _star_allow(repo)
+    assert decision(run_hook(payload(repo / name))) == "deny"
+    assert allowed(run_hook(payload(repo / "docs" / "café.md")))

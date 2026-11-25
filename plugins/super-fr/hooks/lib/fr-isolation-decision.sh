@@ -812,18 +812,38 @@ fr_sentinel_unlock() {
   rmdir "$1.lock" 2>/dev/null || true
 }
 
-# _fr_allowlist_protected <repo-relative path> — 0 when no allowlist may exempt the path
-# (review p2-r5): either allowlist file itself (`.fr/isolation-allow`, `.fr-isolation-allow`,
-# compared case-insensitively, since a case-insensitive filesystem writes the same file), or
-# a path holding an empty, `.` or `..` segment, which the glob would match unnormalised.
-# Otherwise a `*` or `.fr/**` line lets an edit tool rewrite the allowlist, and with it
-# every later decision. The OpenCode plugin's marker.ts `allowlistProtected` is the same rule.
-_fr_allowlist_protected() {
-  _fr_lc=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
-  case "/$_fr_lc/" in *//* | */./* | */../*) return 0 ;; esac
-  case "$_fr_lc" in .fr/isolation-allow | .fr-isolation-allow) return 0 ;; esac
-  return 1
-}
+# _fr_allowlist_protected <toplevel> <file> <repo-relative path> — 0 when no allowlist may
+# exempt the edit (review p2-r5): the isolation marker `.fr-isolation` and either allowlist
+# file (`.fr/isolation-allow`, `.fr-isolation-allow`) are never exempted, since a `*` or
+# `.fr/**` line would otherwise let an edit tool rewrite the gate's own inputs. Fail closed
+# on every way a filesystem can name the same file differently:
+#   1. a path holding an empty, `.` or `..` segment (the glob matches it unnormalised);
+#   2. the name, ASCII case-folded (a case-insensitive filesystem writes the same file);
+#   3. file identity: an existing target that IS (dev+inode, `-ef`, through symlinks) one
+#      of the protected files that exist at the toplevel;
+#   4. a name holding any non-ASCII byte whose parent is the toplevel or its `.fr`, by
+#      name or by identity (Unicode case folding or normalisation could name one of them).
+# The OpenCode plugin's marker.ts `allowlistProtected` is the same rule, and
+# tests/fixtures/isolation-decision-cases.json drives both.
+_fr_allowlist_protected() (
+  LC_ALL=C
+  _fr_top=$1 _fr_pfile=$2 _fr_lc=$(printf '%s' "$3" | tr '[:upper:]' '[:lower:]')
+  case "/$_fr_lc/" in *//* | */./* | */../*) exit 0 ;; esac
+  case "$_fr_lc" in .fr/isolation-allow | .fr-isolation-allow | .fr-isolation) exit 0 ;; esac
+  if [ -e "$_fr_pfile" ]; then
+    for _fr_p in .fr/isolation-allow .fr-isolation-allow .fr-isolation; do
+      [ -e "$_fr_top/$_fr_p" ] && [ "$_fr_pfile" -ef "$_fr_top/$_fr_p" ] && exit 0
+    done
+  fi
+  _fr_name=${_fr_lc##*/}
+  case "$_fr_name" in *[!\ -~]*) ;; *) exit 1 ;; esac
+  case "$_fr_lc" in */*/*) ;; */*) [ "${_fr_lc%%/*}" = .fr ] && exit 0 ;; *) exit 0 ;; esac
+  _fr_parent=${_fr_pfile%/*}
+  [ -d "$_fr_parent" ] || exit 1
+  [ "$_fr_parent" -ef "$_fr_top" ] && exit 0
+  [ -d "$_fr_top/.fr" ] && [ "$_fr_parent" -ef "$_fr_top/.fr" ] && exit 0
+  exit 1
+)
 
 # fr_isolation_decide_edit <file>
 #   0 -> ALLOW the edit; 1 -> BLOCK it.
@@ -893,7 +913,7 @@ fr_isolation_decide_edit() {
     _fr_rfile="$_fr_rdir${_fr_file#"$_fr_dir"}"
     _fr_rel=""
     case "$_fr_rfile" in "$_fr_rtop"/*) _fr_rel=${_fr_rfile#"$_fr_rtop"/} ;; esac
-    if [ -n "$_fr_rel" ] && ! _fr_allowlist_protected "$_fr_rel"; then
+    if [ -n "$_fr_rel" ] && ! _fr_allowlist_protected "$_fr_rtop" "$_fr_rfile" "$_fr_rel"; then
       while IFS= read -r _fr_pattern || [ -n "$_fr_pattern" ]; do
         [ -n "$_fr_pattern" ] || continue
         case "$_fr_pattern" in \#*) continue ;; esac

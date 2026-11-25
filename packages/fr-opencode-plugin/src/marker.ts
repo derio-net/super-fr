@@ -408,17 +408,40 @@ function globMatch(pattern: string, value: string): boolean {
   return new RegExp(`^${escaped}$`).test(value);
 }
 
+const PROTECTED_FILES = [".fr/isolation-allow", ".fr-isolation-allow", ".fr-isolation"] as const;
+
+/** Whether *a* and *b* both exist and are one file (dev+inode, through symlinks). */
+function sameFile(a: string, b: string): boolean {
+  try {
+    const sa = statSync(a);
+    const sb = statSync(b);
+    return sa.dev === sb.dev && sa.ino === sb.ino;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Whether no allowlist may exempt *rel* (review p2-r5): either allowlist file itself
- * (`.fr/isolation-allow`, `.fr-isolation-allow`, compared case-insensitively, since a
- * case-insensitive filesystem writes the same file), or a path holding an empty, `.` or
- * `..` segment. Otherwise a `*` or `.fr/**` line lets an edit tool rewrite the allowlist,
- * and with it every later decision. Bash: `_fr_allowlist_protected`.
+ * Whether no allowlist may exempt the edit of *file* (*rel* below *toplevel*; review
+ * p2-r5): the isolation marker `.fr-isolation` and either allowlist file are never
+ * exempted, since a `*` or `.fr/**` line would otherwise let an edit tool rewrite the
+ * gate's own inputs. Fail closed on every way a filesystem can name the same file:
+ * an empty, `.` or `..` segment; the ASCII case-folded name; file identity (dev+inode)
+ * with a protected file that exists at the toplevel; and a non-ASCII name whose parent
+ * is the toplevel or its `.fr`, by name or identity. Bash: `_fr_allowlist_protected`;
+ * tests/fixtures/isolation-decision-cases.json drives both.
  */
-export function allowlistProtected(rel: string): boolean {
-  const lc = rel.toLowerCase();
+export function allowlistProtected(toplevel: string, file: string, rel: string): boolean {
+  const lc = rel.replace(/[A-Z]/g, (c) => c.toLowerCase());
   if (/\/\/|\/\.\.?\//.test(`/${lc}/`)) return true;
-  return lc === ".fr/isolation-allow" || lc === ".fr-isolation-allow";
+  if ((PROTECTED_FILES as readonly string[]).includes(lc)) return true;
+  if (existsSync(file) && PROTECTED_FILES.some((p) => sameFile(file, join(toplevel, p)))) return true;
+  const name = lc.slice(lc.lastIndexOf("/") + 1);
+  if (!/[^\x20-\x7e]/.test(name)) return false;
+  const segments = lc.split("/");
+  if (segments.length === 1 || (segments.length === 2 && segments[0] === ".fr")) return true;
+  const parent = dirname(file);
+  return sameFile(parent, toplevel) || sameFile(parent, join(toplevel, ".fr"));
 }
 
 function matchesAllowlist(toplevel: string, file: string): boolean {
@@ -437,7 +460,7 @@ function matchesAllowlist(toplevel: string, file: string): boolean {
   const rfile = `${rdir}${tail}`;
   const rel = relative(toplevel, rfile);
   if (rel.startsWith("..")) return false;
-  if (allowlistProtected(rel)) return false;
+  if (allowlistProtected(toplevel, rfile, rel)) return false;
   const lines = readFileSync(allowPath, "utf-8").split("\n");
   for (const raw of lines) {
     const pattern = raw.trim();

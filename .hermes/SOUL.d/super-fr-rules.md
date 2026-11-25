@@ -102,7 +102,8 @@ pipeline skill ran this session.
    are not targets. Ask `fr settings paths --shell` for the directories
    (`FR_SPECS_DIR`, `FR_PLANS_DIR`, …).
 5. Path matches a glob in `.fr/isolation-allow` (`.fr-isolation-allow` while it is
-   absent; below) → allow. Neither allowlist file is ever exempted by one.
+   absent; below) → allow. Neither allowlist file nor the `.fr-isolation` marker is
+   ever exempted by one, whatever name (case, link, non-ASCII spelling) reaches it.
 6. Otherwise → **deny** with a message naming the three ways forward.
 
 One dependency failure is fail-**open**, and it is the only one: when `git`
@@ -196,7 +197,8 @@ that the workspace is a genuine isolation, per the checks above.
   only while it is absent) — a globlist in the working tree, never read from a ref,
   for operator-managed paths that legitimately live in the base clone (data, caches,
   memory). Matched against the file's repo-relative path; `*` spans `/`. No line
-  exempts either allowlist file itself, so an edit tool cannot widen it: edit it by
+  exempts either allowlist file or the `.fr-isolation` marker (by name, by file
+  identity through a link, or by a non-ASCII spelling beside them), so an edit tool cannot widen it: edit it by
   hand or with `FR_BASE_OK=1`. Example:
   ```
   # operator-managed, base-clone edits allowed

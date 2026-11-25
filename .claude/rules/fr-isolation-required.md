@@ -59,7 +59,8 @@ To work here:
   fr-brainstorming / fr-debugging) and edit in the worktree.
 - For base-clone paths that are operator-managed (data, caches, memory), list
   them in `.fr/isolation-allow` (`.fr-isolation-allow` at the root while it is
-  absent; `*` spans `/`). No line exempts either allowlist file itself.
+  absent; `*` spans `/`). No line exempts either allowlist file or
+  the `.fr-isolation` marker, under any name.
 - For a deliberate one-off base edit, set `FR_BASE_OK=1`.
 
 **Carve-out — `fr-phase-executor` must NOT get its own worktree.** The org

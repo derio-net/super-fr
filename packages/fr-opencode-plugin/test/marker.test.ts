@@ -2,7 +2,7 @@
 // isolated from the tool.execute.before wiring in index.test.ts.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -828,4 +828,34 @@ describe("review p2-r5: the allowlist never unlocks itself", () => {
       });
     }
   }
+});
+
+describe("review p2-r5: the marker, file identity and non-ASCII names", () => {
+  function starAllow(): string {
+    const top = realpathSync(repo);
+    mkdirSync(join(top, ".fr"), { recursive: true });
+    writeFileSync(join(top, ".fr", "isolation-allow"), "*\n");
+    return top;
+  }
+  test("the isolation marker is never exempted", () => {
+    const top = starAllow();
+    expect(matchesAllowlist(top, join(top, ".fr-isolation"))).toBe(false);
+    expect(matchesAllowlist(top, join(top, ".FR-Isolation"))).toBe(false);
+  });
+  test("a symlink or hard link to a protected file is refused by identity", () => {
+    const top = starAllow();
+    mkdirSync(join(top, "notes"));
+    symlinkSync(join(top, ".fr", "isolation-allow"), join(top, "notes", "link"));
+    linkSync(join(top, ".fr", "isolation-allow"), join(top, "notes", "hard"));
+    expect(matchesAllowlist(top, join(top, "notes", "link"))).toBe(false);
+    expect(matchesAllowlist(top, join(top, "notes", "hard"))).toBe(false);
+    expect(matchesAllowlist(top, join(top, "notes", "plain.md"))).toBe(true);
+  });
+  test("a non-ASCII name beside the protected files is refused; deeper it is not", () => {
+    const top = starAllow();
+    for (const name of [".fr-isolatİon", ".fr/isolatıon-allow", "ﬁle"]) {
+      expect(matchesAllowlist(top, join(top, name))).toBe(false);
+    }
+    expect(matchesAllowlist(top, join(top, "docs", "café.md"))).toBe(true);
+  });
 });
