@@ -9382,6 +9382,13 @@ batches:
     - packages/fr/src/fr/triage/kanban_render.py
     - packages/fr/src/fr/triage/model.py
     delivered: held
+  - kind: red_handback
+    at: '2026-11-25T15:15:34.435826Z'
+    pr: 1679
+    head: ebc2266b72b22b9cd5a908e855f8c4af0bd6517d
+    checks:
+    - 3 failing check(s)
+    delivered: none
 - id: consumer-followups
   title: 'Consumer-delivery follow-ups: plugin-dir judgement, Gitea job token, tea login error'
   ids:
