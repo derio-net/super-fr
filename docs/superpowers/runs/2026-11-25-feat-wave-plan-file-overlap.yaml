@@ -3,7 +3,7 @@ run: 2026-11-25-feat-wave-plan-file-overlap
 workflow: fr-goal@1
 branch: feat/wave-plan-file-overlap
 started: '2026-11-25T12:55:25+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -52,8 +52,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-11-25T15:44:19+00:00'
+    state: done
+    at: '2026-11-25T15:50:07+00:00'
     members:
     - implement-phase
     - review-phase
@@ -82,13 +82,20 @@ steps:
         evidence:
           visual: none
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-25T15:44:19+00:00'
           agent: a4cd5a1f28c90c472
           harness: claude-code
           model: claude-sonnet-5-5
           session: 0b0df376-70ba-43e5-92da-54c79b85d954
+          returned: '2026-11-25T15:50:07+00:00'
+          outcome: done
+        evidence:
+          review: review-p1
+          reviewer: a4cd5a1f28c90c472
+          visual: none
+          findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5
   journal-check:
     state: pending
   lens-review:
