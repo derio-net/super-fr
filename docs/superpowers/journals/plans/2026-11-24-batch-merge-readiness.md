@@ -254,3 +254,72 @@ the readers gained one branch each, the slug logic sits in the new fr.run.debug_
 ### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
 
 prose rewritten to fit the 120-line skill cap; mirrors regenerated
+
+<!-- fr:journal kind=review scope=plan id=p4-review created=2026-11-25T08:20:48+00:00 phase=4 -->
+### p4-review · review · Phase 4 code review: fr-debugging shape matches §E and every R11 reader names the debug journal; 7 in-scope gaps, 1 out (phase 4)
+
+Reviewer verified the manifest against §E, `debug` in REPO_TRACKED_ARTIFACTS, the debug-journal readers (record/apply slug, _evidence_target, _review_journal_entries, pr_body._journals and so unaccounted/deliver's leftovers gate), that run_exit/docs/deliver witnesses tolerate a run with no spec or plan, that fr-goal and fr-goal-light are unchanged, and that every command the skill names exists. Findings p4-r1..p4-r8.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-11-25T08:20:48+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · record template's _EMITTED_NAMES omits debug, so the debug step's brief never asks for emitted: {debug: ...} (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-11-25T08:20:48+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · _EvidenceTarget.subject says 'the spec' for the debug target; refusals and suggested commands name a spec that does not exist (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-11-25T08:20:48+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · PR body's Review lenses section says 'This run predates review lenses.' for every debug run (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-11-25T08:20:48+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · _run_journal ignores the debug journal, so a dead binding in a debug run refuses autonomous substitution (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-11-25T08:20:48+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · skill §0 starts no run in any reused workspace; R10 limits that to a workspace that already has a run (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-11-25T08:20:48+00:00 phase=4 state=open review_scope=in -->
+### p4-r6 · finding [open] (reviewer: in scope) · skill/explainer: no host-side note for fr run; offers fr journal add --kind review, which the review gate refuses before the step opens (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7 created=2026-11-25T08:20:48+00:00 phase=4 state=open review_scope=in -->
+### p4-r7 · finding [open] (reviewer: in scope) · vacuous test assertions ('debug'/'review' in output); no end-to-end deliver refusal on an open out-of-scope debug finding (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8 created=2026-11-25T08:20:48+00:00 phase=4 state=open review_scope=out -->
+### p4-r8 · finding [open] (reviewer: out of scope) · a reviewer's fenced review-findings block is validated only for phase targets, so the skill's d-r<k> block is unchecked (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-11-25T08:20:48+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: record template's _EMITTED_NAMES omits debug, so the debug step's brief never asks for emitted: {debug: ...} (phase 4)
+
+e80ac2bbc: _EMITTED_NAMES gains debug; test parses the brief JSON, asserts step == debug and the template's debug: line.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-11-25T08:20:48+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: _EvidenceTarget.subject says 'the spec' for the debug target; refusals and suggested commands name a spec that does not exist (phase 4)
+
+e80ac2bbc: subject returns 'the fix' for scope debug; test asserts 'filed against the fix are still open: d-r1' and the --scope debug resolve command. Spec/plan wording unchanged.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-11-25T08:20:48+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: PR body's Review lenses section says 'This run predates review lenses.' for every debug run (phase 4)
+
+e80ac2bbc: pr_body._shape_has_lens_review reads the run's manifest; a shape with no lens-review step renders 'This workflow has no lens review.' (test_pr_body_lenses.py).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-11-25T08:20:48+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: _run_journal ignores the debug journal, so a dead binding in a debug run refuses autonomous substitution (phase 4)
+
+e80ac2bbc: _run_journal falls back to the run's debug journal after plan, before spec; test added. run_cmd.py held at its 9100 budget.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-11-25T08:20:48+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: skill §0 starts no run in any reused workspace; R10 limits that to a workspace that already has a run (phase 4)
+
+7198f79de, cc9a45747: §0 checks the branch for an existing cursor; with one it starts none, without one it runs fr run start fr-debugging --branch <that branch>. Explainer matches.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-11-25T08:20:48+00:00 phase=4 state=fixed resolves=p4-r6 -->
+### p4-r6-resolved · finding [fixed] · resolves p4-r6: skill/explainer: no host-side note for fr run; offers fr journal add --kind review, which the review gate refuses before the step opens (phase 4)
+
+7198f79de, cc9a45747: skill and explainer say fr run / fr usage run on the harness host in devcontainer mode; the review step record is the only route for the review entry (fr journal add --kind review named once as the refused route). Mirrors and README synced.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7-resolved created=2026-11-25T08:20:48+00:00 phase=4 state=fixed resolves=p4-r7 -->
+### p4-r7-resolved · finding [fixed] · resolves p4-r7: vacuous test assertions ('debug'/'review' in output); no end-to-end deliver refusal on an open out-of-scope debug finding (phase 4)
+
+e80ac2bbc: assertions parse the brief JSON and match the exact refusal texts ('names no entry in the debug journal', 'still open: d-r1'); new end-to-end test refuses deliver through resolve while out-of-scope d-r2 is open and unaccounted.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved created=2026-11-25T08:20:48+00:00 phase=4 state=open resolves=p4-r8 out_of_scope=true -->
+### p4-r8-resolved · finding [out-of-scope] · resolves p4-r8: a reviewer's fenced review-findings block is validated only for phase targets, so the skill's d-r<k> block is unchecked (phase 4)
+
+Not caused by this change: returned review-findings blocks are checked only for phase units (run_cmd returned_phase = target.phase), already true of spec-review before this branch. R11 does not require it; the gate still refuses any open d-r finding in the journal.
