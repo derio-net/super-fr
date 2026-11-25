@@ -27,11 +27,16 @@ time.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
 
+import pytest
 import yaml
 from pytest_split.algorithms import LeastDurationAlgorithm
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CI_YAML = REPO_ROOT / ".github" / "workflows" / "ci.yml"
@@ -144,43 +149,44 @@ def test_ci_ok_needs_every_other_job() -> None:
 
 
 def _ci_ok_step() -> dict:
+    """The step that decides ci-ok: since ci-economy R17, `scripts/ci_lane.py verdict`."""
     workflow = _load_ci_workflow()
-    steps = workflow["jobs"]["ci-ok"]["steps"]
-    assert len(steps) == 1, f"expected exactly one step in ci-ok, got {steps}"
+    steps = [
+        s
+        for s in workflow["jobs"]["ci-ok"]["steps"]
+        if "ci_lane.py verdict" in str(s.get("run", ""))
+    ]
+    assert len(steps) == 1, f"expected exactly one verdict step in ci-ok, got {steps}"
     return steps[0]
 
 
 def test_ci_ok_step_shape() -> None:
     step = _ci_ok_step()
     env = step.get("env") or {}
-    assert "RESULTS" in env
-    assert "join(needs.*.result" in env["RESULTS"]
+    assert env.get("NEEDS") == "${{ toJSON(needs) }}"
+    assert "${{" not in step["run"], "results must reach the shell through env, not run:"
 
-    run = step["run"]
-    assert "${{" not in run, "results must reach the shell through env, not run: interpolation"
-    assert "failure" in run
-    assert "cancelled" in run
+
+def _verdict(results: dict[str, str]) -> int:
+    """Run the step's script as ci-ok runs it, in the full lane."""
+    needs = {job: {"result": r, "outputs": {}} for job, r in results.items()}
+    full = {"classify": "success", **{j: "success" for j in _FULL_REQUIRED}}
+    needs = {**{j: {"result": r, "outputs": {}} for j, r in full.items()}, **needs}
+    env = {"LANE": "full", "NEEDS": json.dumps(needs), "PATH": os.environ.get("PATH", "")}
+    script = REPO_ROOT / "scripts" / "ci_lane.py"
+    return subprocess.run([sys.executable, str(script), "verdict"], env=env, check=False).returncode
+
+
+_FULL_REQUIRED = ("collect", "test", "split-check", "coverage")
 
 
 def test_ci_ok_run_script_exits_zero_on_success_and_skipped() -> None:
-    run = _ci_ok_step()["run"]
-    result = subprocess.run(
-        ["bash", "-c", run], env={"RESULTS": "success skipped success"}, capture_output=True
-    )
-    assert result.returncode == 0, result.stderr
+    assert _verdict({"lint": "success", "change-fragment": "skipped"}) == 0
 
 
 def test_ci_ok_run_script_exits_nonzero_on_failure() -> None:
-    run = _ci_ok_step()["run"]
-    result = subprocess.run(
-        ["bash", "-c", run], env={"RESULTS": "success failure"}, capture_output=True
-    )
-    assert result.returncode != 0
+    assert _verdict({"lint": "success", "docs-check": "failure"}) != 0
 
 
 def test_ci_ok_run_script_exits_nonzero_on_cancelled() -> None:
-    run = _ci_ok_step()["run"]
-    result = subprocess.run(
-        ["bash", "-c", run], env={"RESULTS": "cancelled success"}, capture_output=True
-    )
-    assert result.returncode != 0
+    assert _verdict({"lint": "cancelled"}) != 0

@@ -43,9 +43,14 @@ Pure: facts and judgements in, sets out. The command only formats them.
   legacy) as a line of their own, and open `fr:owed` issues (debt-engine R14, R16). Like
   awaiting live they are never ranked, unranked, unplaced or without severity; each
   digest's figures are parsed from its body at check time;
-- **untrusted** — an open issue the intake rule finds ineligible (an outside author, no
-  `ready-fr` label; spec 2026-11-17-triage-intake R4), with its reason. It is never ranked,
-  unranked, unplaced or proposed in a batch, and the skill never judges it;
+- **untrusted** — an open issue the intake rule finds ineligible (an outside author with no
+  admission by `fr triage admit`; spec 2026-11-17-triage-intake R4, 2026-11-22-triage-hardening
+  R4), with its reason. It is shown by key, URL, author and reason only, never by title (R1).
+  It is never ranked, unranked, unplaced or proposed in a batch, and the skill never judges it;
+- **ignored claims** — claim markers collect ignored because their authors are not trusted
+  (2026-11-22-triage-hardening R7). Anyone can post one, so the advice is conditional: a
+  driving account goes in the repo's `pr_authors`, which also admits its issues to batches;
+  any other author is ignored;
 - **duplicate candidates** — groups of open issues the engine (`fr.triage.dedupe`)
   proposes as duplicates, with each flagged pair's reasons. A proposal, never a
   verdict: the fr-triage skill judges each into `duplicate_of` or `distinct_from`;
@@ -64,15 +69,16 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
-from fr.labels import FR_AWAITING_LIVE, FR_IN_PROGRESS, FR_OWED
+from fr.labels import FR_IN_PROGRESS
 from fr.triage.batch import closeout_state, derive_batch_stage, is_open
 from fr.triage.claims import expired, from_issue_claim, holder, owed_claims
-from fr.triage.debt import is_marked, is_trusted_digest, issue_figures
+from fr.triage.debt import is_marked, issue_figures
 from fr.triage.dedupe import CandidateGroup, candidates
-from fr.triage.intake import issue_reason, untrusted_issues
+from fr.triage.intake import untrusted_issues
 from fr.triage.model import (
     Batch,
     Facts,
+    IgnoredClaims,
     Issue,
     IssueClaim,
     Judgements,
@@ -81,6 +87,7 @@ from fr.triage.model import (
     issue_key,
     normalize_key,
 )
+from fr.triage.sets import is_awaiting_live, is_debt_digest, is_owed, is_set_apart
 from fr.triage.timestamps import parse_aware
 
 SETTLED_STAGES = frozenset({"closed", "merged"})
@@ -203,10 +210,17 @@ class CheckResult:
     owed: list[Issue] = field(default_factory=list)
     # Open issues intake finds ineligible, with the reason (triage-intake R4).
     untrusted: list[tuple[Issue, str]] = field(default_factory=list)
+    # Claim markers collect ignored as untrusted, per issue (2026-11-22-triage-hardening R7).
+    ignored_claims: list[IgnoredClaims] = field(default_factory=list)
     candidates: list[CandidateGroup] = field(default_factory=list)
     duplicates: list[Duplicate] = field(default_factory=list)
     claims: ClaimSets = field(default_factory=ClaimSets)
     closed_in_progress: list[StaleInProgress] = field(default_factory=list)
+    # Never-dispatched batches whose members are all closed or awaiting live (R9): each is
+    # retired with `fr triage batch cancel <id> --yes`.
+    obsolete_batches: list[str] = field(default_factory=list)
+    # Proposed batches with a closed member and an open one: batch id -> the closed keys.
+    stale_members: dict[str, list[str]] = field(default_factory=dict)
     skipped: list[tuple[str, str]] = field(default_factory=list)
     config_ignored: list[tuple[str, list[str]]] = field(default_factory=list)
     # (repo, declared, recorded): a one-repo scope whose settings name a state repo other
@@ -246,9 +260,16 @@ class CheckResult:
             "duplicate_chained": list(self.duplicate_chained),
             "awaiting_live": [row(i) for i in self.awaiting_live],
             "debt_digests": [{**row(i), "figures": issue_figures(i)} for i in self.debt_digests],
-            "untrusted_digests": [row(i) for i in self.untrusted_digests],
+            # Shown by key, URL, author and reason only, never by title (R1).
+            "untrusted_digests": [{**row(i), "title": ""} for i in self.untrusted_digests],
             "owed": [row(i) for i in self.owed],
-            "untrusted": [{**row(i), "reason": why} for i, why in self.untrusted],
+            "untrusted": [{**row(i), "title": "", "reason": why} for i, why in self.untrusted],
+            "obsolete_batches": list(self.obsolete_batches),
+            "stale_members": {b: list(keys) for b, keys in self.stale_members.items()},
+            "ignored_claims": [
+                {"key": c.key, "repo": c.repo, "authors": list(c.authors)}
+                for c in self.ignored_claims
+            ],
             "duplicate_candidates": [
                 {
                     "keys": list(g.keys),
@@ -446,38 +467,25 @@ def stale_dispatches(facts: Facts) -> list[Stale]:
     return out
 
 
-def is_awaiting_live(issue: Issue) -> bool:
-    """Whether `issue` is open and carries `fr:awaiting-live`."""
-    return issue.state == "open" and FR_AWAITING_LIVE.name in issue.labels
-
-
-def is_debt_digest(issue: Issue, facts: Facts) -> bool:
-    """Whether `issue` is an open debt digest: the marker, current or legacy, as a line
-    of its own, written by a trusted author (debt-engine R14; `fr.triage.debt`)."""
-    return is_trusted_digest(issue, facts)
-
-
-def is_owed(issue: Issue) -> bool:
-    """Whether `issue` is open and carries `fr:owed` (debt-engine R16)."""
-    return issue.state == "open" and FR_OWED.name in issue.labels
-
-
-def is_set_apart(issue: Issue, facts: Facts) -> bool:
-    """Whether `issue` is in a set of its own that is never ranked or proposed as work:
-    awaiting live, a debt digest, owed, or an open issue intake finds untrusted."""
-    return (
-        is_awaiting_live(issue)
-        or is_debt_digest(issue, facts)
-        or is_owed(issue)
-        or (issue.state == "open" and issue_reason(issue, facts) is not None)
-    )
-
-
 def batch_awaits_live(batch: Batch, facts: Facts) -> bool:
     """Whether every open member of *batch* awaits its live walk (at least one is
     open): such a batch is no work, so the driver holds it (spec §F, R18)."""
     members = [i for i in facts.issues if i.key in batch.ids and i.state == "open"]
     return bool(members) and all(is_awaiting_live(i) for i in members)
+
+
+def stale_members(facts: Facts, judgements: Judgements) -> dict[str, list[str]]:
+    """Each proposed batch with a closed member and a member not closed, by batch id: the
+    closed keys, in member order (R9). A batch whose members are all closed is `obsolete`."""
+    found = {i.key: i for i in facts.issues}
+    out: dict[str, list[str]] = {}
+    for batch in judgements.batches:
+        if derive_batch_stage(batch, facts) != "proposed":
+            continue
+        closed = [k for k in batch.ids if k in found and found[k].state == "closed"]
+        if closed:
+            out[batch.id] = closed
+    return out
 
 
 def awaiting_live_issues(facts: Facts) -> list[Issue]:
@@ -602,6 +610,11 @@ def classify(
         ],
         owed=[i for i in facts.issues if is_owed(i)],
         untrusted=untrusted_issues(facts),
+        ignored_claims=list(facts.ignored_claims),
+        obsolete_batches=[
+            b.id for b in judgements.batches if derive_batch_stage(b, facts) == "obsolete"
+        ],
+        stale_members=stale_members(facts, judgements),
         candidates=candidates(facts, judgements),
         duplicates=duplicates(facts, judgements),
         claims=(

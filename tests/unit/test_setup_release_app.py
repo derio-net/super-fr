@@ -37,6 +37,8 @@ from typing import Any
 
 import pytest
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "setup-release-app.sh"
 APP_ID = 424242

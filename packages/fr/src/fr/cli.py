@@ -189,6 +189,12 @@ def main(
     from fr.config.protection import forget as _forget_protection
 
     _forget_protection()
+    # super-fr#1511: a cursor's lost-update check compares against what THIS
+    # command read, so an earlier invocation in the same process (CliRunner, an
+    # embedding host) never counts as this one's read.
+    from fr.run.model import forget_observed_run_states
+
+    forget_observed_run_states()
     # super-fr#746: before anything else — a wrong fr must not migrate
     # artifacts either. Refuses a PATH-reached fr that disagrees with the fr the
     # harness's integrations pinned; see fr.binary_identity.

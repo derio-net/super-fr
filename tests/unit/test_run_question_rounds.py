@@ -43,6 +43,8 @@ from tests.unit.transcript_sessions import (
     text_row,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 SPEC = "docs/superpowers/specs/2026-09-26-x-design.md"
 SPEC_SLUG = "2026-09-26-x"
 SESSION = "s-rounds"

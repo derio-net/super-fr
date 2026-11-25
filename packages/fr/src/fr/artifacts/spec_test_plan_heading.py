@@ -40,7 +40,7 @@ REPAIR_NAME = "test-plan-heading"
 
 _SUFFIX_RE = re.compile(r"\s*(\([^()]*\))$")
 _HEADING_RE = re.compile(r"^(#{1,6})(?=\s+\S)")
-_KEYWORD_RE = re.compile(r"^##\s+(Verification|Implementation Plans|Requirements)\s*$")
+_KEYWORD_RE = re.compile(r"^##\s+(Verification|Implementation Plans|Requirements|Design shape)\s*$")
 
 
 def _shift_region(lines: list[str], start: int, level: int) -> None:

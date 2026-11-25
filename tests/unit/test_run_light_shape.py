@@ -30,6 +30,8 @@ from tests.unit.record_support import RUN, commit_all, fr, head, snapshot, write
 from tests.unit.requirements_support import seed_requirements
 from tests.unit.spec_review_support import spec_review_evidence
 
+pytestmark = pytest.mark.own_artifacts
+
 SPEC_REL = "docs/spec.md"
 BRANCH = "feat/light"
 LIGHT_IDS = [

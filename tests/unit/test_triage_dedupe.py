@@ -19,8 +19,19 @@ REPO = "derio-net/super-fr"
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "triage" / "dedupe-calibration.json"
 
 
-def _issue(number: int, title: str, body: str = "", state: str = "open") -> Issue:
+def _issue(
+    number: int,
+    title: str,
+    body: str = "",
+    state: str = "open",
+    labels: list[str] | None = None,
+    author: str = "maintainer",
+    association: str | None = "OWNER",
+) -> Issue:
     return Issue(
+        labels=labels or [],
+        author=author,
+        author_association=association,
         repo=REPO,
         number=number,
         title=title,
@@ -262,3 +273,35 @@ def test_groups_join_by_connectivity_and_are_sorted() -> None:
     for g in groups:
         assert list(g.pairs) == sorted(g.pairs, key=lambda p: (p.a, p.b))
         assert all(p.a < p.b for p in g.pairs)
+
+
+# ------------------------------------------ the set-apart universe (hardening R6)
+
+
+def test_owed_trackers_with_similar_titles_form_no_group() -> None:
+    owed = [_issue(n, f"Owed: Test Plan step {n} owed", labels=["fr:owed"]) for n in (1, 2, 3)]
+    assert _run(*owed) == []
+
+
+def test_awaiting_live_issues_with_equal_titles_form_no_group() -> None:
+    a = _issue(1, "Walk the live board", labels=["fr:awaiting-live"])
+    b = _issue(2, "Walk the live board", labels=["fr:awaiting-live"])
+    assert _run(a, b) == []
+
+
+def test_debt_digests_and_untrusted_issues_form_no_group() -> None:
+    marker = "<!-- fr-technical-debt -->"
+    digests = [
+        _issue(
+            n, "Technical debt digest", body=marker, author="github-actions[bot]", association=None
+        )
+        for n in (1, 2)
+    ]
+    assert _run(*digests) == []
+    strangers = [_issue(n, "Same stranger title", author="eve", association="NONE") for n in (3, 4)]
+    assert _run(*strangers) == []
+
+
+def test_two_eligible_issues_with_equal_titles_still_group() -> None:
+    groups = _run(_issue(1, "Fix the board header"), _issue(2, "Fix the board header"))
+    assert [g.keys for g in groups] == [("super-fr#1", "super-fr#2")]

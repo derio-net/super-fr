@@ -30,6 +30,7 @@ from typing import Any
 
 from fr.triage.errors import TriageError
 from fr.triage.model import Facts, Scope, load_judgements, load_scope_facts, normalize_key
+from fr.triage.snapshot import strict_snapshots
 
 ClientFor = Callable[[str], Any]
 """OWNER/REPO -> the forge client that reads its visibility (`GhClient.repo_visibility`)."""
@@ -47,8 +48,20 @@ class VisibilityUnreadable(PrivacyError):  # noqa: N818 - named by the spec
     still refuses."""
 
 
+DEBT_KEY_SUFFIX = "#debt"
+"""The suffix of the key a snapshot's debt repo enters the guard under (triage-hardening R12):
+`<owner/repo>#debt`, which can never be an issue key, so `refusal` words it as debt."""
+
+
 def refusal(issue: str, repo: str, state_repo: str) -> str:
     """THE refusal line, shared by every call site (P3.T4.S4)."""
+    if issue.endswith(DEBT_KEY_SUFFIX):
+        return (
+            f"a carried snapshot holds debt figures of {repo}, which is not public, and this "
+            f"scope's state repo {state_repo} is public: its state ref and exports would leak "
+            "them. Drop those snapshots, or move the scope's state to a private repo "
+            "(cloud-triage R8)"
+        )
     return (
         f"{issue} is an issue of {repo}, which is not public, and this scope's state repo "
         f"{state_repo} is public: its state ref and exports would leak it. Keep {issue} out, "
@@ -147,12 +160,16 @@ def key_repos(keys: Iterable[str], scope: Scope, facts: Facts | None) -> dict[st
                   for i in (facts.issues if facts else [])}  # fmt: skip
     members = [scope.target] if scope.kind == "repo" else list(scope.repos)
     by_name = {r.split("/", 1)[1].lower(): r for r in members}
+    by_full = {r.lower(): r for r in members}
     owners = {r.split("/", 1)[0] for r in members} if scope.kind != "org" else {scope.owner}
     out: dict[str, str] = {}
     for key in keys:
         canon = normalize_key(key)
         name = canon.split("#", 1)[0]
         repo = from_facts.get(canon) or by_name.get(name)
+        if repo is None and "/" in name:
+            # A snapshot's PR key is `OWNER/REPO#n`: the repo is named in full.
+            repo = by_full.get(name, name)
         if repo is None:
             # A key naming no repo of the scope (hand-edited, or left from a repo removed
             # from it) is never skipped (p3-r8): its repo is the scope's one owner's, read
@@ -217,7 +234,16 @@ def state_keys(state_dir: Path) -> list[str]:
         keys |= {k for b in judgements.batches for k in b.ids}
         keys |= {k for p in judgements.patterns for k in p.ids}
     keys |= set(load_origins(state_dir / "origins.yaml").issues)
+    for snap in strict_snapshots(state_dir):
+        keys |= {*snap.issues, *snap.prs}
     return sorted(normalize_key(k) for k in keys)
+
+
+def state_repos(state_dir: Path) -> list[str]:
+    """Every repo the carried snapshots' debt figures name (R12): their visibility is
+    checked like a key's repo. An unreadable snapshot is a `TriageError`."""
+    repos = {r for snap in strict_snapshots(state_dir) for r in (snap.debt or {})}
+    return sorted(repos)
 
 
 def guard_state(state_dir: Path, *, scope: Scope, state_repo: str, client_for: ClientFor) -> None:
@@ -238,6 +264,8 @@ def guard_state(state_dir: Path, *, scope: Scope, state_repo: str, client_for: C
         except TriageError:
             facts = None  # unusable facts: every repo is read live instead
     repos = key_repos(state_keys(state_dir), scope, facts)
+    # A debt repo is a repo, not a key: it enters as its own name (`owner/repo`).
+    repos.update({f"{r.lower()}{DEBT_KEY_SUFFIX}": r for r in state_repos(state_dir)})
     vis: dict[str, str | None] = dict(facts.visibility) if facts else {}
     vis[state_repo] = now
     _fill(vis, repos.values(), client_for)

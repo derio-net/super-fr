@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from fr.artifacts.paths import KIND_DIRS
 from fr.config.space import LEGACY_PROFILES, PROFILES, SPACE_DIR, rel
 from fr.ghclient import UnsupportedForgeOperation
+from fr.hostclient import FORGE_ERRORS
 from fr.journal.model import (
     JournalEntry,
     append_journal_entry,
@@ -362,7 +363,14 @@ class Gate:
         forge's repo metadata, cross-checked with the base checkout's `origin/HEAD`;
         never the PR's own base ref, which its author chooses."""
         if self._default is None:
-            forge = self.forge.default_branch(cwd=self.target.primary)
+            # A forge error (a login page the adapter re-raises, gh#1554; a refused
+            # host) is the gate's refusal, naming it — never a traceback (R7).
+            try:
+                forge = self.forge.default_branch(cwd=self.target.primary)
+            except FORGE_ERRORS as exc:
+                raise StageFailed(
+                    f"cannot read the default branch from the forge: {exc}", code=2
+                ) from exc
             origin = self.host.origin_head()
             if not forge or not origin:
                 raise StageFailed(
@@ -746,19 +754,27 @@ def stage_1(gate: Gate) -> None:
 
 
 def _checks_green(gate: Gate) -> None:
+    from fr.checkstate import bucket_verdict
     from fr.triage.batch_drive import checks_verdict
 
     t = gate.target
     every = gate.forge.pr_checks(t.repo, t.pr)
     counts = {"pass": 0, "fail": 0, "pending": 0}
-    for c in every:
-        bucket = str(c.get("bucket") or "")
-        key = "pass" if bucket in ("pass", "skipping") else bucket
-        key = "fail" if key == "cancel" else key
-        if key in counts:
-            counts[key] += 1
-    verdict, names = checks_verdict(gate.forge.pr_required_checks(t.repo, t.pr), counts,
-                                    ci_none=False)  # fmt: skip
+    for c in every:  # a cancelled check is pending (spec 2026-11-24-ci-economy R3)
+        counts[bucket_verdict(str(c.get("bucket") or ""))] += 1
+    required = gate.forge.pr_required_checks(t.repo, t.pr)
+    verdict, names = checks_verdict(required, counts, ci_none=False)
+    if verdict == "pending":
+        # Counted apart: a cancelled check no newer run replaced, with nothing still
+        # running, is owed a re-run, not a wait (review #1647).
+        read = required or every
+        waiting = [c for c in read if bucket_verdict(str(c.get("bucket") or "")) == "pending"]
+        if waiting and all(c.get("bucket") == "cancel" for c in waiting):
+            cancelled = sorted({str(c.get("name")) for c in waiting})
+            raise StageFailed(
+                f"PR #{t.pr}'s checks were cancelled with no newer run: "
+                f"{', '.join(cancelled)}; re-run the workflow"
+            )
     if verdict != "green":
         raise StageFailed(f"PR #{t.pr}'s checks are {verdict}: {', '.join(names)}")
 

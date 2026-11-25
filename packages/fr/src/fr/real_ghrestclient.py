@@ -32,6 +32,7 @@ from typing import Any, Literal, cast
 
 from fr import _hosts
 from fr import gh as _gh
+from fr.checkstate import bucket_verdict, is_superseded, verdict_of
 from fr.gh import GhError
 from fr.ghclient import (
     MERGE_METHODS,
@@ -303,18 +304,14 @@ def _comment_record(c: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-_BUCKET = {
-    "SUCCESS": "pass",
-    "SKIPPED": "skipping",
-    "NEUTRAL": "skipping",
-    "CANCELLED": "cancel",
-    "FAILURE": "fail",
-    "ERROR": "fail",
-    "TIMED_OUT": "fail",
-    "ACTION_REQUIRED": "fail",
-    "STARTUP_FAILURE": "fail",
-    "STALE": "fail",
-}
+def _bucket(state: str) -> str:
+    """A check state as the `gh pr checks` bucket it renders: `skipping` and `cancel`
+    keep gh's names, every other state takes `fr.checkstate`'s verdict."""
+    if state.upper() in {"SKIPPED", "NEUTRAL"}:
+        return "skipping"
+    if is_superseded(state):
+        return "cancel"
+    return verdict_of(state)
 
 
 def _check_row(entry: dict[str, Any]) -> dict[str, Any]:
@@ -326,7 +323,7 @@ def _check_row(entry: dict[str, Any]) -> dict[str, Any]:
         state = (
             entry.get("conclusion") if entry.get("status") == "COMPLETED" else entry.get("status")
         ) or ""
-    return {"name": name, "bucket": _BUCKET.get(state, "pending"), "state": state}
+    return {"name": name, "bucket": _bucket(state), "state": state}
 
 
 def _pr_base_sha(pulls: Iterable[dict[str, Any]] | None, sha: str) -> str:
@@ -397,15 +394,16 @@ def _commit_check_records(
 
 def _ci(rollup: list[dict[str, Any]]) -> str:
     """`list_linked_prs`' `ci`: PASS / FAIL / PENDING / NONE over the latest run of
-    each check (the GraphQL rollup's `state`, collapsed as `_coerce_ci_state`)."""
+    each check (the GraphQL rollup's `state`, collapsed as `_coerce_ci_state`); a
+    cancelled check is pending (spec 2026-11-24-ci-economy R3)."""
     from fr.triage.collect import _latest_runs
 
-    rows = [_check_row(e)["bucket"] for e in _latest_runs(rollup)]
+    rows = [bucket_verdict(_check_row(e)["bucket"]) for e in _latest_runs(rollup)]
     if not rows:
         return "NONE"
-    if any(b in {"fail", "cancel"} for b in rows):
+    if "fail" in rows:
         return "FAIL"
-    if any(b == "pending" for b in rows):
+    if "pending" in rows:
         return "PENDING"
     return "PASS"
 

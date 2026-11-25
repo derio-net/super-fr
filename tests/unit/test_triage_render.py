@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import os
 import re
+import shutil
+import subprocess
 from collections.abc import Callable
 from html.parser import HTMLParser
 from pathlib import Path
@@ -889,3 +892,90 @@ def test_the_board_with_duplicates_is_deterministic() -> None:
         {3: {}, 9: {"duplicate_of": "super-fr#3"}},
     )
     assert render_issues(facts, judgements) == render_issues(facts, judgements)
+
+
+def test_an_issue_row_with_a_withheld_title_shows_the_key_and_a_quiet_note() -> None:
+    """2026-11-22-triage-hardening R1: a page never shows an ineligible issue's title."""
+    from fr.triage.model import Issue
+    from fr.triage.render import TITLE_WITHHELD, _row, issue_title
+
+    issue = Issue(
+        repo="example-org/widgets",
+        number=4,
+        title="",
+        state="open",
+        url="https://github.com/example-org/widgets/issues/4",
+    )
+    row = _row(issue, judgement=None, tier="", order=0, show_repo=True, patterns=[])
+    assert TITLE_WITHHELD in row and "widgets#4" in row
+    assert issue_title("a <b>") == "a &lt;b&gt;"
+
+
+# ------------------------------- the filter script without its bar (triage-hardening R13)
+
+
+def test_the_issues_filter_script_returns_early_when_the_filter_bar_is_absent() -> None:
+    from fr.triage.components import PAGE_SCRIPT
+    from fr.triage.fragments import Entry, Resolved
+    from fr.triage.render import SCRIPT
+
+    from tests.unit.triage_board_fixtures import busy
+
+    page = render_issues(*busy(), resolved=Resolved(order=[Entry("since")]))
+
+    assert 'id="q"' not in page
+    guard = "if (!q || !sort) return;"
+    assert guard in SCRIPT
+    assert SCRIPT.index(guard) < SCRIPT.index("addEventListener")
+    script = page[page.rindex("<script>") : page.rindex("</script>")]
+    assert SCRIPT in script
+    assert script.index(SCRIPT) < script.index(PAGE_SCRIPT)
+
+
+@pytest.mark.skipif(
+    shutil.which("node") is None and not os.environ.get("CI"),
+    reason="node is not installed (CI always runs it: a missing node there fails)",
+)
+def test_the_issues_filter_script_runs_without_throwing_when_the_filter_bar_is_absent() -> None:
+    """R13, executed: a document with no `q`/`sort` element and whose every other DOM read
+    throws. The script must return before touching anything else."""
+    from fr.triage.render import SCRIPT
+
+    stub = (
+        "function boom(){ throw new Error('touched the DOM past the guard'); }\n"
+        "var document = { getElementById: function(){ return null; },"
+        " querySelectorAll: boom, addEventListener: boom };\n"
+        "var window = { addEventListener: boom }; var localStorage = { getItem: boom };\n"
+    )
+    done = subprocess.run(
+        ["node", "-e", stub + SCRIPT], capture_output=True, text=True, timeout=30, check=False
+    )
+    assert done.returncode == 0, done.stderr
+
+
+def test_a_member_of_an_obsolete_batch_is_not_tagged_in_batch(tmp_path: Path) -> None:
+    """T4: an obsolete batch (every member closed or awaiting its live walk) holds nothing,
+    so its open awaiting-live member carries no "batch" tag; a live batch's member does."""
+
+    def facts_edit(doc: dict[str, Any]) -> None:
+        for issue in doc["issues"]:
+            if issue["number"] == 529:
+                issue["labels"] = [*issue.get("labels", []), "fr:awaiting-live"]
+
+    def judgements_edit(doc: dict[str, Any]) -> None:
+        doc["schema"] = 2
+        doc["batches"] = [
+            {"id": "gone", "title": "gone", "ids": ["super-fr#529"]},
+            {"id": "live", "title": "live", "ids": ["super-fr#333"]},
+        ]
+
+    facts, judgements = _state_with(
+        tmp_path, facts_edit=facts_edit, judgements_edit=judgements_edit
+    )
+    from fr.triage.batch import derive_batch_stage
+
+    stages = {b.id: derive_batch_stage(b, facts) for b in judgements.batches}
+    assert stages == {"gone": "obsolete", "live": "proposed"}
+    page = render_issues(facts, judgements)
+    assert "batch gone" not in _row_block(page, "super-fr#529")
+    assert "batch live" in _row_block(page, "super-fr#333")

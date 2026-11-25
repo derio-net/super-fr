@@ -11,6 +11,8 @@ import pytest
 from fr.acceptance.pin import FrPin
 from fr.acceptance.scaffold import ACTION_PINS, render_workflow
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PIN = FrPin("0123456789abcdef0123456789abcdef01234567", "v8.1.5")
 CI_TYPES = ("github-actions", "gitea-actions", "gitlab-ci")

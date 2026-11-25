@@ -76,16 +76,31 @@ def test_needs_you_never_calls_one_unplaced() -> None:
 
 
 def _batches():
-    """Wave 1 holds an ordinary proposed batch; wave 2's only member awaits live."""
+    """Wave 1 holds an ordinary proposed batch; wave 2's only open member awaits live, and
+    its other member is not in the facts, so the batch is not known to be done (a batch whose
+    members are all closed or awaiting derives `obsolete` instead, R8) and is held."""
     f = facts([issue(1), issue(2, labels=[LIVE])])
     jd = judgements(
-        {"widgets#1": j(), "widgets#2": j()},
+        {"widgets#1": j(), "widgets#2": j(), "widgets#3": j()},
         [
             batch("a-ordinary", [1], wave=1),
-            batch("b-live", [2], wave=2),
+            batch("b-live", [2, 3], wave=2),
         ],
     )
     return f, jd
+
+
+def test_a_never_dispatched_wholly_awaiting_batch_is_obsolete_not_held() -> None:
+    """R8: obsolete takes precedence over the awaiting-live hold: no action, nothing to wait on."""
+    from fr.triage.batch import derive_batch_stage
+    from fr.triage.batch_drive import drive_pass
+    from fr.triage.views import drive_snapshot
+
+    f = facts([issue(2, labels=[LIVE])])
+    jd = judgements({"widgets#2": j()}, [batch("b-live", [2], wave=2)])
+
+    assert derive_batch_stage(jd.batches[0], f) == "obsolete"
+    assert [a for a in drive_pass(drive_snapshot(f, jd)).actions if a.batch == "b-live"] == []
 
 
 def test_an_awaiting_live_batch_is_not_next_up_and_holds_no_wave_open() -> None:

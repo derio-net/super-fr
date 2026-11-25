@@ -681,3 +681,18 @@ def test_head_tree_and_dirty_paths_apply_the_mode_predicate(tmp_path: Path) -> N
     assert "docs/superpowers/runs/evil.sh" in dirty
     assert "docs/superpowers/journals/plans/x.md" in dirty
     assert "docs/superpowers/runs/ok.yaml" not in dirty
+
+
+def test_the_run_shape_file_is_fr_bookkeeping() -> None:
+    """Spec 2026-11-24-show-me-visuals R12: `<run-id>.shape.md` is left out like the
+    durable PR body, and listed in `TRUST_EXCLUDED`."""
+    from fr.ops.trust import TRUST_EXCLUDED, is_trust_excluded
+
+    assert is_trust_excluded("docs/superpowers/runs/2026-11-24-feat-x.shape.md")
+    assert "docs/superpowers/runs/<run-id>.shape.md" in TRUST_EXCLUDED
+    for path in (
+        "docs/superpowers/runs/notes.md",
+        "docs/superpowers/runs/r.records/x.shape.md",
+        "docs/superpowers/runs/x/y.shape.md",
+    ):
+        assert not is_trust_excluded(path), path

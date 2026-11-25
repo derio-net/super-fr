@@ -25,6 +25,7 @@ from dataclasses import dataclass
 
 from fr.triage.batch import theme_key
 from fr.triage.model import Facts, Issue, Judgements
+from fr.triage.sets import is_set_apart
 
 TITLE_MATCH = 0.5  # title Jaccard that flags a pair on its own
 TITLE_NEAR = 0.25  # title Jaccard that corroborates one identifier, or a shared theme
@@ -195,13 +196,15 @@ def _components(pairs: list[Pair]) -> list[CandidateGroup]:
 def candidates(facts: Facts, judgements: Judgements) -> list[CandidateGroup]:
     """Candidate duplicate groups among the open issues of *facts* (spec §3.B).
 
-    The universe is the open issues minus every one judged `duplicate_of` anything;
+    The universe is the open issues minus every one set apart (`fr.triage.sets`) and every
+    one judged `duplicate_of` anything;
     a pair either side lists in `distinct_from` is skipped.
     """
     universe = [
         i
         for i in facts.issues
         if i.state == "open"
+        and not is_set_apart(i, facts)
         and not (judgements.issues.get(i.key) and judgements.issues[i.key].duplicate_of)
     ]
     modules: set[str] = set()

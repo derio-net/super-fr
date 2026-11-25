@@ -167,3 +167,13 @@ def test_an_unwritable_lock_directory_does_not_block_migration(tmp_path: Path) -
             assert ok is True
     finally:
         os.chmod(d, 0o700)
+
+
+def test_a_new_file_gets_the_umask_default_mode_like_write_text(tmp_path: Path) -> None:
+    """`mkstemp` creates its temp file 0600; a file that did not exist yet must
+    come out as a plain `write_text` would have made it, not private."""
+    plain = tmp_path / "plain.yaml"
+    plain.write_text("a\n")
+    atomic = tmp_path / "atomic.yaml"
+    write_text_atomic(atomic, "a\n")
+    assert stat.S_IMODE(atomic.stat().st_mode) == stat.S_IMODE(plain.stat().st_mode)

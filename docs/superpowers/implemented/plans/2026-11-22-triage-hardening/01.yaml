@@ -1,0 +1,166 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Intake trust boundary — withheld titles, admission pinned to content, ignored
+    claim markers (R1-R5, R7)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - intake-title-withheld
+  - intake-admit-pinned
+  - claim-untrusted-warning
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/admit.py
+  - packages/fr/src/fr/triage/intake.py
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/triage/claims.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/check.py
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/skills/fr-triage/SKILL.md
+  - .hermes/skills/fr/fr-triage/SKILL.md
+  - docs/explainers/fr-triage.md
+  - docs/explainers/fr-wave-driver.md
+  - docs/reference/cli.md
+  - README.md
+  - .changes/feat-batch-triage-hardening.yaml
+  - tests/unit/test_triage_admit.py
+  - tests/unit/test_triage_intake.py
+  - tests/unit/test_triage_collect*.py
+  - tests/unit/test_triage_check.py
+  - tests/unit/test_triage_claims.py
+  - tests/fixtures/triage/**
+  - docs/acceptance/features/2026-11-22-triage-hardening.yaml
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Smoke and change fragment
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      On the unchanged tree run `uv run pytest -q --no-cov -n 4 tests/unit/test_triage_intake.py tests/unit/test_triage_collect.py tests/unit/test_triage_check.py tests/unit/test_triage_dedupe.py tests/unit/test_triage_privacy.py`; all green (a red is a discovery, journalled, not fixed here).
+  - id: P1.T1.S2
+    text: |-
+      Add `.changes/feat-batch-triage-hardening.yaml`: `bump: minor`, summary `triage: ready-fr admits an issue only with a trusted fr triage admit marker matching its content (re-admit label-only issues with fr triage admit), ineligible issues' titles are withheld, never-dispatched batches whose members all closed are obsolete, judged PRs past the PR list limit are settled, the privacy guard reads snapshot keys, owed trackers leave dedupe`. Commit; `uv run fr push`.
+- number: 2
+  title: The digest and the admit marker (R3, spec §B)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: new tests/unit/test_triage_admit.py — `content_digest("t", "a\r\nb") == content_digest("t", "a\nb")`, starts `sha256:`, differs when title or body changes; `admit_marker(d)` round-trips through `parse_admit`; a malformed JSON marker and a v other than 1 parse to None; `latest_admit(comments, trusted)` returns the newest trusted marker's digest by `created_at`, ignores an untrusted author's newer marker (author not in trusted, association CONTRIBUTOR), and trusts a MEMBER association. Fails: module missing.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: new packages/fr/src/fr/triage/admit.py with `content_digest`, `ADMIT_PREFIX = "<!-- fr-admit:"`, `admit_marker`, `parse_admit`, `latest_admit` (trust via `fr.triage.claims.trusted_author`). Tests green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: the marker parse shares the claim marker's JSON-in-comment helper if one exists in claims.py; otherwise note the reason in the step record. Re-run.
+- number: 3
+  title: Facts schema 16 and the collect reads (R1, R5, R7; spec §A, §B, §D)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests/unit/test_triage_collect.py — with the existing fake forge: (a) an outside author's open issue is stored with `title == ""` and `body == ""`; (b) a `ready-fr` issue by a CONTRIBUTOR with a trusted marker over its full title and a body longer than `BODY_LIMIT` is stored with `content_digest == admit_digest` (digest over the untruncated body) and is eligible via `issue_reason`; (c) the same issue edited after the marker is ineligible with reason containing `edited after admission` and `fr triage admit`; (d) a MEMBER-authored `ready-fr` issue with no marker has its association read and stays eligible, and its comments are not read; (e) a `ready-fr` CONTRIBUTOR issue whose comment read raises `ForgeError` gets `admit_read False`, is ineligible with a `comments not read` reason, and the repo is NOT skipped; (f) an `UnsupportedForgeOperation` gives the `this forge cannot list comments` reason; (g) a claimed issue whose comments hold a marker by an untrusted author gets an `IgnoredClaims` entry naming that login; (h) an issue that is both claimed and ready-fr reads its comments once (count `list_issue_comments` calls).
+  - id: P1.T3.S2
+    text: |-
+      GREEN: model.py — `FACTS_SCHEMA = 16`; `Issue.content_digest`, `admit_digest`, `admit_read`, `admit_unread`; `IgnoredClaims(repo, number, authors)` and `Facts.ignored_claims`. claims.py — `ClaimRead.untrusted_authors`, filled by `read_claims`. collect.py — compute `content_digest` in `_issue` from the raw body before `_body`; `_admitted` drops the `ready-fr` clause; split `_comment_facts` into one fetch serving the claim and admit reads (claim-read failure keeps today's repo skip; admit-only failure stays local); carry a `keep` repo's `ignored_claims`; rename `_withhold_untrusted_bodies` to `_withhold_untrusted_text`, clearing title and body. intake.py — the ready-fr clause needs `admit_digest == content_digest`; the four reasons of spec §B; `issue_reason` passes the stored fields. Tests green.
+  - id: P1.T3.S3
+    text: |-
+      RED then GREEN: a test loads a schema-15 facts fixture holding an outside author's titled issue and a label-only `ready-fr` issue with a body; after `load_facts` both have empty title and body. Change `load_facts` (model.py) to re-withhold for any file below 16. Existing schema fixtures that pin FACTS_SCHEMA are updated in the same commit.
+  - id: P1.T3.S4
+    text: |-
+      REFACTOR: one helper decides whether an issue needs its comments read (claim, admit, both); no second copy of the ready-fr test in collect. Re-run the triage tests.
+- number: 4
+  title: Check, pages and the admit command (R1, R2, R4, R7)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests/unit/test_triage_check.py — the `untrusted` and `untrusted_digests` text lines print `<key> <url> (<author>: <reason>)` with no title; the JSON rows carry `title: ""`; the untrusted header names `fr triage admit`, not the label; `ignored_claims` print in their own block with `add <login> to pr_authors in <repo>'s .fr/triage.yaml`. test_triage_intake.py — `rejection_line` names `fr triage admit <key>`.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: check.py / commands/triage_cmd.py output changes; `rejection_line` reworded; pages (render.py) print the key and a quiet `title withheld` where a title is empty. Tests green.
+  - id: P1.T4.S3
+    text: |-
+      RED: tests/unit/test_triage_admit.py CLI tests through typer's CliRunner with a fake GhClient — `fr triage admit derio-net/x#5` previews label and comment and writes nothing; `--yes` ensures and adds `ready-fr` and posts one comment whose marker digest equals `content_digest` of the live title and body; a `/pull/` URL is refused exit 2; a glab/tea adapter is refused exit 2 before any read; an author in `claim_trusted` prints `already eligible` and writes nothing.
+  - id: P1.T4.S4
+    text: |-
+      GREEN: `@triage_app.command("admit")` in commands/triage_cmd.py, forge writes only through `GhClient.edit_issue_labels`/`ensure_labels`/`comment_issue`, only with `--yes`. Tests green.
+- number: 5
+  title: Docs, skill and generated surfaces
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Update plugins/super-fr/skills/fr-triage/SKILL.md: untrusted set — an operator admits an issue with `fr triage admit <key>` (label alone no longer admits; an edit after admission voids it); claims phase — list every account that drives a scope in `pr_authors`. Update docs/explainers/fr-triage.md (the ready-fr line near :115) and docs/explainers/fr-wave-driver.md (near :51) and their `reviewed` stamps. Run `uv run --no-project python scripts/sync-opencode.py`, `scripts/sync-hermes.py` and `scripts/sync-readme.py`; commit the mirrors, README and docs/reference/cli.md.
+  - id: P1.T5.S2
+    text: |-
+      Move rows intake-title-withheld, intake-admit-pinned, claim-untrusted-warning to `ci` with `uv run fr acceptance set-status --id <row> --status ci --notes "<tests>" --level unit=derio-net/super-fr:tests/unit/<file>.py#<test>` naming the tests above. Run the fast tier from the brief last.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-22T22:40:36+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-11-22T22:40:36+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-22T22:40:36+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-22T22:40:36+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-22T22:40:36+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-22T22:40:36+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-22T22:40:36+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-11-22T22:40:36+00:00'
+      note: null
+    P1.T3.S4:
+      state: x
+      ticked_at: '2026-11-22T22:40:36+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-22T22:40:36+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-22T22:40:36+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-11-22T22:40:36+00:00'
+      note: null
+    P1.T4.S4:
+      state: x
+      ticked_at: '2026-11-22T22:40:36+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-22T22:40:36+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-22T22:40:36+00:00'
+      note: null
+  completion:
+    at: '2026-11-22T22:40:36+00:00'
+    note: null
+    observed_prs: []

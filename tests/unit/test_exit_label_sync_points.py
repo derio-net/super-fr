@@ -12,8 +12,11 @@ from fr.verification import labels as labels_mod
 from fr.verification.labels import LabelSyncError, SyncOutcome
 
 from tests.unit.record_support import RUN, write_record
+from tests.unit.requirements_support import DESIGN_SHAPE_SECTION
 from tests.unit.test_deliver_pr_body import PR, _at_deliver, _body, _deliver
 from tests.unit.test_record_apply import _at_spec_review, _resolve, _spec_review_record
+
+pytestmark = pytest.mark.own_artifacts
 
 
 class _Sync:
@@ -197,7 +200,7 @@ def test_resolving_spec_review_warns_of_an_ops_gap_without_a_plan(
     root = _at_spec_review(tmp_path)
     (root / "docs" / "spec.md").write_text(
         "# spec\n\n## Verification\n\nstrategy: none\ngate: devops\n\n"
-        "## Test Plan\n\n- run `pulumi up` on the stack\n"
+        "## Test Plan\n\n- run `pulumi up` on the stack\n" + DESIGN_SHAPE_SECTION
     )
     subprocess.run(["git", "-C", str(root), "commit", "-qam", "gated spec"], check=True)
     out = _resolve(root, write_record(root, _spec_review_record()), step="spec-review", item=None)

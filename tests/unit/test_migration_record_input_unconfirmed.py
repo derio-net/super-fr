@@ -10,8 +10,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.record.model import parse_record
+
+pytestmark = pytest.mark.own_artifacts
 
 _V2_RECORD = """\
 schema_version: 2

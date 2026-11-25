@@ -17,6 +17,8 @@ from fr.run.model import load_run_state
 from tests.unit.test_deliver_pr_body import RUN, _at_deliver, _body, _deliver, live
 from tests.unit.test_placement_merged import _home, quiet, stealthy
 
+pytestmark = pytest.mark.own_artifacts
+
 # the fixtures, re-exported so pytest finds them here
 __all__ = ["_home", "live", "quiet", "stealthy"]
 
@@ -144,6 +146,7 @@ def test_minimal_under_an_outside_placement_keeps_the_render_beside_the_cursor(
     import fr.hostclient
     import fr.record.pr_body
     import fr.settings
+    import fr.shape
     from fr.commands import run_cmd
     from fr.record.pr_body import durable_pr_body_path
 
@@ -155,6 +158,7 @@ def test_minimal_under_an_outside_placement_keeps_the_render_beside_the_cursor(
     monkeypatch.setattr(fr.settings, "load_settings", lambda _root: minimal_settings)
     monkeypatch.setattr(fr.record.pr_body, "render_pr_body", lambda *_a: "## Findings\n")
     monkeypatch.setattr(run_cmd, "_deliver_pr_ask_gate", lambda *_a: None)
+    monkeypatch.setattr(fr.shape, "deliver_shape_refusal", lambda *_a: None)
     monkeypatch.setattr(run_cmd, "_refuse_premature_closes", lambda *_a: None)
     forge = SimpleNamespace(pr_body=lambda ref, cwd=None: PLAIN)
     monkeypatch.setattr(fr.hostclient, "client_for", lambda _root: forge)

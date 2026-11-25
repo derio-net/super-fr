@@ -20,6 +20,8 @@ from fr.real_ghclient import RealGhClient
 from fr.real_glabclient import RealGlabClient
 from fr.real_teaclient import RealTeaClient
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = "derio-net/super-fr"
 
 

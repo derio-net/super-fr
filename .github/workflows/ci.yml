@@ -18,8 +18,59 @@ on:
 env:
   UV_PYTHON: "3.14"
 
+# A newer push to a pull request supersedes its older run (ci-economy R1): only the
+# head counts, so the older run is cancelled. A push to main or fr-queue/** and a merge
+# group get a group of their own (the run id) and are never cancelled.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.ref) || format('ci-{0}-{1}', github.event_name, github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # One lane per run (ci-economy R5, R15), chosen by scripts/ci_lane.py:
+  # - landed: a push to main whose sha already passed this workflow on an fr-queue/**
+  #   push. Only validate-artifacts (main's strict check) and ci-ok run again.
+  # - light: a pull request that changes nothing installable, nothing under tests/ and
+  #   nothing under .github/. scoped-tests runs instead of the shards.
+  # - full: everything else, a merge group and an fr-queue/** push included, and any
+  #   answer the script cannot read for sure.
+  # Full history: the merge base of a pull request must be reachable.
+  classify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      lane: ${{ steps.lane.outputs.lane }}
+      trusted_run: ${{ steps.lane.outputs.trusted_run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # No uv and no Python install: ci_lane.py is stdlib only, so the runner's own python3
+      # runs it, and every job waits on this one (review p2-r3).
+      - name: Choose this run's lane
+        id: lane
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BASE_REF: ${{ github.base_ref }}
+          REPO: ${{ github.repository }}
+          # Only `landed` reads the forge: a pull request's own ci_lane.py gets no token.
+          GH_TOKEN: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.token || '' }}
+        run: |
+          if [ "$EVENT" = push ] && [ "$REF" = refs/heads/main ]; then
+            python3 scripts/ci_lane.py landed --sha "$GITHUB_SHA" --run "$GITHUB_RUN_ID" --repo "$REPO"
+          elif [ "$EVENT" = pull_request ]; then
+            python3 scripts/ci_lane.py classify --base "$BASE_REF"
+          else
+            echo "lane=full" >> "$GITHUB_OUTPUT"
+          fi
+
   lint:
+    needs: classify
+    if: needs.classify.outputs.lane != 'landed'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -30,6 +81,8 @@ jobs:
       - run: uv run ruff format --check packages/ tests/
 
   typecheck:
+    needs: classify
+    if: needs.classify.outputs.lane != 'landed'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -44,6 +97,8 @@ jobs:
   # by `split-check` from main's own CI measurements), else the committed
   # `.test_durations`.
   plan:
+    needs: classify
+    if: needs.classify.outputs.lane == 'full'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -70,6 +125,8 @@ jobs:
   # What the suite collects, with the shards' own addopts and no split or
   # coverage; `split-check` proves the shards ran exactly this set (R5).
   collect:
+    needs: classify
+    if: needs.classify.outputs.lane == 'full'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -88,7 +145,8 @@ jobs:
           retention-days: 1
 
   test:
-    needs: plan
+    needs: [classify, plan]
+    if: needs.classify.outputs.lane == 'full'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -156,7 +214,8 @@ jobs:
   # On a push to main it also saves the shards' measured durations as the next
   # run's plan.
   split-check:
-    needs: [test, collect]
+    needs: [classify, test, collect]
+    if: needs.classify.outputs.lane == 'full'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -191,7 +250,8 @@ jobs:
   # Combines the 7 shards' coverage data and holds the --cov-fail-under=75
   # gate that a single unsharded `test` job used to hold via addopts.
   coverage:
-    needs: test
+    needs: [classify, test]
+    if: needs.classify.outputs.lane == 'full'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -205,7 +265,32 @@ jobs:
       - run: uv run coverage combine .coverage.shard*
       - run: uv run coverage report --fail-under=75
 
+  # The light lane's tests (ci-economy R16): what this pull request's changes reach,
+  # plus the smoke set, instead of the shards. Full history: --fr-scope diffs against
+  # the merge base with the base branch.
+  scoped-tests:
+    needs: classify
+    if: needs.classify.outputs.lane == 'light'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - run: uv sync
+      - name: The tests this change reaches
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: uv run pytest --fr-scope "origin/$BASE_REF" -q --no-cov -n auto
+
+  # Runs in every lane, the landed one included: on main it is the strict check
+  # (ci-economy R5), which an fr-queue/** run does not make.
   validate-artifacts:
+    needs: classify
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -245,6 +330,8 @@ jobs:
         run: fr validate artifacts --allow-migratable
 
   opencode-plugin-test:
+    needs: classify
+    if: needs.classify.outputs.lane != 'landed'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -280,6 +367,8 @@ jobs:
         run: uv run pytest --no-cov -q tests/integration/test_opencode_plugin_live.py
 
   version-sync:
+    needs: classify
+    if: needs.classify.outputs.lane != 'landed'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -289,9 +378,10 @@ jobs:
         run: uv run --no-project python scripts/bump-version.py --check
 
   change-fragment:
+    needs: classify
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && needs.classify.outputs.lane != 'landed'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -308,6 +398,8 @@ jobs:
   # push to main runs the structural checks only, and a merge group diffs
   # against the default branch (R6). No `.fr/docs.yaml`: nothing to check.
   docs-check:
+    needs: classify
+    if: needs.classify.outputs.lane != 'landed'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -327,6 +419,8 @@ jobs:
   # A page that does not render (or links to a path git does not track) fails
   # here, before merge, not on the deploy after it (docs-currency R15).
   site-build:
+    needs: classify
+    if: needs.classify.outputs.lane != 'landed'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -349,20 +443,29 @@ jobs:
           BLOG_CRAFT_DIR: .blog-craft
         run: uv run --isolated --no-project --with pytest --with pyyaml pytest -q -o addopts= --noconftest -p no:cacheprovider tests/unit/test_writing_standards_docs.py -k real_checker
 
-  # One stable check name for a future required-check rule (#706).
+  # One stable check name for the required-check rule (#706). It runs in every run,
+  # never skipped: a skipped required check reads as passing (ci-economy R2). A
+  # superseded run's ci-ok fails on a sha that is no pull request's head any more.
+  # scripts/ci_lane.py verdict reads the lane (R17): a failed or cancelled job fails
+  # every lane; full needs the shards, light needs scoped-tests and may skip only the
+  # shard jobs, landed needs validate-artifacts and names the run it trusts.
   ci-ok:
     if: always()
-    needs: [lint, typecheck, plan, collect, test, split-check, coverage,
-            validate-artifacts, opencode-plugin-test, version-sync,
+    needs: [classify, lint, typecheck, plan, collect, test, split-check, coverage,
+            scoped-tests, validate-artifacts, opencode-plugin-test, version-sync,
             change-fragment, docs-check, site-build]
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
-      - name: Every CI job succeeded or was skipped by its own condition
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Every CI job did what this run's lane asks
         env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
-        run: |
-          echo "job results: $RESULTS"
-          case " $RESULTS " in
-            *" failure "*|*" cancelled "*) exit 1 ;;
-          esac
+          LANE: ${{ needs.classify.outputs.lane }}
+          TRUSTED_RUN: ${{ needs.classify.outputs.trusted_run }}
+          NEEDS: ${{ toJSON(needs) }}
+        run: uv run --no-project python scripts/ci_lane.py verdict

@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/triage/batch_drive.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - docs/cloud-setup.md
-reviewed: 2026-11-25 under quiet and stealth the driver drops the guarded `.fr/triage.yaml` keys from an unprotected configuration branch; the state lives in the cache repository (S1 R7, R17); 2026-11-24 fix/install-stable-by-default, the cloud driver's self-update and the setup script install the release itself, never main (this repo's post_merge asks for --version main); still true; 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-23 pr-readiness-wait phase 1, every driver brief gains one sentence (the driver owns the PR's mergeability and CI, so the session runs no `fr pr settle` loop); still true; 2026-11-22 gate names, runner status and timestamp refactors preserve this interface; 2026-11-20 batch train-truth R24 the driver sorts failures into transient and refusal (a push the remote refused is transient, a lost race on the state ref a refusal), keeps a failure ledger, can run under a supervisor (signalled or orphaned it exits 0, else with the driver's code), writes drive.log (drive status, drive log, the board's Activity panel and Driver stopped need) and hands red and conflicting drafts back early, one fetch per repo per pass, the merge queue's base read included; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-19 the driver's page memory (drive-pages.json holds unfinished waves and an owed flag, no measurement) is kept across processes and carried by the state ref; the driver re-renders every page after the board and snapshots at a wave's finish (triage-pages-ux R6, R7). 2026-11-18 the pages have one name each (batches.html, fr triage batches; the Backlog holds Needs you now). 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates; 2026-11-21 wave-merge-queue phase 7 fixes, requeue targets, the marker comment's trust and scope, the close-out body written once; 2026-11-21 wave-merge-queue phase 7, the queue line, the marker comment, the wave report, defer, requeue and queue-retry; 2026-11-20 wave-merge-queue phase 6, one close-out per wave that migrates what it archives and a DevOps barrier through labels; wave-merge-queue phase 5, every merge is a queue entry and the train is gone; 2026-11-21 wave-merge-queue lens fixes, a moved block of changes, a hand-edited merge and a rewritten branch void an approval, and a pr-open batch waiting on a later queue takes no slot; wave-merge-queue phase 1 fixes, a moved identical change keeps an approval (stated limit, since replaced); wave-merge-queue phase 1, an approval is pinned to the pull request's diff (its patch-id), not its head; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
+reviewed: 2026-11-25 under quiet and stealth the driver drops the guarded `.fr/triage.yaml` keys from an unprotected configuration branch; the state lives in the cache repository (S1 R7, R17); 2026-11-24 batch closeout-truth, approved-fr admits a held close-out to the queue, a stale artifact the close-out does not archive delays it, the close-out session closes; 2026-11-24 fix/install-stable-by-default, the cloud driver's self-update and the setup script install the release itself, never main (this repo's post_merge asks for --version main); still true; 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-23 pr-readiness-wait phase 1, every driver brief gains one sentence (the driver owns the PR's mergeability and CI, so the session runs no `fr pr settle` loop); still true; 2026-11-22 an outside issue is admitted with fr triage admit, not the label alone (triage-hardening); gate names, runner status and timestamp refactors preserve this interface; 2026-11-20 batch train-truth R24 the driver sorts failures into transient and refusal (a push the remote refused is transient, a lost race on the state ref a refusal), keeps a failure ledger, can run under a supervisor (signalled or orphaned it exits 0, else with the driver's code), writes drive.log (drive status, drive log, the board's Activity panel and Driver stopped need) and hands red and conflicting drafts back early, one fetch per repo per pass, the merge queue's base read included; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-19 the driver's page memory (drive-pages.json holds unfinished waves and an owed flag, no measurement) is kept across processes and carried by the state ref; the driver re-renders every page after the board and snapshots at a wave's finish (triage-pages-ux R6, R7). 2026-11-18 the pages have one name each (batches.html, fr triage batches; the Backlog holds Needs you now). 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates; 2026-11-21 wave-merge-queue phase 7 fixes, requeue targets, the marker comment's trust and scope, the close-out body written once; 2026-11-21 wave-merge-queue phase 7, the queue line, the marker comment, the wave report, defer, requeue and queue-retry; 2026-11-20 wave-merge-queue phase 6, one close-out per wave that migrates what it archives and a DevOps barrier through labels; wave-merge-queue phase 5, every merge is a queue entry and the train is gone; 2026-11-21 wave-merge-queue lens fixes, a moved block of changes, a hand-edited merge and a rewritten branch void an approval, and a pr-open batch waiting on a later queue takes no slot; wave-merge-queue phase 1 fixes, a moved identical change keeps an approval (stated limit, since replaced); wave-merge-queue phase 1, an approval is pinned to the pull request's diff (its patch-id), not its head; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 a batch with a member the intake rule rejects is blocked (batch triage-intake); batch release-truth, cloud-setup.md now says the doctor compares release candidates
 ---
 
 ## Why a loop and not a checklist?
@@ -48,8 +48,9 @@ You set them with `fr triage batch create` and `fr triage batch edit` (`--wave N
 batch that names itself and a cycle, and leave the file as it was. If a batch's dependency
 ends up cancelled, abandoned or `partial`, the driver reports the batch as **blocked** and
 never dispatches it; that one needs you. A batch is also blocked while one of its issues is
-from an outside author that no operator admitted. The `ready-fr` label on that issue lifts
-the block, and the next pass dispatches the batch.
+from an outside author that no operator admitted. `fr triage admit <key>` on that issue lifts
+the block, and the next pass dispatches the batch. The label alone does not, and an edit to
+the issue after admission blocks the batch again.
 
 Use waves for "these are independent, start them together" and `after` for "this one edits
 what that one adds". A batch may have no wave. With no batch ids on the command line,
@@ -89,7 +90,21 @@ is true now, not from what it remembers. In order, a pass:
     housekeeping one with your label. When the checks of a combination fail twice, or the
     pull request conflicts, it leaves the queue and the driver hands it back to the batch's
     session if that session is idle, at most twice per dispatch. If the session is gone, or
-    after those two hand-backs, the pull request shows under **Needs you now**. A repo whose
+    after those two hand-backs, the pull request shows under **Needs you now**. A cancelled
+    check does not count as failed. CI cancels a run when a newer run replaces it, so the
+    driver waits for the new run. If no new run comes within `queue.check_wait_minutes`, the
+    check shows under **Needs you now**, the same as a check that never reported. Some
+    conflicts are not real, and the queue settles them itself. Two pages that both moved
+    their `reviewed:` date keep the later date. A generated file, or a generated block in a
+    page, is written again by the commands the repo lists as `mirrors:` in
+    `.fr/triage.yaml`, and the files those commands write in whole are listed as
+    `generated:`. The commands come from the base branch, but the scripts they run come
+    from the pull requests in the combination. The queue trusts that code as far as it
+    tests it. The commands run in a copy of the files with no git folder, with no forge
+    token, no SSH agent and an empty home folder, and the queue takes back only the
+    generated files they wrote. This keeps a mistake small, but it is not a sandbox: the
+    commands run as your user. If a command fails, or it changes any other file, the pull
+    request goes back to its session. A repo whose
     base branch requires a forge merge queue, or that has not said how its checks run on the
     combinations (`queue.ci` in `.fr/triage.yaml`), is held, and the driver says what to add.
     A pull request that `gate:devops` holds before merge is a barrier. The DevOps stage
@@ -162,8 +177,12 @@ is true now, not from what it remembers. In order, a pass:
     close-out leaves it out. Its own close-out follows once its gate passes, and it queues
     between waves; see [exit gates](fr-exit-gates.md). The driver merges closed-out archive
     pull requests only
-    when they are the repo's own, green, and touch only what an archive touches. It can also
-    export a finished wave's state at this point.
+    when they are the repo's own, green, and touch only what an archive touches. Any other
+    one waits for your `approved-fr` label. The driver records the label, and drops it if a
+    later push changes what the pull request changes. If the default branch holds a stale
+    file that the close-out does not archive, the driver says so and starts the close-out
+    only after a migration has moved that file. It can also export a finished wave's state
+    at this point.
 
 4. **Dispatches what may start.** It counts the batches in flight (dispatched, or with an
    open pull request) over every batch in the state file. A batch whose pull request is open
@@ -172,7 +191,8 @@ is true now, not from what it remembers. In order, a pass:
    it starts the next batch by wave, then merge order, then id. It skips any batch whose
    `after` batches have not all merged. A landing the queue made frees its slots on the next
    pass, not in the pass that made it.
-5. **Tidies.** The driver closes a finished batch's sessions. When it sees a wave go from
+5. **Tidies.** The driver closes a finished batch's sessions, and the close-out session
+   once every batch it closed out is finished. When it sees a wave go from
    unfinished to finished while duplicate candidates exist, it prints one `dedupe` line
    naming the `fr triage check` command to judge them.
 
@@ -271,8 +291,10 @@ The driver hands a real merge conflict back to the batch's session when that ses
 idle, or to a fresh session on the batch's branch. It does not wait for the queue to take a pull request. Each pass it tries every open batch
 pull request that the forge shows as conflicting, draft or ready, approved or not. A pull
 request that the queue holds in a slot is left to the queue, which rebases or ejects it. The try is a trial merge with the default
-branch in a scratch checkout that the driver always removes. It uses the same rules as the
-real merge, so a version file or a lock file that the driver would resolve is not a conflict.
+branch in a scratch checkout that the driver always removes. It uses the real merge's rules
+for version files and lock files, so one that the driver would resolve is not a conflict. A
+`reviewed:` stamp or a generated file or block still counts as a conflict in this try: the
+queue settles those only when it builds a combination.
 The driver tries a given head against a given default-branch commit once for each process.
 A pull request that has been handed back for its current head is not shown as awaiting
 approval: its card says it is conflicting and handed back. The brief says to merge the base without

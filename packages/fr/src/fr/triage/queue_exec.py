@@ -18,6 +18,7 @@ through the `GhClient` adapter, both passed in, so this module starts no process
 
 from __future__ import annotations
 
+import tempfile
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
@@ -26,6 +27,7 @@ from typing import Any, Literal, Protocol
 
 import yaml
 
+from fr.checkstate import Verdict, is_superseded, verdict_of
 from fr.ghclient import UnsupportedBatchOps, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
 from fr.triage.batch_merge import MergeConflictError, MergeStopError, unresolvable
@@ -57,6 +59,7 @@ from fr.triage.model import (
     QueueSlotLostEvent,
     VersionBlock,
 )
+from fr.triage.regen import IRREGULAR, classify_conflicts, outside_generated
 from fr.triage.wave_queue import (
     HOLD_HALT,
     HOLD_REF,
@@ -149,13 +152,106 @@ def _apply_slot(wt: Worktree, version: VersionBlock | None, slot: str | None, re
         wt.run(version.relock)
 
 
+MIRROR_TIMEOUT_SECONDS = 600.0
+"""How long one `mirrors:` command may run while a combination is built (2026-11-24-ci-economy
+R11): one that runs longer hands the entry back, as a failed one does."""
+
+
+@dataclass(frozen=True)
+class Regen:
+    """What a repo declares for its generated files (spec 2026-11-24-ci-economy R8, R11): the
+    `mirrors:` argument lists that regenerate them, the `generated:` globs of the files they
+    write in whole, and the per-command *timeout*. The default declares neither."""
+
+    mirrors: tuple[tuple[str, ...], ...] = ()
+    generated: tuple[str, ...] = ()
+    timeout: float = MIRROR_TIMEOUT_SECONDS
+
+
+class MirrorFailedError(MergeConflictError):
+    """A conflict the mirrors could not settle (R11): a command failed or ran out of time,
+    a file kept conflict markers, or the commands changed a path they may not. Its words are
+    the hand-back's reason, since they name the command."""
+
+
 def _conflict(entry: EntryInput, paths: Sequence[str], where: Path) -> MergeConflictError:
     return MergeConflictError(
         f"PR #{entry.pr} ({entry.key}) conflicts with the combination ahead of it in a "
         f"change the queue will not resolve: {', '.join(paths)} (only a version file whose "
-        "PR change is the version alone is resolved)",
+        "PR change is the version alone, a generated file and a `reviewed:` stamp are "
+        "resolved)",
         batch=entry.key, head=entry.head, paths=paths,
     )  # fmt: skip
+
+
+def _conflicted_text(wt: Worktree, path: str) -> str | None:
+    try:
+        return wt.read(path)
+    except OSError, UnicodeDecodeError:
+        return None  # no text there: a real conflict
+
+
+def _mirror_failed(entry: EntryInput, paths: Sequence[str], words: str) -> MirrorFailedError:
+    return MirrorFailedError(
+        f"PR #{entry.pr} ({entry.key}): the queue could not regenerate "
+        f"{', '.join(paths)}: {words}",
+        batch=entry.key, head=entry.head, paths=paths,
+    )  # fmt: skip
+
+
+def _unsafe_path(rel: str) -> bool:
+    """A path no mirror may hand back: absolute, or with a `.git` or `..` component."""
+    parts = rel.replace("\\", "/").split("/")
+    return rel.startswith(("/", "\\")) or any(p in (".git", "..") for p in parts)
+
+
+def _regenerate(
+    wt: Worktree, regen: Regen, entry: EntryInput, paths: Sequence[str], abort: Callable[[], None]
+) -> None:
+    """R11, by a structural rule: the mirrors never see a git directory. The resolved
+    worktree's tracked files are exported to a fresh directory with no `.git`; each command
+    runs there (`gitseam.run_mirror`: a named environment, an empty HOME, its process group
+    killed when it ends). Then the entry is handed back when one failed, a file keeps
+    conflict markers, a changed path is git metadata (a `.git` or `..` component, or
+    absolute), a changed path is not a regular file, or a change lies outside the
+    `generated:` files and blocks; otherwise only those changed paths are copied back and
+    staged."""
+    with tempfile.TemporaryDirectory(prefix="fr-mirror-") as where:
+        export = Path(where)
+        try:
+            tracked = wt.export_tracked(export)
+            before = wt.snapshot_export(export, tracked)
+            for argv in regen.mirrors:
+                wt.run_mirror(argv, export, regen.timeout)
+            after = wt.snapshot_export(export, tracked)
+        except (GitError, OSError) as exc:  # an unreadable or vanished file hands back too
+            abort()
+            raise _mirror_failed(entry, paths, str(exc)) from exc
+        marked = [p for p in paths if "\n<<<<<<< " in "\n" + (after.get(p) or "")]
+        if marked:
+            abort()
+            raise _mirror_failed(entry, marked, "conflict markers are left after the mirrors ran")
+        changed = sorted(p for p in {*before, *after} if before.get(p) != after.get(p))
+        unsafe = [p for p in changed if _unsafe_path(p)]
+        if unsafe:  # whatever the globs say: fnmatch's `*` spans `/` (review #1647)
+            abort()
+            raise _mirror_failed(entry, unsafe, "the mirrors wrote a git metadata path")
+        stray = outside_generated(dict(before), dict(after), regen.generated)
+        if stray:
+            abort()
+            raise _mirror_failed(
+                entry, stray, "the mirrors changed it outside the generated files and blocks"
+            )
+        odd = [p for p in changed if (after.get(p) or "").startswith(IRREGULAR)]
+        if odd:
+            abort()
+            raise _mirror_failed(entry, odd, "the mirrors left it as something other than a file")
+        try:
+            wt.take_generated(export, changed)
+        except (GitError, OSError) as exc:
+            abort()
+            raise _mirror_failed(entry, changed, str(exc)) from exc
+    wt.stage_all()
 
 
 def _resolve(
@@ -165,16 +261,32 @@ def _resolve(
     conflicted: list[str],
     base: str,
     abort: Callable[[], None],
+    regen: Regen,
 ) -> bool:
     """R6: take the combination's side of the version files the PR changed the version
-    alone in (and of a lockfile with a relock); anything else is a `MergeConflictError`.
-    Whether a lockfile was taken (so a relock is owed)."""
+    alone in (and of a lockfile with a relock). 2026-11-24-ci-economy R9-R11: resolve each
+    `reviewed:` stamp and generated-block hunk, take the combination's side of each whole
+    generated path, and regenerate with the mirrors. Anything else is a
+    `MergeConflictError` naming only the real paths. Whether a lockfile was taken (so a
+    relock is owed)."""
     refused = unresolvable(version, wt.show, base, entry.head, conflicted)
-    if refused:
+    held = wt.unmerged_stages()
+    kinds = classify_conflicts(
+        refused, regen.generated, lambda p: _conflicted_text(wt, p), lambda p: held.get(p, {})
+    )
+    owed = [*kinds.whole, *kinds.regenerate]
+    real = [*kinds.real, *([] if regen.mirrors else owed)]
+    if real:
         abort()
-        raise _conflict(entry, refused, wt.path)
-    wt.take_ours(conflicted)
-    return any(is_lockfile(p) for p in conflicted)
+        raise _conflict(entry, real, wt.path)
+    versioned = [p for p in conflicted if p not in refused]
+    if versioned or kinds.whole:
+        wt.take_ours([*versioned, *kinds.whole])
+    for path, text in kinds.hunks.items():
+        wt.write_resolved(path, text)
+    if owed:
+        _regenerate(wt, regen, entry, owed, abort)
+    return any(is_lockfile(p) for p in versioned)
 
 
 def _combine(
@@ -184,6 +296,7 @@ def _combine(
     entry: EntryInput,
     method: Method,
     version: VersionBlock | None,
+    regen: Regen,
 ) -> tuple[str, str]:
     """The tree of *entry* on *prev*, staged in *wt*, and the parents its commit takes;
     for `rebase` the replayed tip itself is returned as the only "parent" (its tree and
@@ -195,25 +308,34 @@ def _combine(
         for sha in checkout.replayed(base, entry.head):
             conflicted = wt.cherry_pick(sha)
             if conflicted:
-                relock = _resolve(wt, version, entry, conflicted, base, wt.abort_pick)
+                relock = _resolve(wt, version, entry, conflicted, base, wt.abort_pick, regen)
                 wt.continue_pick()
                 if relock and version and version.relock:
                     wt.run(version.relock)
         _apply_slot(wt, version, slot, False)
         tip = wt.amend(files) if version and slot else wt.head()
         if checkout.has_merges(base, entry.head):
-            _keeps_merge_content(checkout, wt, prev, entry, version, slot, base, tip)
+            _keeps_merge_content(checkout, wt, prev, entry, version, slot, base, tip, regen)
         return "", tip
-    return _merged_tree(wt, entry, version, slot, base), ""
+    return _merged_tree(wt, entry, version, slot, base, regen), ""
 
 
 def _merged_tree(
-    wt: Worktree, entry: EntryInput, version: VersionBlock | None, slot: str | None, base: str
+    wt: Worktree,
+    entry: EntryInput,
+    version: VersionBlock | None,
+    slot: str | None,
+    base: str,
+    regen: Regen,
 ) -> str:
     """The tree of a plain merge of *entry* on the worktree's HEAD, R6's conflicts resolved
     and the slot version applied: what `merge` and `squash` build."""
     conflicted = wt.merge(entry.head)
-    relock = _resolve(wt, version, entry, conflicted, base, wt.abort_merge) if conflicted else False
+    relock = (
+        _resolve(wt, version, entry, conflicted, base, wt.abort_merge, regen)
+        if conflicted
+        else False
+    )
     _apply_slot(wt, version, slot, relock)
     wt.stage(version.files if version else [])
     return wt.write_tree()
@@ -228,13 +350,14 @@ def _keeps_merge_content(
     slot: str | None,
     base: str,
     tip: str,
+    regen: Regen,
 ) -> None:
     """p3-r9: `rebase` replays the branch's non-merge commits only, so what a merge commit
     of the branch adds (an evil merge, a conflict resolution) would be dropped without a
     word. The replayed tip's tree must equal a plain merge's of the PR head on *prev*;
     when it does not, the entry leaves the queue, naming the paths."""
     wt.reset_hard(prev)
-    merged = _merged_tree(wt, entry, version, slot, base)
+    merged = _merged_tree(wt, entry, version, slot, base, regen)
     dropped = checkout.diff_paths(checkout.tree_of(tip), merged)
     wt.reset_hard(tip)
     if dropped:
@@ -281,6 +404,7 @@ def build(
     record: Callable[[QueueBuiltEvent], None] | None = None,
     leases: Mapping[int, str | None] | None = None,
     now: Callable[[], datetime] | None = None,
+    regen: Regen | None = None,
 ) -> list[Built]:
     """Build *entries* in order on *base* (the queue's base, or the combination ahead),
     entry i into slot *slots*[i], in *method* (R4, R5, R6): each commit on the one before
@@ -290,7 +414,9 @@ def build(
     with no record). A slot lease that fails raises `SlotLostError`; a real conflict raises
     `MergeConflictError` after the entries ahead of it were built and pushed.
 
-    *queue_base* is the queue's `main` (default: *base*). No PR branch is touched."""
+    *queue_base* is the queue's `main` (default: *base*); *regen* the repo's generated
+    files and mirrors (2026-11-24-ci-economy R9-R11; default: none). No PR branch is
+    touched."""
     if len(slots) < len(entries):
         raise MergeStopError(f"{len(entries)} entries to build into {len(slots)} slot(s)")
     queue_base = queue_base or base
@@ -305,7 +431,7 @@ def build(
     try:
         for entry, slot in zip(entries, slots, strict=False):
             wt.reset_hard(prev)
-            tree, tip = _combine(checkout, wt, prev, entry, method, version)
+            tree, tip = _combine(checkout, wt, prev, entry, method, version, regen or Regen())
             ref = slot_ref(scope, slot)
             # R13: never the sha the slot holds on the remote either. A rebuild in the
             # same second as a build the leases do not name would otherwise be that very
@@ -673,9 +799,6 @@ def pause_landings(plan: QueuePlan, reason: str | None) -> QueuePlan:
 
 # ------------------------------------------------------------------ checks (R7)
 
-_FAILED = frozenset({"failure", "cancelled", "timed_out", "action_required", "startup_failure",
-                     "stale", "error"})  # fmt: skip
-
 
 def gate_checks_of(text: str | None) -> list[str] | None:
     """The gate-check names `.fr/ci.yaml`'s *text* declares, None when it declares none
@@ -693,10 +816,27 @@ def gate_checks_of(text: str | None) -> list[str] | None:
     return out or None
 
 
-def _state(check: Mapping[str, Any]) -> Literal["pass", "fail", "pending"]:
+def _state(check: Mapping[str, Any]) -> Verdict:
+    """A combination's check as `fr.checkstate` reads it: a cancelled one is pending."""
     if check.get("status") != "completed":
         return "pending"
-    return "fail" if str(check.get("conclusion") or "").lower() in _FAILED else "pass"
+    return verdict_of(str(check.get("conclusion") or ""))
+
+
+def _cancelled(check: Mapping[str, Any]) -> bool:
+    return check.get("status") == "completed" and is_superseded(str(check.get("conclusion") or ""))
+
+
+def _unreplaced(checks: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    """*checks* without each cancelled run another run of its workflow and name replaces
+    (R4): `commit_checks` keeps the latest run per (workflow, name), so a same-named check
+    of another workflow replaces nothing (p1-r4)."""
+
+    def key(c: Mapping[str, Any]) -> tuple[str, str]:
+        return str(c.get("workflow") or ""), str(c.get("name"))
+
+    live = {key(c) for c in checks if not _cancelled(c)}
+    return [c for c in checks if not (_cancelled(c) and key(c) in live)]
 
 
 def slot_check(
@@ -709,8 +849,12 @@ def slot_check(
 ) -> tuple[SlotCheck, tuple[str, ...]]:
     """R7: a combination's verdict from `commit_checks` on its own sha, under the same
     required-checks rule as a PR (`checks_verdict`): the *required* names when the repo has
-    any, else every check; nothing reported is pending, never green. With it, the
-    required checks that have not reported `wait_minutes` after the build: each a Need."""
+    any, else every check; nothing reported is pending, never green. With it, the checks
+    that have not reported `wait_minutes` after the build: each a Need. A cancelled check no
+    newer run replaces is pending and, after the wait, late like one that never reported
+    (spec 2026-11-24-ci-economy R4)."""
+    checks = _unreplaced(checks)
+    overdue = now - built_at >= timedelta(minutes=wait_minutes)
     if required:
         by_name: dict[str, list[Mapping[str, Any]]] = {}
         for c in checks:
@@ -721,18 +865,20 @@ def slot_check(
         missing = tuple(sorted(n for n in required if n not in by_name))
         pending = [n for n in required
                    if n in by_name and any(_state(c) == "pending" for c in by_name[n])]  # fmt: skip
-        late = missing if now - built_at >= timedelta(minutes=wait_minutes) else ()
+        cancelled = [n for n in required if n in by_name and any(map(_cancelled, by_name[n]))]
+        late = tuple(sorted({*missing, *cancelled})) if overdue else ()
         if failing:
             return SlotCheck("failing", failing), late
         if missing or pending:
             return SlotCheck("pending"), late
         return SlotCheck("green"), ()
     states = [_state(c) for c in checks]
+    late = tuple(sorted({str(c.get("name")) for c in checks if _cancelled(c)})) if overdue else ()
     if "fail" in states:
         names = tuple(sorted(str(c.get("name")) for c in checks if _state(c) == "fail"))
-        return SlotCheck("failing", names), ()
+        return SlotCheck("failing", names), late
     if not states or "pending" in states:
-        return SlotCheck("pending"), ()
+        return SlotCheck("pending"), late
     return SlotCheck("green"), ()
 
 
@@ -781,22 +927,35 @@ def read_slots(
     wait_minutes: int,
 ) -> tuple[dict[str, SlotCheck], list[str]]:
     """Each standing combination of *record* (sha -> its verdict), and a Need per required
-    check that never reported on one of them in time, naming it (R7)."""
+    check that never reported on one of them in time, naming it (R7), and one per check
+    cancelled there that no newer run replaced in time (spec 2026-11-24-ci-economy R4)."""
     built_at = {e.sha: e.at for e in record.events if isinstance(e, QueueBuiltEvent)}
     out: dict[str, SlotCheck] = {}
     needs: list[str] = []
     for combo in replay(record).combos.values():
+        checks = client.commit_checks(repo, combo.sha)
         verdict, late = slot_check(
-            client.commit_checks(repo, combo.sha), required,
+            checks, required,
             built_at=built_at.get(combo.sha, now), now=now, wait_minutes=wait_minutes,
         )  # fmt: skip
         out[combo.sha] = verdict
-        if late:
+        reported = {str(c.get("name")) for c in checks}
+        missing = [n for n in late if n not in reported]
+        cancelled = [n for n in late if n in reported]
+        if missing:
             needs.append(
-                f"{repo}: required check{'s' if len(late) > 1 else ''} {', '.join(late)} did "
-                f"not report on combination {combo.sha[:12]} within {wait_minutes} min: the "
-                "workflow that reports it does not run on pushes to fr-queue/**; add "
+                f"{repo}: required check{'s' if len(missing) > 1 else ''} {', '.join(missing)} "
+                f"did not report on combination {combo.sha[:12]} within {wait_minutes} min: "
+                "the workflow that reports it does not run on pushes to fr-queue/**; add "
                 "`push: branches: ['fr-queue/**']` to it"
+            )
+        if cancelled:
+            many = len(cancelled) > 1
+            needs.append(
+                f"{repo}: check{'s' if many else ''} {', '.join(cancelled)} "
+                f"{'were' if many else 'was'} cancelled on combination {combo.sha[:12]} and no "
+                f"run replaced {'them' if many else 'it'} within {wait_minutes} min: re-run "
+                f"the cancelled workflow on {combo.sha[:12]}"
             )
     return out, needs
 
@@ -890,6 +1049,10 @@ class QueuePorts:
     # attributed by its files alone is not found again once it is no open PR.
     landed: Callable[[Sequence[Landing]], None] | None = None
     now: Callable[[], datetime] = _utcnow
+    # The repo's `mirrors:` and `generated:` (spec 2026-11-24-ci-economy R8-R11): a
+    # combination's generated-file conflicts are regenerated rather than handed back.
+    mirrors: tuple[tuple[str, ...], ...] = ()
+    generated: tuple[str, ...] = ()
 
 
 class QueueExecutor:
@@ -1288,9 +1451,10 @@ class QueueExecutor:
                 p.checkout, action.base, [i for i in inputs if i is not None], p.method,
                 p.version, scope=p.scope, slots=action.slots, scratch=p.scratch,
                 queue_base=queue_base, record=p.record, now=p.now, leases=dict(self._leases),
+                regen=Regen(mirrors=p.mirrors, generated=p.generated),
             )  # fmt: skip
         except MergeConflictError as exc:
-            dropped = "rebase would drop" in str(exc)
+            dropped = "rebase would drop" in str(exc) or isinstance(exc, MirrorFailedError)
             self.conflicts[exc.batch] = BuildConflict(exc.head, exc.paths,
                                                       str(exc) if dropped else "")  # fmt: skip
             if dropped:

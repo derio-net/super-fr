@@ -16,6 +16,8 @@ from pathlib import Path
 import pytest
 from fr.docs.globs import match as fr_match
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 _spec = importlib.util.spec_from_file_location("build_site", REPO / "scripts" / "build-site.py")
 assert _spec is not None and _spec.loader is not None

@@ -10,6 +10,8 @@ import pytest
 import yaml
 from fr.record.model import RECORD_SCHEMA_VERSION
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 SHIPPED = REPO / "plugins" / "super-fr" / "defaults" / "workflows" / "fr-goal.yaml"
 PACKAGED = REPO / "packages" / "fr" / "src" / "fr" / "defaults" / "workflows" / "fr-goal.yaml"

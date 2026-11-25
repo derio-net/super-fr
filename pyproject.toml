@@ -3,7 +3,7 @@
 # both plugin manifests; the version-sync CI job checks the set.
 [project]
 name = "super-fr-workspace"
-version = "9.0.0rc5"
+version = "9.0.0rc10"
 description = "super-fr workspace root (fr / fr-dispatch / fr-cncd / fr-herdr / fr-claude-cloud)"
 requires-python = ">=3.14"
 dependencies = ["fr", "fr-dispatch", "fr-cncd", "fr-herdr", "fr-claude-cloud"]
@@ -59,6 +59,7 @@ addopts = "--strict-markers --cov --cov-report=term-missing --cov-fail-under=75 
 markers = [
     "scenario: drives an installed fr or install.sh end to end; deselected locally, run by CI and the release",
     "smoke: one CLI round trip per top-level fr command group; always run by --fr-scope",
+    "own_artifacts: reads this checkout's own tracked files (docs/, .fr/, .changes/, root *.md); --fr-scope selects them when those change",
 ]
 
 [tool.coverage.run]

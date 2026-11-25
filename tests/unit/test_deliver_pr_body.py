@@ -22,6 +22,8 @@ from tests.unit.record_support import (
     write_record,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 PR = "https://github.com/derio-net/super-fr/pull/1"
 
 
@@ -165,6 +167,7 @@ def test_no_out_of_scope_findings_renders_none(tmp_path: Path) -> None:
 
     assert render_out_of_scope([]) == "None."
     assert missing_sections("## Findings\n## Out-of-scope findings\nNone.\n") == [
+        "## Shape of the change",
         "## Pre-merge verification owed",
         "## Post-merge verification owed",
         "## Manual operations",
@@ -215,6 +218,7 @@ def test_the_required_sections_carry_no_input_section() -> None:
     assert REQUIRED_SECTIONS == (
         "## Findings",
         "## Out-of-scope findings",
+        "## Shape of the change",
         "## Pre-merge verification owed",
         "## Post-merge verification owed",
         "## Manual operations",

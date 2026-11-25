@@ -17,7 +17,10 @@ import pytest
 
 from tests.unit.acceptance_helpers import make_repo, row, write_fragments, write_matrix_fragments
 
-pytestmark = pytest.mark.skipif(shutil.which("jq") is None, reason="hook scripts require jq")
+pytestmark = [
+    pytest.mark.skipif(shutil.which("jq") is None, reason="hook scripts require jq"),
+    pytest.mark.own_artifacts,
+]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "plugins" / "super-fr" / "hooks" / "fr-acceptance-nag.sh"

@@ -14,6 +14,8 @@ from pathlib import Path
 import pytest
 from fr.triage.timestamps import parse_aware
 
+pytestmark = pytest.mark.own_artifacts
+
 PACKAGES = Path(__file__).resolve().parents[2] / "packages"
 OWNER = PACKAGES / "fr" / "src" / "fr" / "triage" / "timestamps.py"
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import pytest
 import yaml
 from fr.record.model import parse_record
 
@@ -20,6 +21,8 @@ from tests.unit.record_support import (
     started_run,
     write_record,
 )
+
+pytestmark = pytest.mark.own_artifacts
 
 
 def _pickup(root: Path, env: dict[str, str] | None = None):

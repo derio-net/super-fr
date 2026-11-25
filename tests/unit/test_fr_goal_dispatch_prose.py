@@ -23,6 +23,8 @@ import pytest
 from fr.harness import load_matrix
 from fr.harness.prose import scan_prose
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILL = REPO_ROOT / "plugins" / "super-fr" / "skills" / "fr-goal" / "SKILL.md"
 

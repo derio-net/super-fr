@@ -18,6 +18,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 
 PRODUCT_PUSHER = {("fr.git_policy.product", "push_product_branch")}

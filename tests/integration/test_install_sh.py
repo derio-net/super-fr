@@ -21,7 +21,7 @@ import pytest
 
 # Every test here runs install.sh into a sandboxed home: the scenario tier, which a
 # plain local run deselects (spec 2026-11-19-local-suite-cost R5).
-pytestmark = pytest.mark.scenario
+pytestmark = [pytest.mark.scenario, pytest.mark.own_artifacts]
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"

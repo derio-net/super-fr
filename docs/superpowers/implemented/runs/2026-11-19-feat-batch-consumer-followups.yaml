@@ -1,0 +1,133 @@
+schema_version: 12
+run: 2026-11-19-feat-batch-consumer-followups
+workflow: fr-goal@1
+branch: feat/batch-consumer-followups
+started: '2026-11-19T22:17:21+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-11-19T22:22:31+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-19-consumer-followups-design.md
+  spec-review:
+    state: done
+    at: '2026-11-19T22:29:55+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-19T22:22:35+00:00'
+          agent: a5b0215012d40942a
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-opus-5-5
+          tier: hard
+          bound: claude-opus-5-5
+          session: 2d3fa3d9-e3f6-4e93-9b08-1cff78e16b99
+          returned: '2026-11-19T22:29:53+00:00'
+          outcome: done
+        evidence:
+          review: spec-review-1
+          reviewer: a5b0215012d40942a
+          findings: s-r1,s-r2,s-r3,s-r4,s-r5,s-r6
+  plan:
+    state: done
+    at: '2026-11-19T22:32:50+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-11-19-consumer-followups
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-11-19T22:30:13+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 2d3fa3d9-e3f6-4e93-9b08-1cff78e16b99
+          returned: '2026-11-19T22:32:50+00:00'
+          outcome: done
+  plan-review:
+    state: done
+    at: '2026-11-19T22:32:57+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-11-20T02:25:25+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-19T22:32:59+00:00'
+          agent: add08e68cffe9eef5
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          tier: hard
+          bound: claude-opus-5-5
+          session: 2d3fa3d9-e3f6-4e93-9b08-1cff78e16b99
+          returned: '2026-11-20T02:19:35+00:00'
+          outcome: done
+        evidence:
+          visual: none
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-20T02:19:36+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 2d3fa3d9-e3f6-4e93-9b08-1cff78e16b99
+          returned: '2026-11-20T02:25:25+00:00'
+          outcome: done
+        evidence:
+          review: review-p1-1
+          reviewer: ac2ede9205fb5950f
+          visual: none
+          findings: p1-r1
+  journal-check:
+    state: done
+    at: '2026-11-20T02:25:28+00:00'
+    exit: 0
+    stdout: ''
+  lens-review:
+    state: done
+    at: '2026-11-20T02:29:26+00:00'
+    units:
+      step/lens-review:
+        attempts:
+        - dispatched: '2026-11-20T02:25:31+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 2d3fa3d9-e3f6-4e93-9b08-1cff78e16b99
+          returned: '2026-11-20T02:29:26+00:00'
+          outcome: done
+        evidence:
+          review: lens-review-1
+          reviewer: docs-accuracy=ae8771d17b5d3e91d,errors=af22336b67719c3ad,security=ae003c3ddca4343b7
+          findings: l-errors-r1,l-errors-r2,l-errors-r3
+          lenses: docs-accuracy=9:none;errors=5:l-errors-r1,l-errors-r2,l-errors-r3;security=8:none
+  deliver:
+    state: done
+    at: '2026-11-20T07:32:20+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1583
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-20T02:29:27+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 2d3fa3d9-e3f6-4e93-9b08-1cff78e16b99
+          returned: '2026-11-20T07:31:26+00:00'
+          outcome: done
+        evidence:
+          tests: ci:60c9d2d960f5d9510fb18d143ca406fe9c8654e2+396e444d3f313b84df4b96971d9da98719556dbe;tree=77b196f76e52248cf614c52e8a19671862835a8b003c2070fea09ee9f56542a7
+          walk: 20261120T071229Z.log@0075f83673e4
+          proportionality: 396e444d3f313b84df4b96971d9da98719556dbe:4c2d374869b048193c40c3e2feadc4b3c701c2a39e2bbc6b869e70216743d71f
+          docs: 396e444d3f313b84df4b96971d9da98719556dbe:d9af5272ee03fbbcace8cabad793113dba18319bd2ca2245b65f4f54acd6537e
+          visual: none
+fr_version: 8.3.0rc6
+pr: https://github.com/derio-net/super-fr/pull/1583

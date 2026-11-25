@@ -14,7 +14,10 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
 from fr.docs import load
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

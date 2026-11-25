@@ -1,5 +1,5 @@
 {
-  "schema": 17,
+  "schema": 19,
   "scope": "example-org--widgets",
   "kind": "repo",
   "collected_at": "2026-10-12T00:00:00Z",
@@ -22,7 +22,11 @@
       "dispatch_marker_at": null,
       "claims": [],
       "author": null,
-      "author_association": "OWNER"
+      "author_association": "OWNER",
+      "content_digest": null,
+      "admit_digest": null,
+      "admit_read": false,
+      "admit_unread": null
     },
     {
       "repo": "example-org/widgets",
@@ -39,7 +43,11 @@
       "dispatch_marker_at": null,
       "claims": [],
       "author": null,
-      "author_association": "OWNER"
+      "author_association": "OWNER",
+      "content_digest": null,
+      "admit_digest": null,
+      "admit_read": false,
+      "admit_unread": null
     },
     {
       "repo": "example-org/widgets",
@@ -56,7 +64,11 @@
       "dispatch_marker_at": null,
       "claims": [],
       "author": null,
-      "author_association": "OWNER"
+      "author_association": "OWNER",
+      "content_digest": null,
+      "admit_digest": null,
+      "admit_read": false,
+      "admit_unread": null
     },
     {
       "repo": "example-org/widgets",
@@ -73,7 +85,11 @@
       "dispatch_marker_at": null,
       "claims": [],
       "author": null,
-      "author_association": "OWNER"
+      "author_association": "OWNER",
+      "content_digest": null,
+      "admit_digest": null,
+      "admit_read": false,
+      "admit_unread": null
     }
   ],
   "prs": [],
@@ -89,5 +105,6 @@
   "config_ignored": {},
   "gated_prs": [],
   "gated_unread": [],
+  "ignored_claims": [],
   "state_repo_declared": {}
 }

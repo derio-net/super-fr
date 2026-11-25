@@ -19,6 +19,8 @@ from fr.isolation.scaffold import (
 from fr.isolation.scaffold import scaffold_profile as _scaffold_profile
 from typer.testing import CliRunner
 
+pytestmark = pytest.mark.own_artifacts
+
 runner = CliRunner()
 
 

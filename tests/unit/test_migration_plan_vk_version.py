@@ -37,6 +37,8 @@ from fr.artifacts.runner import (
 )
 from fr.artifacts.validate import validate_repo
 
+pytestmark = pytest.mark.own_artifacts
+
 BASE = "schema_version: 2\nplan: demo\nspec: demo-design.md\n"
 
 

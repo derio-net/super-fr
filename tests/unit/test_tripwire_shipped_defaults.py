@@ -25,6 +25,8 @@ from fr.verification.model import StrategyManifest, parse_strategy
 from fr.workflow.check import check_workflow
 from fr.workflow.model import WorkflowError, parse_manifest
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULTS_DIR = REPO_ROOT / "plugins" / "super-fr" / "defaults"
 PACKAGED_DIR = REPO_ROOT / "packages" / "fr" / "src" / "fr" / "defaults"

@@ -12,6 +12,8 @@ from fr.verification.labels import SyncOutcome
 from tests.unit.record_support import RUN, commit_all, fr, git, head, write_record
 from tests.unit.test_record_apply import _at_spec_review, _resolve, _spec_review_record
 
+pytestmark = pytest.mark.own_artifacts
+
 SPEC = "docs/spec.md"
 SECTION = (
     "\n## Verification\n\nstrategy: live\ngate: tester\n- req-r1: live — needs a release\n"

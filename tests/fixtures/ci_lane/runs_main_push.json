@@ -1,0 +1,38 @@
+{
+    "total_count": 3,
+    "workflow_runs": [
+        {
+            "conclusion": "success",
+            "event": "push",
+            "head_branch": "main",
+            "head_sha": "d52f788b0821c2350c9736e5429bc7eca3e07cdd",
+            "id": 45430706463,
+            "name": "acceptance-report",
+            "path": ".github/workflows/acceptance-report.yml",
+            "run_attempt": 1,
+            "status": "completed"
+        },
+        {
+            "conclusion": "success",
+            "event": "push",
+            "head_branch": "main",
+            "head_sha": "d52f788b0821c2350c9736e5429bc7eca3e07cdd",
+            "id": 45430706454,
+            "name": "Release",
+            "path": ".github/workflows/release.yml",
+            "run_attempt": 1,
+            "status": "completed"
+        },
+        {
+            "conclusion": "success",
+            "event": "push",
+            "head_branch": "main",
+            "head_sha": "d52f788b0821c2350c9736e5429bc7eca3e07cdd",
+            "id": 45430706226,
+            "name": "CI",
+            "path": ".github/workflows/ci.yml",
+            "run_attempt": 1,
+            "status": "completed"
+        }
+    ]
+}

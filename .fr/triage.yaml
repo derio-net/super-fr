@@ -32,7 +32,31 @@ export:
 # forbids only force-push and deletion), and the release workflow cuts the wave's release.
 queue:
   ci: push
-  depth: 2
+  # Up to three combinations in CI at once: a wave's non-overlapping entries stack and land together.
+  depth: 3
   land: push
   release: workflow
   # No `release_workflow:` on purpose: release.yml already runs on the drained `fr-hold/**` push.
+# The commands that regenerate this repo's generated files, and the globs of the files they
+# write in whole (spec 2026-11-24-ci-economy R13). The wave merge queue takes the combination's
+# side of a conflicted generated file (and of a conflicted `<!-- generated:NAME -->` block) and
+# runs these, in order, in a copy of the combination's tracked files with no git directory;
+# a conflict brief names them too. Each
+# runs through `uv run --frozen`, so the combination's own fr is imported and uv.lock is never
+# rewritten. README.md and docs/reference/cli.md are not listed: sync-readme.py writes only
+# their generated blocks, which the queue resolves by block.
+mirrors:
+  - [uv, run, --frozen, python, scripts/sync-readme.py]
+  - [uv, run, --frozen, python, scripts/sync-opencode.py]
+  - [uv, run, --frozen, python, scripts/sync-hermes.py]
+  - [uv, run, --frozen, python, scripts/sync-agents-data.py]
+  - [uv, run, --frozen, python, scripts/sync-defaults-data.py]
+generated:
+  - ".opencode/skills/*"         # sync-opencode.py: skill mirrors and their .source notes
+  - ".opencode/instructions/*"   # sync-opencode.py: rule mirrors
+  - ".opencode/agent/*"          # sync-opencode.py: per-tier subagent files
+  - ".opencode/commands/*"       # sync-opencode.py: slash commands
+  - ".hermes/skills/fr/*"        # sync-hermes.py: skill mirrors and their .source notes
+  - ".hermes/SOUL.d/super-fr-rules.md"           # sync-hermes.py: the rules block
+  - "packages/fr/src/fr/agents/*.md"             # sync-agents-data.py: the wheel's agents
+  - "packages/fr/src/fr/defaults/*.yaml"        # sync-defaults-data.py: the wheel's shipped defaults

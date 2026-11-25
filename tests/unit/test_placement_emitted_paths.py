@@ -13,6 +13,7 @@ from fr.cli import app
 from fr.isolation.hostworktree import HostWorktreeTarget
 from typer.testing import CliRunner
 
+from tests.unit.requirements_support import DESIGN_SHAPE_SECTION
 from tests.unit.settings_repo import make_repo
 from tests.unit.test_placement_quiet import QUIET, push_fr_branch
 
@@ -39,7 +40,7 @@ def started(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path
     feature = fr_root / "features" / FEATURE
     spec = feature / KIND_DIRS["spec"] / SPEC
     spec.parent.mkdir(parents=True, exist_ok=True)
-    spec.write_text("# Q\n")
+    spec.write_text("# Q\n" + DESIGN_SHAPE_SECTION)
     code, out = _fr(state.worktree, "run", "advance", cursor.stem)
     assert code == 0, out
     return state.worktree, feature, cursor.stem

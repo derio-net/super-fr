@@ -5,7 +5,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 from fr.triage.model import JUDGEMENTS_SCHEMA
+
+pytestmark = pytest.mark.own_artifacts
 
 SKILLS = Path(__file__).resolve().parents[2] / "plugins/super-fr/skills"
 

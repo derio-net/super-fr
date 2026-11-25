@@ -60,6 +60,11 @@ SKILLS: list[tuple[str, str, str]] = [
         "fr triage origins {collect,check,render}  ·  origins.yaml in the triage state dir",
     ),
     (
+        "fr-show-me",
+        "Draw a change as the smallest text view: tree, structure-diff, mermaid (skill).",
+        "## Design shape in a spec  ·  <run-id>.shape.md  →  ## Shape of the change",
+    ),
+    (
         "fr-devops-gate",
         "The DevOps stage: a PR's manual operations, its merge and its close-out (skill).",
         "fr ops gate --run <id> [--yes]  ·  fr ops {status,apply,attest,trust}",

@@ -26,6 +26,8 @@ from fr.harness import ARGUMENT_VOCABULARY, HARNESSES, TOOL_VOCABULARY
 from fr.harness.model import HarnessError
 from fr.harness.prose import Violation, require_every_harness, scan_prose
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 

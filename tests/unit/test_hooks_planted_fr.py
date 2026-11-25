@@ -17,9 +17,12 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("jq") is None or shutil.which("git") is None, reason="hooks need jq and git"
-)
+pytestmark = [
+    pytest.mark.skipif(
+        shutil.which("jq") is None or shutil.which("git") is None, reason="hooks need jq and git"
+    ),
+    pytest.mark.own_artifacts,
+]
 
 HOOKS_DIR = Path(__file__).resolve().parents[2] / "plugins" / "super-fr" / "hooks"
 FR_SCRIPT = (

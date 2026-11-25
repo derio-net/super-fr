@@ -59,12 +59,14 @@ from fr.triage.drive_errors import fail_exit
 from fr.triage.driver_record import view_inputs
 from fr.triage.errors import TriageError
 from fr.triage.fragments import moved_notes, resolve_manifest
+from fr.triage.intake import issue_reason
 from fr.triage.merge_stops import load_stops
 from fr.triage.model import (
     Batch,
     CloseoutEvent,
     CursorReader,
     Facts,
+    Issue,
     Judgements,
     Scope,
     issue_key,
@@ -843,6 +845,13 @@ def _load_state(
     return target_dir, facts, judgements
 
 
+def _withheld_line(issue: Issue, why: str) -> str:
+    """An ineligible issue as check prints it: key, URL, author and reason, never its title
+    (2026-11-22-triage-hardening R1)."""
+    author = issue.author or "author not read"
+    return f"{escape(issue.key)}  {escape(issue.url)}  ({escape(author)}: {escape(why)})"
+
+
 @triage_app.command("check")
 def check_command(
     repo: RepoOpt = None,
@@ -897,7 +906,8 @@ def check_command(
     )
     for state in ("stale", "release-pending", "held"):
         for e in (e for e in result.closed_in_progress if e.state == state):
-            console.print(f"  {escape(e.key)}  {state}  {escape(e.title)}", soft_wrap=True)
+            title = escape(e.title) if e.title else "[dim]title withheld[/dim]"
+            console.print(f"  {escape(e.key)}  {state}  {title}", soft_wrap=True)
     console.print(f"[bold]unranked[/bold] ({len(result.unranked)}) — open, no judgement")
     for i in result.unranked:
         console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
@@ -959,7 +969,8 @@ def check_command(
         "debt marker, by no trusted author: ignored, never read for figures"
     )
     for i in result.untrusted_digests:
-        console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
+        why = issue_reason(i, facts) or "carries the debt marker, not by the debt workflow"
+        console.print(f"  {_withheld_line(i, why)}", soft_wrap=True)
     console.print(
         f"[bold]owed[/bold] ({len(result.owed)}) — open, fr:owed: an operator action is owed; "
         "not ranked or proposed"
@@ -967,11 +978,41 @@ def check_command(
     for i in result.owed:
         console.print(f"  {escape(i.key)}  {escape(i.title)}", soft_wrap=True)
     console.print(
+        f"[bold]obsolete batches[/bold] ({len(result.obsolete_batches)}) — never dispatched, "
+        "every member closed or awaiting live: nothing left to do; retire each"
+    )
+    for bid in result.obsolete_batches:
+        console.print(
+            f"  {escape(bid)}  fr triage batch cancel {escape(bid)} --yes", soft_wrap=True
+        )
+    console.print(
+        f"[bold]stale members[/bold] ({len(result.stale_members)}) — proposed batches with a "
+        "member already closed: edit them before they dispatch"
+    )
+    for bid, keys in result.stale_members.items():
+        console.print(f"  {escape(bid)}  closed: {escape(', '.join(keys))}", soft_wrap=True)
+    console.print(
         f"[bold]untrusted[/bold] ({len(result.untrusted)}) — open, by an author intake does not "
-        "admit: never judged, ranked or batched; label it ready-fr to admit it"
+        "admit: never judged, ranked or batched; an operator admits one with "
+        "`fr triage admit <key>`"
     )
     for i, why in result.untrusted:
-        console.print(f"  {escape(i.key)}  {escape(i.title)} — {escape(why)}", soft_wrap=True)
+        console.print(f"  {_withheld_line(i, why)}", soft_wrap=True)
+    console.print(
+        f"[bold]ignored claims[/bold] ({len(result.ignored_claims)}) — claim markers by an "
+        "account that is not trusted: other hosts ignore its claims"
+    )
+    for c in result.ignored_claims:
+        for login in c.authors:
+            # Anyone can post a claim-shaped marker, and pr_authors also grants intake
+            # trust: the advice is conditional and names its cost (p1-sec-claim-advice).
+            console.print(
+                f"  {escape(c.key)}  {escape(login)}: claim marker ignored (not a trusted "
+                f"login or member). If {escape(login)} is one of your driving accounts, add "
+                f"it to pr_authors in {escape(c.repo)}'s .fr/triage.yaml (this also admits "
+                "its issues to batches); otherwise ignore it.",
+                soft_wrap=True,
+            )
     console.print(
         f"[bold]no severity[/bold] ({len(result.no_severity)}) — open, judged, no severity"
     )
@@ -1046,7 +1087,9 @@ def clean_labels_command(
     if not yes:
         for t in targets:
             console.print(
-                f"would remove {both} from {t.key}  {t.title}", markup=False, soft_wrap=True
+                f"would remove {both} from {t.key}  {t.title or '(title withheld)'}",
+                markup=False,
+                soft_wrap=True,
             )
         console.print("nothing written; re-run with --yes to write", markup=False)
         return
@@ -1296,6 +1339,7 @@ def render_command(
 # helpers above and registers its commands on `batch_app`, so it is imported
 # LAST: whichever of the two modules loads first, every name the other needs
 # already exists.
+import fr.commands.triage_admit_cmd  # noqa: E402, F401
 import fr.commands.triage_architecture_cmd  # noqa: E402, F401
 import fr.commands.triage_batch_cmd  # noqa: E402, F401
 import fr.commands.triage_claim_cmd  # noqa: E402, F401

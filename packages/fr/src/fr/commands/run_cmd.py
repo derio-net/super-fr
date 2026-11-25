@@ -19,13 +19,13 @@ forking the done/failed cursor asymmetry a second time.
 
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
 import functools
 import json
 import os
 import re
 import shlex
-import subprocess
 from collections.abc import Callable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -86,6 +86,7 @@ from fr.records_commit import commit_records
 from fr.run import liveness as _liveness
 from fr.run import units
 from fr.run.adopt import MANUAL_ITEM, AdoptError, Superseded, adopt_run, plan_phase_tags
+from fr.run.cli_step import run_step
 from fr.run.historical import (
     HISTORICAL_HEADING,
     HISTORICAL_REVIEWER,
@@ -103,16 +104,19 @@ from fr.run.model import (
     AnsweredBy,
     DispatchOutcome,
     RunState,
+    RunStateConflictError,
     RunStateError,
     StepRecord,
     current_run_schema_version,
     existing_run_id_colliding_with,
     load_run_state,
     parse_run_state,
+    read_run_state,
     run_path,
     save_run_state,
     validate_run_id,
 )
+from fr.shape import shown_path
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -370,7 +374,11 @@ def _remember(path: Path) -> None:
 def _save_run_state(repo_root: Path, state: RunState) -> Path:
     """`save_run_state`, noted for the command's closing commit."""
     _remember(run_path(repo_root, state.run))
-    path = save_run_state(repo_root, state)
+    try:
+        path = save_run_state(repo_root, state)
+    except RunStateConflictError as e:  # super-fr#1511: a refusal; nothing was written
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
     _note_record_write(repo_root, path, state)
     return path
 
@@ -4940,13 +4948,13 @@ def _lens_review_brief(step: Step, state: RunState) -> dict[str, Any]:
     compute refuses the brief (exit 2) before anything is written: an empty set
     read off an error would dispatch no reviewer for a lens a rule requires."""
     from fr.lenses.review import LENS_EVIDENCE, lens_review_brief
+    from fr.shape import shape_path
 
     if LENS_EVIDENCE not in step.evidence:
         return {}
     repo_root = resolve_repo_root()
-    return {
-        "lens_review": lens_review_brief(repo_root, _lens_set_or_exit(step.id, repo_root, state))
-    }
+    lenses = _lens_set_or_exit(step.id, repo_root, state)
+    return {"lens_review": lens_review_brief(repo_root, lenses, shape_path(repo_root, state.run))}
 
 
 def _lens_set_or_exit(key: str, repo_root: Path, state: RunState) -> LensSet:
@@ -5386,7 +5394,7 @@ def _existing_run_for_workflow(repo_root: Path, workflow: str, branch: str) -> s
         return None
     for candidate in sorted(runs_dir.glob("*.yaml")):
         try:
-            state = parse_run_state(candidate.read_text())
+            state = read_run_state(candidate)
         except RunStateError, OSError:
             continue  # a broken run file is a different problem
         if state.workflow.split("@", 1)[0] == workflow and state.branch == branch:
@@ -5437,7 +5445,8 @@ def _refuse_spec_policy(
 ) -> None:
     """R7, R8: the step that accepts the spec (`brainstorm`, `spec-review`) refuses one the
     repo's policy forbids (a Test Plan under `test_plan: off`, a `gate:` line under
-    `gates: off`), naming the setting, before anything is written."""
+    `gates: off`), naming the setting, then one with no valid design shape
+    (`_refuse_spec_shape`), before anything is written."""
     if step_id not in ("brainstorm", *_spec_review_ids(repo_root, state)):
         return
     from fr.requirements import run_spec
@@ -5455,6 +5464,17 @@ def _refuse_spec_policy(
         err_console.print(f"[red]{step_id}: {escape(spec_rel)} breaks the repo's settings:[/red]")
         for problem in problems:
             err_console.print(f"  {escape(problem)}", soft_wrap=True)
+        raise typer.Exit(2)
+    _refuse_spec_shape(step_id, spec_rel, emitted_path(repo_root, spec_rel))
+
+
+def _refuse_spec_shape(step_id: str, spec_rel: str, spec: Path) -> None:
+    """Spec 2026-11-24-show-me-visuals R8: the same steps refuse a spec with no valid
+    `## Design shape`, naming it and the two forms, before anything is written."""
+    from fr.shape import spec_shape_refusal
+
+    if (refusal := spec_shape_refusal(step_id, spec_rel, spec)) is not None:
+        err_console.print(f"[red]{escape(refusal)}[/red]", soft_wrap=True)
         raise typer.Exit(2)
 
 
@@ -5914,7 +5934,7 @@ def adopt_cmd(
             dry_run=not yes,
             superseded=effects,
         )
-    except AdoptError as e:
+    except (AdoptError, RunStateConflictError) as e:
         err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(2) from e
     if effects.old and not effects.written_new:
@@ -6195,7 +6215,7 @@ def _cost_cursor(repo_root: Path, run_id: str) -> RunState | None:
     same fallback `load_run_usage` makes for the usage file (review p2-r1), so
     a closed-out run keeps its per-phase table. `None` when neither reads: an
     archived cursor older than the live model prints the step table only."""
-    from fr.run.model import archived_run_path, parse_run_state
+    from fr.run.model import archived_run_path
 
     try:
         return load_run_state(repo_root, run_id)
@@ -6649,26 +6669,23 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
         )
         raise typer.Exit(2)
 
-    proc = subprocess.run(  # noqa: S602 — manifest is operator-authored; values are shlex-quoted
-        command, shell=True, cwd=repo_root, capture_output=True, text=True
+    try:
+        returncode, stdout, failure = run_step(command, repo_root, step.id)
+    except ValueError as e:  # super-fr#1507: a bad timeout is refused, never defaulted
+        err_console.print(f"[red]{escape(str(e))}[/red]")
+        raise typer.Exit(2) from None
+    status: Literal["done", "failed"] = "failed" if failure else "done"
+    new_state = _complete_step(
+        state, manifest, state.cursor, status, exit_code=returncode, stdout=stdout
     )
-    if proc.returncode == 0:
-        new_state = _complete_step(
-            state, manifest, state.cursor, "done", exit_code=0, stdout=proc.stdout
-        )
-        _save_run_state(repo_root, new_state)
+    _save_run_state(repo_root, new_state)
+    if failure is None:
         console.print(f"{step.id}: done (exit 0)")
         return "cli-done"
-    else:
-        new_state = _complete_step(
-            state, manifest, state.cursor, "failed", exit_code=proc.returncode, stdout=proc.stdout
-        )
-        _save_run_state(repo_root, new_state)
-        err_console.print(f"{step.id}: failed (exit {proc.returncode})")
-        # A return value, not `typer.Exit(1)`: only this branch knows a step
-        # ran and failed, so only it may say so (review r1-1). Every
-        # `typer.Exit` raised under `_advance_step` is a refusal.
-        return "cli-failed"
+    err_console.print(failure)
+    # A return value, not `typer.Exit(1)`: only this branch knows a step ran and failed, so only
+    # it may say so (review r1-1). Every `typer.Exit` raised under `_advance_step` is a refusal.
+    return "cli-failed"
 
 
 def _resolve_member(
@@ -7254,7 +7271,11 @@ def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
         shared_closing_keywords,
     )
     from fr.settings import load_settings
+    from fr.shape import deliver_shape_refusal
 
+    if (shape := deliver_shape_refusal(repo_root, state)) is not None:  # show-me-visuals R11
+        err_console.print(f"refused: {shape}", markup=False, soft_wrap=True)
+        raise typer.Exit(2)
     _deliver_pr_ask_gate(repo_root, state, pr)
     pr = pr or state.pr
     minimal = load_settings(repo_root).settings.forge.pr_body == "minimal"
@@ -8217,7 +8238,6 @@ def resolve_in_process(
     same names: `answered_by` (who answered the step's operator gate) and
     `agent`/`harness`/`model` (the late identity of the unit's holder).
     """
-    import contextlib
     import io
     import sys
 
@@ -8273,13 +8293,7 @@ def resolve_in_process(
     )
 
 
-def _shown_path(path: Path, repo_root: Path) -> str:
-    """*path* relative to the checkout when it is inside it, else absolute: under quiet
-    and stealth a run's files live outside the product checkout."""
-    try:
-        return path.resolve().relative_to(repo_root.resolve()).as_posix()
-    except ValueError:
-        return str(path)
+_shown_path = shown_path  # one display rule with fr.shape's refusals (review p1-r1)
 
 
 def _resolve_with_record(
@@ -8827,7 +8841,7 @@ def _runs_on_this_branch(repo_root: Path) -> list[RunState]:
     found: list[RunState] = []
     for candidate in sorted(runs_dir.glob("*.yaml")):
         try:
-            state = parse_run_state(candidate.read_text())
+            state = read_run_state(candidate)
         except RunStateError, OSError:
             continue
         if state.branch == branch:

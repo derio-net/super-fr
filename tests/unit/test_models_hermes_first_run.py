@@ -15,8 +15,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fr.models import load_models
 from fr.models import resolve as resolve_binding
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPO_MODELS = REPO_ROOT / "docs" / "superpowers" / "models.yaml"

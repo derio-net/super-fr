@@ -28,9 +28,12 @@ from pathlib import Path
 import pytest
 
 REAL = {name: shutil.which(name) for name in ("jq", "git", "python3")}
-pytestmark = pytest.mark.skipif(
-    any(v is None for v in REAL.values()), reason="hooks need jq, git and python3"
-)
+pytestmark = [
+    pytest.mark.skipif(
+        any(v is None for v in REAL.values()), reason="hooks need jq, git and python3"
+    ),
+    pytest.mark.own_artifacts,
+]
 
 HOOKS_DIR = Path(__file__).resolve().parents[2] / "plugins" / "super-fr" / "hooks"
 PLANTED = '#!/bin/sh\nprintf "%s %s\\n" "$0" "$*" >> "$PLANTED_MARK"\nexit 1\n'

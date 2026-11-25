@@ -12,7 +12,7 @@ covers:
   - packages/fr/src/fr/lenses/**
   - plugins/super-fr/defaults/lenses/**
   - packages/fr/src/fr/commands/lenses_cmd.py
-reviewed: 2026-11-25 the shipped texts move to `plugins/super-fr/defaults/lenses/` (wheel `fr/defaults/lenses/`), `FR_SHIPPED_DEFAULTS_DIR` points at another tree, and `.fr/lenses.yaml` is read from the configuration space (S1 R1, R15, R16); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; explicit run merge targets and fail-closed target alignment
+reviewed: 2026-11-25 the shipped texts move to `plugins/super-fr/defaults/lenses/` (wheel `fr/defaults/lenses/`), `FR_SHIPPED_DEFAULTS_DIR` points at another tree, and `.fr/lenses.yaml` is read from the configuration space (S1 R1, R15, R16); 2026-11-24 the brief gains a `shape` key and the return rule a sentence on it (show-me-visuals R16); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; explicit run merge targets and fail-closed target alignment
 ---
 
 ## What a lens is
@@ -126,6 +126,12 @@ Between the per-phase reviews and delivery there is one step, `lens-review`. At 
 point, fr computes the set again from the journals and the branch's diff. The step's brief
 carries it. For each lens, the brief gives its text, why it is there, the diff's merge-base
 and the rule that its reviewer must return by.
+
+Beside a non-empty set the brief also gives
+`shape`, the absolute path of the run's shape file (see [fr-show-me](explainers/fr-show-me.md)).
+It is `null` when the file did not exist when fr built the brief. Each reviewer reads that file and reports, as a finding of
+its own lens, any way the shape contradicts the diff. The shape file is not a changed file
+of the feature, so the reviewer does not list it under `examined`.
 
 With an empty set there is nothing to do, and the step closes at once. Otherwise the
 orchestrator dispatches **one reviewer per lens**. Each reviewer has its own context and

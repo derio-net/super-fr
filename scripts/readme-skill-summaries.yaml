@@ -15,4 +15,5 @@ fr-isolation: Run work in a throwaway worktree and container so your checkout is
 fr-origins: Classify where a repo's recent bugs came from and which process change would have prevented them.
 fr-plan: Turn a spec into a phase-by-phase plan that tooling can track and an agent can execute.
 fr-progress: Report what is in progress, what drifted and what is ready to archive.
+fr-show-me: Draw a change as a tree, a structure-diff or a diagram, for a spec, a PR or a question.
 fr-triage: Rank a repo's or an org's open issues, group them into batches and drive the batches to merged PRs.

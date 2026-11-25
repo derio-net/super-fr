@@ -373,3 +373,21 @@ def test_several_allowed_and_no_default_names_the_config_key_and_the_flag() -> N
         choose_method(None, {"default": None, "allowed": ["merge", "squash"]})
     assert "--method" in str(exc.value)
     assert "merge_method" in str(exc.value) and ".fr/triage.yaml" in str(exc.value)
+
+
+def test_the_merges_check_counts_read_a_cancelled_check_as_pending() -> None:
+    """Spec 2026-11-24-ci-economy R3: with no required checks, a cancelled check is
+    pending, a skipped one passes and only the `fail` bucket fails."""
+    from fr.checkstate import FAILING_BUCKETS
+    from fr.triage.batch_merge import pr_checks_verdict
+
+    class Forge:
+        def pr_required_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            return []
+
+        def pr_checks(self, repo: str, number: int) -> list[dict[str, Any]]:
+            return [{"name": "a", "bucket": "cancel"}, {"name": "b", "bucket": "skipping"}]
+
+    verdict, _ = pr_checks_verdict(Forge(), "derio-net/super-fr", 7, ci_none=False)  # type: ignore[arg-type]
+    assert verdict == "pending"
+    assert FAILING_BUCKETS == {"fail"}

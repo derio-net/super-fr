@@ -886,6 +886,12 @@ def _fell_back_to_cwd(root: Path, state: GitContext) -> bool:
     return root.resolve() != state.toplevel
 
 
+STALE_REFUSAL: Final = (
+    "were written for a different fr and must be migrated before this command can run."
+)
+"""The words every stale-artifact refusal says (`_will_not_act_here`): what a caller that
+runs fr reads to tell "a migration is owed" from any other exit 2 (gh#1569)."""
+
 COMMIT_NOTICE_PREFIX: Final = "fr: migrated and committed"
 """The one line the session hooks relay (spec §D, R11) — keep it a prefix match."""
 
@@ -949,8 +955,7 @@ def _will_not_act_here(
     if failures:
         return _cannot_read(root, failures)
     return (
-        f"fr: artifacts in {root} were written for a different fr and must be "
-        "migrated before this command can run.",
+        f"fr: artifacts in {root} {STALE_REFUSAL}",
         f"  {because}",
         f"  {detail}",
         *((CARRY_LINE,) if carry else ()),

@@ -12,7 +12,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/defaults/workflows/fr-goal.yaml
-reviewed: 2026-11-25 the shipped shapes moved to `plugins/super-fr/defaults/workflows/` (S1 R15), nothing else here changed; 2026-11-23 still true; deliver derives a settle witness from the PR (pr-readiness-wait); 2026-11-21 still true; a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 still true; fr-goal learned the declared `tests ci` default and the refusal of advisory logs (local-suite-cost); 2026-11-15 still true; fr-goal learned that a discharged owed issue closes at merge
+reviewed: 2026-11-25 the shipped shapes moved to `plugins/super-fr/defaults/workflows/` (S1 R15), nothing else here changed; 2026-11-24 still true; fr-goal gains the design shape and the run shape file, which this essay does not list (show-me-visuals); 2026-11-23 still true; deliver derives a settle witness from the PR (pr-readiness-wait); 2026-11-21 still true; a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 still true; fr-goal learned the declared `tests ci` default and the refusal of advisory logs (local-suite-cost); 2026-11-15 still true; fr-goal learned that a discharged owed issue closes at merge
 writing_standard: elements-of-style
 ---
 

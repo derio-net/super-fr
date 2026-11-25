@@ -21,11 +21,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from tests.integration.test_install_marketplace_namespace import (  # noqa: F401
     fake_home,
     home_with_plugin_state,
 )
 from tests.integration.test_install_sh import _run_install
+
+pytestmark = pytest.mark.own_artifacts
 
 EVENTS = {"WorktreeCreate": "fr-worktree-create.sh", "WorktreeRemove": "fr-worktree-remove.sh"}
 FOREIGN = {"type": "command", "command": "echo someone-elses-hook"}

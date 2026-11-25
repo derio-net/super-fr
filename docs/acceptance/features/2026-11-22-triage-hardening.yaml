@@ -1,0 +1,168 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-22-triage-hardening
+repo: derio-net/super-fr
+rows:
+  - id: intake-title-withheld
+    capability: triage-intake
+    acceptance: An issue intake finds ineligible reaches facts, check and the pages
+      with no title or body; admitting it restores the title at the next collect
+    origin:
+    - spec:2026-11-22-triage-hardening#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect.py#test_an_outside_authors_issue_is_stored_with_no_title_and_no_body
+      - super-fr:tests/unit/test_triage_collect.py#test_a_schema_15_facts_file_loads_with_titles_and_label_only_text_withheld
+      - super-fr:tests/unit/test_triage_check.py#test_check_prints_and_emits_the_untrusted_set
+      - super-fr:tests/unit/test_triage_render.py#test_an_issue_row_with_a_withheld_title_shows_the_key_and_a_quiet_note
+    status: ci
+    notes: 'CI unit tests: collect withholds an outside author''s title and body, a
+      schema-15 file is withheld on load, check and pages show key, url, author and
+      reason'
+    verify: none
+  - id: intake-admit-pinned
+    capability: triage-intake
+    acceptance: ready-fr admits an issue only with a trusted admit marker matching its
+      current title and body; an edit after admission makes it ineligible again until
+      `fr triage admit` re-admits it
+    origin:
+    - spec:2026-11-22-triage-hardening#R2
+    - spec:2026-11-22-triage-hardening#R3
+    - spec:2026-11-22-triage-hardening#R4
+    - spec:2026-11-22-triage-hardening#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_admit.py#test_the_digest_reads_crlf_as_lf_and_starts_sha256
+      - super-fr:tests/unit/test_triage_admit.py#test_latest_admit_ignores_an_untrusted_authors_newer_marker
+      - super-fr:tests/unit/test_triage_admit.py#test_admit_with_yes_labels_and_posts_one_marker_over_the_live_content
+      - super-fr:tests/unit/test_triage_admit.py#test_an_edit_between_the_preview_and_the_write_is_refused
+      - super-fr:tests/unit/test_triage_admit.py#test_admit_refuses_a_forge_that_cannot_list_comments_before_any_read
+      - super-fr:tests/unit/test_triage_collect.py#test_a_ready_fr_issue_with_a_trusted_marker_over_its_full_content_is_eligible
+      - super-fr:tests/unit/test_triage_collect.py#test_a_ready_fr_issue_edited_after_its_marker_is_ineligible
+      - super-fr:tests/unit/test_triage_collect.py#test_a_member_authored_ready_fr_issue_reads_its_association_and_no_comments
+      - super-fr:tests/unit/test_triage_collect.py#test_a_failed_admit_read_leaves_only_that_issue_ineligible
+      - super-fr:tests/unit/test_triage_intake.py#test_the_ready_fr_label_admits_only_with_a_marker_matching_the_content
+    status: ci
+    notes: 'CI unit tests: digest over a body past BODY_LIMIT, marker parser and trust,
+      intake reasons (edited, no marker, unread, unsupported forge), a MEMBER-authored
+      labelled issue, and fr triage admit against a fake GhClient incl. the confirmed-digest
+      re-read'
+    verify: none
+  - id: dedupe-set-apart
+    capability: triage-dedupe
+    acceptance: Owed trackers, awaiting-live issues, debt digests and untrusted issues
+      are never proposed as duplicate candidates
+    origin:
+    - spec:2026-11-22-triage-hardening#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_dedupe.py#test_owed_trackers_with_similar_titles_form_no_group
+      - super-fr:tests/unit/test_triage_dedupe.py#test_debt_digests_and_untrusted_issues_form_no_group
+      - super-fr:tests/unit/test_triage_dedupe.py#test_two_eligible_issues_with_equal_titles_still_group
+    status: ci
+    notes: 'CI unit tests: owed, awaiting-live, debt digest and untrusted issues form
+      no candidate group; two eligible issues still do'
+    verify: none
+  - id: claim-untrusted-warning
+    capability: triage-claims
+    acceptance: A claim marker ignored as untrusted is reported by check with the pr_authors
+      fix
+    origin:
+    - spec:2026-11-22-triage-hardening#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect.py#test_a_claim_marker_by_an_untrusted_author_is_recorded_by_login
+      - super-fr:tests/unit/test_triage_check.py#test_ignored_claim_markers_print_in_their_own_block_with_the_fix
+    status: ci
+    notes: 'CI unit tests: collect records untrusted claim markers by login, check prints
+      them with conditional pr_authors advice'
+    verify: none
+  - id: batch-obsolete-stage
+    capability: triage-batches
+    acceptance: 'A never-dispatched batch whose members are all closed is obsolete:
+      never dispatched, meets its dependents, listed by check for cancelling; a partly-closed
+      proposed batch names its closed members'
+    origin:
+    - spec:2026-11-22-triage-hardening#R8
+    - spec:2026-11-22-triage-hardening#R9
+    - spec:2026-11-22-triage-hardening#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_obsolete.py#test_a_never_dispatched_batch_of_closed_members_is_obsolete
+      - super-fr:tests/unit/test_triage_obsolete.py#test_the_drive_dispatches_a_batch_after_an_obsolete_one_and_never_the_obsolete_one
+      - super-fr:tests/unit/test_triage_batch_verbs.py#test_cancel_accepts_an_obsolete_batch_and_touches_no_member
+      - super-fr:tests/unit/test_triage_obsolete_surfaces.py#test_check_lists_the_obsolete_batch_with_its_cancel_command
+      - super-fr:tests/unit/test_triage_obsolete_surfaces.py#test_the_batches_page_shows_an_obsolete_batch_under_its_own_heading
+    status: ci
+    notes: 'CI unit tests: derive_batch_stage incl. an awaiting-live member, dependencies,
+      waves, drive selection, batch cancel of an obsolete batch, check and the Batches
+      page'
+    verify: none
+  - id: collect-past-limit-pr
+    capability: triage-collect
+    acceptance: A judged PR past the PR list's limit is recorded with its state after
+      one collect and costs no forge call afterwards once closed or merged
+    origin:
+    - spec:2026-11-22-triage-hardening#R11
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect_carry.py#test_a_closed_judged_pr_is_carried_from_the_previous_facts_without_a_call
+      - super-fr:tests/unit/test_triage_collect_carry.py#test_a_judged_pr_past_the_limit_is_viewed_and_recorded
+    status: ci
+    notes: unit tests for the view, the carry and the failed view
+    verify: none
+  - id: privacy-snapshot-keys
+    capability: triage-privacy
+    acceptance: The privacy guard refuses a push whose carried snapshots name a private
+      repo's issue to a public state repo
+    origin:
+    - spec:2026-11-22-triage-hardening#R12
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_privacy.py#test_a_snapshot_issue_key_of_a_private_repo_refuses_a_public_state_repo
+      - super-fr:tests/unit/test_triage_privacy.py#test_a_snapshot_debt_repo_that_is_private_refuses_a_public_state_repo
+    status: ci
+    notes: unit tests for snapshot issue, pr and debt keys and an unparseable file
+    verify: none
+  - id: issues-page-filter-guard
+    capability: triage-pages
+    acceptance: The Issues page's folds and tabs work when its manifest leaves out the
+      filter bar
+    origin:
+    - spec:2026-11-22-triage-hardening#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_render.py#test_the_issues_filter_script_returns_early_when_the_filter_bar_is_absent
+    status: ci
+    notes: render test without the filter bar
+    verify: none
+amendments:
+  - row: intake-trust-eligibility
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_triage_collect.py#test_no_association_read_when_every_issue_is_admitted_by_login_or_label
+    why: 'split: the label no longer skips the association read (triage-hardening R5)'
+  - row: intake-trust-eligibility
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_triage_collect.py#test_no_association_read_when_every_issue_is_admitted_by_login
+    why: the login half of the split test
+  - row: intake-batch-refuses-untrusted
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_verbs.py#test_create_refuses_an_untrusted_member_naming_it_and_ready_fr_and_writes_nothing
+    why: 'renamed: the refusal names fr triage admit, not the label (triage-hardening
+      R4)'
+  - row: intake-batch-refuses-untrusted
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_triage_batch_verbs.py#test_create_refuses_an_untrusted_member_naming_it_and_the_admit_verb_and_writes_nothing
+    why: the renamed test
