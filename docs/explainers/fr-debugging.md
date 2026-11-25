@@ -13,7 +13,7 @@ covers:
   - plugins/super-fr/skills/fr-debugging/SKILL.md
   - packages/fr/src/fr/journal/**
   - packages/fr/src/fr/commands/journal_cmd.py
-reviewed: 2026-11-25 the skill starts the shipped fr-debugging run (debug, review, deliver) and resolves each step with a record (batch-merge-readiness R10, R11); 2026-11-23 fr pr settle warns on a branch with two debug journals and applies the repo setting (lens review); 2026-11-23 the last step waits for the PR to settle, with three fix rounds at most (pr-readiness-wait R10); 2026-11-15 owed-archive-side-effects phase 1, owed issues are closed by reading the one issue; the page is still true
+reviewed: 2026-11-25 a reused workspace starts a run only when its branch has none, fr run stays on the host, the review entry goes through the step record; 2026-11-25 the skill starts the shipped fr-debugging run (debug, review, deliver) and resolves each step with a record (batch-merge-readiness R10, R11); 2026-11-23 fr pr settle warns on a branch with two debug journals and applies the repo setting (lens review); 2026-11-23 the last step waits for the PR to settle, with three fix rounds at most (pr-readiness-wait R10); 2026-11-15 owed-archive-side-effects phase 1, owed issues are closed by reading the one issue; the page is still true
 ---
 
 ## Why is "just try something" the expensive path?
@@ -52,9 +52,13 @@ or to debug on your current branch on purpose, run
 If you are already inside an active workspace (for example, for a bug found mid-feature),
 **reuse it**. Then the failing test and the fix join that feature's branch and PR, and
 the skill does not open a second, competing PR. `fr isolation status` confirms where you
-are.
+are. Then the skill checks whether that branch already has a run cursor. If it has one, the
+skill starts none and the existing run carries the work. If it has none, the skill
+starts the `fr-debugging` run on that branch.
 
-From here every command runs through `fr isolation exec -- ...`. The agent reproduces the
+From here every command runs through `fr isolation exec -- ...`, except `fr run` and
+`fr usage`. In devcontainer mode those run on the harness host, and `fr isolation exec`
+refuses them and prints the host-side command. The agent reproduces the
 failure, and records it the moment it has:
 
 ```bash
@@ -139,8 +143,9 @@ searchable. `fr journal render --scope debug --slug <slug>` prints it as Markdow
    debug journal, and runs the command again. `fr push` also checks commit subjects
    against the repo's templates, and the skill writes the body from the rendered debug
    journal: root cause, fix, and the failing-test-first story.
-4. **Record the review.** One reviewer reads the fix, and its `review` entry goes in the
-   debug journal, with its findings numbered `d-r1`, `d-r2` and so on. The run cursor
+4. **Record the review.** One reviewer reads the fix. Its `review` entry goes in the
+   debug journal through the `review` step record, and only that way. Its findings are
+   numbered `d-r1`, `d-r2` and so on. The run cursor
    enforces it: the `review` step is refused without a reviewer's entry, and while a
    finding is still open.
 5. **Push on the host**, and confirm that `git rev-list --count @{u}..HEAD` prints `0`.
