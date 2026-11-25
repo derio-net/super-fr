@@ -75,9 +75,14 @@ rows:
     - spec:2026-11-24-wave-queue-gaps#R8
     - spec:2026-11-24-wave-queue-gaps#R9
     - spec:2026-11-24-wave-queue-gaps#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_wave_overlap.py#test_two_open_batches_of_one_wave_sharing_a_path_overlap_by_suffix
+      - super-fr:tests/unit/test_triage_batch_verbs.py#test_create_with_a_wave_writes_the_batch_then_prints_the_overlap
+      - super-fr:tests/unit/test_triage_batch_dispatch.py#test_the_dispatch_brief_names_an_overlapping_batch_of_its_wave
+    status: ci
+    notes: 'R7-R10 shipped: fr.triage.wave_overlap, suggest/create/edit print the pairs,
+      the dispatch brief names the overlap'
     verify: none
   - id: wave-queue-operator-entry
     capability: Operator queue entries
