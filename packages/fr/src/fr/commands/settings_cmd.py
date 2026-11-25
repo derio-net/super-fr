@@ -436,8 +436,11 @@ def _protected_tip(root: Path, placement: str) -> str:
         space = stealth_config_space(root, ref.text, target)
     try:
         require_protected(space, None, "bring the old settings copy in step without `--expect`")
-    except ProtectionReadError:
-        raise
+    except ProtectionReadError as e:  # lens review l-errors-r9: the remedy needs no rules read
+        raise ProtectionReadError(
+            f"{e}. Run `{quiet.SYNC_COMMAND}` to preview the change, then "
+            f"`{quiet.SYNC_COMMAND} --yes --expect <tip>`"
+        ) from e
     except SettingsError as e:
         raise SettingsError(
             f"{e}. Run `{quiet.SYNC_COMMAND}` to preview the change, then "

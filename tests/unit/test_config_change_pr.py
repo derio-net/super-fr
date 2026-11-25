@@ -463,3 +463,23 @@ def test_a_failed_fetch_after_a_push_still_moves_the_tracking_ref(
     assert git(root, "rev-parse", "refs/remotes/origin/demo").strip() == git(
         _origin(tmp_path), "rev-parse", "demo"
     ).strip()
+
+
+def test_a_failed_rules_read_under_sync_yes_names_the_expect_remedy(
+    repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Lens review l-errors-r9: `--yes` without `--expect` reads the forge's rules; when that
+    read fails, the refusal still names the preview and `--expect <tip>`, which need no
+    rules read."""
+    from fr.config import protection
+
+    _merged(repo, tmp_path, prs)
+
+    def down(space: object, client: object, what: str) -> None:
+        raise protection.ProtectionReadError(f"fr will not {what}: HTTP 502")
+
+    monkeypatch.setattr(protection, "require_protected", down)
+    bare = _sync(repo, "--yes")
+    assert bare.exit_code == 2
+    flat = " ".join(bare.output.split())
+    assert "HTTP 502" in flat and "fr settings sync --yes --expect <tip>" in flat, bare.output
