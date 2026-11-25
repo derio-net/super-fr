@@ -122,7 +122,7 @@ one artifact kind.
   - `fr cloud doctor`: Print every cloud prerequisite and its state; exits 1 when any fails.
   - `fr cloud setup-script`: Print the cloud environment setup script (paste it into the environment's Setup script; new sessions run it).
 - `fr repos`: Instrument locally-checked-out repos (driven by the operator's collection).
-  - `fr repos sync`: Write docs/superpowers/plan-config.yaml into each checked-out repo.
+  - `fr repos sync`: Write .fr/plan-config.yaml into each checked-out repo (a pull request to the configuration branch under quiet and stealth).
 - `fr journal`: Scope-keyed durable run-state (spec\|plan\|debug): add / render / check.
   - `fr journal add`: Append one entry to ``docs/superpowers/journals/<slug>.md``.
   - `fr journal resolve`: Append a resolution record closing one finding.
