@@ -259,3 +259,17 @@ run_kind: candidate
 ### s-r13-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1552] · resolves s-r13: The isolation gate and the pipeline sentinel also judge in the plugin's directory
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1552.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-25T20:25:54+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: On a machine with OpenCode 2, run the released `scripts/install.sh`. In a consumer repo, start a session and ask the agent to quote the first heading of `fr-isolation-required`; it answers from its system prompt. Ask again on a later turn, and from a child (subagent) session, and check the rule text appears once in the request, not twice. (Row `opencode-rules-delivered`.)
+
+Evidence: https://github.com/derio-net/super-fr/pull/1548#issuecomment-7173568770
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-11-25T20:25:54+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: In a Gitea consumer repo, run `fr acceptance init --refresh-ci` with the debt job on, dispatch the workflow with `debt: true`, and see the "Technical debt" issue upserted and the archive branch pushed. In a GitLab consumer repo, `fr acceptance init --refresh-ci` prints the `technical-debt` job to paste into `.gitlab-ci.yml`; paste it, then run a web pipeline with `DEBT=true` once with `FR_DEBT_TOKEN` unset (the job fails with the one-line remedy) and once with it set (issue upserted, branch pushed). (Row `debt-credentials-gitea-gitlab`.)
+
+Evidence: https://github.com/derio-net/super-fr/pull/1548#issuecomment-7173568770
