@@ -323,3 +323,136 @@ e80ac2bbc: assertions parse the brief JSON and match the exact refusal texts ('n
 ### p4-r8-resolved · finding [out-of-scope] · resolves p4-r8: a reviewer's fenced review-findings block is validated only for phase targets, so the skill's d-r<k> block is unchecked (phase 4)
 
 Not caused by this change: returned review-findings blocks are checked only for phase units (run_cmd returned_phase = target.phase), already true of spec-review before this branch. R11 does not require it; the gate still refuses any open d-r finding in the journal.
+
+<!-- fr:journal kind=review scope=plan id=lens-review created=2026-11-25T11:45:33+00:00 -->
+### lens-review · review · Lens review (security, errors, tests, docs-accuracy) of the whole feature: 16 in-scope findings, all fixed
+
+Four reviewers, one per lens, over git diff 24130aa17..HEAD. Security found no path to ready, admit or merge an undelivered PR; it and errors both found that a corrupt cursor was skipped (fail open), and security found gc's guard blind to quiet/stealth placement and to an unlistable runs dir. Errors found read failures losing their cause and missing Needs. Tests mutation-checked the suite: the R5 order, the unread-retry, the queue-open verdict, whose-move for CI red and the skill's R10 text were unpinned. Docs-accuracy found three false claims (skill, explainer, AGENTS.md). Fixes: 72fcd25c7, 077f478d4, f0f78c421, 5c63c10e1; spec R10 wording in the follow-up commit.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · gc's R9 guard reads cursors only from the product worktree; under quiet/stealth a running deliver is reaped
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-security-r2 · finding [open] (reviewer: in scope) · branch_runs returns [] on OSError, so an unlistable runs dir reads as nothing running and gc reaps
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-security-r3 · finding [open] (reviewer: in scope) · read_cursor skips a corrupt or malformed branch cursor, so a not-delivered run beside a deliver-done one reads delivered
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · an unparseable or malformed run file is dropped from the every-cursor fold (admits, or wrong R12 merge-by-hand advice)
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · cursor read failures drop their cause, log nothing and read as the driver's move forever
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · needs_you raises a Need only for no-cursor; no-clone and persistent unread never reach Needs-you
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · _shape_has_lens_review's bare except turns any failure into a false 'predates review lenses'
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · R5 order not pinned: single-condition fixtures and a vacuous R5_ORDER test
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · no test that _Driver.cursor_at re-reads after an unread result
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · the queue-opening verdict (merges next) is untested
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · whose move for ci-red/conflicting is unpinned
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · no tripwire pins the fr-debugging skill's R10 run-start instructions
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-tests-r6 · finding [open] (reviewer: in scope) · two admission tests restate the code under test and cannot fail
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · skill says fr run start refuses a second run on a branch; it refuses only the same workflow
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · fr-debugging explainer's pick-a-profile command lacks --profile and forces --base HEAD
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r3 · finding [open] (reviewer: in scope) · AGENTS.md says both shipped shapes run lens-review; fr-debugging has none
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: gc's R9 guard reads cursors only from the product worktree; under quiet/stealth a running deliver is reaped
+
+077f478d4: preserve.gc_run_hold reads the placement's feature root (space_for, create=False) as well as the worktree; an unresolvable placement or absent non-repo root keeps the workspace ('kept: run cursor location unknown'). Unit and gc dry-run/live tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-security-r2 -->
+### l-security-r2-resolved · finding [fixed] · resolves l-security-r2: branch_runs returns [] on OSError, so an unlistable runs dir reads as nothing running and gc reaps
+
+077f478d4: a runs dir that exists but cannot be listed keeps the workspace (in the gc hold, so down's branch_runs callers are unchanged per R9); absent dir is still no cursor. chmod 000 test.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-security-r3 -->
+### l-security-r3-resolved · finding [fixed] · resolves l-security-r3: read_cursor skips a corrupt or malformed branch cursor, so a not-delivered run beside a deliver-done one reads delivered
+
+72fcd25c7: a non-YAML, non-run-shaped or branch-naming-but-unusable file makes the whole read unread, naming the file; tests for corrupt-beside-delivered and lone-corrupt.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: an unparseable or malformed run file is dropped from the every-cursor fold (admits, or wrong R12 merge-by-hand advice)
+
+72fcd25c7: same change as l-security-r3.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: cursor read failures drop their cause, log nothing and read as the driver's move forever
+
+72fcd25c7: read_cursor returns CursorAnswer(position, read, detail); gitseam Checkout.reach_failure carries the fetch error; PullRequest.cursor_detail (optional, inside unreleased facts 17) and cursor_details carry it into the verdict; _Driver.cursor_at reports it once per head via _report_once.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [fixed] · resolves l-errors-r3: needs_you raises a Need only for no-cursor; no-clone and persistent unread never reach Needs-you
+
+72fcd25c7: no-clone and a caused unread are the operator's move; readiness.cursor_remedy names the remedy on the card and in a new cursor-unread Needs-you row, approved or not.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: _shape_has_lens_review's bare except turns any failure into a false 'predates review lenses'
+
+f0f78c421: catches only WorkflowError/OSError and renders 'fr could not read the workflow shape: <error>'; others propagate. Tests for unknown shape, broken YAML and a RuntimeError.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: R5 order not pinned: single-condition fixtures and a vacuous R5_ORDER test
+
+72fcd25c7: 10 two-condition tests over R5's adjacent pairs; the unused R5_ORDER constant and its vacuous test removed.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: no test that _Driver.cursor_at re-reads after an unread result
+
+72fcd25c7: cursor_at re-reads after unread (three calls, three reads), reports once, and carries a clone-open error.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: the queue-opening verdict (merges next) is untested
+
+72fcd25c7: the queue-opening pass pinned to 'Approved, merges next'; verified it fails with the branch disabled.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: whose move for ci-red/conflicting is unpinned
+
+72fcd25c7: whose move pinned to the session for CI red and an unapproved conflict.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: no tripwire pins the fr-debugging skill's R10 run-start instructions
+
+5c63c10e1: tripwire in test_fr_debugging_journal.py over the skill and both mirrors (run start, start-none rule, refusal wording, review via step record).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-tests-r6 -->
+### l-tests-r6-resolved · finding [fixed] · resolves l-tests-r6: two admission tests restate the code under test and cannot fail
+
+72fcd25c7: _ready and _other_ready checked against hand-written admits per case.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: skill says fr run start refuses a second run on a branch; it refuses only the same workflow
+
+5c63c10e1: skill says the check is the agent's own; spec R10 reworded to match in the follow-up commit.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: fr-debugging explainer's pick-a-profile command lacks --profile and forces --base HEAD
+
+5c63c10e1: explainer shows fr isolation up --branch fix/<slug> [--profile <name>] [--base HEAD].
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-docs-accuracy-r3 -->
+### l-docs-accuracy-r3-resolved · finding [fixed] · resolves l-docs-accuracy-r3: AGENTS.md says both shipped shapes run lens-review; fr-debugging has none
+
+5c63c10e1: AGENTS.md says fr-goal and fr-goal-light run lens-review and fr-debugging has none.
