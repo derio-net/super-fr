@@ -56,6 +56,7 @@ from fr.journal.model import (
     spec_journal_slug,
 )
 from fr.record.model import AmendmentItem, StepRecord, allowed_sections, present_sections
+from fr.run.debug_journal import debug_slug
 from fr.workflow.artifacts import journal_scope
 
 _SESSION_START = "1970-01-01T00:00:00+00:00"
@@ -247,6 +248,10 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
         )
         if spec_rel is not None:
             slug = spec_journal_slug(Path(spec_rel).stem)
+    elif scope == "debug":
+        slug = (
+            Path(record.emitted["debug"]).stem if "debug" in record.emitted else debug_slug(state)
+        )
     run_spec_rel = record.emitted.get("spec") or next(
         (r.emitted["spec"] for r in state.steps.values() if r.emitted and "spec" in r.emitted),
         None,

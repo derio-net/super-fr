@@ -876,7 +876,7 @@ class UnreadableJournalError(Exception):
 def _journals(
     repo_root: Path, state: RunState, *, strict: bool = False
 ) -> list[tuple[str, str, list[JournalEntry]]]:
-    """`(scope, slug, entries)` of the run's spec and plan journals. A journal
+    """`(scope, slug, entries)` of the run's spec, plan and debug journals. A journal
     that does not parse is skipped by the render (fail open) and raises
     `UnreadableJournalError` when `strict` — what every gate passes."""
     out: list[tuple[str, str, list[JournalEntry]]] = []
@@ -888,6 +888,8 @@ def _journals(
         wanted.append(("spec", spec_journal_slug(Path(emitted["spec"]).stem)))
     if "plan" in emitted:
         wanted.append(("plan", Path(emitted["plan"]).name))
+    if "debug" in emitted:
+        wanted.append(("debug", Path(emitted["debug"]).stem))
     for scope, slug in wanted:
         path = resolve_journal_read_path(repo_root, scope, slug)  # type: ignore[arg-type]
         if not path.is_file():
