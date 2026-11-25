@@ -8519,6 +8519,13 @@ batches:
     handle: w3N:p3
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
+  - kind: closeout
+    at: '2026-11-25T20:55:30.293320Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -10757,3 +10764,6 @@ queues:
   - kind: queue_drain
     at: '2026-11-25T20:51:28.959190Z'
     main: ff14a97ae139a6e4383b1acbc9ce3fe7cb0a6781
+  - kind: queue_cleared
+    at: '2026-11-25T20:55:27.918282Z'
+    detail: the release cleared the hold
