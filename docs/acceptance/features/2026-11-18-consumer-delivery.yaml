@@ -120,3 +120,107 @@ rows:
     notes: every tea/glab JSON read names an SSO login page, fixture-pinned; the guard
       flags any raw json.loads outside a reasoned allowlist
     verify: none
+amendments:
+  - row: opencode-rules-delivered
+    op: set-status
+    base: 0
+    status: walked
+    notes: 'walked live 2026-11-25 on OpenCode 2.3.2 (model github-copilot/claude-haiku-5.5),
+      env cleared of every Claude Code key and FR_HARNESS*: the installed fr-opencode-plugin
+      (install.sh 9.0.0-rc.8) holds exactly the five rules ~/.claude/rules holds, byte-identical;
+      opencode.jsonc names no instructions for them. In a scratch consumer repo with
+      no rules of its own, a session quoted the fr-isolation-required heading verbatim
+      with no tool on turn 1 and again on turn 2, and a child session started by the
+      subagent tool on turn 3 returned it too. An observer plugin on the same context
+      hook counted each of the five rule headings exactly once in all six requests (three
+      top-level, the child, two follow-ups).'
+    walk:
+      strategy: live
+      harness: opencode
+      model: github-copilot/claude-haiku-5.5
+      outcome: pass
+      at: '2026-11-25T00:00:00Z'
+      evidence: opencode run --standalone on 2.3.2 in a scratch repo, session ses_ruleswalk1795603839
+        plus child ses_dedaa75b7ffebZnTJIHCHpdeKT; observer counts [1,1,1,1,1] on every
+        request (scratch log, not kept)
+    why: 'walked live 2026-11-25 on OpenCode 2.3.2 (model github-copilot/claude-haiku-5.5),
+      env cleared of every Claude Code key and FR_HARNESS*: the installed fr-opencode-plugin
+      (install.sh 9.0.0-rc.8) holds exactly the five rules ~/.claude/rules holds, byte-identical;
+      opencode.jsonc names no instructions for them. In a scratch consumer repo with
+      no rules of its own, a session quoted the fr-isolation-required heading verbatim
+      with no tool on turn 1 and again on turn 2, and a child session started by the
+      subagent tool on turn 3 returned it too. An observer plugin on the same context
+      hook counted each of the five rule headings exactly once in all six requests (three
+      top-level, the child, two follow-ups).'
+  - row: debt-credentials-gitea-gitlab
+    op: set-status
+    base: 0
+    status: walk-owed
+    notes: 'walked live 2026-11-25 at v9.0.0-rc.10. Gitea (throwaway local Gitea 1.24
+      + act_runner): passes — tea installed checksummed, the job token alone wrote then
+      refreshed the Technical debt issue and pushed chore/debt-archive-sweep (opening
+      the PR is the gh#611 gap; forge-error label filed as #1689, matrix job upload
+      failure as #1690). GitLab (self-hosted 15.3, host redacted, throwaway project
+      runner): FR_DEBT_TOKEN unset fails with the one-line remedy as specified, but
+      with it set the job fails every run, because the scaffold never logs glab in and
+      the host trust gate refuses (#1691); a probe adding glab auth login made it create
+      the issue, push the branch and open the draft MR. Owed: re-walk GitLab on the
+      released fix.'
+    walk:
+      strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: fail
+      at: '2026-11-25T00:00:00Z'
+      evidence: 'GitLab scheduled technical-debt job with FR_DEBT_TOKEN set: "the forge
+        refused: GitLab host <host> is not one glab is logged into" (derio-net/super-fr#1691);
+        unset run gave the one-line remedy'
+    issues:
+    - derio-net/super-fr#1691
+    why: 'walked live 2026-11-25 at v9.0.0-rc.10. Gitea (throwaway local Gitea 1.24
+      + act_runner): passes — tea installed checksummed, the job token alone wrote then
+      refreshed the Technical debt issue and pushed chore/debt-archive-sweep (opening
+      the PR is the gh#611 gap; forge-error label filed as #1689, matrix job upload
+      failure as #1690). GitLab (self-hosted 15.3, host redacted, throwaway project
+      runner): FR_DEBT_TOKEN unset fails with the one-line remedy as specified, but
+      with it set the job fails every run, because the scaffold never logs glab in and
+      the host trust gate refuses (#1691); a probe adding glab auth login made it create
+      the issue, push the branch and open the draft MR. Owed: re-walk GitLab on the
+      released fix.'
+  - row: debt-credentials-gitea-gitlab
+    op: set-status
+    base: 1
+    status: walked
+    notes: 'walked 2026-11-25 on the released 9.0.0-rc.11 scaffold. GitLab (self-hosted
+      GitLab 15.3, host redacted; throwaway private project, locked project runner,
+      both deleted after): fr acceptance init --with-ci and --refresh-ci wrote the technical-debt
+      job pinned to rc.11, whose script logs glab in from FR_DEBT_TOKEN (the #1691 fix,
+      shipped in #1703) before the fr commands, unpatched. A schedule pipeline with
+      masked FR_DEBT_TOKEN set ran it green: fr debt issue --yes created the Technical
+      debt issue and fr debt archive-pr --yes archived the merged plan and opened a
+      draft MR (chore/debt-archive-sweep). With the variable removed, the next schedule
+      run failed the job with the one-line remedy ''Set the masked CI/CD variable FR_DEBT_TOKEN
+      (api scope).'' Gitea passed earlier on 2026-11-25 on a throwaway local instance
+      (issue written and refreshed, archive branch pushed; the PR is opened by hand
+      there, gh#611). The earlier failed GitLab walk is #1691, now fixed.'
+    walk:
+      strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-25T19:38:24Z'
+      evidence: 'GitLab schedule pipeline on rc.11 scaffold: technical-debt job green
+        with FR_DEBT_TOKEN (issue created, draft MR opened), failed with the one-line
+        remedy without it; Gitea walk earlier the same day'
+    why: 'walked 2026-11-25 on the released 9.0.0-rc.11 scaffold. GitLab (self-hosted
+      GitLab 15.3, host redacted; throwaway private project, locked project runner,
+      both deleted after): fr acceptance init --with-ci and --refresh-ci wrote the technical-debt
+      job pinned to rc.11, whose script logs glab in from FR_DEBT_TOKEN (the #1691 fix,
+      shipped in #1703) before the fr commands, unpatched. A schedule pipeline with
+      masked FR_DEBT_TOKEN set ran it green: fr debt issue --yes created the Technical
+      debt issue and fr debt archive-pr --yes archived the merged plan and opened a
+      draft MR (chore/debt-archive-sweep). With the variable removed, the next schedule
+      run failed the job with the one-line remedy ''Set the masked CI/CD variable FR_DEBT_TOKEN
+      (api scope).'' Gitea passed earlier on 2026-11-25 on a throwaway local instance
+      (issue written and refreshed, archive branch pushed; the PR is opened by hand
+      there, gh#611). The earlier failed GitLab walk is #1691, now fixed.'
