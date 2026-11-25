@@ -131,3 +131,4 @@ steps:
           session: 0b0df376-70ba-43e5-92da-54c79b85d954
 fr_version: 9.0.0rc10
 issue: 1577
+pr: https://github.com/derio-net/super-fr/pull/1694
