@@ -115,7 +115,7 @@ one artifact kind.
   - `fr isolation verify-merge`: Verify a merged branch's changes actually reached the base branch.
   - `fr isolation gc`: Reconcile isolation workspaces host-wide.
 - `fr init`: Repo initialization: devcontainer profile scaffolding (driven by fr-init).
-  - `fr init scaffold`: Write + commit .devcontainer/<profile>/ and the fr-profiles.yaml entry, plus host secrets placeholders.
+  - `fr init scaffold`: Write and commit .devcontainer/<profile>/ and its entry in the profile declarations (.fr/profiles.yaml), plus host secrets placeholders.
   - `fr init agents`: Render fr's two dispatched agents into .claude/agents/ and commit them.
   - `fr init validator-wrapper`: Write scripts/validate-plans.sh (0755) and stage it — the harness-neutral remedy every isolation guard names when a plan repo is missing the wrapper.
 - `fr cloud`: Claude Code cloud sessions: check the environment, print its setup script.
