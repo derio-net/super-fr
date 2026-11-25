@@ -1214,3 +1214,66 @@ bec21cf4f: create_config_branch is in FR_BRANCH_PUSHERS with its reason (fr-conf
 ### p6-r10-resolved · finding [fixed] · resolves p6-r10: the PROTECTED_SOURCES guard was in-process only, reset by monkeypatch.undo() and blind to the HOME-leak class (phase 6)
 
 c75054f8f: a session-scoped autouse fixture sets HOME and GIT_CONFIG_GLOBAL in os.environ before any test, so subprocesses inherit it and undo() cannot restore the real home, and fails the session naming any new entry in the real ~/.cache/fr/triage/.
+
+<!-- fr:journal kind=finding scope=plan id=p7-scenario-profiles-blocks-every-hop created=2026-11-25T13:25:22+00:00 phase=7 state=fixed review_scope=in -->
+### p7-scenario-profiles-blocks-every-hop · finding [fixed] (reviewer: in scope) · Under quiet/stealth one profiles file its own hop refuses made every cross-space hop fail (pending_files let UnmigratableProfilesError escape) (phase 7)
+
+Found by tests/scenarios/config-homes.sh. fr.config.migrate.pending_files caught only SettingsError around profiles_body; services_text raises UnmigratableProfilesError (an ArtifactMigrationError), so a version-2 profiles file with no service block failed models, plan-config, workflows and the settings hop too. Fixed in 57974e3a7: the catch takes both, the profiles hop alone refuses. Test: test_migration_config_kinds.py::test_under_quiet_an_unmigratable_profiles_file_holds_back_only_itself.
+
+<!-- fr:journal kind=finding scope=plan id=p7-scenario-symlinked-home created=2026-11-25T13:25:22+00:00 phase=7 state=fixed review_scope=in -->
+### p7-scenario-symlinked-home · finding [fixed] (reviewer: in scope) · settings-location raised ValueError for every quiet repo when HOME is reached through a symlink (phase 7)
+
+Found by the scenario (macOS mktemp HOME under /var -> /private/var). _config_settings_for_legacy compared the old switch's unresolved path with git's real --show-toplevel and then called relative_to. Fixed in 57974e3a7 by resolving both. Test: test_migration_config_kinds.py::test_settings_location_works_when_home_is_reached_through_a_symlink.
+
+<!-- fr:journal kind=finding scope=plan id=p7-scenario-commit-hint-outside-repo created=2026-11-25T13:25:22+00:00 phase=7 state=fixed review_scope=in -->
+### p7-scenario-commit-hint-outside-repo · finding [fixed] (reviewer: in scope) · fr migrate artifacts --yes under quiet printed a git add naming fr-config worktree paths, which git refuses as outside the repository (phase 7)
+
+Fixed in 57974e3a7: migrate_cmd._commit_paths splits the product's own paths (printed in the git add) from the configuration-checkout ones (named as already committed and pushed). Test: tests/unit/test_migrate_cmd_commit_hint.py.
+
+<!-- fr:journal kind=finding scope=plan id=p7-scenario-exec-bit-lost created=2026-11-25T13:25:22+00:00 phase=7 state=fixed review_scope=in -->
+### p7-scenario-exec-bit-lost · finding [fixed] (reviewer: in scope) · fr-config's creation and a proposed change committed every file 100644, so a moved .fr/candidate-install stopped being executable (phase 7)
+
+Found by the scenario (the brainstorm resolve warned the moved install was not executable). quiet._orphan_commit and change._commit_on hard-coded 100644. Fixed in acaf94ff2: pending_files records the executable sources, and an `executable` set (or flag, for a proposal) reaches _orphan_commit, stealth._create_branch and _commit_on. Tests: test_migration_config_kinds.py::test_under_quiet_an_executable_file_keeps_its_mode_on_fr_config and ::test_a_proposed_executable_keeps_its_mode.
+
+<!-- fr:journal kind=finding scope=plan id=p7-scenario-empty-old-dir-notice created=2026-11-25T13:25:22+00:00 phase=7 state=fixed review_scope=in -->
+### p7-scenario-empty-old-dir-notice · finding [fixed] (reviewer: in scope) · Every command after the quiet migration still said it was ignoring the emptied docs/superpowers/workflows/ (phase 7)
+
+fr.config.space.located treated an existing empty old directory as an old path to ignore. Fixed in acaf94ff2 (_holds_anything). Test: test_config_legacy_by_tip.py::test_an_empty_old_directory_left_by_the_migration_says_nothing.
+
+<!-- fr:journal kind=decision scope=plan id=p7-scenario-forge-shape created=2026-11-25T13:25:22+00:00 phase=7 -->
+### p7-scenario-forge-shape · decision · The scenario reaches real protection answers with a GitHub-spelled origin served by a fake ssh and a fake gh replaying the captured rules replies (phase 7)
+
+fr asks the forge only for an origin it can name (git remote get-url, which applies insteadOf, so URL rewriting cannot fake it). The quiet product's origin is git@github.com:example-org/demo.git; GIT_SSH_COMMAND=tests/scenarios/fixtures/config-homes/bin/fake-ssh runs git's upload/receive-pack against a local bare repo, and fixtures/config-homes/bin/gh replays tests/fixtures/github_rest/rules/pull-request-approved.json (enforced) and free-plan.error.json (the free-plan 403), any other call failing loudly (an unreadable answer). No reply is constructed. The CLI-level `fr run start`/`advance` walk under quiet that p4-r11 left to this scenario runs once per answer: the repo's fr-goal is ignored under the free-plan 403 (the shipped shape's spec-review follows brainstorm) and used when enforced (plan follows). The migration is committed by the CLI-entry gate in a workspace, since the explicit `fr migrate artifacts --yes` never commits.
+
+<!-- fr:journal kind=decision scope=plan id=p7-rows-to-ci created=2026-11-25T13:25:22+00:00 phase=7 -->
+### p7-rows-to-ci · decision · The six S1 rows move not-implemented -> ci, with their unit refs and the int ref test_scenarios.py#test_config_homes (phase 7)
+
+Their unit tests run in CI and the scenario runs in CI's scenario tier (CI runs every test). Not walked: the deliver walk of the candidate strategy earns that. cloud-triage-state-ref was amended (drop two workspace tests phase 6 deleted, add test_triage_state_home.py's two) so its refs resolve. The three notes naming the deleted test_tripwire_shipped_workflows.py stay: none of their rows moved.
+
+<!-- fr:journal kind=discovery scope=plan id=p7-acceptance-check-main-rows created=2026-11-25T13:25:22+00:00 phase=7 -->
+### p7-acceptance-check-main-rows · discovery · fr acceptance check --no-fetch reports 136 errors, all from rows origin/main added for features this branch has not merged (25 rows: ci-economy, triage-hardening, intake, show-me, ...) (phase 7)
+
+origin/main is not an ancestor of the branch; those rows cite specs and tests that exist only on main. None names an S1 row or this feature's fragment. Merging main into the branch before deliver clears them; it is the orchestrator's call (executors never move to other commits).
+
+<!-- fr:journal kind=finding scope=plan id=p7-commit-notice-counts-paths created=2026-11-25T13:25:22+00:00 phase=7 state=open review_scope=out -->
+### p7-commit-notice-counts-paths · finding [open] (reviewer: out of scope) · The gate's `fr: migrated and committed <n> artifact(s)` counts paths, so a rename of 7 artifacts says 14 (phase 7)
+
+fr.artifacts.trigger._commit_notice uses len(outcome.paths); a rename stages both sides. Pre-S1 behaviour, cosmetic; the commit subject is right (7 artifacts).
+
+<!-- fr:journal kind=discovery scope=plan id=p7-writing-standard-checked created=2026-11-25T13:25:22+00:00 phase=7 -->
+### p7-writing-standard-checked · discovery · The edited pages pass scripts/check-writing-standards.sh against the pinned blog-craft (17 + 14 checked, 0 FAIL) (phase 7)
+
+Fetched at .github/blog-craft.ref. The checker does not split a sentence that starts with a lowercase word (`fr ...`), so such sentences were reworded; one existing FAIL in docs/verification-strategies.md (phase 3's paragraph) was rewritten with them.
+
+<!-- fr:journal kind=lens scope=plan id=lens-tests-1 created=2026-11-25T13:25:22+00:00 phase=7 lens=tests step=implement-phase -->
+### lens-tests-1 · lens · a candidate scenario built on a fake ssh transport and a fake gh replaying captures, standing in for a forge-protected configuration branch (phase 7)
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p7-t1 created=2026-11-25T13:25:22+00:00 phase=7 -->
+### no-refactor-p7-t1 · discovery · no-refactor-because P7.T1 (phase 7)
+
+the scenario is one script over _common.sh's helpers plus two fixture programs (a fake gh replaying the captured rules replies, a fake ssh); the four product fixes it forced were one-line catches or a threaded mode flag at the one creation path, so nothing duplicated was left to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p7-t2 created=2026-11-25T13:25:22+00:00 phase=7 -->
+### no-refactor-p7-t2 · discovery · no-refactor-because P7.T2 (phase 7)
+
+prose, front matter and generated mirrors only, plus message strings; the mirrors are regenerated by their sync scripts, so there was no code to clean
