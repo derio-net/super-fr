@@ -100,9 +100,13 @@ rows:
     - spec:2026-11-19-event-driven-a-la-carte#R19
     - spec:2026-11-19-event-driven-a-la-carte#R20
     - spec:2026-11-19-event-driven-a-la-carte#R21
-    levels: {}
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_state_home.py
+      - super-fr:tests/unit/test_triage_state_repo_s1.py
     status: not-implemented
-    notes: candidate walk scenario, built in plan phase 7
+    notes: candidate walk scenario, built in plan phase 7; the unit tests of R17-R21
+      landed in phase 6
     verify: candidate
     scenario: tests/scenarios/config-homes.sh
 amendments:
