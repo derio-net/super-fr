@@ -1,7 +1,8 @@
 """`fr repos` CLI — instrument already-checked-out repos with a plan-config.yaml.
 
-`fr repos sync` writes `docs/superpowers/plan-config.yaml` into each repo in the
-collection (manifest ∪ positional args). It NEVER clones: a repo that isn't
+`fr repos sync` writes `.fr/plan-config.yaml` into each repo in the collection
+(manifest ∪ positional args); under quiet and stealth it proposes that file on the
+configuration branch by a pull request instead of writing it. It NEVER clones: a repo that isn't
 checked out locally produces a warning, not a failure. Mutating, so dry-run is
 the default; `--yes` writes.
 
