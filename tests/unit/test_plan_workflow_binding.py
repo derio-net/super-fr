@@ -236,7 +236,7 @@ def test_a_shape_that_does_not_resolve_is_an_error_not_the_default(tmp_path: Pat
     # Names the PLAN (which one is broken) and both searched paths (where
     # to put the fix).
     assert plan.meta.plan in message
-    assert str(tmp_path / "docs" / "superpowers" / "workflows" / "no-such-shape.yaml") in message
+    assert str(tmp_path / ".fr" / "workflows" / "no-such-shape.yaml") in message
     assert str(shipped / "no-such-shape.yaml") in message
 
 

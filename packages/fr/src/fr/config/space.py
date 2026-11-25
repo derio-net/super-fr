@@ -423,13 +423,69 @@ def legacy(new: Path, old: Path) -> Path:
 def located(root: Path, kind: str) -> Path:
     """Where configuration kind *kind* is read for the product checkout *root*: a
     `fr.artifacts.paths.CONFIG_KINDS` row or `profiles`, in the configuration space (R9),
-    or at its old path in the product checkout while only that one exists (R13)."""
+    or at its old path in the product checkout while only that one exists (R13).
+
+    Under quiet and stealth the old path is decided by the configuration branch's FETCHED
+    tip, never by the worktree (review p4-r2, plan decision p4-legacy-by-tip): while that
+    branch exists the product's old path is ignored, with one notice naming it (R4), so a
+    feature branch cannot shadow the space; only while it does not may an old file be
+    read, and only when its bytes are the product default branch's committed ones (an
+    old directory's members are read at that branch by `read_checked_bytes`)."""
     from fr.artifacts.paths import LEGACY_CONFIG, config_kind_path
 
     root = Path(root)
+    current = config_space(root)
     if kind == "profiles":
-        return legacy(config_space(root).file(PROFILES), root / LEGACY_PROFILES)
-    return legacy(config_kind_path(root, kind), root / LEGACY_CONFIG[kind])
+        new, old = current.file(PROFILES), root / LEGACY_PROFILES
+    else:
+        new, old = config_kind_path(root, kind), root / LEGACY_CONFIG[kind]
+    if current.placement == _REPO or not (old.exists() or old.is_symlink()):
+        return legacy(new, old)
+    if branch_fetched(current):
+        _old_ignored(old, f"{current.ref} exists, so its {SPACE_DIR}/ is read (R4)")
+        return new
+    if old.is_dir():
+        return legacy(new, old)
+    if old.is_symlink() or not _committed_default(current, old):
+        _old_ignored(
+            old,
+            f"under {current.placement} an old path is read only as the default branch has "
+            "it committed",
+        )
+        return new
+    return legacy(new, old)
+
+
+def branch_fetched(space: ConfigSpace) -> bool:
+    """Whether *space*'s configuration branch has a fetched tip (False under `repo`)."""
+    if space.ref is None:
+        return False
+    repo = space._git_repo()
+    return repo is not None and _commit(repo, f"refs/remotes/{space.ref}") is not None
+
+
+def _committed_default(space: ConfigSpace, old: Path) -> bool:
+    """Whether *old* (a product-checkout file) holds exactly the bytes the product's
+    default branch has committed at its path."""
+    from fr.settings import SettingsError
+    from fr.settings.load import read_at_default
+
+    try:
+        rel_path = old.relative_to(space.product).as_posix()
+        committed = read_at_default(space.product, rel_path)
+        return committed is not None and committed == old.read_text()
+    except ValueError, OSError, UnicodeDecodeError, SettingsError:
+        return False
+
+
+def _old_ignored(old: Path, why: str) -> None:
+    key = f"ignored:{old}"
+    if key not in _OLD_NOTICED:
+        _OLD_NOTICED.add(key)
+        print(
+            f"fr: ignoring {old}, the old location: {why}; run fr migrate artifacts --yes",
+            file=sys.stderr,
+        )
 
 
 def _in_space_checkout(space: ConfigSpace, path: Path) -> bool:
@@ -444,17 +500,27 @@ def read_checked_bytes(root: Path, path: Path, what: str) -> bytes:
     """The bytes of executable or trust configuration *path* (a repo workflow manifest, a
     verification strategy, the profile declarations) for the product checkout *root*.
 
-    Under `repo`, and for a product-checkout path (R13's old location, reviewed with the
-    product), the file as it is. In a quiet or stealth configuration space the WHOLE file is
+    Under `repo`, the file as it is. Under quiet and stealth a product-checkout path (R13's
+    old location) refuses: no configuration branch's protection covers it (review p4-r2).
+    In a quiet or stealth configuration space the WHOLE file is
     executable configuration (a workflow's `kind: cli` argv, a strategy's commands, the
     profiles' secrets and mounts), so it is read only from the fetched, reviewed tip of a
     protected configuration branch (`fr.config.protection.read_checked`, R7), never from
     the configuration checkout's working tree (review p4-sec-manifest-tip, finding
     p5-exec-manifests-guard). Not protected, or absent at the tip, refuses."""
     space = config_space(Path(root))
-    if space.placement == _REPO or not _in_space_checkout(space, path):
+    if space.placement == _REPO:
         return Path(path).read_bytes()
     from fr.config import protection
+
+    if not _in_space_checkout(space, path):
+        # R13's old path in the product (review p4-r2): no configuration branch's
+        # protection covers it, so its executable content never runs here.
+        raise protection.ProtectionError(
+            f"fr will not {what}: {path} is at its old path in the product checkout, and "
+            f"under {space.placement} executable configuration runs only from the protected "
+            f"configuration branch; run `fr migrate artifacts --yes`"
+        )
 
     below = Path(path).resolve().relative_to(space.dir.resolve()).as_posix()
     text = protection.read_checked(space, None, below, what)
