@@ -674,3 +674,45 @@ amendments:
     level: unit
     ref: super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_session_push_after_labelling_voids_the_approval
     why: 'l-tests-r3: the drive-level void'
+  - row: wave-queue-live-wave
+    op: set-status
+    base: 0
+    status: walked
+    notes: 'walked live 2026-11-24/25 on waves 22-24 (scope s-f7ea4061, land: push).
+      Every PR (#1568 #1662 #1628 #1630 #1681 #1683 #1583 #1684, then exports #1666
+      #1685) landed by the driver push at the exact sha its fr-queue/s-f7ea4061/slot-1
+      CI run had tested (R9, R10); no forge merge queue, no PR update by the driver.
+      Waves 22 and 24: one approval per PR, release held while the hold was open ("held:
+      the merge queue ... holds the release"), then one RC per wave on the drain via
+      hold-relay (rc.6, rc.8) and the release cleared the hold (R17). Wave 23 also cut
+      one release (rc.7), but #1630 was approved three times: #1678 merged to main outside
+      the queue while it was open, the session re-merged main, and the head change voided
+      the approval (recorded voided_at). R17 halt exercised: a drained-hold write the
+      remote refused at 2026-11-25T10:40:48Z halted the queue (queue_halt), and the
+      retry at 10:43:50Z wrote it. Not exercised: a combination of more than one entry
+      (longest green prefix, k>1), a failed lease and rebuild, and a server refusing
+      --atomic.'
+    walk:
+      strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-25T00:00:00Z'
+      evidence: triage state refs/heads/fr-triage/s-f7ea4061 judgements.yaml queues
+        waves 22-24 (queue_open/built/land/drain/halt/cleared); refs/heads/fr-hold/queue
+        history (931aa50e0 drained after the refused write); release runs 45475954083
+        and 45497789144 (held), 45482501576 (rc.6), 45514490199 (rc.7); PR fr-queue
+        comments and merge commits
+    why: 'walked live 2026-11-24/25 on waves 22-24 (scope s-f7ea4061, land: push). Every
+      PR (#1568 #1662 #1628 #1630 #1681 #1683 #1583 #1684, then exports #1666 #1685)
+      landed by the driver push at the exact sha its fr-queue/s-f7ea4061/slot-1 CI run
+      had tested (R9, R10); no forge merge queue, no PR update by the driver. Waves
+      22 and 24: one approval per PR, release held while the hold was open ("held: the
+      merge queue ... holds the release"), then one RC per wave on the drain via hold-relay
+      (rc.6, rc.8) and the release cleared the hold (R17). Wave 23 also cut one release
+      (rc.7), but #1630 was approved three times: #1678 merged to main outside the queue
+      while it was open, the session re-merged main, and the head change voided the
+      approval (recorded voided_at). R17 halt exercised: a drained-hold write the remote
+      refused at 2026-11-25T10:40:48Z halted the queue (queue_halt), and the retry at
+      10:43:50Z wrote it. Not exercised: a combination of more than one entry (longest
+      green prefix, k>1), a failed lease and rebuild, and a server refusing --atomic.'
