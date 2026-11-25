@@ -716,6 +716,93 @@ def test_cancel_refuses_a_batch_already_closed_out(tmp_path: Path, gh: FakeGhCli
     assert "cancelled" in out
 
 
+# ------------------------------------------- overlap report (wave-queue-gaps R8-R9)
+
+
+def _waved(tmp_path: Path, *batches: dict[str, Any], facts: Facts | None = None) -> None:
+    _with6(tmp_path, *batches, facts=facts)
+
+
+def _a(wave: int = 1) -> dict[str, Any]:
+    return {"id": "a", "title": "a", "ids": ["super-fr#575"], "wave": wave}
+
+
+def test_suggest_lists_the_overlapping_pairs_of_one_wave_with_both_remedies(
+    tmp_path: Path,
+) -> None:
+    b = {"id": "b", "title": "b", "ids": ["super-fr#577"], "wave": 1}
+    _waved(tmp_path, _a(), b)
+    before = (tmp_path / "judgements.yaml").read_text("utf-8")
+    code, out = _run(tmp_path, "suggest")
+    assert code == 0, out
+    text = " ".join(out.split())
+    assert "overlap in wave 1: `a` and `b`" in text
+    assert "isolation/local.py" in text
+    assert "merge them into one batch" in text and "move one to wave 2" in text
+    assert (tmp_path / "judgements.yaml").read_text("utf-8") == before
+
+
+def test_suggest_prints_no_suggestions_only_when_there_is_neither_grouping_nor_overlap(
+    tmp_path: Path,
+) -> None:
+    only_members = _facts(_issue(577), _issue(575))
+    b = {"id": "b", "title": "b", "ids": ["super-fr#577"], "wave": 2}
+    _waved(tmp_path, _a(), b, facts=only_members)  # two waves: no overlap, nothing free
+    code, out = _run(tmp_path, "suggest")
+    assert code == 0, out
+    assert out.strip() == "no suggestions"
+    b["wave"] = 1
+    _waved(tmp_path, _a(), b, facts=only_members)
+    code, out = _run(tmp_path, "suggest")
+    assert "no suggestions" not in out and "overlap in wave 1" in out
+
+
+def test_create_with_a_wave_writes_the_batch_then_prints_the_overlap(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    _waved(tmp_path, _a())
+    code, out = _run(tmp_path, *_CREATE, "--wave", "1")
+    assert code == 0, out
+    assert [x.id for x in _batches(tmp_path)] == ["a", "lifecycle"]
+    text = " ".join(out.split())
+    assert text.index("created batch lifecycle") < text.index("overlap in wave 1")
+    assert "`a` and `lifecycle`" in text and "move one to wave 2" in text
+
+
+def test_create_without_a_wave_or_without_a_shared_path_prints_no_overlap(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    _waved(tmp_path, _a())
+    code, out = _run(tmp_path, *_CREATE)
+    assert code == 0, out
+    assert "overlap" not in out
+    other = ("create", "docs", "--title", "t", "--issue", "super-fr#471", "--wave", "1")
+    code, out = _run(tmp_path, *other)
+    assert code == 0, out
+    assert "overlap" not in out
+
+
+def test_edit_wave_moves_the_batch_then_prints_the_pairs_it_now_forms(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    b = {"id": "b", "title": "b", "ids": ["super-fr#577"], "wave": 2}
+    _waved(tmp_path, _a(), b)
+    code, out = _run(tmp_path, "edit", "b", "--wave", "1")
+    assert code == 0, out
+    assert next(x for x in _batches(tmp_path) if x.id == "b").wave == 1
+    assert "overlap in wave 1: `a` and `b`" in " ".join(out.split())
+
+
+def test_edit_to_a_wave_with_no_shared_path_prints_no_overlap(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    b = {"id": "b", "title": "b", "ids": ["super-fr#471"], "wave": 2}
+    _waved(tmp_path, _a(), b)
+    code, out = _run(tmp_path, "edit", "b", "--wave", "1")
+    assert code == 0, out
+    assert "overlap" not in out
+
+
 # ----------------------------------------------------------------- suggest
 
 

@@ -804,7 +804,7 @@ def cited_paths(text: str) -> set[str]:
     return {m.strip(".,;:") for m in _PATH.findall(_URL.sub(" ", text))}
 
 
-def _same_file(a: str, b: str) -> bool:
+def same_file(a: str, b: str) -> bool:
     """Two citations name one file when one is a path suffix of the other."""
     return a == b or a.endswith("/" + b) or b.endswith("/" + a)
 
@@ -829,7 +829,7 @@ def suggest(judgements: Judgements, facts: Facts) -> list[Suggestion]:
     cites = {k: cited_paths(judgements.issues[k].detail) for k in free}
     groups: dict[frozenset[str], str] = {}
     for path in sorted({p for ps in cites.values() for p in ps}):
-        members = frozenset(k for k in free if any(_same_file(path, q) for q in cites[k]))
+        members = frozenset(k for k in free if any(same_file(path, q) for q in cites[k]))
         if len(members) > 1 and len(path) > len(groups.get(members, "")):
             groups[members] = path
     out += [

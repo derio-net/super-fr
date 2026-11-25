@@ -50,6 +50,9 @@ Stages are derived by `check` and `render`, never stored. Never write facts your
    and the forge commands you recommend (on GitHub, `gh …`).
 5. **Batch.** Propose groups of judged issues to ship as one run and one PR (`fr triage batch suggest` is input,
    never the answer); create the accepted ones with `fr triage batch create <id> --title T --issue KEY...`.
+   `suggest` also lists each pair of open batches in one wave whose expected files overlap (its PR's files, else
+   the paths its issues cite, minus `generated:` and version files); `create`/`edit --wave` print the pairs they
+   form and still write. Merge such a pair or move one to the next wave; the later dispatch brief names the overlap.
 
 Open PRs are triaged in the same loop: each carries an intent anchor (closing issue, spec, debug journal, else `unanchored`) with CI/merge badges. Judge the diff against it: `delivers | partial | drift | unanchored` plus one line in `delivery_note`. Shallow by design: never a code review.
 To sync later, run the same loop: `check` names what arrived, shipped or went missing.

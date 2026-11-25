@@ -363,6 +363,7 @@ from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
 from fr.triage.timestamps import parse_aware
+from fr.triage.wave_overlap import overlap_lines
 from fr.triage.wave_queue import REPORT_KINDS as QUEUE_REPORT_KINDS
 from fr.triage.wave_queue import (
     Hold,
@@ -917,6 +918,11 @@ def batch_list_command(
         )
 
 
+def _print_overlaps(lines: Sequence[str]) -> None:
+    for line in lines:
+        console.print(line, markup=False, soft_wrap=True)
+
+
 @batch_app.command("create")
 def batch_create_command(
     batch_id: Annotated[str, typer.Argument(help="Batch id, a slug: \\[a-z]\\[a-z0-9-]{0,39}.")],
@@ -962,6 +968,7 @@ def batch_create_command(
     console.print(f"created batch {new.id} ({plural(len(new.ids), 'issue')})", markup=False)
     _say_takes(new.id, admitted)
     _warn_mixed_themes(new, judgements)
+    _print_overlaps(overlap_lines([*judgements.batches, new], judgements, facts, only=new.id))
     if new.wave is not None:  # a wave makes claims owed from now (R3)
         free = [k for k in new.ids if k not in dict(admitted)]
         _settle_claims(env, _claim_ops(new, free, facts, env.me), yes=yes)
@@ -1052,6 +1059,9 @@ def batch_edit_command(
     console.print(f"edited batch {new.id}", markup=False)
     _say_takes(new.id, [(k, h) for k, h in admitted.items() if k in added])
     _warn_mixed_themes(new, judgements)
+    _print_overlaps(
+        overlap_lines(_replace(judgements.batches, new), judgements, facts, only=new.id)
+    )
     owed_before = batch.wave is not None or stage != "proposed"
     owed_after = new.wave is not None or stage != "proposed"
     dropped = [k for k in batch.ids if k not in new.ids]
@@ -1352,11 +1362,13 @@ def batch_suggest_command(
     """Print candidate groupings (shared file, theme, pattern). Writes nothing."""
     _, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     found = suggest(judgements, facts)
-    if not found:
+    overlaps = overlap_lines(judgements.batches, judgements, facts)
+    if not found and not overlaps:
         console.print("no suggestions")
         return
     for s in found:
         console.print(f"{s.signal} {s.label}: {', '.join(s.keys)}", markup=False, soft_wrap=True)
+    _print_overlaps(overlaps)
 
 
 # ---------------------------------------------------------------- dispatch

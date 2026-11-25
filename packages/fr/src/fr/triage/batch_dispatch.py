@@ -34,6 +34,7 @@ from fr.triage.model import (
     parse_triage_config,
 )
 from fr.triage.queue_handback import conflict_brief as conflict_brief  # wave-queue-gaps §A
+from fr.triage.wave_overlap import overlap_brief_lines
 
 # Stages whose reservation still stands: the run was briefed with it and has
 # not merged or been given up (§3.D "every live reservation").
@@ -276,6 +277,7 @@ def render_brief(
             "this triage only, and the merge renumbers it if another batch lands "
             "that number first)."
         )
+    lines += overlap_brief_lines(batch, judgements.batches, judgements, facts)
     lines += [
         "- Do not name any member issue as a phase `tracking_issue` in the plan: the "
         "bridge would then own that issue's `fr:` labels.",
