@@ -180,3 +180,8 @@ test_check_reads_plans_through_the_clone_it_runs_in runs fr triage check from a 
 ### l-tests-r5-resolved · finding [out-of-scope] · resolves l-tests-r5: No test for a cycle or an unknown id in the after closure
 
 Kept out of scope per the reviewer's tag (the closure's cycle and unknown-id safety were already correct); a test nonetheless landed in this PR (operator may mark it fixed): test_an_after_cycle_or_an_unknown_id_neither_loops_nor_raises.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved-2 created=2026-11-25T17:34:45+00:00 state=fixed resolves=l-docs-accuracy-r1 answered_by=operator -->
+### l-docs-accuracy-r1-resolved-2 · finding [fixed] · resolves l-docs-accuracy-r1: fr-triage.md said the Batches page reads every driver clone; a standalone fr triage batches reads only the cwd clone
+
+operator chose fixed: the fix is in PR #1694
