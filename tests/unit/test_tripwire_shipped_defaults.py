@@ -145,7 +145,11 @@ def test_the_sync_script_check_exits_one_on_drift_and_the_write_repairs_it(
     for name in ("lenses/tests.yaml", "workflows/stale.yaml", "verifications/new.yaml"):
         assert name in checked.stderr
 
-    assert _sync(root).returncode == 0
+    written = _sync(root)
+    assert written.returncode == 0
+    assert "removed packages/fr/src/fr/defaults/workflows/stale.yaml" in written.stdout
+    assert "wrote packages/fr/src/fr/defaults/verifications/new.yaml" in written.stdout
+    assert "wrote packages/fr/src/fr/defaults/workflows/stale.yaml" not in written.stdout
     assert _sync(root, "--check").returncode == 0
     assert not (wheel / "workflows" / "stale.yaml").exists()
     assert (wheel / "verifications" / "new.yaml").read_text() == "new\n"

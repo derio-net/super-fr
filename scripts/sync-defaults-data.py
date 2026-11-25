@@ -24,22 +24,23 @@ TARGET = REPO_ROOT / "packages" / "fr" / "src" / "fr" / "defaults"
 KINDS = ("workflows", "verifications", "lenses")
 
 
-def _sync_kind(kind: str, *, check: bool) -> list[str]:
+def _sync_kind(kind: str, *, check: bool) -> list[tuple[str, str]]:
+    """Every drifted copy of *kind* as `(verb, path)`: `wrote` a copy, `removed` a stale one."""
     source, target = SOURCE / kind, TARGET / kind
-    drifted: list[str] = []
+    drifted: list[tuple[str, str]] = []
     wanted = {p.name for p in source.glob("*.yaml")}
     for src in sorted(source.glob("*.yaml")):
         dst = target / src.name
         data = src.read_bytes()
         if dst.is_file() and dst.read_bytes() == data:
             continue
-        drifted.append(str(dst.relative_to(REPO_ROOT)))
+        drifted.append(("wrote", str(dst.relative_to(REPO_ROOT))))
         if not check:
             target.mkdir(parents=True, exist_ok=True)
             dst.write_bytes(data)
     for stale in sorted(target.glob("*.yaml")) if target.is_dir() else []:
         if stale.name not in wanted:
-            drifted.append(str(stale.relative_to(REPO_ROOT)))
+            drifted.append(("removed", str(stale.relative_to(REPO_ROOT))))
             if not check:
                 stale.unlink()
     return drifted
@@ -51,10 +52,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     drifted = [path for kind in KINDS for path in _sync_kind(kind, check=args.check)]
     if args.check and drifted:
-        print("drifted (run scripts/sync-defaults-data.py): " + ", ".join(drifted), file=sys.stderr)
+        paths = ", ".join(path for _, path in drifted)
+        print("drifted (run scripts/sync-defaults-data.py): " + paths, file=sys.stderr)
         return 1
-    for path in drifted:
-        print(f"wrote {path}")
+    for verb, path in drifted:
+        print(f"{verb} {path}")
     return 0
 
 
