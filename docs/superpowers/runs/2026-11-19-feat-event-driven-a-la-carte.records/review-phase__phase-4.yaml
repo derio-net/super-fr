@@ -1,0 +1,47 @@
+schema_version: 12
+run: 2026-11-19-feat-event-driven-a-la-carte
+step: review-phase
+item: phase/4
+outcome: done
+journal:
+  - kind: review
+    id: review-p4
+    phase: 4
+    title: Phase 4 adversarial review (relocation framework, moved kinds, cross-space migration, dogfood)
+    body: |
+      Independent adversarial reviewer read 956538f..HEAD against §D, R9-R14 and the artifact-versioning
+      rule: compliant (profiles 2->3 relocating hop, seven new kinds at 2, every hop asserted, no collision).
+      Reproduced content loss on a lost stealth lease and an old-path shadow bypassing the guard. Eleven
+      in-scope findings and one out-of-scope (fixed here too), plus two automated security-review follow-ups
+      (fork PR trusted by head name; symlinked-parent unlink). All fixed in dfb201a31..c0e1e7d06 with spec
+      amendments to R7, R10 and R13. Selection 3234 passed / 2 failed (pre-existing in test_services_cli.py,
+      fixed by c0e1e7d06) / 1 skipped; ruff, mypy, fr validate artifacts (171 valid) clean.
+  - {kind: finding, id: p4-r1, phase: 4, review_scope: in, title: "move_across unlinked the product file without verifying the destination landed (stealth lost lease swallowed, ensure_space exists() race)"}
+  - {kind: finding, id: p4-r2, phase: 4, review_scope: in, title: "R13 fallback let a product-side old path override the configuration space and bypass read_checked under quiet/stealth"}
+  - {kind: finding, id: p4-r3, phase: 4, review_scope: in, title: "the profiles/workflow/strategy guard exceeded spec R7 and locked free-plan quiet/stealth repos out of isolation up, services and ops"}
+  - {kind: finding, id: p4-r4, phase: 4, review_scope: in, title: "quiet/stealth v1 profiles: 2->3 refused fr's own uncommitted 1->2 rewrite and missed the creation"}
+  - {kind: finding, id: p4-r5, phase: 4, review_scope: in, title: "_config_checkout decided by a -config directory name"}
+  - {kind: finding, id: p4-r6, phase: 4, review_scope: in, title: "stealth migrate auto-committed a deletion of an FR_OWNED path on the target branch, which the stealth push refuses"}
+  - {kind: finding, id: p4-r7, phase: 4, review_scope: in, title: "a diverged or dirty fr-config worktree was silently skipped, leaving an uncommitted product deletion"}
+  - {kind: finding, id: p4-r8, phase: 4, review_scope: in, title: "importing fr.config.migrate first failed with a circular import"}
+  - {kind: finding, id: p4-r9, phase: 4, review_scope: in, title: "fr repos sync ignored the old plan-config path and wrote the fr-config worktree directly under quiet"}
+  - {kind: finding, id: p4-r10, phase: 4, review_scope: in, title: "owed s1-refuse-old-paths named no release and omitted R16's env vars"}
+  - {kind: finding, id: p4-r11, phase: 4, review_scope: in, title: "no stealth profiles walk, guard wiring tested only with read_checked mocked, no tests for the fallback bypass or the lost lease"}
+  - {kind: finding, id: p4-r12, phase: 4, review_scope: out, title: "change_branch named every change settings-<hash>, and a closed-unmerged config PR was re-proposed on every command"}
+resolves:
+  - {id: p4-r1, state: fixed, body: "dfb201a31: unlink only once the re-fetched tip holds the exact bytes; absent -> propose, differing -> refuse (R12), never appearing -> refuse; a lost stealth lease raises BranchRaceError and is re-fetched as existing. Tests: lost lease, exists() race, untracked old path."}
+  - {id: p4-r2, state: fixed, body: "7205bd1a7 and b95c44316: a fetched configuration branch makes the product old path ignored (notice); with none, the old file is read only at the default branch's committed bytes and old-path executable content never runs; spec R13 amended; re-closes p5-exec-manifests-guard for this path."}
+  - {id: p4-r3, state: fixed, body: "1f4c10a03: fr/config/degraded.py: unprotected repo workflows/strategies fall back to the shipped ones, profiles.yaml keeps only schema_version, default, profiles and purpose and names what it drops; a failed protection read still refuses executors; fr services shows the degraded view with protection unknown; spec R7 amended."}
+  - {id: p4-r4, state: fixed, body: "6edcc584e: v1 -> v3 bytes are built in memory from the committed file and the configuration branch is created with them; fr's own in-flight rewrite is accepted, an operator edit still refused."}
+  - {id: p4-r5, state: fixed, body: "07abd65fb: a configuration checkout is recognised by structure (HEAD on refs/heads/fr-config at the computed path, or the migrating product's own space); the ci-config case passes."}
+  - {id: p4-r6, state: fixed, body: "a2ed5010f: under stealth the product file stays, fr prints the exact git rm once, nothing is staged on the target branch; spec R10 amended; discovery p4-stealth-product-deletion superseded."}
+  - {id: p4-r7, state: fixed, body: "d88c216f0: require_current_config_worktree refuses a dirty or diverged fr-config worktree before any unlink, naming the state and the remedy."}
+  - {id: p4-r8, state: fixed, body: "9f8f58d94: the moved-kinds table is built on first use; a test imports each new module first in a fresh python -I interpreter."}
+  - {id: p4-r9, state: fixed, body: "959df32b9 and faf1deaca: resolution through located(); under quiet/stealth a PR through the configuration writer (git.pr honoured) or a refusal naming fr migrate artifacts --yes; never writes the configuration checkout; every old-path read, move and unlink checks for linked parents (link_problem)."}
+  - {id: p4-r10, state: fixed, body: "e27835234: the owed entry names the first minor after S1's release, how fr detects it, and R16's old FR_SHIPPED_* variables; the orchestrator files a dedicated issue at deliver and repoints owed_key."}
+  - {id: p4-r11, state: fixed, body: "Stealth profiles walk (transform, structure check, crash window), guard wiring through resolve_workflow, resolve_strategy and run_cmd's manifest resolver with real protection answers (local origin and a fake forge serving the captured ruleset), the fallback bypass and the lost lease are tested; the CLI-level fr run advance walk is left to the phase-7 candidate scenario."}
+  - {id: p4-r12, state: fixed, body: "25a68541e and f24f3f028: change branches are fr-config-change/<kind>-<hash>; an open PR is reused only when its head is in the target repo, its base is the configuration branch and its head holds the exact bytes; a closed-unmerged one refuses once with its URL and --repropose; a same-named fork PR is ignored."}
+  - {id: p4-stealth-coverage-one-kind, state: fixed, body: "Covered by p4-r11's fix: the stealth profiles walk adds the kind whose stealth path differs, beside models-config."}
+evidence:
+  review: review-p4
+  reviewer: a6ec6f6bf0e1f6a44
