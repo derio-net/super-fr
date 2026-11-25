@@ -447,6 +447,7 @@ class Snapshot:
     cursors: Mapping[str, tuple[str, CursorPosition | None, CursorRead | None]] = field(
         default_factory=dict
     )
+    cursor_details: Mapping[str, str] = field(default_factory=dict)  # an unread read's cause
 
     # marker item -> its open PR's approval verdict (gh#1497), settled as a `closeout`
     # queue entry's (R32): what admits a PR `review_reasons` holds. None is never approved.
@@ -1795,7 +1796,7 @@ def queue_snapshot(
         config=snap.wave_queues.get(repo) or QueueConfig(ci=None),
         batches=batches, stages=snap.stages,
         live={**snap.live, **{a.key: a.pr for a in mine}, **{r.key: r.pr for r in refused}},
-        approvals=snap.approvals, records=records,
+        approvals=snap.approvals, records=records, cursor_details=snap.cursor_details,
         hold=snap.queue_holds.get(repo), hold_read=repo in snap.queue_holds,
         releases=snap.queue_releases.get(repo, ()), base=snap.bases.get(repo, ""),
         slots=snap.queue_slots, default=snap.queue_defaults.get(repo, ""),

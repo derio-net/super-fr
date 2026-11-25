@@ -68,7 +68,7 @@ def test_admits_follows_the_queues_conditions_written_out(
     qs = _other_qs(kind, pr)
     r = other_readiness(f"{kind}#7", qs)
     assert r.admits == _oracle(qs, f"{kind}#7") == admits
-    assert r.admits == _other_ready(qs.others[0], qs)
+    assert _other_ready(qs.others[0], qs) is admits  # the hand-written case (l-tests-r6)
     assert r.facts.delivered == ("admitted" if pr.state == "OPEN" else "unknown")
 
 

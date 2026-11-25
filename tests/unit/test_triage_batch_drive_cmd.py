@@ -375,6 +375,9 @@ class DriveCheckout:
     def reach_commit(self, sha: str, branch: str) -> bool:
         return bool(sha)
 
+    def reach_failure(self, sha: str, branch: str) -> str:
+        return "" if sha else "the PR has no head sha"
+
     # head -> its patch-id (R12); a head not here has none, and the gate judges by `reaches`
     patch_ids: dict[str, str] = {}  # noqa: RUF012 - replaced per instance by a test
     refreshed: int = 0

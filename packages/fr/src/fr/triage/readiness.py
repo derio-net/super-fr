@@ -13,8 +13,8 @@ R2). Delivered means the run cursor read at the PR's live head, folded over ever
 naming its branch (`fr.triage.cursor.fold_positions`), records `deliver` done; every other
 read is a reason it is not (`delivered`).
 
-The verdict is exactly one of R5's, decided in this order, first match wins (`R5_ORDER`,
-`_decide`):
+The verdict is exactly one of R5's, decided in this order, first match wins (`_decide`; the
+pair tests of `tests/unit/test_triage_readiness.py` pin each adjacent pair):
 
 1. `queue-held`: Not ready: queue held: <reason>
 2. `approved-not-delivered` / `not-delivered`: Approved, not delivered / Not ready: not
@@ -97,19 +97,6 @@ VerdictKind = Literal[
     "not-open",
     "refused",
 ]
-R5_ORDER: tuple[tuple[VerdictKind, ...], ...] = (
-    ("queue-held",),
-    ("approved-not-delivered", "not-delivered"),
-    ("ci-red", "ci-running"),
-    ("gate-held",),
-    ("other-base",),
-    ("approval-voided",),
-    ("conflicting",),
-    ("ready-for-approval",),
-    ("merges-next", "queued-behind", "not-queued"),
-)
-"""R5's verdicts in the order `_decide` tries them, first match wins."""
-
 _LINES: dict[VerdictKind, str] = {
     "queue-held": "Not ready: queue held: {r}",
     "approved-not-delivered": "Approved, not delivered",
@@ -140,6 +127,7 @@ class Delivered:
 
     state: DeliveredState
     reason: str = ""
+    cause: str = ""  # an `unread` read's cause, from facts (l-errors-r2); "" when unknown
 
     @property
     def ok(self) -> bool:
@@ -191,7 +179,9 @@ def delivered(batch: Batch, pr: LivePr, qs: QueueSnapshot) -> Delivered:
     if status == "no-clone":
         return Delivered("no-clone", f"no clone of {qs.repo} to read the run cursor from")
     if status != "read":
-        return Delivered("unread", f"the run cursor at {_short(head)} could not be read")
+        why = qs.cursor_details.get(batch.id, "")
+        tail = f": {why}" if why else ""
+        return Delivered("unread", f"the run cursor at {_short(head)} could not be read{tail}", why)
     if head != pr.head:
         why = f"the run cursor was read at {_short(head)}, the PR is at {_short(pr.head)}"
         return Delivered("stale-head", why)
@@ -270,11 +260,16 @@ def _approval_fact(verdict: ApprovalVerdict | None, voided: str | None) -> str:
     return "none"
 
 
-def _mover(kind: VerdictKind, state: DeliveredState) -> Mover:
+def _mover(kind: VerdictKind, d: Delivered) -> Mover:
+    """Whose move a verdict is. Not delivered: the session's while its run works; the
+    driver's for a head it reads again next pass (another head, or a read never asked); the
+    operator's for no cursor (R12), no clone, and a read that failed with a known cause: the
+    driver re-reads it every pass, and it already failed (l-errors-r3, `cursor_remedy`)."""
     if kind in ("approved-not-delivered", "not-delivered"):
-        if state == "at-step":
+        if d.state == "at-step":
             return "session"
-        return "driver" if state in ("unread", "stale-head") else "operator"
+        known = d.state == "unread" and d.cause
+        return "driver" if d.state in ("unread", "stale-head") and not known else "operator"
     if kind in ("ci-red", "conflicting"):
         return "session"
     return "driver" if kind in ("ci-running", "merges-next", "queued-behind") else "operator"
@@ -299,6 +294,11 @@ def _next(kind: VerdictKind, d: Delivered, mover: Mover, batch: Batch, pr: LiveP
     """R6's next action, its link (the PR or its checks tab) and its command (the pane focus)."""
     if d.state == "no-cursor":
         return NO_CURSOR_ACTION, pr.url, ""
+    if (remedy := cursor_remedy(d, qs.repo)) and kind in (
+        "approved-not-delivered",
+        "not-delivered",
+    ):
+        return remedy, pr.url, ""
     if kind in ("ci-red", "ci-running"):
         what = "fix the failing checks" if kind == "ci-red" else "wait for CI"
         return what, f"{pr.url}/checks" if pr.url else "", ""
@@ -313,6 +313,17 @@ def _next(kind: VerdictKind, d: Delivered, mover: Mover, batch: Batch, pr: LiveP
         "gate-held": "pass the DevOps stage",
     }
     return actions.get(kind, "look at the PR"), pr.url, ""
+
+
+def cursor_remedy(d: Delivered, repo: str) -> str:
+    """What the operator does about a run cursor the driver cannot read (l-errors-r3), ""
+    when it is not theirs (`_mover`): clone the repo, or fix the read's known cause. The
+    card's next action and the Needs-you row both say it."""
+    if d.state == "no-clone":
+        return f"clone {repo} on the driver host"
+    if d.state == "unread" and d.cause:
+        return f"fix what stops the run cursor being read: {d.cause}"
+    return ""
 
 
 def _decide(batch: Batch, pr: LivePr, qs: QueueSnapshot, d: Delivered,
@@ -351,7 +362,7 @@ def batch_readiness(batch: Batch, qs: QueueSnapshot) -> Readiness:
     approved = verdict is not None and is_approved(verdict)
     voided = _voided_sha(batch, pr, verdict)
     kind, reason = _decide(batch, pr, qs, d, approved, voided)
-    mover = _mover(kind, d.state)
+    mover = _mover(kind, d)
     action, link, command = _next(kind, d, mover, batch, pr, qs)
     facts = ReadinessFacts(
         delivered="yes" if d.ok else d.reason,
@@ -380,6 +391,12 @@ def fact_cursors(
     folded position and the read status. The driver and the board both build
     `Snapshot.cursors` with it, so the verdict reads one input path."""
     return {e.batch.id: (e.pr.head_oid, e.pr.cursor, e.pr.cursor_read) for e in queue}
+
+
+def fact_cursor_details(queue: Iterable[QueueEntry]) -> dict[str, str]:
+    """Each queued batch's `unread` cursor read's cause as collect stored it (l-errors-r2):
+    `Snapshot.cursor_details`, beside `fact_cursors`."""
+    return {e.batch.id: e.pr.cursor_detail for e in queue if e.pr.cursor_detail}
 
 
 def _ejected(key: str, qs: QueueSnapshot | None) -> str | None:

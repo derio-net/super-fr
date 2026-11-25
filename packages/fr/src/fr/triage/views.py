@@ -76,7 +76,13 @@ from fr.triage.model import (
 )
 from fr.triage.queue_exec import queue_config
 from fr.triage.queue_reports import QUEUE_REPORT_KEY
-from fr.triage.readiness import NO_CURSOR_ACTION, fact_cursors, snapshot_readiness
+from fr.triage.readiness import (
+    NO_CURSOR_ACTION,
+    cursor_remedy,
+    fact_cursor_details,
+    fact_cursors,
+    snapshot_readiness,
+)
 from fr.triage.scope_config import scope_id
 from fr.triage.timestamps import parse_aware
 
@@ -200,6 +206,7 @@ def drive_snapshot(
         rejected=rejected_by_batch(batches, facts),
         approvals=fact_approvals(queue),
         cursors=fact_cursors(queue),
+        cursor_details=fact_cursor_details(queue),
         ledgers=fact_ledgers(batches, facts, stages),  # labels only: no clone (R13)
         ledger_unknown=fact_ledger_unknown(batches, facts, stages),
         post_merge_repos=frozenset(
@@ -236,6 +243,7 @@ class Need:
     # | archive-conflict | driver-stopped (a looping driver stopped on a refusal, R8)
     # | queue-unconfigured (a repo with open batch PRs and no `queue.ci`: nothing merges)
     # | queue-need (the wave merge queue's own: a halt, a hold, a stall, a barrier, R28)
+    # | cursor-unread (a batch PR's run cursor: no clone, or a read failed with a cause)
     kind: str
     ref: str  # the batch id, `<owner/repo>#<n>` (a gated PR), or issue key the row names
     text: str
@@ -245,6 +253,7 @@ class Need:
 NEED_LABELS = {
     "queue-need": "Merge queue needs you",
     "approve-pr": "Label a green PR approved-fr",
+    "cursor-unread": "Run cursor unreadable",
     "queue-unconfigured": "Repo has no merge queue config",
     "red-pr": "Red PR its session cannot fix",
     "failing-ci": "Failing CI",
@@ -328,6 +337,10 @@ def needs_you(
         pr = entry.pr
         if pr.state != "OPEN" or (pr.repo, pr.number) in foreign:
             continue  # a foreign PR is never one to approve (gh#936)
+        delivered = snapshot_readiness(snap, entry.batch).delivered
+        if remedy := cursor_remedy(delivered, pr.repo):  # l-errors-r3: the operator's, approved
+            out.append(Need("cursor-unread", entry.batch.id, f"PR #{pr.number}: {remedy}", pr.url))
+            continue  # or not: no clone, or a read that failed with a known cause
         live = snap.live.get(entry.batch.id)  # its checks as the driver judges them (R4)
         verdict = live.checks if live is not None else "pending"
         approval = snap.approvals.get(entry.batch.id)
@@ -335,7 +348,6 @@ def needs_you(
             continue
         if conflict_at(entry.batch, live.head if live is not None else pr.head_oid) is not None:
             continue  # R18: conflicting at its head: handed back, or the merge-conflict need
-        delivered = snapshot_readiness(snap, entry.batch).delivered
         if not delivered.ok:  # readiness R3, R4: never ask for an approval deliver would void
             if delivered.state == "no-cursor":  # R12: the operator's, by hand or through a run
                 why = f"PR #{pr.number}: {delivered.reason}: {NO_CURSOR_ACTION}"

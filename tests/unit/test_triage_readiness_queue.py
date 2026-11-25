@@ -57,6 +57,12 @@ def test_the_same_draft_delivered_opens_the_queue() -> None:
     plan = plan_queue(_draft(DONE))
     assert _kinds(plan) == ["queue-open"]
     assert plan.readiness["a"].admits
+    # l-tests-r3: the pass that opens the queue places it first in the order it will take
+    assert plan.entries == ()
+    assert (plan.readiness["a"].kind, plan.readiness["a"].verdict) == (
+        "merges-next",
+        "Approved, merges next",
+    )
 
 
 def test_the_plan_holds_a_verdict_for_every_open_batch_in_its_entry_order() -> None:

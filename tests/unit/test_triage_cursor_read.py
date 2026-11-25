@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 from fr.triage.collect import collect_facts
 from fr.triage.cursor import RUNS_DIR, read_cursor
@@ -20,6 +21,7 @@ from fr.triage.errors import TriageError
 from fr.triage.model import (
     FACTS_READS,
     FACTS_SCHEMA,
+    CursorAnswer,
     CursorPosition,
     PullRequest,
     Scope,
@@ -39,11 +41,13 @@ class FakeCheckout:
     def __init__(
         self, files: Mapping[str, Any], *, reach: bool = True, raises: bool = False
     ) -> None:
-        self.files = {n: yaml.safe_dump(d) for n, d in files.items()}
+        # a str value is the file's raw text (a corrupt cursor), anything else is dumped
+        self.files = {n: d if isinstance(d, str) else yaml.safe_dump(d) for n, d in files.items()}
         self.reach, self.raises = reach, raises
 
-    def reach_commit(self, sha: str, branch: str) -> bool:
-        return self.reach and sha == HEAD and branch == BRANCH
+    def reach_failure(self, sha: str, branch: str) -> str:
+        ok = self.reach and sha == HEAD and branch == BRANCH
+        return "" if ok else f"fetch of {branch} failed: network down"
 
     def list_dir(self, ref: str, directory: str) -> list[str]:
         if self.raises:
@@ -71,7 +75,7 @@ DONE = CursorPosition(run="r1", step="deliver", kind="deliver-done")
 def test_every_cursor_delivered_reads_delivered() -> None:
     files = {"r1.yaml": _doc("r1", "deliver", deliver="done"),
              "r2.yaml": _doc("r2", "deliver", deliver="done")}  # fmt: skip
-    assert read_cursor(FakeCheckout(files), _pr()) == (DONE, "read")  # type: ignore[arg-type]
+    assert read_cursor(FakeCheckout(files), _pr()) == (DONE, "read", "")  # type: ignore[arg-type]
 
 
 def test_one_cursor_still_delivering_is_not_delivered() -> None:
@@ -79,18 +83,61 @@ def test_one_cursor_still_delivering_is_not_delivered() -> None:
     files = {"r1.yaml": _doc("r1", "deliver", deliver="done"),
              "r2.yaml": _doc("r2", "deliver", deliver="running")}  # fmt: skip
     got = read_cursor(FakeCheckout(files), _pr())  # type: ignore[arg-type]
-    assert got == (CursorPosition(run="r2", step="deliver", kind="none"), "read")
+    assert got == (CursorPosition(run="r2", step="deliver", kind="none"), "read", "")
 
 
 def test_no_cursor_naming_the_branch_reads_none() -> None:
     files = {"other.yaml": _doc("o", "deliver", branch="feat/other", deliver="done")}
-    assert read_cursor(FakeCheckout(files), _pr()) == (None, "read")  # type: ignore[arg-type]
+    assert read_cursor(FakeCheckout(files), _pr()) == (None, "read", "")  # type: ignore[arg-type]
 
 
-def test_an_unreachable_head_or_a_failed_read_is_unread() -> None:
+def test_an_unreachable_head_or_a_failed_read_is_unread_with_its_cause() -> None:
+    """l-errors-r2: the cause of a failed read is carried, never swallowed."""
     files = {"r1.yaml": _doc("r1", "deliver", deliver="done")}
-    assert read_cursor(FakeCheckout(files, reach=False), _pr()) == (None, "unread")  # type: ignore[arg-type]
-    assert read_cursor(FakeCheckout(files, raises=True), _pr()) == (None, "unread")  # type: ignore[arg-type]
+    got = read_cursor(FakeCheckout(files, reach=False), _pr())  # type: ignore[arg-type]
+    assert (got.position, got.read) == (None, "unread")
+    assert got.detail == f"head {HEAD[:12]} not reached: fetch of {BRANCH} failed: network down"
+    got = read_cursor(FakeCheckout(files, raises=True), _pr())  # type: ignore[arg-type]
+    assert (got.position, got.read) == (None, "unread")
+    assert got.detail == f"reading {RUNS_DIR} at {HEAD[:12]} failed: git failed"
+
+
+def test_a_corrupt_cursor_beside_a_delivered_one_is_unread() -> None:
+    """l-security-r3 / l-errors-r1 (R1 fail closed): a file under the runs dir that is not
+    YAML is unknown, never skipped, so the delivered cursor beside it does not deliver."""
+    files = {"r1.yaml": _doc("r1", "deliver", deliver="done"), "r2.yaml": "run: [unclosed"}
+    got = read_cursor(FakeCheckout(files), _pr())  # type: ignore[arg-type]
+    assert (got.position, got.read) == (None, "unread")
+    assert got.detail.startswith(f"{RUNS_DIR}/r2.yaml at {HEAD[:12]} is not YAML: ")
+
+
+def test_a_lone_corrupt_cursor_is_unread_never_no_cursor() -> None:
+    """A lone corrupt file is not "no cursor names the branch" (which would advise R12's
+    merge by hand): it is a read that failed."""
+    got = read_cursor(FakeCheckout({"r1.yaml": "{{"}), _pr())  # type: ignore[arg-type]
+    assert got.read == "unread" and "r1.yaml" in got.detail
+
+
+@pytest.mark.parametrize(
+    ("doc", "why"),
+    [
+        ({"branch": BRANCH}, "names no run"),
+        ({"branch": BRANCH, "run": "r1"}, "names no cursor step"),
+        ({"branch": BRANCH, "run": "r1", "cursor": "deliver", "steps": ["x"]},
+         "steps is not a mapping"),
+        ({"branch": BRANCH, "run": "r1", "cursor": "deliver", "steps": {"deliver": "done"}},
+         "step deliver is not a mapping"),
+        (["not", "a", "mapping"], "is not a mapping"),
+        ({"run": "r1", "cursor": "deliver"}, "names no branch"),
+    ],
+)  # fmt: skip
+def test_a_cursor_not_shaped_like_a_run_is_unread(doc: Any, why: str) -> None:
+    """Mirrors `fr.isolation.preserve.branch_runs`: a file that is no run (no mapping, no
+    branch) or names this branch with no usable run, cursor or steps is unreadable."""
+    files = {"r1.yaml": _doc("r1", "deliver", deliver="done"), "r2.yaml": doc}
+    got = read_cursor(FakeCheckout(files), _pr())  # type: ignore[arg-type]
+    assert (got.position, got.read) == (None, "unread")
+    assert got.detail == f"{RUNS_DIR}/r2.yaml at {HEAD[:12]} {why}"
 
 
 # ------------------------------------------------------------------ collect
@@ -106,24 +153,28 @@ def _open_pr() -> dict[str, Any]:
             "author": {"login": "operator"}, "isCrossRepository": False}  # fmt: skip
 
 
-def _collect(answer: tuple[CursorPosition | None, str]) -> PullRequest:
+def _collect(answer: CursorAnswer) -> PullRequest:
     forge = FakeForge(issues={REPO: []}, prs={REPO: []}, head_prs={(REPO, BRANCH): [_open_pr()]})
     facts = collect_facts(
         forge, Scope(kind="repo", target=REPO), now=NOW,
         batch_branches=[("alpha", BRANCH, AT)], ledger_branches=[("alpha", BRANCH, AT)],
-        cursor_at=lambda pr: answer,  # type: ignore[arg-type,return-value]
+        cursor_at=lambda pr: answer,
     )  # fmt: skip
     (pr,) = facts.batch_prs
     return pr
 
 
-def test_collect_stores_the_fold_and_its_read_status() -> None:
-    pr = _collect((DONE, "read"))
-    assert (pr.cursor, pr.cursor_read) == (DONE, "read")
-    pr = _collect((None, "unread"))
-    assert (pr.cursor, pr.cursor_read) == (None, "unread")
-    pr = _collect((None, "no-clone"))
-    assert (pr.cursor, pr.cursor_read) == (None, "no-clone")
+def test_collect_stores_the_fold_its_read_status_and_its_cause() -> None:
+    pr = _collect(CursorAnswer(DONE, "read"))
+    assert (pr.cursor, pr.cursor_read, pr.cursor_detail) == (DONE, "read", None)
+    pr = _collect(CursorAnswer(None, "unread", "fetch of x failed: boom"))
+    assert (pr.cursor, pr.cursor_read, pr.cursor_detail) == (
+        None,
+        "unread",
+        "fetch of x failed: boom",
+    )
+    pr = _collect(CursorAnswer(None, "no-clone"))
+    assert (pr.cursor, pr.cursor_read, pr.cursor_detail) == (None, "no-clone", None)
 
 
 def test_facts_are_schema_17_and_still_read_3_to_16(tmp_path: Path) -> None:
@@ -137,21 +188,61 @@ def test_facts_are_schema_17_and_still_read_3_to_16(tmp_path: Path) -> None:
     assert pr.cursor_read is None  # never asked
 
 
-def test_the_drivers_reader_says_no_clone_and_caches_by_head(tmp_path: Path) -> None:
+def _driver(tmp_path: Path) -> Any:
     from fr.commands import triage_batch_cmd
 
-    driver = triage_batch_cmd._Driver(
+    return triage_batch_cmd._Driver(
         triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={},
         max_inflight=4, yes=False,
     )  # fmt: skip
-    assert driver.cursor_at(_pr()) == (None, "no-clone")
+
+
+def test_the_drivers_reader_says_no_clone_and_caches_by_head(tmp_path: Path) -> None:
+    driver = _driver(tmp_path)
+    assert driver.cursor_at(_pr()) == (None, "no-clone", f"no clone of {REPO}")
     driver.checkout_paths = {REPO: tmp_path}
     calls: list[str] = []
     files = {"r1.yaml": _doc("r1", "deliver", deliver="done")}
     driver._reader = lambda repo: calls.append(repo) or FakeCheckout(files)  # type: ignore[method-assign]
-    assert driver.cursor_at(_pr()) == (DONE, "read")
-    assert driver.cursor_at(_pr()) == (DONE, "read")
+    assert driver.cursor_at(_pr()) == (DONE, "read", "")
+    assert driver.cursor_at(_pr()) == (DONE, "read", "")
     assert calls == [REPO]
+
+
+def test_the_drivers_reader_never_caches_an_unread_head_and_says_its_cause_once(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """l-tests-r2 / l-errors-r2: an `unread` result is read again on the next call (a fetch
+    that failed may succeed), and its cause is reported once per head, not once per pass."""
+    driver = _driver(tmp_path)
+    driver.checkout_paths = {REPO: tmp_path}
+    calls: list[str] = []
+    answers = [FakeCheckout({}, reach=False), FakeCheckout({}, reach=False),
+               FakeCheckout({"r1.yaml": _doc("r1", "deliver", deliver="done")})]  # fmt: skip
+    driver._reader = lambda repo: calls.append(repo) or answers[len(calls) - 1]  # type: ignore[method-assign]
+    first = driver.cursor_at(_pr())
+    assert first.read == "unread" and "network down" in first.detail
+    assert driver.cursor_at(_pr()).read == "unread"
+    assert driver.cursor_at(_pr()) == (DONE, "read", "")
+    assert calls == [REPO, REPO, REPO]
+    err = capsys.readouterr().err
+    assert err.count("network down") == 1 and f"{REPO}#41" in err
+
+
+def test_the_drivers_reader_carries_a_failed_clone_open(tmp_path: Path) -> None:
+    """A clone that cannot be opened is unread with the error, never a bare `unread`."""
+    driver = _driver(tmp_path)
+    driver.checkout_paths = {REPO: tmp_path}
+
+    def boom(repo: str) -> Any:
+        raise TriageError("not a git repository")
+
+    driver._reader = boom  # type: ignore[method-assign]
+    got = driver.cursor_at(_pr())
+    assert (
+        got.read == "unread"
+        and got.detail == f"the clone of {REPO} could not be read: not a git repository"
+    )
 
 
 def test_a_cursor_with_no_read_status_is_never_delivered() -> None:

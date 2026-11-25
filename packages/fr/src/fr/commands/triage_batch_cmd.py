@@ -306,8 +306,7 @@ from fr.triage.model import (
     CollectedCloseout,
     ConflictDelivery,
     ConflictEvent,
-    CursorPosition,
-    CursorRead,
+    CursorAnswer,
     CursorReader,
     DeferredEvent,
     DispatchEvent,
@@ -353,7 +352,7 @@ from fr.triage.queue_exec import (
     required_names,
 )
 from fr.triage.quota import Pace
-from fr.triage.readiness import fact_cursors, merge_refusal
+from fr.triage.readiness import fact_cursor_details, fact_cursors, merge_refusal
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
@@ -4201,7 +4200,7 @@ class _Driver:
         self.pace: Pace | None = None
         # (repo, head sha) -> the run cursor's position there: a commit never changes, so
         # each open batch PR head is read once per process (exit-gates R18)
-        self._cursors: dict[tuple[str, str], tuple[CursorPosition | None, CursorRead]] = {}
+        self._cursors: dict[tuple[str, str], CursorAnswer] = {}
         # (repo, default-branch tip, batch branch) -> its gated rows there (R13, R14): they
         # move only when the default branch does
         self._ledger_rows: dict[tuple[str, str, str], LedgerRead] = {}
@@ -4215,22 +4214,26 @@ class _Driver:
 
     # -------------------------------------------------------------- reaching out
 
-    def cursor_at(self, pr: PullRequest) -> tuple[CursorPosition | None, CursorRead]:
+    def cursor_at(self, pr: PullRequest) -> CursorAnswer:
         """The run cursor's folded position at open batch PR *pr*'s head and its read status
         (batch-merge-readiness R1), read through the repo's clone (`gitseam`): `no-clone`
-        with none; an `unread` head is read again next pass, a read one never again."""
+        with none; an `unread` head is read again on the next call, its cause said once per
+        head (l-errors-r2); a read one is never read again."""
         key = (pr.repo, pr.head_oid)
-        if key not in self._cursors:
-            if self.path_of(pr.repo) is None:
-                return None, "no-clone"
-            try:
-                got = read_cursor(self._reader(pr.repo), pr) if pr.head_oid else (None, "unread")
-            except TriageError:
-                return None, "unread"
-            if got[1] == "unread":
-                return got
-            self._cursors[key] = got
-        return self._cursors[key]
+        if key in self._cursors:
+            return self._cursors[key]
+        if self.path_of(pr.repo) is None:
+            return CursorAnswer(None, "no-clone", f"no clone of {pr.repo}")
+        try:
+            got = read_cursor(self._reader(pr.repo), pr)
+        except TriageError as exc:
+            got = CursorAnswer(None, "unread", f"the clone of {pr.repo} could not be read: {exc}")
+        if got.read == "unread":
+            said = f"{pr.repo}#{pr.number}: run cursor not read: {got.detail}"
+            self._report_once(f"cursor\0{pr.repo}\0{pr.head_oid}", said)
+            return got
+        self._cursors[key] = got
+        return got
 
     def client(self, facts: Facts, repo: str) -> GhClient:
         if repo not in self._clients:
@@ -4649,6 +4652,7 @@ class _Driver:
             **reads,
             approvals=approvals,
             cursors=fact_cursors(queue),
+            cursor_details=fact_cursor_details(queue),
             batches=tuple(judgements.batches),
             stages=stages,
             queue=queue,

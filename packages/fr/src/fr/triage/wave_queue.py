@@ -251,6 +251,8 @@ class QueueSnapshot:
     cursors: Mapping[str, tuple[str, CursorPosition | None, CursorRead | None]] = field(
         default_factory=dict
     )
+    # batch id -> why its `unread` cursor read failed (l-errors-r2), from facts
+    cursor_details: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

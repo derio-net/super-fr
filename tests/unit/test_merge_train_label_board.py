@@ -405,3 +405,24 @@ def test_a_green_pr_whose_run_has_not_delivered_is_never_asked_for_the_label() -
     (need,) = [n for n in needs_you(f, jd) if n.kind == "approve-pr"]
     assert need.text == f"PR #20: no run cursor names feat/batch-x: {NO_CURSOR_ACTION}"
     assert "label it" not in need.text
+
+
+@pytest.mark.parametrize("labels", [[], [APPROVED_FR.name]], ids=["unapproved", "approved"])
+def test_a_cursor_the_driver_cannot_read_is_a_need_naming_its_remedy(labels: list[str]) -> None:
+    """l-errors-r3: no clone, or a read that failed with a known cause, is the operator's
+    (`readiness._mover`), approved or not; the Need says what to do, as the card does."""
+    f, jd = _one(labels=labels, cursor=None, cursor_read="no-clone")
+    (need,) = [n for n in needs_you(f, jd) if n.kind == "cursor-unread"]
+    assert need.ref == "x" and need.href == f"{URL}/pull/20"
+    assert need.text == f"PR #20: clone {REPO} on the driver host"
+    why = "fetch of feat/batch-x failed: network down"
+    f, jd = _one(labels=labels, cursor=None, cursor_read="unread", cursor_detail=why)
+    (need,) = [n for n in needs_you(f, jd) if n.kind == "cursor-unread"]
+    assert need.text == f"PR #20: fix what stops the run cursor being read: {why}"
+    assert not [n for n in needs_you(f, jd) if n.kind == "approve-pr"]
+    assert "cursor-unread" in NEED_LABELS
+
+
+def test_an_unread_cursor_with_no_cause_is_no_need_the_driver_reads_it_again() -> None:
+    f, jd = _one(labels=[], cursor=None, cursor_read="unread")
+    assert not [n for n in needs_you(f, jd) if n.kind == "cursor-unread"]

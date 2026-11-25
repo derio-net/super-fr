@@ -18,7 +18,6 @@ from fr.triage.batch_drive import LivePr
 from fr.triage.model import Batch, CursorPosition, QueueRecord
 from fr.triage.readiness import (
     NO_CURSOR_ACTION,
-    R5_ORDER,
     Readiness,
     batch_readiness,
     in_queue_order,
@@ -147,16 +146,89 @@ def test_each_verdict_in_r5_order(
     assert (got.kind, got.verdict, got.admits) == (kind, line, admits)
 
 
-@pytest.mark.parametrize(("case", "qs"), [(c[0], c[1]) for c in CASES], ids=IDS)
-def test_the_queue_admits_exactly_by_the_verdict(case: str, qs: QueueSnapshot) -> None:
-    """R4: `_ready` is `batch_readiness(...).admits`, for every fixture."""
-    batch = qs.batches[0]
-    assert _ready(batch, qs) == batch_readiness(batch, qs).admits
+@pytest.mark.parametrize(("case", "qs", "admits"), [(c[0], c[1], c[4]) for c in CASES], ids=IDS)
+def test_the_queue_admits_exactly_the_hand_written_cases(
+    case: str, qs: QueueSnapshot, admits: bool
+) -> None:
+    """R4 (l-tests-r6): the queue's own `_ready` admits each fixture exactly as the case
+    table says by hand, never by comparing it with the function it calls."""
+    assert _ready(qs.batches[0], qs) is admits
 
 
-def test_every_case_kind_is_in_r5s_order() -> None:
-    kinds = {k for group in R5_ORDER for k in group}
-    assert {c[2] for c in CASES} <= kinds
+# R5's order (l-tests-r1): two conditions hold at once, for each adjacent pair, and the
+# earlier one wins. (case, snapshot, the kind that must win)
+FAILING = {"checks": "failing", "failing": ("lint",)}
+PAIRS: list[tuple[str, QueueSnapshot, str]] = [
+    ("queue held over not delivered",
+     _qs(B, records=(_record(OPENED, HALT),), cursor=(HEAD, RUNNING, "read")), "queue-held"),
+    ("not delivered over CI red",
+     _qs(B, cursor=(HEAD, RUNNING, "read"), pr=_live(**FAILING)), "approved-not-delivered"),
+    ("not delivered (unapproved) over CI running",
+     _qs(B, approved=None, cursor=(HEAD, RUNNING, "read"), pr=_live(checks="pending")),
+     "not-delivered"),
+    ("CI red over a pre-merge gate",
+     _qs(B, pr=_live(labels=("gate:devops",), **FAILING)), "ci-red"),
+    ("CI running over a pre-merge gate",
+     _qs(B, pr=_live(labels=("gate:devops",), checks="pending")), "ci-running"),
+    ("gate over another base",
+     _qs(B, pr=_live(labels=("gate:devops",), base="develop")), "gate-held"),
+    ("another base over a voided approval",
+     _qs(B, approved=Void("a" * 40), pr=_live(base="develop")), "other-base"),
+    ("voided approval over conflicting",
+     _qs(_batch(CONFLICT), approved=Void("a" * 40), pr=_live(mergeable="CONFLICTING")),
+     "approval-voided"),
+    ("conflicting over ready for approval",
+     _qs(_batch(CONFLICT), approved=None, pr=_live(mergeable="CONFLICTING")), "conflicting"),
+    ("an approved conflict is the queue's: merges next",
+     _qs(_batch(CONFLICT), pr=_live(mergeable="CONFLICTING")), "merges-next"),
+]  # fmt: skip
+
+
+@pytest.mark.parametrize(("case", "qs", "kind"), PAIRS, ids=[p[0] for p in PAIRS])
+def test_r5_the_earlier_of_two_holding_conditions_wins(
+    case: str, qs: QueueSnapshot, kind: str
+) -> None:
+    assert batch_readiness(qs.batches[0], qs).kind == kind
+
+
+def test_an_unread_cursor_carries_its_cause_and_is_the_operators() -> None:
+    """l-errors-r2 / l-errors-r3: a read that failed names why, and a known cause is the
+    operator's to fix (the driver re-reads it each pass, and it failed with that cause)."""
+    why = "fetch of feat/batch-b1 failed: network down"
+    got = _facts(_qs(B, approved=None, cursor=(HEAD, None, "unread"), cursor_details={"b1": why}))
+    assert got.verdict == (
+        f"Not ready: not delivered: the run cursor at {HEAD[:12]} could not be read: {why}"
+    )
+    assert got.delivered.cause == why
+    assert got.facts.whose_move == "the operator"
+    assert got.facts.next_action == f"fix what stops the run cursor being read: {why}"
+
+
+def test_an_unread_cursor_with_no_cause_is_the_drivers_to_read_again() -> None:
+    got = _facts(_qs(B, approved=None, cursor=(HEAD, None, "unread")))
+    assert got.facts.whose_move == "the driver"
+
+
+def test_no_clone_is_the_operators_and_names_the_clone() -> None:
+    got = _facts(_qs(B, approved=None, cursor=(HEAD, None, "no-clone")))
+    assert got.facts.whose_move == "the operator"
+    assert got.facts.next_action == f"clone {REPO} on the driver host"
+
+
+@pytest.mark.parametrize(
+    "qs",
+    [
+        _qs(B, pr=_live(**FAILING), sessions={"b1": "working"}),
+        _qs(_batch(CONFLICT), approved=None, pr=_live(mergeable="CONFLICTING"),
+            sessions={"b1": "working"}),
+    ],
+    ids=["ci-red", "conflicting"],
+)  # fmt: skip
+def test_whose_move_is_the_sessions_for_red_ci_and_a_conflict(qs: QueueSnapshot) -> None:
+    """l-tests-r4: a red head and an unapproved conflict are the session's to fix."""
+    got = _facts(qs)
+    assert got.kind in ("ci-red", "conflicting")
+    assert got.facts.whose_move == "the session, working"
 
 
 def test_merge_state_never_changes_admits() -> None:
