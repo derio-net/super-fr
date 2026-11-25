@@ -51,9 +51,10 @@ The first call writes `.devcontainer/dev/devcontainer.json`, adds the profile to
 `.fr/profiles.yaml`, marks it the default, and commits both. A repo that has not migrated
 yet keeps its declarations in `.devcontainer/fr-profiles.yaml`; scaffold adds to that file
 until `fr migrate artifacts --yes` moves it. Under the quiet and stealth placements the
-declarations live on the configuration branch, where a change is a pull request. There
-scaffold writes the old path until that branch holds the declarations, and then refuses
-and names the pull request to open. The second adds
+declarations live on the configuration branch, where a change is a pull request. Under
+quiet, scaffold writes the old path until that branch holds the declarations. Then it
+refuses and tells you to add the profile to `.fr/profiles.yaml` on that branch by a pull
+request. Under stealth, scaffold refuses before it writes anything (see below). The second adds
 a profile that expects two secret names. For each secret, scaffold writes a commented
 placeholder into the host-only env file and never overwrites a value you have already
 put there.

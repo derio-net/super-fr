@@ -88,7 +88,7 @@ Each call writes:
   installed in postCreate + `--env-file` pointing at the host secrets path.
 - `.fr/profiles.yaml` — committed by scaffold; default profile, purpose, expected
   secret keys, and the repo-level nested `forge:` / `ci:` / `tracking:` services (each `type`, optional
-  `host`; schema_version 3 — the CLI-entry gate moves an older `.devcontainer/fr-profiles.yaml`, which scaffold extends at version 2 while only it exists). Under quiet/stealth the declarations live on the configuration branch (`fr-config`, `<branch>-config`; a change is a pull request): scaffold writes the old path while that branch holds none and refuses, naming the pull request, once it does.
+  `host`; schema_version 3 — the CLI-entry gate moves an older `.devcontainer/fr-profiles.yaml`, which scaffold extends at version 2 while only it exists). Under quiet/stealth the declarations live on the configuration branch (`fr-config`, `<branch>-config`; a change is a pull request): under quiet, scaffold writes the old path while that branch holds none, and once it does it refuses and says to add the profile to `.fr/profiles.yaml` there by a pull request (scaffold opens none); under stealth it refuses before writing anything.
 - `~/.config/fr/secrets/<repo>/<profile>.env` — host-only; commented
   placeholders per secret key. Existing operator values are never
   overwritten; re-runs only append missing placeholders.
