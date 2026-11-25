@@ -316,3 +316,8 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-s1-configuration-homes-p7-1 created=2026-11-24T20:41:44+00:00 -->
 ### phase-split-2026-11-24-s1-configuration-homes-p7-1 · decision · review-size: the cross-placement walk scenario every row cites, the section-H pages and the generated mirrors are one more diff than phases 1-6 can each review; it links no row because it advances none
+
+<!-- fr:journal kind=decision scope=spec id=q-legacy-sync-after-pr created=2026-11-25T03:20:30+00:00 -->
+### q-legacy-sync-after-pr · decision · After a reviewed configuration change merges, the old settings copy is brought in step only by fr settings sync --yes
+
+R6 and §B amended (plan decision p2-config-changes-by-pr, revised after a security review). Changes after creation go through a pull request from `fr-config-change/<slug>`, which writes no old copy, so after the merge the old file lags. Readers (fr and the hooks) still refuse then, since a push straight to an unprotected configuration branch looks the same; the refusal says the old file is an earlier first-parent version and names `fr settings sync` (preview of both refs and the commits between, each marked whether it merged a `fr-config-change/*` branch) and `fr settings sync --yes`, which writes the old file with the robust write (fetch first, retry a refused push). Any other difference names both refs and says neither matches.
