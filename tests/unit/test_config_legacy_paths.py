@@ -170,9 +170,7 @@ def _old_plan_config(root: Path) -> Path:
         "docs/superpowers/plan-config.yaml",
         "header:\n  required:\n    - Status\n    - Owner\n",
     )
-    return _put(
-        root, "docs/superpowers/plans/2026-01-01-x.md", "# X\n\n**Status:** Not Started\n"
-    )
+    return _put(root, "docs/superpowers/plans/2026-01-01-x.md", "# X\n\n**Status:** Not Started\n")
 
 
 def test_validate_plans_reads_the_old_plan_config_with_a_notice(root: Path) -> None:
@@ -200,9 +198,7 @@ def test_validate_plans_ignores_the_old_plan_config_under_quiet_and_stealth(
     config_file = bin_dir / "fr-config" / ".fr" / "plan-config.yaml"  # absent
     stub = bin_dir / "fr"
     stub.write_text(
-        "#!/bin/sh\n"
-        f"echo FR_PLACEMENT={placement}\n"
-        f"echo FR_PLAN_CONFIG_FILE={config_file}\n"
+        f"#!/bin/sh\necho FR_PLACEMENT={placement}\necho FR_PLAN_CONFIG_FILE={config_file}\n"
     )
     stub.chmod(0o755)
     done = _validate(root, plan, {"FR_HARNESS_FR": str(stub)})
