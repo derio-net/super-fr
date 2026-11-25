@@ -21,9 +21,15 @@ rows:
     - spec:2026-11-19-event-driven-a-la-carte#R4
     - spec:2026-11-19-event-driven-a-la-carte#R9
     - spec:2026-11-19-event-driven-a-la-carte#R22
-    levels: {}
-    status: not-implemented
-    notes: candidate walk scenario, built in plan phase 7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_config_space.py
+      - super-fr:tests/unit/test_tripwire_config_space.py
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_config_homes
+    status: ci
+    notes: unit tests in CI (phases 1-6); candidate scenario tests/scenarios/config-homes.sh
+      runs in CI's scenario tier and is the deliver walk
     verify: candidate
     scenario: tests/scenarios/config-homes.sh
   - id: s1-migration
