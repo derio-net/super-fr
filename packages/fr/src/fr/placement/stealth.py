@@ -750,6 +750,37 @@ def target_settings_texts(
     return new, old
 
 
+_CHECK_REF: Final = "refs/fr/config-check"
+"""Where `check_config_branch` fetches `<branch>-config` into the tracking clone."""
+
+
+def check_config_branch(root: Path, ref: StealthRef) -> None:
+    """Refuse a `<branch>-config` on the tracking repo that is not a configuration branch
+    (review p2-r2): fetched into the tracking clone, its tree must lie below
+    `<target-dir>/.fr/` and none of its commits be reachable from `<branch>`
+    (`fr.placement.quiet.refuse_foreign_config`). Reads only; nothing is pushed."""
+    from fr.placement.quiet import refuse_foreign_config
+
+    cref = config_ref(ref)
+    wt = ensure_worktree(root, ref)
+    done = network(
+        ["git", "fetch", "--quiet", "--no-tags", "origin",
+         f"+refs/heads/{cref.branch}:{_CHECK_REF}"],
+        wt,
+    )  # fmt: skip
+    if done.returncode != 0:
+        raise SettingsError(
+            f"placement stealth: cannot fetch {cref.text} to inspect it: "
+            f"{(done.stderr or 'git fetch failed').strip()} (R24 fail-fast)"
+        )
+    try:
+        refuse_foreign_config(
+            wt, _CHECK_REF, branch=cref.branch, depth=1, product_refs=[_remote_ref(ref)]
+        )
+    finally:
+        _git(wt, "update-ref", "-d", _CHECK_REF)
+
+
 def adopt_config_clone(root: Path, ref: StealthRef) -> Path | None:
     """The configuration clone for *ref* (R5) when `<branch>-config` exists: cloned on
     demand, else fetched and fast-forwarded (`ensure_worktree`). None when the tracking
@@ -761,6 +792,7 @@ def adopt_config_clone(root: Path, ref: StealthRef) -> Path | None:
     cref = config_ref(ref)
     if not (worktree_path(root, cref) / ".git").exists() and not _remote_has(cref, root):
         return None
+    check_config_branch(root, ref)
     return ensure_worktree(root, cref)
 
 
@@ -809,6 +841,8 @@ def write_target_settings(
     new_rel = f"{target}/{TARGET_SETTINGS}"
     if not (worktree_path(root, cref) / ".git").exists() and not _remote_has(cref, root):
         _create_branch(root, wt, cref, {new_rel: text}, message)
+    else:
+        check_config_branch(root, ref)
     clone = ensure_worktree(root, cref)
     _commit_file(root, cref, clone, new_rel, text, message)
     _commit_file(root, ref, wt, f"{target}/{LEGACY_TARGET_SETTINGS}", text, message)

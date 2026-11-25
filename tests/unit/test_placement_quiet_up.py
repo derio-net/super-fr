@@ -228,3 +228,52 @@ def test_up_no_fetch_never_pushes(tmp_path: Path, with_config: bool) -> None:
     state = _target(repo).up(profile=None, branch="feat/n", no_fetch=True)
     assert state.placement == "quiet"
     assert _origin_heads(tmp_path) == before
+
+
+# --- review p2-r2: fr adopts only a configuration branch (orphan, tree `.fr/`) -----------
+
+
+def _push_fr_config_from_main(repo: Path, keep_product: bool) -> None:
+    """An `fr-config` on origin cut from `main` (shares the product's history); with
+    *keep_product* its tree still holds the product's files, else only `.fr/`."""
+    git(repo, "checkout", "-q", "-b", "fr-config", "main")
+    if not keep_product:
+        git(repo, "rm", "-rqf", ".")
+    (repo / ".fr").mkdir(exist_ok=True)
+    (repo / ".fr" / "settings.yaml").write_text(QUIET)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "not a configuration branch")
+    git(repo, "push", "-q", "origin", "fr-config")
+    git(repo, "checkout", "-q", "main")
+    git(repo, "branch", "-q", "-D", "fr-config")
+
+
+@pytest.mark.parametrize(
+    ("keep_product", "why"),
+    [(True, "README.md"), (False, "shares history")],
+    ids=["product-tree", "product-history"],
+)
+def test_up_refuses_to_adopt_a_foreign_fr_config(
+    tmp_path: Path, keep_product: bool, why: str
+) -> None:
+    repo = _quiet_origin(tmp_path)
+    _push_fr_config_from_main(repo, keep_product)
+    with pytest.raises(IsolationError) as caught:
+        _target(repo).up(profile=None, branch="feat/q")
+    message = str(caught.value)
+    assert "fr-config" in message and why in message
+    assert not (Path(os.environ["HOME"]) / ".cache/fr/worktrees/work/fr-config").exists()
+
+
+def test_fr_never_pushes_an_unrelated_local_fr_config(tmp_path: Path) -> None:
+    """A local `fr-config` cut from the product, origin having none: creating the space
+    (`fr settings init --quiet` on an old quiet repo) refuses rather than push it."""
+    from fr.placement.quiet import ensure_config_branch
+
+    repo = make_repo(tmp_path)
+    push_fr_branch(repo, QUIET)
+    git(repo, "branch", "-q", "fr-config", "main")
+    with pytest.raises(SettingsError) as caught:
+        ensure_config_branch(repo)
+    assert "fr-config" in str(caught.value)
+    assert git(tmp_path / "origin.git", "branch", "--list", "fr-config").strip() == ""

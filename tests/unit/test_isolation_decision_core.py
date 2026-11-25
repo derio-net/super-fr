@@ -800,16 +800,19 @@ def test_an_fr_branch_worktree_at_the_fr_config_path_is_refused(tmp_path: Path) 
     assert decide(spec_in(wt), env={**NO_FR, "HOME": str(home)}) == 1
 
 
-def stealth_config_setup(tmp_path: Path, home: Path) -> Path:
-    """`stealth_setup`, plus the configuration clone of `main-config` beside it. Its tree
-    carries a devcontainer profile so the clone is fr-enabled on its own (a clone that is
-    not fr-enabled is allowed whatever it is, which would make these tests vacuous)."""
+def stealth_config_setup(tmp_path: Path, home: Path, foreign: bool = False) -> Path:
+    """`stealth_setup`, plus the configuration clone of `main-config` beside it: an orphan
+    branch whose tree is `target/.fr/` (spec §B). The clone is made fr-enabled by an
+    untracked, invalid `.fr-isolation` naming stealth (a clone that is not fr-enabled is
+    allowed whatever it is, which would make these tests vacuous). *foreign* also puts a
+    file outside `<target-dir>/.fr/` in its tree: no configuration branch (review p2-r2)."""
     _ws, clone, bare = stealth_setup(tmp_path, home)
     _git(clone, "checkout", "-q", "--orphan", "main-config")
     _git(clone, "rm", "-rqf", ".")
-    profile = clone / ".devcontainer" / "dev"
-    profile.mkdir(parents=True)
-    (profile / "devcontainer.json").write_text('{"image": "x"}\n')
+    (clone / "target" / ".fr").mkdir(parents=True)
+    (clone / "target" / ".fr" / "ci.yaml").write_text("tests: local\n")
+    if foreign:
+        (clone / "src.py").write_text("x = 1\n")
     _git(clone, "add", "-A")
     _git(clone, "commit", "-q", "-m", "config")
     _git(clone, "push", "-q", "origin", "main-config")
@@ -818,7 +821,27 @@ def stealth_config_setup(tmp_path: Path, home: Path) -> Path:
     subprocess.run(
         ["git", "clone", "-q", "--branch", "main-config", str(bare), str(config)], check=True
     )
+    (config / ".fr-isolation").write_text('{"placement": "stealth"}')
     return config
+
+
+def test_a_foreign_stealth_configuration_clone_is_no_write_target(tmp_path: Path) -> None:
+    """Review p2-r2: a `<branch>-config` whose tree holds anything outside
+    `<target-dir>/.fr/` is not fr's configuration branch, whatever its name."""
+    home = tmp_path / "home"
+    config = stealth_config_setup(tmp_path, home, foreign=True)
+    assert decide(config / "target" / ".fr" / "ci.yaml", env={**NO_FR, "HOME": str(home)}) == 1
+
+
+def test_a_foreign_fr_config_worktree_is_no_write_target(tmp_path: Path) -> None:
+    """Review p2-r2: an `fr-config` worktree whose HEAD tree holds product files (a branch
+    cut from the product) is refused, at the right path and on the right branch."""
+    home = tmp_path / "home"
+    wt = quiet_config_worktree(tmp_path, home)
+    (wt / "src.py").write_text("x = 1\n")
+    _git(wt, "add", "src.py")
+    _git(wt, "commit", "-qm", "product file")
+    assert decide(wt / ".fr" / "ci.yaml", env={**NO_FR, "HOME": str(home)}) == 1
 
 
 @pytest.mark.parametrize("env", [None, NO_FR], ids=["fr-resolves", "fr-absent"])

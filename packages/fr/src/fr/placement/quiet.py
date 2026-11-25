@@ -491,6 +491,89 @@ def _refuse_unrelated_local(
     )
 
 
+def config_tree_problem(names: list[str], depth: int) -> str | None:
+    """The first path of a configuration branch's tree outside `.fr/` (*depth* 0, quiet's
+    `fr-config`) or outside `<one segment>/.fr/` (*depth* 1, a stealth `<branch>-config`),
+    or None. Spec 2026-11-19-event-driven-a-la-carte §B: the tree is `.fr/`. The hooks'
+    `_fr_config_tree_ok` and marker.ts `configTreeOk` are the same rule."""
+    for name in names:
+        if not name:
+            continue
+        if depth == 0:
+            if not (name.startswith(".fr/") and len(name) > 4):
+                return name
+            continue
+        at = name.find("/.fr/")
+        if at <= 0 or "/" in name[:at] or len(name) <= at + 5:
+            return name
+    return None
+
+
+def refuse_foreign_config(
+    cwd: Path, ref: str, *, branch: str, depth: int, product_refs: list[str]
+) -> None:
+    """Refuse to adopt (or push) *ref* as the configuration branch *branch* unless it is
+    one (review p2-r2): its tree lies below `.fr/` (`config_tree_problem`) and none of its
+    commits is reachable from *product_refs* (an orphan beside the product, never a branch
+    cut from it). Mirrors `fr.placement.move._refuse_foreign_fr_branch`."""
+    sha = _git(cwd, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}").stdout.strip()
+    if not sha:
+        return
+    where = ".fr/" if depth == 0 else "<target-dir>/.fr/"
+    listed = _git(cwd, "ls-tree", "-r", "-z", "--name-only", sha)
+    if listed.returncode != 0:
+        raise SettingsError(
+            f"placement: cannot read the tree of `{branch}` ({sha[:12]}): "
+            f"{listed.stderr.strip()}; fr will not adopt a branch it cannot inspect"
+        )
+    bad = config_tree_problem(listed.stdout.split("\0"), depth)
+    if bad is not None:
+        raise SettingsError(
+            f"placement: `{branch}` ({sha[:12]}) is not a configuration branch: its tree "
+            f"holds {bad!r}, outside {where} (spec 2026-11-19-event-driven-a-la-carte §B: an "
+            f"orphan branch whose tree is {where}). fr will not adopt or push it; rename or "
+            "remove that branch and retry"
+        )
+    others = [r for r in product_refs if r]
+    if not others:
+        return
+    total = _git(cwd, "rev-list", "--count", sha).stdout.strip()
+    own = _git(cwd, "rev-list", "--count", sha, "--not", *others).stdout.strip()
+    if total != own:
+        raise SettingsError(
+            f"placement: `{branch}` ({sha[:12]}) is not a configuration branch: it shares "
+            "history with the product's branches, where it must be an orphan (spec "
+            "2026-11-19-event-driven-a-la-carte §B). fr will not adopt or push it; rename "
+            "or remove that branch and retry"
+        )
+
+
+_OWN_REFS: Final = (
+    QUIET_REF,
+    CONFIG_REF,
+    paths.MEMORY_REF,
+    paths.SWITCH_REF,
+    "refs/remotes/origin/HEAD",
+)
+
+
+def product_refs(root: Path) -> list[str]:
+    """Every local and origin branch of *root* that is the product's: all but quiet's own
+    (`fr`, `fr-config`) and the configuration change branches."""
+    listed = _git(root, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes/origin")
+    return [
+        r for r in listed.stdout.split() if r not in _OWN_REFS and "/fr-config-change/" not in r
+    ]
+
+
+def _check_config_refs(root: Path) -> None:
+    """`origin/fr-config` and a local `fr-config`, each when present, are configuration
+    branches (`refuse_foreign_config`)."""
+    others = product_refs(root)
+    for ref in (paths.SWITCH_REF, CONFIG_REF):
+        refuse_foreign_config(root, ref, branch=CONFIG_BRANCH, depth=0, product_refs=others)
+
+
 def _forget_own_stale_entry(root: Path, path: Path) -> None:
     """Clear the registration of the fr worktree at *path* when its directory is gone
     (else `worktree add` refuses a "missing but already registered worktree"), and no
@@ -533,6 +616,7 @@ def ensure_config_worktree(root: Path) -> Path | None:
         return None
     if _ref_sha(common, paths.SWITCH_REF) is None and _ref_sha(common, CONFIG_REF) is None:
         return None
+    _check_config_refs(root)
     path = _ensure_linked(root, config_worktree_path(root), CONFIG_BRANCH, paths.SWITCH_REF)
     _fast_forward_linked(root, path, CONFIG_BRANCH, paths.SWITCH_REF)
     return path
@@ -926,6 +1010,8 @@ def write_branch_file(
     common = paths._common_dir(root)
     local = _git(root, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}^{{commit}}")
     remote = _ref_sha(common, tracking) if common is not None else None
+    if branch == CONFIG_BRANCH:
+        _check_config_refs(root)  # never adopt, or push, a branch that is not one
     created = None
     if remote is None and local.returncode != 0:
         created = _orphan_commit(root, {rel: text}, message)

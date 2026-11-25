@@ -251,3 +251,29 @@ def test_init_stealth_writes_both_files_identically(
     new = git(track, "show", "main-config:local--origin/.fr/settings.yaml")
     old = git(track, "show", "main:local--origin/settings.yaml")
     assert new == old and "placement: stealth" in new.splitlines()
+
+
+@pytest.mark.parametrize("shape", ["product-tree", "product-history"])
+def test_up_refuses_to_adopt_a_foreign_config_branch(tmp_path: Path, shape: str) -> None:
+    """Review p2-r2: a tracking repo's `<branch>-config` that shares history with
+    `<branch>` or holds files outside `<target-dir>/.fr/` is not adopted."""
+    from fr.isolation.types import IsolationError
+
+    target, track = stealth_pair(tmp_path)
+    clone = tmp_path / "foreign-clone"
+    git(tmp_path, "clone", "-q", str(track), str(clone))
+    git(clone, "config", "user.name", "t")
+    git(clone, "config", "user.email", "t@example.invalid")
+    git(clone, "checkout", "-q", "-b", "main-config")
+    if shape == "product-history":
+        git(clone, "rm", "-rqf", ".")
+    (clone / "local--origin/.fr").mkdir(parents=True)
+    (clone / "local--origin/.fr/settings.yaml").write_text("artifacts:\n  gates: off\n")
+    git(clone, "add", "-A")
+    git(clone, "commit", "-qm", "foreign")
+    git(clone, "push", "-q", "origin", "main-config")
+    with pytest.raises(IsolationError) as caught:
+        _up(target, track)
+    message = str(caught.value)
+    assert "main-config" in message
+    assert ("shares history" in message) == (shape == "product-history")

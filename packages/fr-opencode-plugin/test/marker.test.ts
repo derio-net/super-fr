@@ -749,15 +749,17 @@ describe("S1: the fr-config worktree and the configuration clone (R5)", () => {
     withoutFr(() => expect(allowed(join(wt, "x.md"))).toBe(false));
   });
 
-  function stealthConfig(): { ws: string; config: string } {
+  function stealthConfig(foreign = false): { ws: string; config: string } {
     const tracking = plain("tracking");
     const bare = join(root, "tracking.git");
     sh("git", ["clone", "--quiet", "--bare", tracking, bare], root);
-    // the configuration branch carries a profile, so its clone is fr-enabled on its own
+    // the configuration branch's tree is `target/.fr/` (spec §B); `foreign` adds a file
+    // outside it (review p2-r2)
     sh("git", ["checkout", "--quiet", "--orphan", "main-config"], tracking);
     sh("git", ["rm", "-rqf", "."], tracking);
-    mkdirSync(join(tracking, ".devcontainer", "dev"), { recursive: true });
-    writeFileSync(join(tracking, ".devcontainer", "dev", "devcontainer.json"), "{}\n");
+    mkdirSync(join(tracking, "target", ".fr"), { recursive: true });
+    writeFileSync(join(tracking, "target", ".fr", "ci.yaml"), "tests: local\n");
+    if (foreign) writeFileSync(join(tracking, "src.ts"), "x\n");
     sh("git", ["add", "."], tracking);
     sh("git", ["commit", "--quiet", "-m", "config"], tracking);
     sh("git", ["push", "--quiet", bare, "main-config"], tracking);
@@ -778,6 +780,9 @@ describe("S1: the fr-config worktree and the configuration clone (R5)", () => {
     );
     const config = join(parent, "stealth--local--tracking--main-config");
     sh("git", ["clone", "--quiet", "--branch", "main-config", bare, config], root);
+    // an untracked, invalid marker naming stealth makes the clone fr-enabled, so the
+    // write-target rule is what decides (else every edit there is allowed)
+    writeFileSync(join(config, ".fr-isolation"), JSON.stringify({ placement: "stealth" }));
     return { ws, config: realpathSync(config) };
   }
 
@@ -791,6 +796,19 @@ describe("S1: the fr-config worktree and the configuration clone (R5)", () => {
     const marker = readFileSync(join(ws, ".fr-isolation"), "utf-8");
     writeFileSync(join(ws, ".fr-isolation"), marker.replace(realpathSync(ws), "/elsewhere.invalid"));
     withoutFr(() => expect(allowed(file)).toBe(false));
+  });
+
+  test("review p2-r2: a foreign configuration clone or fr-config worktree is no write target", () => {
+    const { config } = stealthConfig(true);
+    withoutFr(() => expect(allowed(join(config, "target", ".fr", "ci.yaml"))).toBe(false));
+    const prod = plain("prod");
+    configSwitch(prod);
+    const wt = worktree(prod, join(base("prod"), "fr-config"), "fr-config", "refs/remotes/origin/fr-config");
+    withoutFr(() => expect(allowed(join(wt, ".fr", "ci.yaml"))).toBe(true));
+    writeFileSync(join(wt, "src.ts"), "x\n");
+    sh("git", ["add", "src.ts"], wt);
+    sh("git", ["commit", "--quiet", "-m", "product file"], wt);
+    withoutFr(() => expect(allowed(join(wt, ".fr", "ci.yaml"))).toBe(false));
   });
 });
 

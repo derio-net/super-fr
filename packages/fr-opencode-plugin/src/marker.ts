@@ -493,6 +493,28 @@ function quietWorktreePath(common: string): string | null {
 /** The repo's own quiet `fr` worktree, or its `fr-config` worktree beside it (S1 R5): a
  * LINKED worktree at exactly that path, HEAD on that path's branch (`refs/heads/fr`,
  * `refs/heads/fr-config`), the switch (`readSwitch`) reading canonically `placement: quiet`. */
+/**
+ * Whether every path of a configuration checkout's tree lies below `.fr/` (depth 0:
+ * quiet's `fr-config`) or below `<one segment>/.fr/` (depth 1: a stealth
+ * `<branch>-config`). Spec §B: an orphan branch whose tree is `.fr/`; a checkout holding
+ * anything else is no write target (review p2-r2). Bash: `_fr_config_tree_ok`.
+ */
+export function configTreeOk(depth: 0 | 1, names: readonly string[]): boolean {
+  return names
+    .filter((n) => n !== "")
+    .every((n) => {
+      if (depth === 0) return n.startsWith(".fr/") && n.length > 4;
+      const at = n.indexOf("/.fr/");
+      return at > 0 && !n.slice(0, at).includes("/") && n.length > at + 5;
+    });
+}
+
+/** The checkout's HEAD tree passes `configTreeOk`; an unreadable or empty tree does not. */
+function configCheckoutOk(toplevel: string, depth: 0 | 1): boolean {
+  const tree = git(toplevel, "ls-tree", "-r", "--name-only", "HEAD");
+  return tree !== undefined && configTreeOk(depth, tree.split("\n"));
+}
+
 function isQuietFrWorktree(toplevel: string): boolean {
   try {
     if (!statSync(join(toplevel, ".git")).isFile()) return false; // never a primary checkout
@@ -507,6 +529,7 @@ function isQuietFrWorktree(toplevel: string): boolean {
   const branch = ["fr", "fr-config"].find((name) => resolvedDir(join(dirname(rawWant), name)) === toplevel);
   if (branch === undefined) return false;
   if (git(toplevel, "symbolic-ref", "--quiet", "HEAD") !== `refs/heads/${branch}`) return false;
+  if (branch === "fr-config" && !configCheckoutOk(toplevel, 0)) return false;
   if (git(toplevel, "config", "--get", "remote.origin.url") === undefined) return false;
   const text = readSwitch(toplevel);
   return text !== undefined && switchIsQuiet(text);
@@ -575,6 +598,7 @@ function isStealthClone(toplevel: string): boolean {
     // `<branch>-config` (S1 R5, `fr.placement.stealth.config_ref`)
     const configClone = head === `${branch}-config` && /^stealth--.+-config$/.test(basename(toplevel));
     if (branch !== head && !configClone) continue;
+    if (branch !== head && !configCheckoutOk(toplevel, 1)) continue;
     if (!sameRepo(ref.slice(0, at), url)) continue;
     const wsTop = resolvedDir(ws);
     if (wsTop !== null && hasValidIsolationMarker(wsTop)) return true;

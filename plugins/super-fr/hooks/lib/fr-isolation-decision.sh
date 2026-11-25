@@ -595,6 +595,36 @@ _fr_quiet_worktree_path() {
   printf '%s\n' "$HOME/.cache/fr/worktrees/${_fr_qmain##*/}/fr"
 }
 
+# _fr_config_tree_ok <depth> — 0 when every path on stdin (`git ls-tree -r --name-only
+# HEAD` of a configuration checkout) lies below `.fr/` (depth 0: quiet's `fr-config`) or
+# below `<one segment>/.fr/` (depth 1: a stealth `<branch>-config`). Spec §B: the
+# configuration branch is an orphan whose tree is `.fr/`; a checkout holding anything else
+# (a product branch that happens to carry the name) is no write target (review p2-r2).
+# A quoted (unusual) name matches neither shape: refused. marker.ts `configTreeOk`.
+_fr_config_tree_ok() {
+  while IFS= read -r _fr_tline || [ -n "$_fr_tline" ]; do
+    [ -n "$_fr_tline" ] || continue
+    case "$1" in
+      0) case "$_fr_tline" in .fr/?*) ;; *) return 1 ;; esac ;;
+      *)
+        case "$_fr_tline" in ?*/.fr/?*) ;; *) return 1 ;; esac
+        _fr_tpre=${_fr_tline%%/.fr/*}
+        case "$_fr_tpre" in */* | "") return 1 ;; esac
+        ;;
+    esac
+  done
+  return 0
+}
+
+# _fr_config_checkout_ok <toplevel> <depth> — the checkout's HEAD tree passes
+# `_fr_config_tree_ok`; an unreadable or empty tree (no HEAD commit, git failing, no
+# file at all) does not.
+_fr_config_checkout_ok() {
+  _fr_ctree=$("$FR_GIT_BIN" -C "$1" ls-tree -r --name-only HEAD 2>/dev/null) || return 1
+  [ -n "$_fr_ctree" ] || return 1 # an empty tree holds no configuration: as marker.ts
+  printf '%s\n' "$_fr_ctree" | _fr_config_tree_ok "$2"
+}
+
 # _fr_is_quiet_fr_worktree <resolved toplevel> — the `fr` or the `fr-config` worktree.
 _fr_is_quiet_fr_worktree() {
   [ -f "$1/.git" ] || return 1 # a linked worktree, never a primary checkout
@@ -613,6 +643,7 @@ _fr_is_quiet_fr_worktree() {
   fr_git_resolve || return 1
   [ "$("$FR_GIT_BIN" -C "$1" symbolic-ref --quiet HEAD 2>/dev/null)" = "refs/heads/$_fr_qbranch" ] ||
     return 1
+  if [ "$_fr_qbranch" = fr-config ]; then _fr_config_checkout_ok "$1" 0 || return 1; fi
   "$FR_GIT_BIN" -C "$1" config --get remote.origin.url >/dev/null 2>&1 || return 1
   _fr_read_switch "$1" || return 1
   _fr_switch_enabled "$_fr_switch" || return 1
@@ -660,6 +691,7 @@ _fr_is_stealth_clone() {
       # the configuration clone: `stealth--*-config` on `<branch>-config` (S1 R5)
       [ "$_fr_sbranch-config" = "$_fr_shead" ] || continue
       case "${1##*/}" in stealth--?*-config) ;; *) continue ;; esac
+      _fr_config_checkout_ok "$1" 1 || continue
     fi
     _fr_same_repo "${_fr_sref%@*}" "$_fr_surl" || continue
     _fr_swtop=$(_fr_resolved_dir "$_fr_sws") || continue
