@@ -141,9 +141,11 @@ rows:
       unit:
       - super-fr:tests/unit/test_triage_state_home.py
       - super-fr:tests/unit/test_triage_state_repo_s1.py
-    status: not-implemented
-    notes: candidate walk scenario, built in plan phase 7; the unit tests of R17-R21
-      landed in phase 6
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_config_homes
+    status: ci
+    notes: unit tests in CI (phases 1-6); candidate scenario tests/scenarios/config-homes.sh
+      runs in CI's scenario tier and is the deliver walk
     verify: candidate
     scenario: tests/scenarios/config-homes.sh
 amendments:
