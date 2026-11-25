@@ -964,7 +964,12 @@ def sync_plan_target(root: Path, ref: StealthRef, target: str) -> Any:
     new_at, old_at = f"{new_at} ({tip[:12]})", f"{old_at}"
     if old_text is None:
         # lens review l-errors-r1: a write stopped between its two pushes; the old file
-        # follows from the tip the operator checks (`--yes --expect <tip>`)
+        # follows from the tip the operator checks (`--yes --expect <tip>`). It is copied
+        # as it is, so it must be a valid target settings file first (verification v-r4,
+        # as quiet checks `parse_switch_text`): a malformed one refuses here.
+        from fr.settings.load import parse_target_text
+
+        parse_target_text(new_text, f"{cref.text}:{new_rel}")
         commits = changes_since(clone, _remote_ref(cref), new_rel, "")
         return SyncPlan(
             new_at, f"{old_at} (absent)", "absent", commits, new_text, tip, blob, unlabelled

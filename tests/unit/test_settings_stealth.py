@@ -322,3 +322,21 @@ def test_a_half_initialised_stealth_target_is_finished_by_sync(
     assert git(track, "show", f"main:{rel}") == git(
         track, "show", "main-config:local--origin/.fr/settings.yaml"
     )
+
+
+@pytest.mark.parametrize("text", ["placement: quiet\n", "no_such_key: 1\n"])
+def test_sync_refuses_a_malformed_config_branch_file_in_the_absent_state(
+    tmp_path: Path, text: str
+) -> None:
+    """Verification v-r4: with the old file absent, the sync would copy the configuration
+    branch's file to the tracking branch as it is. It is validated first, the way the
+    stealth settings read validates it (quiet's `parse_switch_text` check), and a malformed
+    one refuses rather than being offered for `--yes`."""
+    from fr.settings import SettingsError
+
+    target, track = stealth_pair(tmp_path)
+    _push_config_settings(track, tmp_path, text)
+    state = _up(target, track)
+    ref = stealth.parse_ref(f"{track}@main")
+    with pytest.raises(SettingsError):
+        stealth.sync_plan_target(state.worktree, ref, "local--origin")

@@ -191,6 +191,21 @@ def _resolve_source(root: Path) -> tuple[str | None, str | None, str, Source]:
     return None, None, "no default branch found: defaults", "defaults"
 
 
+def parse_target_text(text: str | None, source: str) -> tuple[Any, Settings]:
+    """A stealth target's settings file, validated: its YAML, its schema, and no
+    `placement` other than `stealth`. One validation for the stealth settings read and the
+    stealth `fr settings sync` (verification v-r4), as quiet's `parse_switch_text` is for
+    the quiet switch. Raises `SettingsError`."""
+    data = _yaml_of(text, source)
+    settings = parse_settings(data, source=source)
+    if _present(data, "placement") and settings.placement != "stealth":
+        raise SettingsError(
+            f"{source}: placement: {settings.placement} cannot be set in a target's stealth "
+            "settings file; it says `placement: stealth` (or nothing)"
+        )
+    return data, settings
+
+
 def default_commit(repo_root: Path) -> tuple[str, str] | None:
     """`(qualified ref, commit sha)` of the default ref `read_at_default` reads (None: no
     default ref). Raises `SettingsError` like it."""
@@ -357,13 +372,7 @@ def _stealth(root: Path) -> EffectiveSettings | None:
         qualified = f"refs/remotes/origin/{cref.branch}"
     else:
         text, rel_path, source = old_text, old_rel, f"{ref.text}:{old_rel}"
-    data = _yaml_of(text, source)
-    settings = parse_settings(data, source=source)
-    if _present(data, "placement") and settings.placement != "stealth":
-        raise SettingsError(
-            f"{source}: placement: {settings.placement} cannot be set in a target's stealth "
-            "settings file; it says `placement: stealth` (or nothing)"
-        )
+    data, settings = parse_target_text(text, source)
     contrary = tuple(
         f"forge.{key}"
         for key, value in QUIET_FORGE.items()
