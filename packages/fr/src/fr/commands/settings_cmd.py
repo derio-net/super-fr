@@ -517,9 +517,13 @@ def sync_cmd(
             "the configuration branch moved since the old copy's version (first parent, "
             "newest first; the label is information, not a review: check the shas):"
         )
+    if plan.unlabelled:
+        typer.echo(f"warning: {plan.unlabelled}", err=True)
     for sha, second, subject, merged in plan.commits:
         how = (
-            "merge of fr-config-change/ (its tip is the second parent)"
+            "label unknown"
+            if plan.unlabelled
+            else "merge of fr-config-change/ (its tip is the second parent)"
             if merged
             else "NOT a merge of a fr-config-change/* branch"
             if second

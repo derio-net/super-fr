@@ -405,3 +405,61 @@ def test_under_git_pr_ask_an_approved_request_opens_and_is_consumed(
     )
     url = write_settings(quiet_config_space(repo), NEW, message="chore(fr): labels off")
     assert url and prs and consumed == [("pr", prs[0][1])]
+
+
+# --- lens review l-errors-r8: a failed read is said, never a label --------------------
+
+
+def test_a_failed_fetch_of_the_change_branches_makes_the_labels_unknown(
+    repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_settings(quiet_config_space(repo), NEW, message="chore(fr): labels off")
+    change_tip = git(_origin(tmp_path), "rev-parse", prs[0][1]).strip()
+    merge = _merge_commit(tmp_path, change_tip, "an innocent subject")
+    git(repo, "fetch", "-q", "origin", "+refs/heads/fr-config:refs/remotes/origin/fr-config")
+    quiet._CACHE.clear()
+    real = quiet._default_network
+
+    def network(root: Path):  # type: ignore[no-untyped-def]
+        run = real(root)
+
+        def go(argv: list[str]):  # type: ignore[no-untyped-def]
+            if quiet.CHANGE_REFSPEC in argv:
+                return subprocess.CompletedProcess(argv, 128, "", "fatal: connection reset")
+            return run(argv)
+
+        return go
+
+    monkeypatch.setattr(quiet, "_default_network", network)
+    out = _sync(repo).output
+    assert "connection reset" in out, out
+    assert f"{merge}  second parent {change_tip}  label unknown" in out, out
+    assert "NOT a merge" not in out
+
+
+def test_a_failed_history_read_refuses_rather_than_listing_nothing(repo: Path) -> None:
+    with pytest.raises(SettingsError, match="cannot read the history"):
+        quiet.changes_since(repo, "refs/remotes/origin/no-such", ".fr/settings.yaml", "x")
+
+
+def test_a_failed_fetch_after_a_push_still_moves_the_tracking_ref(
+    tmp_path: Path,
+) -> None:
+    """The push landed, so origin's branch is the pushed commit: the tracking ref follows
+    even when the fetch after it fails (else every later read sees the old tip)."""
+    root = make_repo(tmp_path)
+    # no default fetch refspec, so the push itself moves no remote-tracking ref
+    git(root, "config", "--unset-all", "remote.origin.fetch")
+    real = quiet._default_network(root)
+
+    def network(argv: list[str]):  # type: ignore[no-untyped-def]
+        if argv[:2] == ["git", "fetch"] and any("refs/remotes/origin/demo" in a for a in argv):
+            return subprocess.CompletedProcess(argv, 128, "", "fatal: connection reset")
+        return real(argv)
+
+    quiet.write_branch_file(
+        root, "demo", "refs/remotes/origin/demo", "a.txt", "one\n", "m", network=network
+    )
+    assert git(root, "rev-parse", "refs/remotes/origin/demo").strip() == git(
+        _origin(tmp_path), "rev-parse", "demo"
+    ).strip()

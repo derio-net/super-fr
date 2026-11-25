@@ -328,6 +328,9 @@ class SyncPlan:
     text: str | None = None
     tip: str = ""
     blob: str = ""
+    unlabelled: str = ""
+    """Why the merge labels are unknown (the change branches could not be fetched, lens
+    review l-errors-r8); empty when they were read."""
 
 
 def changes_since(
@@ -339,6 +342,11 @@ def changes_since(
     subject is never read for it (anyone can write a subject)."""
     listed = _git(cwd, "log", "--first-parent", "--format=%H%x09%P%x09%s",
                   "-n", str(_HISTORY_LIMIT), ref)  # fmt: skip
+    if listed.returncode != 0:  # lens review l-errors-r8: never an empty list to review
+        raise SettingsError(
+            f"fr settings sync: cannot read the history of {ref} "
+            f"({(listed.stderr or 'git log failed').strip()}); nothing was written"
+        )
     changes = _git(cwd, "for-each-ref", "--format=%(objectname)",
                    "refs/remotes/origin/fr-config-change/")  # fmt: skip
     heads = set(changes.stdout.split())
@@ -350,6 +358,18 @@ def changes_since(
         second = (parents.split()[1:2] or [""])[0]
         out.append((sha, second, subject, bool(second) and second in heads))
     return tuple(out)
+
+
+def change_fetch_problem(fetched: subprocess.CompletedProcess[str]) -> str:
+    """Why the change branches' fetch leaves the merge labels unknown, or "" (lens review
+    l-errors-r8)."""
+    if fetched.returncode == 0:
+        return ""
+    return (
+        "the fr-config-change/* branches could not be fetched "
+        f"({(fetched.stderr or fetched.stdout or 'git fetch failed').strip()}), so no "
+        "commit is labelled"
+    )
 
 
 def expect_refusal(plan: SyncPlan, expect: str | None) -> SettingsError | None:
@@ -374,7 +394,8 @@ def sync_plan(root: Path) -> SyncPlan:
     root = Path(root)
     net = _default_network(root)
     _fetch_both(root, net, None)
-    net(["git", "fetch", "--quiet", "--no-tags", "--prune", "origin", CHANGE_REFSPEC])
+    fetched = net(["git", "fetch", "--quiet", "--no-tags", "--prune", "origin", CHANGE_REFSPEC])
+    unlabelled = change_fetch_problem(fetched)
     _CACHE.clear()
     new, old = switch_texts(root)
     new_at = f"{_SOURCE} ({new[0][:12]})" if new else f"{_SOURCE} (absent)"
@@ -382,7 +403,7 @@ def sync_plan(root: Path) -> SyncPlan:
     if new is not None and old is None and parse_switch_text(new[1]) is not None:
         tip, blob = new[0], _blob(root, _SOURCE) or ""
         commits = changes_since(root, paths.SWITCH_REF, paths.SWITCH_SETTINGS, "")
-        return SyncPlan(new_at, old_at, "absent", commits, new[1], tip, blob)
+        return SyncPlan(new_at, old_at, "absent", commits, new[1], tip, blob, unlabelled)
     if new is None or old is None:
         return SyncPlan(new_at, old_at, "none")
     tip, blob = new[0], _blob(root, _SOURCE) or ""
@@ -393,7 +414,7 @@ def sync_plan(root: Path) -> SyncPlan:
         return SyncPlan(new_at, old_at, "mismatch", tip=tip, blob=blob)
     assert old_blob is not None
     commits = changes_since(root, paths.SWITCH_REF, paths.SWITCH_SETTINGS, old_blob)
-    return SyncPlan(new_at, old_at, "lags", commits, new[1], tip, blob)
+    return SyncPlan(new_at, old_at, "lags", commits, new[1], tip, blob, unlabelled)
 
 
 def half_written(root: Path) -> SyncPlan | None:
@@ -1415,7 +1436,13 @@ def write_branch_file(
             f"{(pushed.stderr or pushed.stdout or 'git push failed').strip()}. Nothing was "
             "forced; fix the remote (or pull its changes) and retry"
         )
-    net(["git", "fetch", "--quiet", "--no-tags", "origin", f"+refs/heads/{branch}:{tracking}"])
+    fetched = net(
+        ["git", "fetch", "--quiet", "--no-tags", "origin", f"+refs/heads/{branch}:{tracking}"]
+    )
+    if fetched.returncode != 0:
+        # lens review l-errors-r8: the push landed, so origin's branch IS *head*; the
+        # tracking ref follows it, or every later read would see the old tip
+        _git(root, "update-ref", tracking, head)
 
 
 def create_config_branch(

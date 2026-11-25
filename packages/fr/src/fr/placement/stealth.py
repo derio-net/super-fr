@@ -934,7 +934,14 @@ def settle_differing_target(
 def sync_plan_target(root: Path, ref: StealthRef, target: str) -> Any:
     """The stealth `fr settings sync` preview: syncs both clones and fetches the tracking
     repo's change branches into the configuration clone, then reads."""
-    from fr.placement.quiet import CHANGE_REFSPEC, SyncPlan, _blob, changes_since, legacy_lags
+    from fr.placement.quiet import (
+        CHANGE_REFSPEC,
+        SyncPlan,
+        _blob,
+        change_fetch_problem,
+        changes_since,
+        legacy_lags,
+    )
 
     cref = config_ref(ref)
     wt = ensure_worktree(root, ref)
@@ -944,7 +951,9 @@ def sync_plan_target(root: Path, ref: StealthRef, target: str) -> Any:
     if not (clone / ".git").exists():
         return SyncPlan(new_at, old_at, "none")
     ensure_worktree(root, cref)
-    network(["git", "fetch", "--quiet", "--no-tags", "--prune", "origin", CHANGE_REFSPEC], clone)
+    unlabelled = change_fetch_problem(
+        network(["git", "fetch", "--quiet", "--no-tags", "--prune", "origin", CHANGE_REFSPEC], clone)
+    )
     new_text, old_text = target_settings_texts(root, ref, target)
     if new_text is None:
         return SyncPlan(new_at, old_at, "none")
@@ -955,14 +964,16 @@ def sync_plan_target(root: Path, ref: StealthRef, target: str) -> Any:
         # lens review l-errors-r1: a write stopped between its two pushes; the old file
         # follows from the tip the operator checks (`--yes --expect <tip>`)
         commits = changes_since(clone, _remote_ref(cref), new_rel, "")
-        return SyncPlan(new_at, f"{old_at} (absent)", "absent", commits, new_text, tip, blob)
+        return SyncPlan(
+            new_at, f"{old_at} (absent)", "absent", commits, new_text, tip, blob, unlabelled
+        )
     if new_text == old_text:
         return SyncPlan(new_at, old_at, "in-step", tip=tip, blob=blob)
     old_blob = _blob(wt, f"{_remote_ref(ref)}:{old_rel}")
     if old_blob is None or not legacy_lags(clone, _remote_ref(cref), new_rel, old_blob):
         return SyncPlan(new_at, old_at, "mismatch", tip=tip, blob=blob)
     commits = changes_since(clone, _remote_ref(cref), new_rel, old_blob)
-    return SyncPlan(new_at, old_at, "lags", commits, new_text, tip, blob)
+    return SyncPlan(new_at, old_at, "lags", commits, new_text, tip, blob, unlabelled)
 
 
 def sync_legacy_target(root: Path, ref: StealthRef, target: str, *, expect: str | None) -> Any:
