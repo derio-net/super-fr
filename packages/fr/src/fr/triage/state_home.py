@@ -679,3 +679,40 @@ def stealth_tracking(start: Path) -> tuple[bool, str | None]:
         return True, None
     slug = slug_from_url(ref.repo)
     return True, (slug if slug and slug.count("/") == 1 else None)
+
+
+def stealth_declared_state_repo(start: Path) -> str | None:
+    """Under stealth, the `triage.state_repo` the operator's stealth configuration space
+    declares (decision p6-stealth-ignores-declared, spec 2026-11-19 R20 amended): the product
+    repo's own settings are never read for it. Read at the configuration branch's tip, and
+    counted only while the forge enforces a pull-request rule there (R7's guard,
+    `fr.config.protection.require_protected`); otherwise ignored and said. None outside
+    stealth, when the space does not exist yet, or when the key is absent."""
+    from fr.config import protection
+    from fr.config.space import config_space
+    from fr.settings import SettingsError
+    from fr.settings.load import parse_settings_text
+
+    root = gitseam.toplevel(start) if start.is_dir() else None
+    if root is None:
+        return None
+    try:
+        space = config_space(root)
+        if space.placement != "stealth":
+            return None
+        text = space.at_default("settings")
+        if text is None:
+            return None
+        where = f"{space.checkout}:{space.tree_path('settings')}"
+        declared = parse_settings_text(text, source=where, servable=False).triage.state_repo
+    except SettingsError as exc:
+        _say(f"fr triage: triage.state_repo of the stealth configuration space not read: {exc}")
+        return None
+    if declared is None:
+        return None
+    try:
+        protection.require_protected(space, None, "use triage.state_repo")
+    except (protection.ProtectionError, protection.ProtectionReadError) as exc:
+        _say(f"fr triage: ignoring triage.state_repo of {where}: {exc}")
+        return None
+    return declared

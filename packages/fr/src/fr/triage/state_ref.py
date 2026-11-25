@@ -416,8 +416,10 @@ def decide_state_repo(
     is *ask*. The privacy guard (`fr.triage.privacy`) judges every push to the answer,
     whichever rule chose it (R21).
 
-    *declared* (a one-repo scope's `triage.state_repo`, R20) wins; then *stealth* (the
-    tracking repo of the stealth workspace the scope is first collected from, R19); then:
+    *stealth* (the tracking repo of the stealth workspace the scope is first collected
+    from, R19) wins; then *declared* (a one-repo scope's `triage.state_repo`, R20; under
+    stealth only ever read from the operator's stealth configuration space, never the
+    product repo, decision p6-stealth-ignores-declared); then:
     one repo: that repo, and no question. Several, at least one private: the operator
     picks one of the private ones. All public (a repo whose visibility is unknown counts
     as public here: it is never offered as the safe choice): the operator picks between
@@ -425,10 +427,10 @@ def decide_state_repo(
     is None (non-interactive) or gives no answer: the state then stays local. An answer
     outside the choices is refused (`TriageError`)."""
     ordered = sorted(set(repos))
-    if declared is not None and len(ordered) == 1:
-        return declared
     if stealth is not None:
         return stealth
+    if declared is not None and len(ordered) == 1:
+        return declared
     if len(ordered) == 1:
         return ordered[0]
     if not ordered or ask is None:

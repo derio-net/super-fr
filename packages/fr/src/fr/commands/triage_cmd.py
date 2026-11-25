@@ -583,7 +583,7 @@ def collect_into(
     )
     if scope.kind == "repo":
         declared = (
-            read_declared_state_repo(make_forge(), scope.target)
+            _declared_state_repo(scope.target, workspace)
             if settle
             else (previous.state_repo_declared.get(scope.target) if previous else None)
         )
@@ -672,6 +672,20 @@ def state_repo_prompt() -> Ask | None:
         return choice
 
     return ask
+
+
+def _declared_state_repo(repo: str, workspace: Path | None) -> str | None:
+    """The `triage.state_repo` a settle collect takes for one-repo scope *repo* (R20): the
+    product repo's settings, read through the forge, outside stealth; under stealth never
+    the product repo's (it may not decide where stealth's state goes, decision
+    p6-stealth-ignores-declared), only the operator's stealth configuration space."""
+    from fr.triage import state_home
+
+    start = workspace if workspace is not None else Path.cwd()
+    stealthy, _ = state_home.stealth_tracking(start)
+    if stealthy:
+        return state_home.stealth_declared_state_repo(start)
+    return read_declared_state_repo(make_forge(), repo)
 
 
 def _settle_state_repo(target_dir: Path, facts: Facts, *, workspace: Path | None = None) -> None:

@@ -43,8 +43,8 @@ def _never(*a: Any) -> str:
 # ------------------------------------------------------------------ the decision
 
 
-def test_a_declared_state_repo_wins_for_a_one_repo_scope() -> None:
-    got = decide_state_repo(["o/one"], {}, _never, declared="o/refs", stealth="o/track")
+def test_a_declared_state_repo_wins_for_a_one_repo_scope_outside_stealth() -> None:
+    got = decide_state_repo(["o/one"], {}, _never, declared="o/refs")
     assert got == "o/refs"
 
 
@@ -387,3 +387,59 @@ def test_the_one_repo_default_is_guarded_too_and_passes_for_its_own_private_repo
     assert chosen == "example-org/secret"
 
     assert _push_chosen(tmp_path, chosen, {chosen: "private"})
+
+
+# ------------------------------------ review p6-r5: stealth never reads the product repo
+
+
+def _declaration_reads(forge: Any) -> list[dict[str, Any]]:
+    """Reads of the product repo's settings at its default branch, where the declaration is
+    (the quiet switch probe of the triage config read, at `fr-config`, is another read)."""
+    return [
+        kw
+        for kw in forge.called("read_file_at_ref")
+        if kw["path"] == SETTINGS and kw["ref"] == "HEAD"
+    ]
+
+
+def test_p6_r5_under_stealth_the_product_repos_declaration_is_never_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A product repo's `.fr/settings.yaml` may not decide where a stealth workspace's state
+    is pushed: the tracking repo wins, and the product file is not even read."""
+    forge = _forge({(REPO, SETTINGS, "HEAD"): DECLARED})
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
+    monkeypatch.setattr(state_home, "stealth_tracking", lambda start: (True, "example-org/track"))
+    monkeypatch.setattr(state_home, "stealth_declared_state_repo", lambda start: None)
+    state = tmp_path / "s"
+
+    assert _collect(state).exit_code == 0
+    assert load_durable(state).state_repo == "example-org/track"
+    assert not _declaration_reads(forge)
+    assert load_facts(state / "facts.json").state_repo_declared == {}
+
+
+def test_p6_r5_a_stealth_space_declaration_counts_only_without_a_forge_tracking_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    forge = _forge({(REPO, SETTINGS, "HEAD"): DECLARED})
+    monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
+    monkeypatch.setattr(state_home, "stealth_tracking", lambda start: (True, None))
+    monkeypatch.setattr(
+        state_home, "stealth_declared_state_repo", lambda start: "example-org/operator-refs"
+    )
+    state = tmp_path / "s"
+
+    assert _collect(state).exit_code == 0
+    assert load_durable(state).state_repo == "example-org/operator-refs"
+    assert not _declaration_reads(forge)
+
+
+def test_p6_r5_the_tracking_repo_wins_over_any_declaration() -> None:
+    got = decide_state_repo(["o/one"], {}, _never, declared="o/refs", stealth="o/track")
+    assert got == "o/track"
+
+
+def test_p6_r5_outside_stealth_there_is_no_stealth_declaration(tmp_path: Path) -> None:
+    assert state_home.stealth_declared_state_repo(_clone(tmp_path)) is None
+    assert state_home.stealth_declared_state_repo(tmp_path / "nowhere") is None
