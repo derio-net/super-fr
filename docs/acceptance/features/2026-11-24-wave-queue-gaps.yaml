@@ -91,9 +91,19 @@ rows:
     - spec:2026-11-24-wave-queue-gaps#R14
     - spec:2026-11-24-wave-queue-gaps#R15
     - spec:2026-11-24-wave-queue-gaps#R16
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_queue_cmd.py#test_add_records_one_queue_add_by_the_authenticated_login
+      - super-fr:tests/unit/test_wave_queue_operator_planner.py#test_while_idle_a_ready_operator_entry_opens_a_between_waves_queue_at_once
+      - super-fr:tests/unit/test_wave_queue_operator_planner.py#test_a_wave_queue_does_not_drain_while_an_operator_entry_is_pending
+      - super-fr:tests/unit/test_operator_reads.py#test_an_added_pr_with_a_valid_label_is_admitted_as_an_operator_entry
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_an_added_approved_pr_opens_a_between_waves_queue_through_the_driver
+      - super-fr:tests/unit/test_queue_requests.py#test_queue_requests_below_schema_14_are_refused
+    status: ci
+    notes: 'phase 2 of wave-queue-gaps: queue add/remove verb with its refusals (fake
+      forge), the operator entry admitted and settled by operator_reads, the planner''s
+      join/open/drain/stall/eject rules, the driver seam end to end, and the schema-14
+      stamp; all in CI'
     verify: none
   - id: wave-queue-operator-preapproval
     capability: Operator queue entries
