@@ -765,3 +765,8 @@ The owed entry's body now says: the first minor release after the one that ships
 ### p4-change-pr-dedup · decision · Configuration changes are named by kind and never re-proposed every command (p4-r12) (phase 4)
 
 change_branch -> fr-config-change/<kind>-<hash> (kind: the path below .fr/). Before pushing, open_change reads earlier PRs from that head (fr.config.change.prs_for_head): an OPEN one is reused (URL returned, nothing pushed), one CLOSED unmerged refuses with its URL and 'fr migrate artifacts --yes --repropose' (FR_CONFIG_REPROPOSE=1). Security follow-up: an earlier PR counts only when its head is in the target repo (isCrossRepository False, then pr_view), it merges into the configuration branch, and, when open, origin's head holds the path with exactly the bytes; a fork PR with the same head name is ignored. Tests: test_config_change_pr_dedup.py.
+
+<!-- fr:journal kind=decision scope=plan id=p4-tests-added created=2026-11-25T08:03:55+00:00 phase=4 -->
+### p4-tests-added · decision · Missing p4 tests added (p4-r11) (phase 4)
+
+Stealth profiles walk (v1->v3, structure check, crash window on the config clone): test_config_stealth_keeps_product.py. Guard wiring through resolve_workflow, resolve_strategy and run_cmd._resolve_manifest_checked_schema (the function fr run advance resolves its shape with) under quiet with real protection answers (local origin = not enforced; fake forge client serving the captured approved ruleset via protection._default_client): test_config_degraded.py. Fallback bypass: test_config_legacy_by_tip.py. Lost lease: test_config_move_verified.py. A full fr run advance CLI walk under quiet was not built (cursor + fr worktree fixtures); the advance path is exercised at its resolver.
