@@ -3,7 +3,7 @@ run: 2026-11-24-feat-wave-queue-gaps
 workflow: fr-goal@1
 branch: feat/wave-queue-gaps
 started: '2026-11-24T22:23:24+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -52,8 +52,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-11-25T10:40:59+00:00'
+    state: done
+    at: '2026-11-25T10:58:34+00:00'
     members:
     - implement-phase
     - review-phase
@@ -132,12 +132,19 @@ steps:
         evidence:
           visual: none
       phase/3/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-25T10:40:59+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: e4ba8d5a-76b8-46bb-aa9a-81b12b1286eb
+          returned: '2026-11-25T10:58:34+00:00'
+          outcome: done
+        evidence:
+          review: review-p3-1
+          reviewer: a29551b9a0bc2507b
+          visual: none
+          findings: p3-r1,p3-r2,p3-r3
   journal-check:
     state: pending
   lens-review:

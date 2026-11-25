@@ -352,3 +352,38 @@ A PR's files carry the true path, so a batch with a PR is exact. Left as it is (
 ### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
 
 new pure module with no prior shape to clean; the one reuse change is same_file made public in batch.py
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-25T10:58:33+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · wave_overlaps pairs batches of different repos, which the per-repo queue can never conflict (phase 3)
+
+wave_overlap.py paired any two open batches of one wave whatever their repo, so an org or group scope reported and briefed an overlap the queue cannot produce. Fix: skip pairs whose Batch.repo_name differs. Tests: test_batches_of_different_repos_never_overlap_though_they_cite_one_path (pure) and test_suggest_reports_no_overlap_between_batches_of_two_repos (command seam).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-25T10:58:33+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · preapproval's forge-comments-off gate is untested, mislabelled and undocumented (phase 3)
+
+_preapprove's _comments_off gate (operator_entries.py) had no test though test_tripwire_forge_writes.py's GATED entry claims it, both gates reported under the key preapprove-repo-labels, and the docs said preapproval always comments first. Fix: each gate reports under its own key (labels, comments); test_preapproval_does_nothing_while_forge_comments_are_off proves no comment, label or approval record and one report; the fr-triage skill and the fr-wave-driver explainer now say preapproval does nothing while forge comments or labels are off.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-25T10:58:33+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · docs overstate or omit the overlap report (phase 3)
+
+fr-wave-driver.md said same-file batches will conflict (now may conflict); the batch suggest docstring (and so docs/reference/cli.md) and fr-triage.md did not mention the overlap pairs suggest prints. Updated both, regenerated README/cli.md and the OpenCode and Hermes skill mirrors, bumped fr-triage.md's reviewed stamp.
+
+<!-- fr:journal kind=review scope=plan id=review-p3-1 created=2026-11-25T10:58:33+00:00 phase=3 -->
+### review-p3-1 · review · independent code review of phase 3: 3 findings, all in scope (phase 3)
+
+Reviewed phase 3 (R7-R10, R13 preapproval). Three findings, all in scope and fixed with tests. The #1669 merge resolution was verified to keep both features.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-25T10:58:33+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: wave_overlaps pairs batches of different repos, which the per-repo queue can never conflict (phase 3)
+
+wave_overlaps skips pairs of different repos; two new tests (pure and suggest).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-25T10:58:33+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: preapproval's forge-comments-off gate is untested, mislabelled and undocumented (phase 3)
+
+Separate report keys, comments-off test, skill and explainer clause.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-25T10:58:33+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: docs overstate or omit the overlap report (phase 3)
+
+may conflict; suggest docstring, cli.md, fr-triage.md and stamp updated; mirrors synced.
