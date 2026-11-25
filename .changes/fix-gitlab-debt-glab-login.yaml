@@ -1,0 +1,2 @@
+bump: patch
+summary: The scaffolded GitLab technical-debt job logs glab in to its own server before running fr, so fr's glab host trust gate no longer refuses every run (gh#1691); rerun `fr acceptance init --refresh-ci` to pick it up.
