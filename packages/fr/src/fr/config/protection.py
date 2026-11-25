@@ -257,14 +257,19 @@ def _default_client(space: ConfigSpace) -> object:
 
 
 def protection_of(space: ConfigSpace, client: object | None = None) -> Answer | None:
-    """*space*'s configuration branch's answer; None under `repo` (nothing is asked)."""
+    """*space*'s configuration branch's answer; None under `repo` (nothing is asked).
+
+    *client* is the product repo's forge client, used under quiet (where `fr-config` lives on
+    the product's origin). Under stealth the branch lives in the tracking repo, possibly on
+    another forge, so a given client is never asked: the tracking repo's own is built (a
+    product client's answer never stands for the tracking repo's rules)."""
     if space.placement == _REPO:
         return None
     found = _target(space)
     if isinstance(found, NotEnforced):
         return found
     repo, branch = found
-    if client is None:
+    if client is None or space.placement == _STEALTH:
         try:
             client = _default_client(space)
         except Exception as exc:  # noqa: BLE001 — a client fr cannot build is a failed read

@@ -128,12 +128,12 @@ def _manifest() -> Any:
     )
 
 
-def _walk(root: Path, forge: object | None = None) -> Any:
+def _walk(root: Path, forge: object | None = None, manifest: Any = None, rows: Any = ()) -> Any:
     from fr.verification.walk import run_walk
 
     return run_walk(
-        repo_root=root, run="r", manifest=_manifest(), rows=(), model="m", harness="h",
-        code_tree="t", forge=forge,
+        repo_root=root, run="r", manifest=manifest or _manifest(), rows=rows, model="m",
+        harness="h", code_tree="t", forge=forge,
     )  # fmt: skip
 
 
@@ -162,6 +162,36 @@ def test_the_walk_runs_the_configuration_branchs_install_when_enforced(
     monkeypatch.setattr(protection, "_origin_slug", lambda r: SLUG)
     _walk(root, forge=_Rules())
     assert sentinel.exists()
+
+
+def test_a_scenario_program_in_the_configuration_space_is_refused_before_anything_runs(
+    tmp_path: Path,
+) -> None:
+    """Security review: every argv[0] resolved into the configuration space passes the guard,
+    not only the install's, and the refusal comes before the install runs."""
+    from fr.verification.model import StrategyManifest
+    from fr.verification.walk import WalkError
+
+    installed = tmp_path / "installed"
+    scenario_ran = tmp_path / "scenario-ran"
+    root = _quiet_with_config(
+        tmp_path, {".fr/candidate-install": f"#!/bin/sh\ntouch {scenario_ran}\n"}
+    )
+    (root / "install.sh").write_text(INSTALL.format(sentinel=installed))
+    (root / "install.sh").chmod(0o755)
+    (root / "s.sh").write_text("#!/bin/sh\n")
+    manifest = StrategyManifest.model_validate(
+        {
+            "verification": "candidate", "schema": 1, "when": "pre-merge", "driver": "agent",
+            "install": ["./install.sh", "{prefix}"],
+            "scenario": [".fr/candidate-install", "{scenario}"], "source": "worktree",
+        }
+    )  # fmt: skip
+    row = SimpleNamespace(id="r1", scenario="s.sh")
+    with pytest.raises(WalkError) as caught:
+        _walk(root, manifest=manifest, rows=(row,))
+    assert FIX in str(caught.value)
+    assert not installed.exists() and not scenario_ran.exists()
 
 
 def test_under_repo_the_walk_asks_nothing(tmp_path: Path) -> None:

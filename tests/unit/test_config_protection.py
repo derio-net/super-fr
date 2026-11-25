@@ -319,3 +319,18 @@ def test_the_guarded_triage_keys_cover_commands_and_trust() -> None:
     assert {"post_merge", "version", "mirrors", "pr_authors", "queue", "exit", "export"} <= set(
         protection.GUARDED_TRIAGE_KEYS
     )
+
+
+def test_under_stealth_the_tracking_repos_forge_answers_never_the_given_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Security review: under stealth the configuration branch lives in the tracking repo
+    (maybe on another host); a product-repo client saying "protected" never answers for it."""
+    product_client, product_calls = _rest(_reply("pull-request.json"))
+    tracking_client, tracking_calls = _rest(_reply("empty.json"))
+    monkeypatch.setattr(protection, "_default_client", lambda space: tracking_client)
+    space = _space("stealth", tmp_path, tracking="git@github.com:example-org/track.git@main")
+    with pytest.raises(ProtectionError, match="no rules"):
+        protection.require_protected(space, product_client, "run post_merge")
+    assert product_calls.calls == []
+    assert tracking_calls.calls == ["repos/example-org/track/rules/branches/main-config"]

@@ -366,20 +366,37 @@ def _contract(repo_root: Path, manifest: StrategyManifest) -> None:
 
 
 def _protected(repo_root: Path, manifest: StrategyManifest, forge: object | None) -> None:
-    """Spec 2026-11-19-event-driven-a-la-carte R7: under quiet and stealth an install program
-    read from the configuration branch (`.fr/candidate-install`) runs only when the forge
+    """Spec 2026-11-19-event-driven-a-la-carte R7: under quiet and stealth a program the
+    install or scenario template reads from the configuration branch
+    (`.fr/candidate-install`) runs only when the forge
     enforces a pull-request rule on that branch; *forge* is the client to ask (None: the
     repo's own)."""
     from fr.config.protection import require_protected
     from fr.config.space import config_space, in_space
     from fr.settings import SettingsError
 
-    if not manifest.install or not in_space(manifest.install[0]):
+    programs = [t[0] for t in (manifest.install, manifest.scenario) if t]
+    if not any(in_space(p) for p in programs):
         return
     try:
         require_protected(config_space(repo_root), forge, "run the candidate install")
     except SettingsError as exc:
         raise WalkError(str(exc)) from exc
+
+
+def _program(argv0: str, repo_root: Path, forge: object | None) -> str:
+    """The repo-relative program *argv0*'s path; one in the configuration space passes the
+    protection guard first, so no template reaches it unguarded (R7)."""
+    from fr.config.protection import require_protected
+    from fr.config.space import config_space, in_space
+    from fr.settings import SettingsError
+
+    if in_space(argv0):
+        try:
+            require_protected(config_space(repo_root), forge, f"run {argv0}")
+        except SettingsError as exc:
+            raise WalkError(str(exc)) from exc
+    return str(install_path(argv0, repo_root))
 
 
 def run_walk(
@@ -463,7 +480,7 @@ def run_walk(
             argv = render_argv(template, {**values, **extra})
             # A repo-relative program (`.fr/candidate-install`) runs from the repo.
             if "/" in argv[0] and not os.path.isabs(argv[0]):
-                argv[0] = str(install_path(argv[0], repo_root))
+                argv[0] = _program(argv[0], repo_root, forge)
             return argv
 
         def operator_fr_moved() -> str | None:
