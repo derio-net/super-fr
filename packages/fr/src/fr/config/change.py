@@ -127,7 +127,7 @@ def _forge_prs_for_head(remote: str, head: str) -> list[dict[str, object]]:
                 }
             )
         return out
-    except (*FORGE_ERRORS, UnsupportedForgeOperation):
+    except FORGE_ERRORS + (UnsupportedForgeOperation,):
         return []
 
 
