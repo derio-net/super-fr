@@ -848,15 +848,6 @@ def check_command(
     if as_json:
         print(json.dumps(result.to_json(), indent=2, ensure_ascii=False))
         return
-    console.print(
-        f"[bold]state repo mismatch[/bold] ({len(result.state_repo_mismatch)}) — the repo's "
-        "settings name another state repo; the recorded one is kept"
-    )
-    for repo_name, declared, kept in result.state_repo_mismatch:
-        console.print(
-            f"  {escape(repo_name)}  declares {escape(declared)}, records {escape(kept)}",
-            soft_wrap=True,
-        )
     console.print(f"[bold]skipped repos[/bold] ({len(result.skipped)}) — not collected")
     for repo, why in result.skipped:
         console.print(f"  {escape(repo)}  {escape(why)}", soft_wrap=True)
@@ -866,6 +857,15 @@ def check_command(
     )
     for repo, keys in result.config_ignored:
         console.print(f"  {escape(repo)}  {escape(', '.join(keys))}", soft_wrap=True)
+    console.print(
+        f"[bold]state repo mismatch[/bold] ({len(result.state_repo_mismatch)}) — the repo's "
+        "settings name another state repo; the recorded one is kept"
+    )
+    for repo_name, declared, kept in result.state_repo_mismatch:
+        console.print(
+            f"  {escape(repo_name)}  declares {escape(declared)}, records {escape(kept)}",
+            soft_wrap=True,
+        )
     console.print(
         f"[bold]closed in progress[/bold] ({len(result.closed_in_progress)}) — closed, still "
         f"labelled fr:in-progress or fr:claimed; {CLEARING_RULE}"
