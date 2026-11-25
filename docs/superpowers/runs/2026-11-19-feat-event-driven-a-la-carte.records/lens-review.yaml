@@ -1,0 +1,75 @@
+schema_version: 12
+run: 2026-11-19-feat-event-driven-a-la-carte
+step: lens-review
+outcome: done
+journal:
+  - kind: review
+    id: review-lenses
+    global: true
+    title: "Lens review of S1 configuration homes: docs-accuracy, errors, security, tests"
+    body: |
+      Four read-only reviewers, one per lens, over the whole feature diff (merge base 11c158e4).
+      Security found no bypass of the edit gate, allowlist or marker self-protection, or of the
+      fr-config and stealth config-clone write targets (case-folding, segments, symlinks, hard
+      links, non-ASCII names; bash and TS agree). It raised four trust-model findings. Errors
+      raised ten, docs-accuracy four, tests six (one out of scope).
+      Every in-scope finding is fixed with a test written first (1e17b090c..f6f2e5683). The spec
+      is amended 2026-11-25 at R6, R7, section C, R10 and R20. Three tests that S1 broke in
+      test_merge_train_label_board.py were found and fixed on the way (288befc2c).
+      An independent adversarial verifier then checked the fixes: 22 of 23 closed;
+      l-security-r2 was half closed (an untracked old-path file still moved from disk) and it
+      raised three smaller gaps (validate-plans fail-open when fr fails, the CI HEAD fallback in
+      the default-ref comparison, stealth's absent sync state not validating the switch). All
+      four are fixed (2d81ff235, 6583f7496, 9607b17f9, f6f2e5683).
+  - {kind: finding, id: l-docs-accuracy-r1, global: true, review_scope: in, title: "fr-isolation.md says fr refuses all unprotected executable config; guarded ci.yaml and triage.yaml keys are ignored, not refused"}
+  - {kind: finding, id: l-docs-accuracy-r2, global: true, review_scope: in, title: "fr-init page and skill misdescribe scaffold under quiet and stealth"}
+  - {kind: finding, id: l-docs-accuracy-r3, global: true, review_scope: in, title: "fr-isolation.md says the migration always creates the config branch first"}
+  - {kind: finding, id: l-docs-accuracy-r4, global: true, review_scope: in, title: "repos_cmd.py docstring names the old plan-config path"}
+  - {kind: finding, id: l-errors-r1, global: true, review_scope: in, title: "A partly failed fr settings init (config branch pushed, legacy refused) cannot be retried"}
+  - {kind: finding, id: l-errors-r2, global: true, review_scope: in, title: "Quiet fr-config creation never raises BranchRaceError"}
+  - {kind: finding, id: l-errors-r3, global: true, review_scope: in, title: "change._forge_prs_for_head swallows every forge error"}
+  - {kind: finding, id: l-errors-r4, global: true, review_scope: in, title: "open_change's git timeouts escape as raw TimeoutExpired"}
+  - {kind: finding, id: l-errors-r5, global: true, review_scope: in, title: "A failed read of triage.state_repo settles the state repo durably"}
+  - {kind: finding, id: l-errors-r6, global: true, review_scope: in, title: "The stealth-declared triage.state_repo path is unreachable"}
+  - {kind: finding, id: l-errors-r7, global: true, review_scope: in, title: "degraded.read_profiles reads a failed fetch as no profiles"}
+  - {kind: finding, id: l-errors-r8, global: true, review_scope: in, title: "settings sync preview ignores failed fetch and git log"}
+  - {kind: finding, id: l-errors-r9, global: true, review_scope: in, title: "settings sync --yes forge-read failure names no remedy"}
+  - {kind: finding, id: l-errors-r10, global: true, review_scope: in, title: "A failed fast-forward of the fr-config worktree is silent"}
+  - {kind: finding, id: l-security-r1, global: true, review_scope: in, title: "Enforced accepted an approval a later push keeps"}
+  - {kind: finding, id: l-security-r2, global: true, review_scope: in, title: "The migration seeded fr-config from HEAD, not the default branch"}
+  - {kind: finding, id: l-security-r3, global: true, review_scope: in, title: "ci_evidence read guarded keys without fetching or checking origin"}
+  - {kind: finding, id: l-security-r4, global: true, review_scope: in, title: "_forge_open_pr reused an open PR with no repo or base check"}
+  - {kind: finding, id: l-tests-r1, global: true, review_scope: in, title: "validate-plans.sh fell back to the product's old plan-config under quiet and stealth"}
+  - {kind: finding, id: l-tests-r2, global: true, review_scope: in, title: "Row s1-switch-moved cited no OpenCode or Hermes test"}
+  - {kind: finding, id: l-tests-r3, global: true, review_scope: in, title: "The protected-clone guard did not reach child processes"}
+  - {kind: finding, id: l-tests-r4, global: true, review_scope: in, title: "config-homes.sh never asserted its gh log"}
+  - {kind: finding, id: l-tests-r5, global: true, review_scope: in, title: "test_the_cache_lives_in_memory_only grepped source"}
+  - {kind: finding, id: l-tests-r6, global: true, review_scope: out, title: "fr.repos.DEFAULT_MANIFEST takes Path.home() at import"}
+resolves:
+  - {id: l-docs-accuracy-r1, state: fixed, body: "9142cc137: the page separates what fr refuses (candidate install, ops.yaml) from what it ignores (guarded ci.yaml and triage.yaml keys)."}
+  - {id: l-docs-accuracy-r2, state: fixed, body: "2f53f39bb, 9142cc137: scaffold under quiet refuses and names the manual pull request; under stealth it refuses before writing."}
+  - {id: l-docs-accuracy-r3, state: fixed, body: "9142cc137, 24d62e86f, 2d81ff235: the page lists the three branch cases, and says only committed default-branch bytes move and untracked files never do."}
+  - {id: l-docs-accuracy-r4, state: fixed, body: "573ee39f0: repos_cmd.py and repos.py docstrings name .fr/plan-config.yaml."}
+  - {id: l-errors-r1, state: fixed, body: "5efc1011c: sync has an absent state that lands the legacy copy with --yes --expect <tip>; init in that state prints the command; end-to-end tests for quiet and stealth. f6f2e5683 validates the stealth switch first (verifier v-r4)."}
+  - {id: l-errors-r2, state: fixed, body: "b453fc8af: a refused push re-probes and raises BranchRaceError when origin now has fr-config."}
+  - {id: l-errors-r3, state: fixed, body: "7b2088573: only UnsupportedForgeOperation means no earlier proposals; other forge errors refuse."}
+  - {id: l-errors-r4, state: fixed, body: "7b2088573: git timeouts in open_change become a SettingsError saying nothing changed."}
+  - {id: l-errors-r5, state: fixed, body: "6788f085f: StateRepoUnread; the collect warns and does not settle."}
+  - {id: l-errors-r6, state: fixed, body: "ac7b220dc: under stealth no triage.state_repo is read (R20 amended); the dead path is removed."}
+  - {id: l-errors-r7, state: fixed, body: "04aa86f0e: {} only when origin says the branch is absent or no clone exists; else refuse or 'protection unknown'."}
+  - {id: l-errors-r8, state: fixed, body: "91b80881a: failed fetch labels 'label unknown' with a warning; failed git log refuses; post-push fetch failure updates the tracking ref."}
+  - {id: l-errors-r9, state: fixed, body: "ad3489be2: the refusal names the preview and --expect <tip>."}
+  - {id: l-errors-r10, state: fixed, body: "0ca6f3e96: a failed ff-only names the worktree, the reason and the stash command."}
+  - {id: l-security-r1, state: fixed, body: "1e17b090c: enforced also needs dismiss_stale_reviews_on_push or require_last_push_approval on the same rule; the captured approved reply (both false) is now the negative case; the enforced fixture is that capture with one value flipped, said in the README; R7 and section C amended; the trusted-on-adoption limit is stated beside BYPASS_LIMIT."}
+  - {id: l-security-r2, state: fixed, body: "4382127dd: tracked files move with the default ref's bytes and mode; 2d81ff235: an untracked file is refused (verifier v-r1, reproduced then fixed); 9607b17f9: the CI HEAD fallback is never a default ref (v-r3). R10 amended."}
+  - {id: l-security-r3, state: fixed, body: "218c5f0a1: _at_tip fetches the tip with fetch_tip (origin checked) once protected; a failure refuses."}
+  - {id: l-security-r4, state: fixed, body: "d47cf978a: open_pr_in_repo, and a found PR into another base refuses."}
+  - {id: l-tests-r1, state: fixed, body: "8b479d384: under quiet and stealth the old plan-config is never read; repo still reads it, tested by its effect; 6583f7496: an unknown placement is treated as not repo when origin has fr or fr-config (v-r2); also fixes a BSD sed crash."}
+  - {id: l-tests-r2, state: fixed, body: "2db984e: s1-switch-moved cites test_isolation_decision_cases.py, test_hermes_isolation_hook_edits.py and the OpenCode decision-cases.test.ts and marker.test.ts."}
+  - {id: l-tests-r3, state: fixed, body: "11f64204d: FR_TRIAGE_PROTECTED_SOURCES, set by conftest; a real child process refuses the move."}
+  - {id: l-tests-r4, state: fixed, body: "4b5fd150b: gh.log is emptied before fr run start and must hold the rules route."}
+  - {id: l-tests-r5, state: fixed, body: "95a147310: a behaviour test in child processes with a fresh HOME and cwd."}
+  - {id: l-tests-r6, state: out-of-scope, body: "DEFAULT_MANIFEST in fr/repos.py predates S1; S1 did not change how it is computed, and its test sets FR_REPOS_MANIFEST. Filed at deliver."}
+evidence:
+  review: review-lenses
+  reviewer: "docs-accuracy=a0fb115e8683233e5,errors=acb48c55b0018c52c,security=aa92202452f1f16f8,tests=adf5759cdd903b68f"
