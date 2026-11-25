@@ -15,3 +15,8 @@ fr.glab.host_env trusts only hosts in glab's config.yml (known_hosts). The scaff
 ### 42c8fe2e142e · finding [fixed] · DEBT_STEP_GITLAB logs glab in before the fr commands
 
 The technical-debt job's script now starts with export GLAB_CONFIG_DIR="$(mktemp -d)" and echo "$FR_DEBT_TOKEN" | glab auth login --hostname "$CI_SERVER_HOST" --stdin (the fix proven live on a self-hosted GitLab 15.3, host redacted: fr debt issue filed the issue, fr debt archive-pr pushed and opened a draft MR). The login sits in script, after every before_script line, so glab is installed by then. Pinned by tests/unit/test_acceptance_scaffold_debt_jobs.py::test_gitlab_debt_job_logs_glab_in_before_any_fr_command (red before the fix, green after); both GitLab goldens regenerated (only the two lines and the header comment changed).
+
+<!-- fr:journal kind=review scope=debug id=563603313dfb created=2026-11-25T18:56:23+00:00 -->
+### 563603313dfb · review · Self-review of PR #1703: no findings
+
+Checked: (1) fr.glab._config_yml reads $GLAB_CONFIG_DIR/config.yml first, as glab does, so the login's host is the one known_hosts() sees; (2) GitLab runs before_script and script in one shell, so the export persists and glab is installed before the login; (3) the token goes through stdin and is never on argv; (4) host_env stays unchanged: relaxing it would reopen gh#1014; (5) the goldens differ only by the intended lines; (6) privacy: the diff, journal and PR body name no real host, user or employer.
