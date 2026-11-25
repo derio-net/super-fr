@@ -51,3 +51,80 @@ Operator: rows verify none, CI unit tests over fixture plans and batches; no wal
 ### q-gate · decision · Gate developer, no hold
 
 Operator: gate developer; nothing held after merge. decider: operator
+
+<!-- fr:journal kind=finding scope=spec id=s1 created=2026-11-25T13:17:35+00:00 state=open review_scope=in -->
+### s1 · finding [open] (reviewer: in scope) · The run cursor has no `artifacts.plan` key; the plan folder is in `steps.<step>.emitted.plan`
+
+check: codebase. run/model.py:278,317 and a real cursor (2026-11-24-feat-ci-economy.yaml:34-38) hold the plan at steps.plan.emitted.plan. The spec's reader would find no plan in any real cursor.
+
+<!-- fr:journal kind=finding scope=spec id=s2 created=2026-11-25T13:17:35+00:00 state=open review_scope=in -->
+### s2 · finding [open] (reviewer: in scope) · PlanSource cannot tell no-ref from no-cursor
+
+check: consistency. gitseam.py:960-966 list_dir returns [] for a missing ref, so R2's separate reasons are untestable with list_dir/show alone.
+
+<!-- fr:journal kind=finding scope=spec id=s3 created=2026-11-25T13:17:35+00:00 state=open review_scope=in -->
+### s3 · finding [open] (reviewer: in scope) · Unknown batch repo and a clone with no origin have no stated reason
+
+check: consistency. batch.py:108-113 batch_repo may return None; gitseam.py:651-655 origin_repo raises without an origin; unstated they crash fr triage check, which must exit 0.
+
+<!-- fr:journal kind=finding scope=spec id=s4 created=2026-11-25T13:17:35+00:00 state=open review_scope=in -->
+### s4 · finding [open] (reviewer: in scope) · The driver's board reads cwd, but the driver works through --checkout clones
+
+check: codebase. triage_batch_cmd.py:3961-3990 and :5822-5836: group/org scopes would show every repo but the cwd's as not compared.
+
+<!-- fr:journal kind=finding scope=spec id=s5 created=2026-11-25T13:17:35+00:00 state=open review_scope=in -->
+### s5 · finding [open] (reviewer: in scope) · build_board's overlap input and the board's unread display are undefined
+
+check: consistency. kanban.py:804-815; triage_kanban_cmd.py:424-436 notes. Type of overlaps= and where unread reasons show were unstated.
+
+<!-- fr:journal kind=review scope=spec id=spec-review-1 created=2026-11-25T13:17:35+00:00 -->
+### spec-review-1 · review · independent spec review: 5 findings
+
+Dispatched fr-spec-reviewer reviewed spec and journal against the 7 decisions and the codebase; 5 findings (s1-s5), all in scope, all fixed in the spec. Every other named helper was verified with file:line (last_dispatch, dependency_state, with_forecast, planned_merge_order, read_cursor, KIND_DIRS, toplevel, Checkout.origin_repo/show/list_dir, TriageConfig.generated, VersionBlock.files, Facts.config_for, PhaseHeader.files, Card, build_board, write_board, check_command, batch edit --wave/--after). Suggested lenses: errors, tests.
+
+<!-- fr:journal kind=lens scope=spec id=lens-errors-1 created=2026-11-25T13:17:35+00:00 lens=errors step=spec-review -->
+### lens-errors-1 · lens · The not-compared path must turn every git and YAML failure into a reason inside a command that always exits 0
+
+<!-- fr:journal kind=lens scope=spec id=lens-tests-1 created=2026-11-25T13:17:35+00:00 lens=tests step=spec-review -->
+### lens-tests-1 · lens · The reader's fixtures must match the real cursor and phase-file shapes
+
+<!-- fr:journal kind=finding scope=spec id=s1-resolved created=2026-11-25T13:17:35+00:00 state=fixed resolves=s1 -->
+### s1-resolved · finding [fixed] · resolves s1: The run cursor has no `artifacts.plan` key; the plan folder is in `steps.<step>.emitted.plan`
+
+Background, R1 and Design A now read the plan folder from the `plan` value of any step's `emitted` mapping; the quiet/stealth case is named; the Test Plan fixture uses the real cursor shape.
+
+<!-- fr:journal kind=finding scope=spec id=s2-resolved created=2026-11-25T13:17:35+00:00 state=fixed resolves=s2 -->
+### s2-resolved · finding [fixed] · resolves s2: PlanSource cannot tell no-ref from no-cursor
+
+PlanSource gains exists_at(ref, path), which Checkout has (gitseam.py:944); the reader checks the ref first, so `no ref origin/<branch>` is its own reason.
+
+<!-- fr:journal kind=finding scope=spec id=s3-resolved created=2026-11-25T13:17:35+00:00 state=fixed resolves=s3 -->
+### s3-resolved · finding [fixed] · resolves s3: Unknown batch repo and a clone with no origin have no stated reason
+
+R2 names `repo of batch unknown` (batch_repo None); R9 names `no clone here` for a cwd outside a clone or without origin; source_for_clones turns GitError into that reason; both are in the Test Plan.
+
+<!-- fr:journal kind=finding scope=spec id=s4-resolved created=2026-11-25T13:17:35+00:00 state=fixed resolves=s4 -->
+### s4-resolved · finding [fixed] · resolves s4: The driver's board reads cwd, but the driver works through --checkout clones
+
+write_board takes an optional checkouts map; the driver's _write_board passes checkout_paths (one line, inside the module budget: 8223 of 8225); R9 states the driver's board reads its own clones.
+
+<!-- fr:journal kind=finding scope=spec id=s5-resolved created=2026-11-25T13:17:35+00:00 state=fixed resolves=s5 -->
+### s5-resolved · finding [fixed] · resolves s5: build_board's overlap input and the board's unread display are undefined
+
+build_board takes overlaps: Mapping[str, tuple[str, ...]] from card_lines(report); each not-compared batch is one page note; R7's Test Plan line covers it.
+
+<!-- fr:journal kind=decision scope=spec id=exit-baseline created=2026-11-25T13:17:37+00:00 -->
+### exit-baseline · decision · exit when spec-review resolved
+
+The exit when spec-review resolved; `fr verification set` and `deliver` compare against it.
+
+```yaml
+row_gates:
+  plan-overlap-board: none
+  plan-overlap-check: none
+row_kinds:
+  plan-overlap-board: none
+  plan-overlap-check: none
+run_gate: developer
+run_kind: none
+```

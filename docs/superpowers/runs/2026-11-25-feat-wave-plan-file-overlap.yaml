@@ -3,7 +3,7 @@ run: 2026-11-25-feat-wave-plan-file-overlap
 workflow: fr-goal@1
 branch: feat/wave-plan-file-overlap
 started: '2026-11-25T12:55:25+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,17 +12,25 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-25-wave-plan-file-overlap-design.md
   spec-review:
-    state: running
-    at: '2026-11-25T13:12:34+00:00'
+    state: done
+    at: '2026-11-25T13:17:37+00:00'
     units:
       step/spec-review:
         attempts:
         - dispatched: '2026-11-25T13:12:34+00:00'
+          agent: af1d959892b1abe47
           agent_type: super-fr:fr-spec-reviewer
           harness: claude-code
+          model: claude-opus-5-5
           tier: hard
           bound: claude-opus-5-5
           session: 0b0df376-70ba-43e5-92da-54c79b85d954
+          returned: '2026-11-25T13:17:36+00:00'
+          outcome: done
+        evidence:
+          review: spec-review-1
+          reviewer: af1d959892b1abe47
+          findings: s1,s2,s3,s4,s5
   plan:
     state: pending
   plan-review:
