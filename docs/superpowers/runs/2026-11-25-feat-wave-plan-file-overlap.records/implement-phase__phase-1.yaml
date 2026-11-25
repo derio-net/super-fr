@@ -1,0 +1,22 @@
+schema_version: 12
+run: 2026-11-25-feat-wave-plan-file-overlap
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T2.S4, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S1, P1.T5.S2]
+refactor:
+  P1.T3: "the check command change is one call and one print block; nothing to clean"
+  P1.T5: "docs, fragment and acceptance moves only; no code to refactor"
+journal:
+  - kind: decision
+    id: plan-overlap-one-paragraph
+    title: A card's overlap sentences render as one paragraph
+    body: "The spec asks for one `<p class=\"overlap\">` per card detail, so a card in several overlaps joins its sentences with spaces inside that one paragraph, instead of one paragraph per overlap."
+    phase: 1
+  - kind: discovery
+    id: plan-overlap-checkout-paths-optional
+    title: The driver's checkout map holds optional paths
+    body: "`checkout_paths` is `dict[str, Path | None]`, so `write_board` and `source_for_clones` take `Mapping[str, Path | None]`; a None value reads as no clone of the repo."
+    phase: 1
+resolves: []
+evidence: {}
