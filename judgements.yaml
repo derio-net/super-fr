@@ -9444,6 +9444,13 @@ batches:
     handle: w3T:p3
     run: 2026-11-19-feat-batch-consumer-followups
     archive: chore/closeout-2026-11-25-1
+  - kind: closeout
+    at: '2026-11-25T09:19:57.046918Z'
+    runner: herdr
+    handle: w3T:p3
+    run: 2026-11-19-feat-batch-consumer-followups
+    archive: chore/closeout-2026-11-25-1
+    archived: 1684
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
@@ -10393,6 +10400,7 @@ closeouts:
   planned:
   - consumer-followups
   pr: 1684
+  merged: true
   head: d5328379d9e905cd1754da8271f40200fcd26fc5
   members:
   - consumer-followups
@@ -10577,3 +10585,6 @@ queues:
     entries:
     - pr: 1684
       kind: closeout
+  - kind: queue_drain
+    at: '2026-11-25T09:19:48.996388Z'
+    main: 2e310c24c0a58a6c1a2958b4bf33c5bb3f130baf
