@@ -223,8 +223,8 @@ and pushes it. If the branch exists without a file, fr proposes that file in a p
 The product file then stays until the pull request merges and you run the migration again.
 If the branch holds the file with other bytes, fr refuses that file and keeps both.
 
-The migration moves only the bytes that the default branch has committed. It removes a
-file from the product only when the fetched branch holds the same bytes. If the push is refused, nothing leaves
+The migration moves only the bytes that the default branch has committed. It does not move
+a file that git does not track. It removes a file from the product only when the fetched branch holds the same bytes. If the push is refused, nothing leaves
 the product. Under stealth the product file stays, and fr prints the `git rm` you can run.
 
 **Older fr.** An fr from before this change reads the switch only from the old file, the

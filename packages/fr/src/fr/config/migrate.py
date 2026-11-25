@@ -498,9 +498,9 @@ def is_executable(product: Path, source: Path) -> bool:
     bytes are the default branch's blob (`source_text`), so its mode is the default
     branch's too (review p7-r3, lens review l-security-r2): under `core.fileMode=false` a
     chmod is no change to git, and neither the working tree's bit nor a chmod committed
-    only on this branch may make a reviewed 100644 file executable. An untracked file's
-    mode is its owner's execute bit, what `git add` would commit."""
-    import stat
+    only on this branch may make a reviewed 100644 file executable. An untracked file is
+    never executable here: the default branch has no mode for it, and its move refuses
+    (`_untracked`, verification v-r1)."""
 
     rel_path = Path(source).relative_to(product).as_posix()
     tracked = subprocess.run(
@@ -523,7 +523,7 @@ def is_executable(product: Path, source: Path) -> bool:
             and bool(listed.stdout.strip())
             and listed.stdout.split()[0] == "100755"
         )
-    return bool(Path(source).lstat().st_mode & stat.S_IXUSR)
+    return False
 
 
 def _default_commit(product: Path) -> tuple[str, str] | None:
@@ -596,8 +596,9 @@ def source_text(product: Path, source: Path) -> str:
     symlink; a tracked file's blob as the product's DEFAULT branch committed it (lens review
     l-security-r2, like `fr.config.space.located`), refused while it has uncommitted
     changes (pushing the blob and deleting the edit would lose it) or while HEAD's blob
-    differs from the default branch's (an unreviewed change must land there first); an
-    untracked one (a regular file, checked above) as it is on disk."""
+    differs from the default branch's (an unreviewed change must land there first). An
+    untracked file is refused (`_untracked`): the default branch lacks it, so nobody
+    reviewed it (verification v-r1)."""
     from fr.settings import SettingsError
 
     rel_path = refuse_link(product, source)
@@ -608,7 +609,7 @@ def source_text(product: Path, source: Path) -> str:
     if not git("ls-files", "--error-unmatch", "--", rel_path).returncode == 0:
         if not Path(source).is_file():
             raise SettingsError(f"{rel_path} is not a regular file: fr will not move it")
-        return Path(source).read_text()
+        raise _untracked(rel_path)
     if git("diff", "--quiet", "HEAD", "--", rel_path).returncode != 0:
         raise SettingsError(
             f"{rel_path} has uncommitted changes: commit or stash them, then run "
@@ -618,6 +619,23 @@ def source_text(product: Path, source: Path) -> str:
     if shown.returncode != 0:
         raise SettingsError(f"cannot read {rel_path} at HEAD: {shown.stderr.decode().strip()}")
     return _as_default_has_it(product, rel_path, shown.stdout.decode("utf-8"))
+
+
+def _untracked(rel_path: str) -> Exception:
+    """The refusal for an untracked file a cross-space hop would move (verification v-r1,
+    lens review l-security-r2). No kind that moves ACROSS legitimately carries an untracked
+    file: the one untracked file S1 moves, the base clone's operator-managed allowlist, is
+    `across=False` and renamed in its own checkout (R8), and stealth keeps the product file
+    in place, so a refusal here loses nothing. Reading it from disk would let an
+    agent-written `.fr/candidate-install` (mode 100755) become the configuration branch's
+    first commit unreviewed."""
+    from fr.settings import SettingsError
+
+    return SettingsError(
+        f"{rel_path} is not tracked, so the default branch has not committed it: fr moves "
+        "only what the default branch has committed; commit it and land the change on the "
+        "default branch first, then run `fr migrate artifacts --yes` again (S1 R10)"
+    )
 
 
 def _as_default_has_it(product: Path, rel_path: str, committed: str) -> str:
@@ -655,8 +673,8 @@ _STAMP_LINES = re.compile(r"^schema_version\s*:[^\r\n]*(\r?\n)?", re.MULTILINE)
 
 def profiles_body(product: Path, source: Path) -> str:
     """The version-3 bytes a cross-space profiles move pushes for *source* (review p4-r4):
-    the COMMITTED file (an untracked one as it is), taken 1 -> 2 in memory when it is at
-    version 1 (`fr.artifacts.profiles_services.services_text`) and stamped 3, so the
+    the COMMITTED file (an untracked one is refused, `_untracked`), taken 1 -> 2 in memory
+    when it is at version 1 (`fr.artifacts.profiles_services.services_text`) and stamped 3, so the
     configuration branch receives the final bytes in one move. The working tree may differ
     from the commit only by fr's own in-flight 1 -> 2 rewrite of it (the same text, stamped
     2 by the runner); any other difference is an operator's edit and refuses."""
@@ -676,7 +694,7 @@ def profiles_body(product: Path, source: Path) -> str:
             raise SettingsError(f"cannot read {rel_path} at HEAD: {shown.stderr.decode().strip()}")
         committed = _as_default_has_it(product, rel_path, shown.stdout.decode("utf-8"))
     else:
-        committed = disk
+        raise _untracked(rel_path)
     bom = "\ufeff" if committed.startswith("\ufeff") else ""
     plain = committed.removeprefix(bom)
     v2 = services_text(Path(source), plain)

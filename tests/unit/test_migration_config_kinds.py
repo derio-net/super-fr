@@ -626,3 +626,41 @@ def test_a_quiet_creation_lost_to_another_host_is_a_branch_race(tmp_path: Path) 
     with pytest.raises(BranchRaceError, match="another"):
         quiet.create_config_branch(root, {".fr/settings.yaml": QUIET}, "m", network=racing)
     assert git(root, "branch", "--list", "fr-config").strip() == ""
+
+
+def test_an_untracked_moved_file_is_refused_and_never_reaches_fr_config(tmp_path: Path) -> None:
+    """Verification v-r1 (l-security-r2): an untracked `.fr/candidate-install` the default
+    branch never reviewed must not ride into the configuration branch's first commit from
+    disk, executable bit and all: its move refuses like any change the default branch
+    lacks, and nothing is pushed."""
+    from fr.config.migrate import move_across
+    from fr.settings import SettingsError
+
+    root = _quiet(tmp_path)
+    _put(root, ".fr/ci.yaml", "tests: ci\n")
+    src = root / ".fr/candidate-install"
+    src.write_text("#!/bin/sh\necho evil\n")
+    src.chmod(0o755)
+    with pytest.raises(SettingsError, match="land the change on the default branch first"):
+        move_across(root, src, "candidate-install")
+    assert src.exists()
+    listed = subprocess.run(
+        ["git", "-C", str(_origin(tmp_path)), "ls-tree", "-r", "--name-only", "fr-config"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert ".fr/candidate-install" not in listed.stdout.split()
+
+
+def test_an_untracked_profiles_file_is_refused_across(tmp_path: Path) -> None:
+    """v-r1 for the profiles move, which builds its own body (`profiles_body`)."""
+    from fr.config.migrate import profiles_body
+    from fr.settings import SettingsError
+
+    root = _quiet(tmp_path)
+    src = root / ".devcontainer/fr-profiles.yaml"
+    src.parent.mkdir(parents=True, exist_ok=True)
+    src.write_text("schema_version: 2\nprofiles: {}\n")
+    with pytest.raises(SettingsError, match="land the change on the default branch first"):
+        profiles_body(root, src)
