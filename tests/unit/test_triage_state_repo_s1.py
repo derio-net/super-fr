@@ -113,11 +113,14 @@ class _RulesForge(FakeForge):
         return self.rules
 
 
-PROTECTED = [
-    {"type": "pull_request", "parameters": {"required_approving_review_count": 1}},
-    {"type": "non_fast_forward"},
-    {"type": "deletion"},
-]
+PROTECTED = json.loads(
+    (
+        Path(__file__).resolve().parents[1]
+        / "fixtures/github_rest/rules/pull-request-approved-dismiss-stale.json"
+    ).read_text()
+)
+"""The rules fr reads as enforced (the captured approved reply with one parameter flipped,
+see that directory's README; lens review l-security-r1)."""
 
 
 def _forge(files: dict[tuple[str, str, str], str] | None = None, rules: object = None) -> Any:
@@ -410,7 +413,6 @@ def test_p6_r5_under_stealth_the_product_repos_declaration_is_never_read(
     forge = _forge({(REPO, SETTINGS, "HEAD"): DECLARED})
     monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
     monkeypatch.setattr(state_home, "stealth_tracking", lambda start: (True, "example-org/track"))
-    monkeypatch.setattr(state_home, "stealth_declared_state_repo", lambda start: None)
     state = tmp_path / "s"
 
     assert _collect(state).exit_code == 0
@@ -419,27 +421,30 @@ def test_p6_r5_under_stealth_the_product_repos_declaration_is_never_read(
     assert load_facts(state / "facts.json").state_repo_declared == {}
 
 
-def test_p6_r5_a_stealth_space_declaration_counts_only_without_a_forge_tracking_repo(
+def test_under_stealth_no_declaration_is_read_and_a_local_tracking_repo_keeps_it_local(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Lens review l-errors-r6, spec R20 (amended): under stealth fr reads no
+    `triage.state_repo` at all. A tracking repo that is no forge repo cannot keep the state
+    ref, so the state stays local, said; nothing else is asked."""
     forge = _forge({(REPO, SETTINGS, "HEAD"): DECLARED})
     monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
     monkeypatch.setattr(state_home, "stealth_tracking", lambda start: (True, None))
-    monkeypatch.setattr(
-        state_home, "stealth_declared_state_repo", lambda start: "example-org/operator-refs"
-    )
     state = tmp_path / "s"
 
-    assert _collect(state).exit_code == 0
-    assert load_durable(state).state_repo == "example-org/operator-refs"
+    done = _collect(state)
+    assert done.exit_code == 0
+    assert load_durable(state).state_repo is None
     assert not _declaration_reads(forge)
+    assert "no forge repo" in " ".join(done.output.split())
+
+
+def test_the_stealth_space_declaration_reader_is_gone() -> None:
+    """The reader was unreachable in effect (a local tracking repo is never enforced), so
+    the code now says what R20 says: under stealth, no declaration."""
+    assert not hasattr(state_home, "stealth_declared_state_repo")
 
 
 def test_p6_r5_the_tracking_repo_wins_over_any_declaration() -> None:
     got = decide_state_repo(["o/one"], {}, _never, declared="o/refs", stealth="o/track")
     assert got == "o/track"
-
-
-def test_p6_r5_outside_stealth_there_is_no_stealth_declaration(tmp_path: Path) -> None:
-    assert state_home.stealth_declared_state_repo(_clone(tmp_path)) is None
-    assert state_home.stealth_declared_state_repo(tmp_path / "nowhere") is None

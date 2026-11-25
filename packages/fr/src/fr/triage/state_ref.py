@@ -417,9 +417,8 @@ def decide_state_repo(
     whichever rule chose it (R21).
 
     *stealth* (the tracking repo of the stealth workspace the scope is first collected
-    from, R19) wins; then *declared* (a one-repo scope's `triage.state_repo`, R20; under
-    stealth only ever read from the operator's stealth configuration space, never the
-    product repo, decision p6-stealth-ignores-declared); then:
+    from, R19) wins; then *declared* (a one-repo scope's `triage.state_repo`, R20; never
+    read under stealth, decision p6-stealth-ignores-declared); then:
     one repo: that repo, and no question. Several, at least one private: the operator
     picks one of the private ones. All public (a repo whose visibility is unknown counts
     as public here: it is never offered as the safe choice): the operator picks between

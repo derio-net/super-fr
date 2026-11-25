@@ -676,15 +676,16 @@ def state_repo_prompt() -> Ask | None:
 
 def _declared_state_repo(repo: str, workspace: Path | None) -> str | None:
     """The `triage.state_repo` a settle collect takes for one-repo scope *repo* (R20): the
-    product repo's settings, read through the forge, outside stealth; under stealth never
-    the product repo's (it may not decide where stealth's state goes, decision
-    p6-stealth-ignores-declared), only the operator's stealth configuration space."""
+    product repo's settings, read through the forge, outside stealth. Under stealth none is
+    read at all (R20 amended, decision p6-stealth-ignores-declared, lens review
+    l-errors-r6): the product repo may not decide where stealth's state goes, and the
+    tracking repo is the state repo, or, when it is no forge repo, the state stays local."""
     from fr.triage import state_home
 
     start = workspace if workspace is not None else Path.cwd()
     stealthy, _ = state_home.stealth_tracking(start)
     if stealthy:
-        return state_home.stealth_declared_state_repo(start)
+        return None
     return read_declared_state_repo(make_forge(), repo)
 
 
@@ -703,7 +704,7 @@ def _settle_state_repo(target_dir: Path, facts: Facts, *, workspace: Path | None
         return
     declared = next(iter(facts.state_repo_declared.values()), None)
     stealthy, tracking = stealth_tracking(workspace if workspace is not None else Path.cwd())
-    if stealthy and tracking is None and declared is None:
+    if stealthy and tracking is None:
         err_console.print(
             f"warning: this stealth workspace's tracking repo is no forge repo, so it cannot "
             f"keep the state ref, and the product repo may not. {NO_STATE_REPO}",
