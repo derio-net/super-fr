@@ -247,6 +247,7 @@ for rules in free-plan approved; do
   run_fr out isolation up --branch "feat/q-$rules"
   require_exit 0 "$out"
   cd "$HOME/.cache/fr/worktrees/demo/feat__q-$rules" || fail "no workspace for feat/q-$rules: $out"
+  : > "$FAKE_GH_LOG"   # only this start's forge calls, so the route below is this one's
   run_fr out run start fr-goal --branch "feat/q-$rules" --run-id "q-$rules"
   require_exit 0 "$out"
   if [ "$rules" = free-plan ]; then
@@ -255,6 +256,9 @@ for rules in free-plan approved; do
     expect_grep 'keep the ruleset.s bypass list empty' "$out" "the fix names the bypass list"
   else
     refuse_grep 'ignoring workflows/fr-goal' "$out" "an enforced fr-config's shape is used"
+    # The verdict came from the forge (lens review l-tests-r4): this start asked the rules route.
+    expect_grep '^api (-i )?repos/example-org/demo/rules/branches/fr-config$' \
+      "$(cat "$FAKE_GH_LOG")" "enforced: fr read the rules of fr-config from the forge"
   fi
   run_fr out run advance "q-$rules"
   require_exit 0 "$out"
