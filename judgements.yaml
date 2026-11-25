@@ -9339,6 +9339,17 @@ batches:
     run: 2026-11-22-feat-batch-triage-hardening
     archive: chore/closeout-2026-11-24-3
     archived: 1683
+  - kind: claims_released
+    at: '2026-11-25T00:02:52.401466Z'
+    keys:
+    - super-fr#1539
+    - super-fr#1542
+    - super-fr#1545
+    - super-fr#1075
+    - super-fr#1561
+    - super-fr#1572
+    - super-fr#1556
+    - super-fr#1557
 - id: merge-readiness
   title: 'Merge only what delivered: the driver reads deliver from the cursor, and the Batches page shows
     one readiness verdict per PR'
