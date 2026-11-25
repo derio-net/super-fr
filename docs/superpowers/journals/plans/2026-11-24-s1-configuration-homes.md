@@ -273,3 +273,76 @@ Security review of `fr settings sync` (amends p2-config-changes-by-pr). The prev
 ### p2-config-pr-honours-git-pr · decision · The configuration change's PR honours git.pr exactly as fr pr create does (phase 2)
 
 Orchestrator decision. `fr.config.change.open_change` reads `git.pr` from the product checkout's settings (`pr_policy`; under stealth the target workspace's, while the PR goes to the tracking repo). Under `ask` it calls `fr.git_policy.ask.require_approval(kind=pr, branch=fr-config-change/<slug>)` with the run's approval journal before committing or pushing anything; a missing approval refuses (SettingsError, nothing pushed, run the command again once approved), and an approved request is consumed after the PR opens. Under `auto` it opens as before. The schema's `git.pr` takes only `auto` and `ask` (AUTO_ASK), so there is no `off` path to build; if `off` is ever added, the PR open is where it must print the pushed branch and the command to open it.
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-11-25T03:57:01+00:00 phase=2 -->
+### review-p2 · review · Phase 2 adversarial review (configuration branch, the switch, the edit gate on three harnesses) (phase 2)
+
+Independent adversarial reviewer read e297636..HEAD against §B, R5, R6, R8 and R13, attacked the
+edit gate with structural forgeries (wrong branch, wrong path, fr at fr-config's path, primary
+checkout, same-basename foreign worktree, differing switches, symlinked allowlist): all held, bash and
+TS identical. Reproduced three real defects in scratch repos (legacy-push race lockout, foreign
+fr-config adoption, allowlist self-unlock). Seven in-scope findings, all fixed in 6a01ea762..aa5c5c255,
+plus three automated security-review revisions (marker protection and file identity; no auto-sync of
+the legacy copy; second-parent labelling and --expect on fr settings sync) and the configuration PR
+honouring git.pr. Targeted selection 3009 passed / 9 skipped, bun 399/0, tsc, ruff, mypy, parity clean.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-25T03:57:01+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · the legacy fr push lost a race with any artifact push, leaving differing switches on origin and a permanent lockout (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-25T03:57:01+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · a fetching up adopted a foreign origin or local fr-config, committed onto product history and pushed it; the gate then treated that checkout as a write target (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-25T03:57:01+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · fetching up / run start / stealth enter pushed a new branch to origin, which spec §B does not provide for (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-25T03:57:01+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · under stealth up --no-fetch still pushed (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-25T03:57:01+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · the moved allowlist could unlock itself through an old .fr/** glob (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-25T03:57:01+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · the bash/TS parity drift test pinned only the switch location strings, not the decision logic (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-11-25T03:57:01+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · later changes to fr-config were direct pushes, not the pull request spec §B requires (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-25T03:57:01+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: the legacy fr push lost a race with any artifact push, leaving differing switches on origin and a permanent lockout (phase 2)
+
+447350b3b/623b5e593 and the write_legacy rewrite: the legacy write fetches, rebases fr's own commits and retries a non-fast-forward up to 3 times; a retry with fr-config current lands only the legacy copy; no reader writes the copy, a lagging one is brought in step only by fr settings sync --yes --expect <tip>, and every refusal names both refs and the remedy.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-25T03:57:01+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: a fetching up adopted a foreign origin or local fr-config, committed onto product history and pushed it; the gate then treated that checkout as a write target (phase 2)
+
+929ad1ac4: quiet.refuse_foreign_config refuses a config branch whose tree holds anything outside .fr/ (stealth <dir>/.fr/) or that shares history with the product, at the worktree, write_branch_file and the stealth clone; the gate also checks the tree shape in bash and TS (decision p2-gate-config-tree).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-25T03:57:01+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: fetching up / run start / stealth enter pushed a new branch to origin, which spec §B does not provide for (phase 2)
+
+d97afe310: entering a workspace fetches and never creates; fr settings init and the migration (phase 4, discovery p2-phase4-migration-creates-config) create the space; decision p2-create-at-init-and-migration replaces p2-up-creates-config-space.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-25T03:57:01+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: under stealth up --no-fetch still pushed (phase 2)
+
+d97afe310: with creation gone, tests show up --no-fetch (quiet, with and without fr-config) and stealth up leave every ref on origin and the tracking repo unchanged.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-25T03:57:01+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: the moved allowlist could unlock itself through an old .fr/** glob (phase 2)
+
+6a01ea762 and 32a23dab0: no allowlist exempts either allowlist file or the .fr-isolation marker; names compared ASCII-folded, empty/./.. segments refused, file identity (dev+inode) compared, non-ASCII names at the top level or in .fr fail closed; identical in both engines, tested through the real hooks and bun.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-25T03:57:01+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: the bash/TS parity drift test pinned only the switch location strings, not the decision logic (phase 2)
+
+f4a29583a: tests/fixtures/isolation-decision-cases.json drives both the bash library (pytest) and marker.ts (bun); a one-sided logic mutation failed one suite each way.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-11-25T03:57:01+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: later changes to fr-config were direct pushes, not the pull request spec §B requires (phase 2)
+
+8b7a28a57 and aa5c5c255: a change to an existing configuration branch commits on fr-config-change/<slug>, pushes it and opens a PR through the forge client (stealth: the tracking repo), honouring git.pr ask as fr pr create does; spec R6/§B amended (decision q-legacy-sync-after-pr).
+
+<!-- fr:journal kind=finding scope=plan id=p2-config-writes-not-prs-resolved created=2026-11-25T03:57:01+00:00 phase=2 state=fixed resolves=p2-config-writes-not-prs -->
+### p2-config-writes-not-prs-resolved · finding [fixed] · resolves p2-config-writes-not-prs: write_settings pushes the configuration branch directly; spec §B wants a pull request for every change after creation (phase 2)
+
+Answered by p2-r7's fix: decision p2-config-changes-by-pr, commits 8b7a28a57 and aa5c5c255.
