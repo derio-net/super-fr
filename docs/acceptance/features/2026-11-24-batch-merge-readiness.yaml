@@ -100,8 +100,11 @@ rows:
     - spec:2026-11-24-batch-merge-readiness#R2
     levels: {}
     status: walk-owed
-    notes: ''
+    notes: only a real drive pass over a real draft batch PR shows the hold end to end;
+      the post-merge walk (Test Plan 1) is tracked by derio-net/super-fr#1693
     verify: live
+    issues:
+    - derio-net/super-fr#1693
   - id: batch-readiness-no-cursor-hold
     capability: Visible hold for a PR that can never carry a cursor
     acceptance: A batch PR not delivered for want of a cursor, a readable head or a
