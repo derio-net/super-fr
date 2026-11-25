@@ -750,3 +750,8 @@ QuietWriter.refresh calls fr.placement.quiet.require_current_config_worktree: af
 ### p4-import-first · decision · The moved-kinds table is built on first use (p4-r8) (phase 4)
 
 fr.config.migrate.MOVED became all_moved() (cached), so importing fr.config.migrate first no longer runs fr.artifacts' registry against a half-initialised module. test_config_import_first.py imports each S1 module first in a fresh python -I.
+
+<!-- fr:journal kind=decision scope=plan id=p4-repos-sync-config-space created=2026-11-25T08:03:50+00:00 phase=4 -->
+### p4-repos-sync-config-space · decision · fr repos sync reads plan-config through the space and proposes under quiet/stealth (p4-r9) (phase 4)
+
+located() decides the file (old path counts as existing); --force under repo writes .fr/plan-config.yaml and removes the old file (never both, R12); under quiet/stealth fr proposes it as a PR via the configuration writer (fr.config.change, git.pr honoured) or prints REFUSED naming fr migrate artifacts --yes when no configuration branch exists; it never writes the configuration checkout. Security follow-up: every read/write/delete of an old-path or config file goes through fr.config.space.link_problem (lstat of each parent, resolved path inside the checkout). Tests: test_repos_sync_config_space.py, test_repos_cmd.py, test_config_symlinked_parents.py.
