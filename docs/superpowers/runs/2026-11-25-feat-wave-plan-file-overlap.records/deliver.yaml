@@ -1,0 +1,11 @@
+schema_version: 12
+run: 2026-11-25-feat-wave-plan-file-overlap
+step: deliver
+outcome: done
+journal: []
+resolves: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/1694
+evidence:
+  tests: ci
+  walk: none
