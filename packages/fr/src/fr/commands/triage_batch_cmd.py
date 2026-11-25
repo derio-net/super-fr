@@ -353,7 +353,7 @@ from fr.triage.queue_exec import (
     required_names,
 )
 from fr.triage.quota import Pace
-from fr.triage.readiness import fact_cursors
+from fr.triage.readiness import fact_cursors, merge_refusal
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
@@ -3269,13 +3269,8 @@ def batch_merge_command(
             except (DriverRefusal, TransientPassFailure) as exc:  # the pass's own boundary
                 _fail(exc.message, code=exc.code)
             plan = driver.last_pass
-            if batch_ids and plan is not None:
-                unapproved = [n for n in names if n in plan.awaiting]
-                if unapproved:
-                    _fail(
-                        f"not approved: {', '.join(unapproved)}: fr merges a batch PR only "
-                        f"with the operator's `{APPROVED_FR.name}` label on it"
-                    )
+            if batch_ids and plan is not None and (refused := merge_refusal(names, plan)):
+                _fail(refused)
             if not yes:
                 return
             done, said = _merge_progress(driver, names, plan)

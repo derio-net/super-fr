@@ -44,7 +44,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from typing import Literal
 
-from fr.labels import pre_merge_held
+from fr.labels import APPROVED_FR, pre_merge_held
 from fr.triage.approval import (
     ApprovalVerdict,
     Approved,
@@ -54,7 +54,7 @@ from fr.triage.approval import (
     is_approved,
 )
 from fr.triage.batch import QueueEntry
-from fr.triage.batch_drive import LivePr
+from fr.triage.batch_drive import LivePr, Pass
 from fr.triage.mergeability import conflicting
 from fr.triage.model import (
     ApprovalEvent,
@@ -388,3 +388,19 @@ def in_queue_order(
     ahead = order[at - 1]
     return replace(r, kind="queued-behind", reason=ahead,
                    verdict=_LINES["queued-behind"].format(r=ahead))  # fmt: skip
+
+
+def merge_refusal(names: Sequence[str], plan: Pass) -> str:
+    """Why `fr triage batch merge` refuses its named batches after *plan*'s pass, "" when it
+    does not: the pass holds them (`awaiting`), and the readiness verdict says why. Only a
+    batch with no valid approval is "not approved"; an approved one the pass holds names its
+    hold (not delivered, R1; awaiting DevOps, fr-ops R14), never the label."""
+    verdicts = {k: r for q in plan.queues for k, r in q.readiness.items()}
+    why = {a.batch: a.detail for a in plan.actions if a.kind == "held"}  # approved holds only
+    held = [n for n in names if n in plan.awaiting]
+    unapproved = [n for n in held if n not in why and not (n in verdicts and verdicts[n].approved)]
+    if unapproved:
+        return (f"not approved: {', '.join(unapproved)}: fr merges a batch PR only with the "
+                f"operator's `{APPROVED_FR.name}` label on it")  # fmt: skip
+    lines = [f"{n}: {why.get(n) or verdicts[n].verdict}" for n in held]
+    return f"not ready: {'; '.join(lines)}" if lines else ""
