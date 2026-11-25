@@ -26,7 +26,12 @@ class DocsEnvError(Exception):
 
 def load_config(root: Path) -> DocsConfig | None:
     """The strict config, or None when the repo has no `.fr/docs.yaml` (R1)."""
-    path = config_space(root).file(CONFIG_PATH)
+    from fr.settings import SettingsError
+
+    try:
+        path = config_space(root).file(CONFIG_PATH)
+    except SettingsError as e:  # review p1-r4: the placement is unreadable, said as ours
+        raise DocsEnvError(f"cannot tell where {CONFIG_PATH} lives: {e}") from e
     if not path.is_file():
         return None
     try:

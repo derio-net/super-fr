@@ -511,3 +511,50 @@ def test_the_ops_gate_reads_the_queue_block_from_the_configuration_space(
         HostCheckout(root).queue_configured("main")
     _push_orphan(root, "fr-config", {".fr/triage.yaml": "queue:\n  ci: push\n"})
     assert HostCheckout(root).queue_configured("main") is True
+
+
+# --- a malformed switch reaches each reader as its own error (review p1-r4) -------------
+
+
+def _bad_switch_repo(tmp_path: Path) -> Path:
+    root = make_repo(tmp_path)
+    _push_orphan(root, "fr", {"settings.yaml": "schema: 1\nplacement: 'quiet'\n"})
+    git(root, "fetch", "-q", "origin", "+refs/heads/fr:refs/remotes/origin/fr")
+    return root
+
+
+def test_a_malformed_switch_is_the_docs_readers_own_error(tmp_path: Path) -> None:
+    from fr.docs.load import DocsEnvError, load_config
+
+    with pytest.raises(DocsEnvError, match="placement"):
+        load_config(_bad_switch_repo(tmp_path))
+
+
+def test_a_malformed_switch_is_the_debt_readers_own_error(tmp_path: Path) -> None:
+    from fr.debt.engine import DebtConfigError, load_stale_days
+
+    with pytest.raises(DebtConfigError, match="placement"):
+        load_stale_days(_bad_switch_repo(tmp_path), None)
+
+
+def test_a_malformed_switch_is_the_ops_readers_own_error(tmp_path: Path) -> None:
+    from fr.ops.load import OpsLoadError, load_ops_config
+
+    with pytest.raises(OpsLoadError, match="placement"):
+        load_ops_config(_bad_switch_repo(tmp_path))
+
+
+def test_a_malformed_switch_is_the_lens_readers_own_error(tmp_path: Path) -> None:
+    from fr.lenses.model import LensError
+    from fr.lenses.resolve import load_config
+
+    with pytest.raises(LensError, match="placement"):
+        load_config(_bad_switch_repo(tmp_path))
+
+
+def test_a_malformed_switch_leaves_the_lenient_remap_lenient(tmp_path: Path) -> None:
+    from fr.verification.rows import load_remap
+
+    remap, why = load_remap(_bad_switch_repo(tmp_path))
+    assert remap == {}
+    assert why is not None and "placement" in why

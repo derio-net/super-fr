@@ -72,10 +72,14 @@ def load_remap(repo_root: Path) -> tuple[dict[str, str], str | None]:
     import yaml
     from pydantic import ValidationError
 
-    from fr.config.space import config_space
+    from fr.config.space import config_space, rel
+    from fr.settings import SettingsError
     from fr.triage.model import parse_triage_config
 
-    path = config_space(repo_root).file("triage")
+    try:
+        path = config_space(repo_root).file("triage")
+    except SettingsError as e:  # review p1-r4: lenient, so an unreadable placement is no remap
+        return {}, f"cannot tell where {rel('triage')} lives: {e}"
     if not path.is_file():
         return {}, None
     try:

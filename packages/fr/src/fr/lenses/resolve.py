@@ -60,7 +60,12 @@ def shipped_lenses() -> dict[str, Lens]:
 
 def load_config(root: Path) -> LensConfig:
     """`.fr/lenses.yaml` from the working tree; absent is an empty config. Raises `LensError`."""
-    path = config_space(root).file(REPO_CONFIG_REL.as_posix())
+    from fr.settings import SettingsError
+
+    try:
+        path = config_space(root).file(REPO_CONFIG_REL.as_posix())
+    except SettingsError as e:  # review p1-r4: the placement is unreadable, said as ours
+        raise LensError(f"cannot tell where {REPO_CONFIG_REL} lives: {e}") from e
     if not path.is_file():
         return LensConfig()
     source = str(REPO_CONFIG_REL)

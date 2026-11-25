@@ -82,7 +82,12 @@ def load_stale_days(repo_root: Path, override: int | None) -> int:
         if override < 1:
             raise DebtConfigError("--stale-days must be a positive number of days")
         return override
-    path = config_space(repo_root).file(CONFIG_REL.as_posix())
+    from fr.settings import SettingsError
+
+    try:
+        path = config_space(repo_root).file(CONFIG_REL.as_posix())
+    except SettingsError as e:  # review p1-r4: the placement is unreadable, said as ours
+        raise DebtConfigError(f"cannot tell where {CONFIG_REL} lives: {e}") from e
     if not path.is_file():
         return DEFAULT_STALE_DAYS
     try:

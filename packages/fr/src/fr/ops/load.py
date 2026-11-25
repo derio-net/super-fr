@@ -99,7 +99,12 @@ class OpsConfig(BaseModel):
 
 def load_ops_config(repo_root: Path) -> OpsConfig:
     """The repo's `.fr/ops.yaml`, or an empty config when there is none."""
-    path = config_space(repo_root).file(CONFIG_REL.as_posix())
+    from fr.settings import SettingsError
+
+    try:
+        path = config_space(repo_root).file(CONFIG_REL.as_posix())
+    except SettingsError as e:  # review p1-r4: the placement is unreadable, said as ours
+        raise OpsLoadError(f"cannot tell where {CONFIG_REL} lives: {e}") from e
     if not path.is_file():
         return OpsConfig()
     data = _safe_load(path.read_text(), path, 0)
