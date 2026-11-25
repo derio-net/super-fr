@@ -190,3 +190,8 @@ operator chose fixed: the fix is in PR #1694
 ### l-tests-r5-resolved-2 · finding [fixed] · resolves l-tests-r5: No test for a cycle or an unknown id in the after closure
 
 operator chose fixed: the fix is in PR #1694
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved-2 created=2026-11-25T17:35:01+00:00 phase=1 state=open resolves=p1-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1695 -->
+### p1-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1695] · resolves p1-r5: overlaps() compares repo names case-sensitively (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1695.
