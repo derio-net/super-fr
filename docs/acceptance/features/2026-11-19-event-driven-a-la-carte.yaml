@@ -233,3 +233,10 @@ amendments:
     ref: super-fr:tests/unit/test_tripwire_shipped_defaults.py#test_shipped_fr_goal_runs_journal_check_between_implement_and_deliver
     why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
       when the shipped defaults merged into one tree (phase 5)
+  - row: cloud-triage-state-ref
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_triage_state_workspace.py#test_state_lives_in_the_workspace_and_is_excluded_through_the_common_dir
+    why: S1 R17 moved the state out of the workspace into the cache repository; the
+      two workspace tests were replaced by test_triage_state_home.py's
