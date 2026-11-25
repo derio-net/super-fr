@@ -47,7 +47,8 @@ steps: `debug`, `review` and `deliver`. So the fix's pull request carries a curs
 a batch driver can read. fr cuts a cold-start `fix/<slug>` from the freshly fetched
 default branch. So the fix is clean of whatever your checkout holds. To pick a profile,
 or to debug on your current branch on purpose, run
-`fr isolation up --branch fix/<slug> --base HEAD` first and start the run on it.
+`fr isolation up --branch fix/<slug> [--profile <name>] [--base HEAD]` first and start the run
+on it.
 
 If you are already inside an active workspace (for example, for a bug found mid-feature),
 **reuse it**. Then the failing test and the fix join that feature's branch and PR, and

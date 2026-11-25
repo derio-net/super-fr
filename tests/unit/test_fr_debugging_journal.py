@@ -68,3 +68,21 @@ def test_review_record_is_pushed_before_the_closeout_relay(skill: Path) -> None:
         f"{skill.relative_to(REPO_ROOT)}: Deliver must confirm the branch is level "
         "with its upstream before the closeout relay (gh#871)."
     )
+
+
+# ------------------------------------- R10: the skill drives a run (l-tests-r5)
+
+
+@pytest.mark.parametrize("skill", _COPIES, ids=lambda p: str(p.relative_to(REPO_ROOT)))
+def test_the_skill_starts_its_own_run_only_on_a_branch_with_none(skill: Path) -> None:
+    """batch-merge-readiness R10: the skill starts the shipped `fr-debugging` run on the
+    fix branch, starts none on a branch that already has a run (a check the skill makes,
+    since `fr run start` refuses only a second run of the same workflow), and records the
+    review through the `review` step's record."""
+    flat = " ".join(skill.read_text().split())
+    assert "fr run start fr-debugging --branch" in flat
+    assert "a branch that already has a run (a feature's fr-goal run) keeps it — start none" in flat
+    assert "`fr run start` refuses only a second run of the same workflow" in flat
+    assert "refuses a second run on a branch" not in flat  # the old, false claim
+    assert "Record the review through `review`'s step record (§3) alone" in flat
+    assert "never `fr journal add --kind review`" in flat
