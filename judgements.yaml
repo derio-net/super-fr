@@ -9846,6 +9846,7 @@ exports:
   at: '2026-11-24T21:10:39.572325Z'
   pr: 1666
   head: cb0f3e4f38d6e2d21d1cc2cc94c64477ae71d686
+  merged: true
 closeouts:
 - repo: derio-net/super-fr
   item: derio-net/super-fr/run/closeout-2026-11-15-1
@@ -10620,3 +10621,6 @@ queues:
     entries:
     - pr: 1666
       kind: export
+  - kind: queue_drain
+    at: '2026-11-25T10:09:49.048336Z'
+    main: 0e389e2efc43e10a1f343b907ef0c638cccc0b2e
