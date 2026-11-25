@@ -329,3 +329,26 @@ wave_queue.operator_work counts pending operator entries minus those whose stall
 ### p2-r3-resolved · finding [fixed] · resolves p2-r3: R11/R12: `queue add` to a repo with no batch was silently inert (phase 2)
 
 queue_requests.reader_repos adds every collected repo a request of the scope names to the map the snapshot's queue readers (wave queue, housekeeping, operator, barrier, lineage, placements, post_merge repos) loop over. Test: test_triage_batch_drive_cmd.py::test_an_added_pr_in_a_repo_with_no_batch_is_read_and_lands_between_waves.
+
+<!-- fr:journal kind=decision scope=plan id=p3-merge-ci-economy created=2026-11-25T10:40:57+00:00 phase=3 -->
+### p3-merge-ci-economy · decision · Merged #1669's head 59ee50bf5 instead of waiting for main, on the operator's decision (phase 3)
+
+P3.T1.S1's precondition (#1669 landed on origin/main) was replaced by the operator's decision not to wait:
+origin/feat/ci-economy at 59ee50bf5 was merged into this branch (a merge commit, no rebase). Conflicts in
+gitseam.py and queue_exec.py kept both features (Checkout.leads/carried and BuildConflict.onto beside the
+CI-economy Regen/mirrors work); test_triage_model.py keeps one facts-schema list (FACTS_SCHEMA 18 is #1669's,
+JUDGEMENTS_SCHEMA 14 this branch's, no collision); the fr-triage skill and the two explainers' reviewed
+entries keep both sides, and the opencode/hermes mirrors and cli.md were regenerated, not hand-resolved.
+This phase reads TriageConfig.generated from the merged code.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-cited-paths-dot created=2026-11-25T10:40:57+00:00 phase=3 -->
+### p3-cited-paths-dot · discovery · cited_paths strips a leading dot, so a dot-directory citation reads as its undotted name (phase 3)
+
+`cited_paths` strips "." from each token's ends, so `.opencode/skills/x.md` is cited as
+`opencode/skills/x.md`. The generated: exclusion therefore will not match such a citation by glob.
+A PR's files carry the true path, so a batch with a PR is exact. Left as it is (suggest has the same behaviour).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-25T10:40:57+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+new pure module with no prior shape to clean; the one reuse change is same_file made public in batch.py
