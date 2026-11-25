@@ -22,8 +22,6 @@ from fr.config.space import config_space, rel
 from fr.lenses.model import Lens, LensConfig, LensError, parse_config, parse_lens, read_text
 
 REPO_CONFIG_REL = Path(rel("lenses"))
-PLUGIN_LENSES_REL = _shipped.plugin_rel("lenses")
-PACKAGED_LENSES_DIRNAME = "defaults/lenses"
 SHIPPED_ENV_VAR = _shipped.DEFAULTS_ENV_VAR
 
 
@@ -44,9 +42,10 @@ def shipped_lenses() -> dict[str, Lens]:
         # The wheel always carries them: none found is a broken install, and
         # reading it as "this repo has no lenses" would empty every lens set.
         raise LensError(
-            "no shipped lens manifests were found (looked in $"
-            f"{SHIPPED_ENV_VAR}/lenses, the fr package's {PACKAGED_LENSES_DIRNAME}/ and the "
-            "installed plugin): reinstall fr"
+            f"no shipped lens manifests were found (looked in ${SHIPPED_ENV_VAR}/lenses, "
+            f"${_shipped.LEGACY_ENV_VARS['lenses']}, the fr package's "
+            f"{_shipped.PACKAGED_DEFAULTS_DIRNAME}/lenses/ and the installed plugin): "
+            "reinstall fr"
         )
     out: dict[str, Lens] = {}
     for path in sorted(found.glob("*.yaml")):
