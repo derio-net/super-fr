@@ -253,21 +253,40 @@ def init_state_repo(path: Path) -> None:
     (info / "exclude").write_text(STATE_REPO_EXCLUDE, encoding="utf-8")
 
 
-def remove_worktree(path: Path) -> bool:
-    """`git worktree remove --force` *path*, run in the repository that registered it (read
-    from the worktree itself), then `git worktree prune` there. Whether git took it; a
-    directory that is no linked worktree is left to the caller."""
-    if not (path / ".git").is_file():
-        return False
+def worktree_paths(root: Path) -> list[Path]:
+    """Every worktree registered in the repository of the clone at *root*, the main one
+    first (`git worktree list --porcelain`), as git names them."""
+    out = git(["worktree", "list", "--porcelain"], root)
+    return [
+        Path(line[len("worktree ") :]) for line in out.splitlines() if line.startswith("worktree ")
+    ]
+
+
+def worktree_unsafe(path: Path) -> str | None:
+    """Why the worktree at *path* may not be removed without losing work, or None: local
+    changes (tracked or untracked), or commits at its HEAD that no branch, tag or
+    remote-tracking ref holds (unpushed work a removal would leave to the reflog). A git
+    that cannot say is a reason too: unknown is never clean."""
     try:
-        common = Path(git(["rev-parse", "--git-common-dir"], path).strip())
-    except GitError:
-        return False
-    common = common if common.is_absolute() else (path / common).resolve()
-    if not git_ok(["worktree", "remove", "--force", str(path)], common):
-        return False
-    git_ok(["worktree", "prune"], common)
-    return True
+        if git(["status", "--porcelain", "--untracked-files=all"], path).strip():
+            return "it has local changes"
+        if git(["rev-parse", "--verify", "--quiet", "HEAD"], path).strip():
+            ahead = git(
+                ["rev-list", "--count", "HEAD", "--not", "--branches", "--tags", "--remotes"],
+                path,
+            ).strip()
+            if ahead not in ("", "0"):
+                return f"it has {ahead} commit(s) no branch, tag or remote holds"
+    except GitError as exc:
+        return f"git cannot say whether it is clean ({exc})"
+    return None
+
+
+def remove_clean_worktree(path: Path, root: Path) -> None:
+    """`git worktree remove` *path* (never forced: a worktree git will not remove plainly is
+    kept, consistent with `Checkout.add_worktree`, review r3-f6), run in the clone at
+    *root*. Raises `GitError` when git refuses."""
+    git(["worktree", "remove", str(path)], root)
 
 
 def prune_worktrees(root: Path) -> None:

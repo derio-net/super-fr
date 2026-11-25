@@ -239,7 +239,10 @@ def state_dir(
     first use moves it into the cache (R18, `fr.triage.state_home.settle`), and refuses
     (`TriageError`) when it may not. A `--workspace` that is no clone is refused, naming it.
     The cache's first use makes it a git repository whose `info/exclude` ignores everything,
-    so the state ref is built and pushed there with no product clone.
+    so the state ref is built and pushed there with no product clone; a cache an fr below S1
+    wrote is refused instead (`state_home.refuse_older`): only the move makes it one. The
+    scope's move lock is then held shared for the rest of the process, so no move runs
+    while this command writes (`state_home.hold_shared`).
     With `prepare=False`, only resolve the path: nothing is moved or created. Replacement
     previews use this without changing other commands' defaults.
     """
@@ -259,6 +262,8 @@ def state_dir(
         return target  # pure resolution: nothing moved, nothing created
     if root is not None and not _same_dir(root, target):
         state_home.settle(scope.name, root, target)
+    state_home.hold_shared(target)  # no move runs while this command writes (p6-r7)
+    state_home.refuse_older(target, root)
     state_home.ensure_repo(target)
     return target
 

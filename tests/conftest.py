@@ -341,14 +341,17 @@ _PROTECTED_CLONES = (REPO_ROOT, _main_checkout(REPO_ROOT))
 
 
 @pytest.fixture(autouse=True)
-def _never_move_this_checkouts_triage_state(monkeypatch: pytest.MonkeyPatch) -> None:
+def _never_move_this_checkouts_triage_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """The checkout under test and its main checkout are clones whose old triage state
     (`.fr/triage-state/`) the S1 move must never take into a sandbox home (spec 2026-11-19
     R18): a suite run from the operator's clone would otherwise move live state into a tmp
-    dir that is then deleted."""
+    dir that is then deleted. Each test's shared move locks (`state_home.hold_shared`, held
+    for a process's life) are dropped after it, so the suite holds no file open per test."""
     from fr.triage import state_home
 
     monkeypatch.setattr(state_home, "PROTECTED_SOURCES", list(_PROTECTED_CLONES))
+    yield
+    state_home.release_shared()
 
 
 @pytest.fixture(autouse=True)
