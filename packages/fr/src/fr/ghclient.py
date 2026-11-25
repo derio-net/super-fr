@@ -348,6 +348,14 @@ class GhClient(Protocol):
         required. Spec 2026-10-07-cloud-triage §I, gate checks (p2-r1)."""
         ...
 
+    def branch_rules(self, repo: str, branch: str) -> Any:
+        """*branch*'s effective rules as the forge answers them (GitHub's
+        `GET rules/branches/{branch}`: a list of `{type, parameters, ...}`), raising the
+        forge's own error (the free-plan 403 included) for `fr.config.protection` to judge
+        (spec 2026-11-19-event-driven-a-la-carte R7). A forge that cannot read rules
+        raises `UnsupportedForgeOperation`."""
+        ...
+
     def base_rules(self, repo: str, branch: str) -> BaseRules:
         """The rules on *branch* (merge-train-safety §D, R12): a `merge_queue` rule, and a
         strict required-status-checks rule (rulesets, and classic protection's `strict`).
@@ -585,6 +593,9 @@ class UnsupportedBatchOps:
 
     def required_check_names(self, repo: str, base: str) -> list[str]:
         raise self._unsupported("required_check_names")
+
+    def branch_rules(self, repo: str, branch: str) -> Any:
+        raise self._unsupported("branch_rules")
 
     def base_rules(self, repo: str, branch: str) -> BaseRules:
         return BaseRules()  # a forge without the concepts has neither: not an error (R12)

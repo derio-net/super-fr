@@ -43,6 +43,7 @@ READS = frozenset(
         "commit_checks",
         "required_check_names",
         "base_rules",
+        "branch_rules",
         "open_pr_for_head",
         "open_pr_in_repo",
         "authenticated_login",

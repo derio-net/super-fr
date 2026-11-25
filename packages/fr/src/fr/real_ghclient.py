@@ -475,6 +475,12 @@ class RealGhClient:
     def authenticated_login(self) -> str:
         return _gh.viewer_login()
 
+    def branch_rules(self, repo: str, branch: str) -> Any:
+        """Spec 2026-11-19-event-driven-a-la-carte R7: the `github-rest` backend's route."""
+        from fr.real_ghrestclient import RealGhRestClient
+
+        return RealGhRestClient(host=self._host).branch_rules(repo, branch)
+
     def base_rules(self, repo: str, branch: str) -> BaseRules:
         """Merge-train-safety §D: the `github-rest` backend's REST routes, on this host."""
         from fr.real_ghrestclient import RealGhRestClient

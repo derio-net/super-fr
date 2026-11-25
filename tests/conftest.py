@@ -89,6 +89,15 @@ def _fresh_git_system_config_memo() -> None:
 
 
 @pytest.fixture(autouse=True)
+def _fresh_protection_cache() -> None:
+    """`fr.config.protection` keeps a branch's protection answer for the command; a test's
+    fake forge must never meet an answer a previous test's forge gave."""
+    from fr.config.protection import forget
+
+    forget()
+
+
+@pytest.fixture(autouse=True)
 def _fresh_forge_policy_cache() -> None:
     """`fr.settings.remote.client_policy` keeps a repo's policy per client for minutes; a
     test's fake client must never meet an answer a previous test's client read."""

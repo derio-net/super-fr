@@ -233,6 +233,11 @@ class ClientForge:
         with _forge_errors():
             return self._client.repo_visibility(repo)
 
+    def branch_rules(self, *, repo: str, branch: str) -> Any:
+        """The adapter's effective rules of *branch* (`fr.config.protection` judges them)."""
+        with _forge_errors():
+            return self._client.branch_rules(repo, branch)
+
 
 def scope_repos(
     forge: Forge, scope: Scope, *, repo_limit: int = REPO_LIMIT
