@@ -81,9 +81,14 @@ rows:
     origin:
     - spec:2026-11-24-batch-merge-readiness#R10
     - spec:2026-11-24-batch-merge-readiness#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_fr_debugging_shape.py#test_the_shipped_manifest_passes_workflow_check_and_resolves
+      - super-fr:tests/unit/test_fr_debugging_shape.py#test_review_is_refused_while_a_debug_finding_is_open
+      - super-fr:tests/unit/test_fr_debugging_shape.py#test_the_pr_body_lists_the_debug_journals_findings
+    status: ci
+    notes: 'phase 4: shipped fr-debugging shape, debug journal readers, skill starts
+      and resolves the run'
     verify: none
   - id: batch-merge-live-drive
     capability: Live drive holds an undelivered approved batch PR
