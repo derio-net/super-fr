@@ -1140,7 +1140,7 @@ class RequeuedEvent(_Strict):
     wave: int | None = None
 
 
-QueueEntryKind = Literal["closeout", "export", "archive", "housekeeping"]
+QueueEntryKind = Literal["closeout", "export", "archive", "housekeeping", "operator"]
 
 
 class QueueEntryRef(_Strict):
@@ -1326,6 +1326,35 @@ QueueEvent = Annotated[
     | QueueApprovalEvent,
     Field(discriminator="kind"),
 ]
+
+
+class QueueAddEvent(_Strict):
+    """`fr triage queue add --pr <pr>` by forge login *by*: *repo*'s PR *pr* joins *scope*'s
+    queue as an operator entry, or, for a batch PR of the scope, is only *preapproved*
+    (spec 2026-11-24-wave-queue-gaps R11, R13, R16). Needs judgements schema 14."""
+
+    kind: Literal["queue_add"]
+    at: AwareDatetime
+    repo: str = Field(min_length=1)
+    scope: str = Field(min_length=1)
+    pr: int = Field(ge=1)
+    by: str = Field(min_length=1)
+    preapproved: bool = False
+
+
+class QueueRemoveEvent(_Strict):
+    """`fr triage queue remove --pr <pr>` by forge login *by*: the add of *pr* ends (spec
+    2026-11-24-wave-queue-gaps R11, R16). Needs judgements schema 14."""
+
+    kind: Literal["queue_remove"]
+    at: AwareDatetime
+    repo: str = Field(min_length=1)
+    scope: str = Field(min_length=1)
+    pr: int = Field(ge=1)
+    by: str = Field(min_length=1)
+
+
+QueueRequest = Annotated[QueueAddEvent | QueueRemoveEvent, Field(discriminator="kind")]
 
 
 def _time_ordered(events: list[Any], what: str) -> list[Any]:
@@ -1535,6 +1564,7 @@ class Judgements(_Strict):
     exports: list[Export] = []  # the driver's per-wave state exports; schema 4
     closeouts: list[CollectedCloseout] = []  # collected close-out start markers; schema 10
     queues: list[QueueRecord] = []  # the wave merge queues (wave-merge-queue R24); schema 13
+    queue_requests: list[QueueRequest] = []  # operator entries (wave-queue-gaps R11); 14
 
     @field_validator("issues", mode="before")
     @classmethod
@@ -1629,6 +1659,11 @@ class Judgements(_Strict):
             raise ValueError(
                 f"`exports:` needs schema 4, but this file is stamped schema {self.schema_}"
             )
+        if self.queue_requests and self.schema_ < 14:
+            raise ValueError(
+                f"`queue_requests:` needs schema 14, but this file is stamped schema {self.schema_}"
+            )
+        _time_ordered(list(self.queue_requests), "queue_requests")
         if self.queues and self.schema_ < 13:
             raise ValueError(
                 f"`queues:` needs schema 13, but this file is stamped schema {self.schema_}"

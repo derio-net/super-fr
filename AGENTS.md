@@ -221,7 +221,8 @@ uv workspace monorepo, version lockstepped across every manifest (see
      13 the wave merge queue's `queues:` list, the batch `deferred`/`requeued` events and
      the `patch_id` of an approval and an update (wave-merge-queue R12, R24); current
      writers stamp 14 (read 1–14), adding the `conflict` event's `onto` and `reissue`
-     (wave-queue-gaps R16).
+     and the operator's `queue_requests:` (`queue_add`/`queue_remove`, folded by
+     `fr.triage.queue_requests`; wave-queue-gaps R11, R16).
     `fr triage batch replace` owns scope then pane locks, checkpoints and cross-store
     repair, never replaying uncertain submission; `drive` runs waves to completion.
     `batch_drive.py` is the pure pass (a `Snapshot` in, ordered `closeout`,

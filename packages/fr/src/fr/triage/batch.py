@@ -37,7 +37,9 @@ from fr.triage.model import (
     Judgements,
     Launch,
     PullRequest,
+    QueueAddEvent,
     QueueRecord,
+    QueueRemoveEvent,
     ReplacementEvent,
     TriageConfig,
     _check_schema,
@@ -625,6 +627,21 @@ def save_queues(
     docs = [q.model_dump(mode="json", exclude_defaults=True) for q in queues]
     block = yaml.safe_dump({"queues": docs}, sort_keys=False, allow_unicode=True, width=100)
     return _rewrite(path, "queues", block, unchanged=lambda now: list(now.queues) == list(read))
+
+
+def save_queue_requests(
+    path: Path,
+    requests: Sequence[QueueAddEvent | QueueRemoveEvent],
+    *,
+    read: Sequence[QueueAddEvent | QueueRemoveEvent],
+) -> Judgements:
+    """Write *requests* as `path`'s `queue_requests:` section (spec 2026-11-24-wave-queue-gaps
+    R11): the sibling of `save_queues`, under the same refuse-or-write discipline."""
+    docs = [r.model_dump(mode="json", exclude_defaults=True) for r in requests]
+    block = yaml.safe_dump({"queue_requests": docs}, sort_keys=False, allow_unicode=True, width=100)
+    return _rewrite(
+        path, "queue_requests", block, unchanged=lambda now: list(now.queue_requests) == list(read)
+    )
 
 
 # ------------------------------------------------------------------ launch
