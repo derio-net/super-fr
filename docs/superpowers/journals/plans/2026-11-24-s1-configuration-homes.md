@@ -570,3 +570,143 @@ a89d4a781: an empty rules reply says no ruleset on this branch, that classic bra
 ### p3-r6-resolved · finding [out-of-scope] · resolves p3-r6: workflow kind:cli run: and verification argv become configuration-branch executables once phase 5 moves them into .fr/ (phase 3)
 
 Today workflows and verification manifests still resolve from the product checkout, so phase 3 does not cause it; it becomes real when phase 5 moves them into .fr/, and is carried as the open in-scope phase-5 finding p5-exec-manifests-guard.
+
+<!-- fr:journal kind=decision scope=plan id=p4-cross-space-cases created=2026-11-25T07:02:51+00:00 phase=4 -->
+### p4-cross-space-cases · decision · A cross-space hop creates the configuration branch with every pending file, else removes a file already there, else opens a pull request and keeps the product file (phase 4)
+
+fr/config/migrate.py move_across (spec R10, R11; carried discovery p2-phase4-migration-creates-config).
+1. No `fr-config` / `<branch>-config` yet: the hop CREATES it as one orphan commit holding the
+   settings (the old switch's bytes, R6; the legacy copy stays as it is) and every file the
+   migration would move there (`pending_files`: the R9 kinds at their old paths, quiet's R11
+   `.fr/` files, a profiles file only when already at version 2, at 3), pushed plainly before
+   any product file is removed; a refused push removes nothing (quiet.create_config_branch /
+   stealth.create_config_branch). Only clean tracked files ride along, so an uncommitted edit
+   is never pushed.
+2. The branch holds the file with the same bytes: the product file is removed (in the
+   product's one `chore(fr): migrate` commit). Other bytes: R12's refusal, naming both.
+3. The branch exists without the file: fr opens a pull request (`fr.config.change.open_change`,
+   honouring git.pr) and refuses that artifact naming the URL; the product file stays until the
+   change merges and the migration runs again. A foreign branch is refused
+   (quiet._check_config_refs / stealth.check_config_branch) before anything is written.
+`settings-location` 1 -> 2 runs the same creation from the old switch (via the runner's
+MIGRATING_ROOT, since its file sits in the `fr` worktree); a branch already holding identical
+settings reads as migrated (the old file is R6's legacy copy, not R12's second file).
+
+<!-- fr:journal kind=decision scope=plan id=p4-config-kinds-model created=2026-11-25T07:02:51+00:00 phase=4 -->
+### p4-config-kinds-model · decision · Moved kinds are location-stamped; R12 lets a destination holding the expected bytes finish the move (phase 4)
+
+`ArtifactKind.locators` (oldest first) and `roots(repo_root, index)` say where each locator is
+globbed (the newest one in the configuration space); `location_stamp` reads the newest matching
+locator, `no_stamp_write` is the no-op writer. A relocating `SchemaMigration` names its
+`destination` up front (so R12 and the uncommitted veto are checked at plan time) and may set
+`expected` bytes (profiles 2 -> 3 writes its stamp). A destination that exists with exactly the
+expected bytes is a move that already happened (a crash, or the branch created carrying it), so
+it is finished, not refused. `quiet-config` is stamped by checkout (HEAD `fr-config`: 2) since
+both ends are `.fr/<file>`. A hop that leaves its file untouched (`settings-location`) stages
+nothing (`PlannedAction.untouched`).
+
+<!-- fr:journal kind=decision scope=plan id=p4-profiles-refuse-whole-file created=2026-11-25T07:02:51+00:00 phase=4 -->
+### p4-profiles-refuse-whole-file · decision · Under quiet/stealth the profile declarations are read from the protected tip or refused whole (phase 4)
+
+Review p4-sec-profiles. `.fr/profiles.yaml` decides secrets env-files, mounts, `ops: true` and the
+forge/CI/tracking services fr trusts; no subset is safe to take from an unreviewed branch, so
+`profiles_config` reads it with `protection.read_checked` (require_protected at the fetched tip)
+and an unprotected branch refuses the whole file. Under repo, and for the old product path
+(R13), nothing changes.
+
+<!-- fr:journal kind=decision scope=plan id=p4-scaffold-declaration-path created=2026-11-25T07:02:51+00:00 phase=4 -->
+### p4-scaffold-declaration-path · decision · fr init scaffold writes .fr/profiles.yaml at 3, the old path at 2 while only that exists, and refuses under quiet/stealth once the branch holds it (phase 4)
+
+§E's quiet/stealth pull request for the declaration is not built (no phase of this plan names it):
+under quiet/stealth scaffold keeps writing the product's old `.devcontainer/fr-profiles.yaml` at
+version 2 while the configuration branch has no declarations (the migration carries it), and
+refuses once it has them, naming the pull request path. `fr repair` and `fr migrate v1-to-v2`
+likewise leave a plan-config that lives on the configuration branch alone (repairable_plan_config).
+
+<!-- fr:journal kind=decision scope=plan id=p4-owed-key created=2026-11-25T07:02:51+00:00 phase=4 -->
+### p4-owed-key · decision · s1-refuse-old-paths carries owed_key issue:derio-net/super-fr#1653 (phase 4)
+
+The plan's `fr journal add` command lacked the `owed_key:` body line every owed entry needs; the
+entry is filed under #1653 at deliver, so its key is that issue (no Test Plan step or row owes
+the refusal itself).
+
+<!-- fr:journal kind=discovery scope=plan id=p4-messages-name-old-paths created=2026-11-25T07:02:51+00:00 phase=4 -->
+### p4-messages-name-old-paths · discovery · User-facing messages and docstrings still name .devcontainer/fr-profiles.yaml and docs/superpowers/plan-config.yaml (phase 7) (phase 4)
+
+acceptance/ci.py, acceptance/local.py, services/resolve.py, services/require.py, run/closeout.py,
+_hosts.py, hostclient.py, commands/acceptance_cmd.py and the skills name the old declaration path
+in refusals; tests assert some of them. The readers use the new path; the words are phase 7's
+(spec §H) together with the pages.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-stealth-product-deletion created=2026-11-25T07:02:51+00:00 phase=4 -->
+### p4-stealth-product-deletion · discovery · Under stealth the product's migrate commit deletes paths stealth.FR_OWNED_PATHS lists (phase 4)
+
+A stealth target holding an old-path file (docs/superpowers/models.yaml, .devcontainer/fr-profiles.yaml)
+gets a product commit deleting it; the stealth push guard refuses any commit touching an fr-owned
+prefix, so `fr push` may refuse that deletion. A stealth target should carry no such file (R24),
+so this is rare; not changed here.
+
+<!-- fr:journal kind=finding scope=plan id=p4-stealth-coverage-one-kind created=2026-11-25T07:02:51+00:00 phase=4 state=open review_scope=in -->
+### p4-stealth-coverage-one-kind · finding [open] (reviewer: in scope) · P4.T2.S1's stealth leg is covered for one kind (models-config), not per kind (phase 4)
+
+tests/unit/test_migration_config_kinds.py runs every R9 kind under repo and quiet, and under
+stealth only models-config (the cross-space path is kind-generic: StealthWriter + move_across).
+Parametrizing the stealth test over FILES is the fix if the reviewer wants each kind walked.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-import-cycle created=2026-11-25T07:02:51+00:00 phase=4 -->
+### p4-import-cycle · discovery · config_migration imported fr.settings at module level, an import cycle through fr.isolation.types (phase 4)
+
+Collecting tests/unit/test_ops_profile.py (fr.isolation.scaffold first) failed with a partially
+initialised fr.isolation.types; fixed in 3293ec854 by importing SettingsError late.
+
+<!-- fr:journal kind=finding scope=plan id=p4-sec-symlink created=2026-11-25T07:02:51+00:00 phase=4 state=fixed review_scope=in -->
+### p4-sec-symlink · finding [fixed] (reviewer: in scope) · A cross-space hop read old paths from the working tree, so a symlink to ~/.ssh/... was pushed onto the configuration branch (phase 4)
+
+Self-raised from the automated security review of the committed phase-4 code (HIGH). Fixed in
+3f11fc9cc: `refuse_link` refuses a symlink at the path or any directory between, and a path
+resolving outside the checkout; `source_text` pushes a tracked file's committed blob and refuses
+an uncommitted edit; pending_files refuses the whole creation on a symlink. relocate_file
+refuses a symlinked source too. Tests: test_under_quiet_a_symlinked_old_path_is_refused_and_nothing_is_pushed,
+test_a_symlink_among_the_pending_files_refuses_the_creation,
+test_a_cross_space_hop_pushes_the_committed_bytes_and_refuses_a_dirty_file.
+
+<!-- fr:journal kind=finding scope=plan id=p4-sec-profiles created=2026-11-25T07:02:51+00:00 phase=4 state=fixed review_scope=in -->
+### p4-sec-profiles · finding [fixed] (reviewer: in scope) · profiles_config read .fr/profiles.yaml from the quiet/stealth configuration checkout unguarded (phase 4)
+
+Self-raised from the security review (MEDIUM). Fixed in 3f11fc9cc (decision
+p4-profiles-refuse-whole-file). Test: test_quiet_profile_declarations_are_read_through_the_protection_guard.
+
+<!-- fr:journal kind=finding scope=plan id=p4-sec-manifest-tip created=2026-11-25T07:02:51+00:00 phase=4 state=fixed review_scope=in -->
+### p4-sec-manifest-tip · finding [fixed] (reviewer: in scope) · resolve_workflow checked the branch's protection and then read the working-tree manifest (phase 4)
+
+Self-raised from the security review (MEDIUM). Fixed in 3f11fc9cc: `fr.config.space.read_checked_bytes`
+reads a workflow manifest, a verification strategy (resolve_strategy and strategy_identity) and the
+profile declarations from `protection.read_checked` at the fetched tip whenever they sit in a
+quiet/stealth configuration space; under repo and at R13's product path, the file as it is.
+Test: test_a_quiet_manifest_is_read_from_the_checked_tip_not_the_working_tree.
+
+<!-- fr:journal kind=finding scope=plan id=p5-exec-manifests-guard-resolved created=2026-11-25T07:02:51+00:00 phase=4 state=fixed resolves=p5-exec-manifests-guard -->
+### p5-exec-manifests-guard-resolved · finding [fixed] · resolves p5-exec-manifests-guard: workflow kind:cli run: and verification install/scenario argv become configuration-branch executables once phase 5 moves them into .fr/; they must pass require_protected (whole argv, not only a .fr/ argv[0]) (phase 4)
+
+Closed in phase 4 (3f11fc9cc). The guard is at the manifest, not at argv[0]: a workflow
+manifest or verification strategy resolved from a quiet/stealth configuration space is read
+only from the protected branch's fetched, reviewed tip (`read_checked_bytes` ->
+`protection.read_checked`, which runs `require_protected`), so every `kind: cli` `run:` argv
+`fr run advance` executes and every `install`/`scenario` argv the walk renders comes from a
+reviewed, protected manifest as a whole; an unprotected branch refuses the whole manifest.
+Under repo nothing changes.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-11-25T07:02:51+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+the relocation is one runner path (_relocate) and one disk helper (relocate_file) shared by every relocating hop; R12's check is one function (both_paths_refusal) used at plan and apply time, so there was nothing duplicated to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-11-25T07:02:51+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+every moved kind is generated from the one MOVED table in fr.config.migrate (registry entries and hops alike), and every reader resolves through fr.config.space.located, so no per-kind copy was left to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t3 created=2026-11-25T07:02:51+00:00 phase=4 -->
+### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
+
+legacy() is one function behind located(); the owed entry is a journal write, so there was no code to clean
