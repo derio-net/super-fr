@@ -7005,12 +7005,16 @@ class _Driver:
             return why
         from fr.config.protection import refusal_at
 
-        why = refusal_at(  # R7: the queue gates, versions and runs post_merge on configuration
-            self.checkout(repo).path, self.client(facts, repo),
-            "run the merge queue (gate_checks, version commands, post_merge)",
-        )  # fmt: skip
-        if why is not None:
-            return why
+        # R7: the queue gates, versions and runs post_merge on configuration. A repo whose
+        # collected config has no `queue:` (none declared, or collect dropped it from an
+        # unprotected configuration branch) is refused below for the missing `ci`.
+        if facts.config_for(repo).queue is not None:
+            why = refusal_at(
+                self.checkout(repo).path, self.client(facts, repo),
+                "run the merge queue (gate_checks, version commands, post_merge)",
+            )  # fmt: skip
+            if why is not None:
+                return why
         try:
             rules = self._base_rules(facts, repo)
         except DefaultBranchUnknown as exc:

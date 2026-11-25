@@ -295,7 +295,10 @@ def test_the_drivers_queue_is_held_on_an_unprotected_fr_config(
         triage_batch_cmd._Driver, "_base_rules",
         lambda self, facts, repo: pytest.fail("held before the base rules are read"),
     )  # fmt: skip
-    why = driver._queue_refusal(SimpleNamespace(), "o/r")
+    from fr.triage.model import QueueBlock, TriageConfig
+
+    facts = SimpleNamespace(config_for=lambda repo: TriageConfig(queue=QueueBlock(ci="push")))
+    why = driver._queue_refusal(facts, "o/r")
     assert why is not None and "merge queue" in why and FIX in why
 
 
