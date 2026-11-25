@@ -222,6 +222,19 @@ const DIFFERING_SWITCHES = "placement: two switches that differ";
  * blob, so byte for byte, as fr compares them, R6) read as a text `switchEnabled` calls
  * fr-enabled and `switchIsQuiet` never calls quiet (fail closed). Bash: `_fr_read_switch`.
  */
+/** The sentence a deny appends when the two quiet switches differ (R6). Bash:
+ * `FR_SWITCH_DIFFER_NOTE`, the same text. */
+export const SWITCH_DIFFER_NOTE =
+  "The two quiet switches (origin/fr-config:.fr/settings.yaml and origin/fr:settings.yaml) differ, " +
+  "so this repo is gated: run `fr settings show` to bring the old copy in step after a reviewed " +
+  "change to fr-config, or make the two identical by hand.";
+
+/** `SWITCH_DIFFER_NOTE` (with a leading space) when *toplevel*'s two switches differ, else "". */
+export function switchDifferNote(toplevel: string): string {
+  if (!switchRefMaybe(toplevel)) return "";
+  return readSwitch(toplevel) === DIFFERING_SWITCHES ? ` ${SWITCH_DIFFER_NOTE}` : "";
+}
+
 export function readSwitch(toplevel: string): string | undefined {
   const [fresh, old] = SWITCH_LOCATIONS.map((at) => git(toplevel, "rev-parse", "--verify", "--quiet", at));
   if (fresh !== undefined && old !== undefined && fresh !== old) return DIFFERING_SWITCHES;

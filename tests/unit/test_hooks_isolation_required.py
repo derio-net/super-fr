@@ -368,3 +368,21 @@ def test_a_non_ascii_name_beside_the_protected_files_is_refused(tmp_path: Path, 
     _star_allow(repo)
     assert decision(run_hook(payload(repo / name))) == "deny"
     assert allowed(run_hook(payload(repo / "docs" / "café.md")))
+
+
+def test_a_deny_over_differing_switches_names_the_sync(tmp_path: Path) -> None:
+    """Spec R6, decision p2-config-changes-by-pr: the hook cannot write, so it names the
+    fr command that brings the old copy in step."""
+    from tests.unit.test_isolation_decision_core import push_config_switch, quiet_repo
+
+    repo = quiet_repo(tmp_path, settings="placement: quiet\n")
+    env = {"PATH": "/usr/bin:/bin"}
+    reason = json.loads(run_hook(payload(repo / "src.py"), env).stdout)["hookSpecificOutput"][
+        "permissionDecisionReason"
+    ]
+    assert "fr settings show" not in reason
+    push_config_switch(repo, "placement: quiet\n# reviewed\n")
+    reason = json.loads(run_hook(payload(repo / "src.py"), env).stdout)["hookSpecificOutput"][
+        "permissionDecisionReason"
+    ]
+    assert "fr settings show" in reason and "origin/fr-config:.fr/settings.yaml" in reason

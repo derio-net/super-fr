@@ -204,12 +204,7 @@ def _read(root: Path) -> Switch | None:
     new, old = switch_texts(root)
     result: Switch | None = None
     if new is not None and old is not None and new[1] != old[1]:
-        raise SettingsError(
-            f"placement: the two quiet switches differ: {_SOURCE} ({new[0][:12]}) and "
-            f"{_LEGACY_SOURCE} ({old[0][:12]}). fr writes both with the same bytes until "
-            "the old one is retired (R6), so one was edited by hand: make them identical "
-            f"(the `{CONFIG_BRANCH}` file is the one fr reads) and push both"
-        )
+        _settle_differing(root, new, old)
     if new is not None:
         parsed = parse_switch_text(new[1], source=_SOURCE, branch=CONFIG_BRANCH)
         if parsed is not None:
@@ -220,6 +215,108 @@ def _read(root: Path) -> Switch | None:
             result = Switch(parsed[0], parsed[1], old[0], paths.LEGACY_SWITCH_REF, _LEGACY_SOURCE)
     _CACHE[key] = result
     return result
+
+
+_READ_ONLY: list[bool] = [False]
+"""Set by `read_only()`: a reader that must not write (the hooks' `fr settings paths
+--no-create`) refuses a lagging legacy copy instead of bringing it in step."""
+_SYNCED: set[str] = set()
+"""Common dirs whose lagging legacy switch this process already brought in step (said once)."""
+_HISTORY_LIMIT: Final = 500
+"""How far back fr-config's first-parent history is searched for the legacy copy's bytes."""
+
+
+@contextmanager
+def read_only() -> Iterator[None]:
+    """Within it, `_read` never writes: a lagging legacy copy refuses (naming the command
+    that brings it in step) rather than being pushed."""
+    before = _READ_ONLY[0]
+    _READ_ONLY[0] = True
+    try:
+        yield
+    finally:
+        _READ_ONLY[0] = before
+
+
+def history_blobs(cwd: Path, ref: str, rel: str, limit: int = _HISTORY_LIMIT) -> set[str]:
+    """Every blob *rel* held on *ref*'s first-parent history (its last *limit* commits
+    that touched it), read from one `git log --raw`."""
+    done = _git(
+        cwd, "log", "--first-parent", "--no-abbrev", "--format=", "--raw", "-n", str(limit),
+        ref, "--", rel,
+    )  # fmt: skip
+    blobs: set[str] = set()
+    for line in done.stdout.splitlines() if done.returncode == 0 else []:
+        fields = line.split("\t", 1)[0].split()
+        if len(fields) >= 4 and line.startswith(":"):
+            blobs.update(b for b in fields[2:4] if b.strip("0"))
+    return blobs
+
+
+def legacy_lags(cwd: Path, ref: str, rel: str, legacy_blob: str | None) -> bool:
+    """The legacy copy's bytes (*legacy_blob*) are those *rel* held at some commit on
+    *ref*'s first-parent history: the configuration branch advanced through a reviewed
+    change (spec 2026-11-19-event-driven-a-la-carte R6, §B "Older readers") and the old
+    file has not followed yet."""
+    return legacy_blob is not None and legacy_blob in history_blobs(cwd, ref, rel)
+
+
+def _blob(cwd: Path, spec: str) -> str | None:
+    done = _git(cwd, "rev-parse", "--verify", "--quiet", spec)
+    if done.returncode != 0:
+        return None
+    return done.stdout.strip() or None
+
+
+def settled_message(root: Path, text: str, summary: str) -> str:
+    """`chore(fr): <summary>` through the commit templates of the settings *text* (the
+    reviewed configuration being brought in step). `fr_message` would read the settings,
+    which is the very read that is settling: it would recurse."""
+    from fr.git_policy.templates import FrCommitKind, _with_trailer, render_subject
+    from fr.settings.load import parse_settings_text
+
+    # No run issue either: `run_issue` resolves the artifact space, which reads the switch.
+    settings = parse_settings_text(text, source="the configuration branch", servable=False)
+    kind: FrCommitKind = "bookkeeping"
+    return _with_trailer(render_subject(settings, "chore", "fr", summary, None), kind)
+
+
+def _settle_differing(root: Path, new: tuple[str, str], old: tuple[str, str]) -> None:
+    """The two switches differ (R6). When the old one is an earlier version of the new
+    one, fr brings it in step (once per process, saying so) and the read proceeds; a read
+    that may not write refuses, naming the command that does. Any other difference
+    refuses, naming both refs and both remedies."""
+    old_blob = _blob(root, _LEGACY_SOURCE)
+    if legacy_lags(root, paths.SWITCH_REF, paths.SWITCH_SETTINGS, old_blob):
+        if _READ_ONLY[0]:
+            raise SettingsError(
+                f"placement: the old quiet switch {_LEGACY_SOURCE} ({old[0][:12]}) lags "
+                f"{_SOURCE} ({new[0][:12]}): a reviewed change advanced `{CONFIG_BRANCH}`. "
+                "Run `fr settings show` (any fr command that reads the settings) to bring "
+                "the old copy in step; this read does not write"
+            )
+        message = settled_message(
+            root, new[1], f"bring the old quiet switch in step with {CONFIG_BRANCH}"
+        )
+        write_legacy(root, new[1], message)
+        common = paths._common_dir(root)
+        key = str(common)
+        if key not in _SYNCED:
+            _SYNCED.add(key)
+            print(
+                f"fr: brought {_LEGACY_SOURCE} in step with {_SOURCE} (a reviewed change "
+                f"advanced `{CONFIG_BRANCH}`; older fr read the old file, R6)",
+                file=sys.stderr,
+            )
+        return
+    raise SettingsError(
+        f"placement: the two quiet switches differ: {_SOURCE} ({new[0][:12]}) and "
+        f"{_LEGACY_SOURCE} ({old[0][:12]}), and the old one holds no earlier version of "
+        f"the new one, so fr cannot tell which is meant (R6). Either make the old file "
+        f"an earlier version again and run `fr settings show`, which brings it in step "
+        f"after a reviewed change to `{CONFIG_BRANCH}`; or, if neither is right, edit both "
+        f"by hand to the same bytes (`{CONFIG_BRANCH}` through a pull request) and push them"
+    )
 
 
 def parse_switch_text(
@@ -496,15 +593,19 @@ def config_tree_problem(names: list[str], depth: int) -> str | None:
     `fr-config`) or outside `<one segment>/.fr/` (*depth* 1, a stealth `<branch>-config`),
     or None. Spec 2026-11-19-event-driven-a-la-carte §B: the tree is `.fr/`. The hooks'
     `_fr_config_tree_ok` and marker.ts `configTreeOk` are the same rule."""
+    from fr.config.space import SPACE_DIR
+
+    top = f"{SPACE_DIR}/"
+    below = f"/{SPACE_DIR}/"
     for name in names:
         if not name:
             continue
         if depth == 0:
-            if not (name.startswith(".fr/") and len(name) > 4):
+            if not (name.startswith(top) and len(name) > len(top)):
                 return name
             continue
-        at = name.find("/.fr/")
-        if at <= 0 or "/" in name[:at] or len(name) <= at + 5:
+        at = name.find(below)
+        if at <= 0 or "/" in name[:at] or len(name) <= at + len(below):
             return name
     return None
 
@@ -519,7 +620,9 @@ def refuse_foreign_config(
     sha = _git(cwd, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}").stdout.strip()
     if not sha:
         return
-    where = ".fr/" if depth == 0 else "<target-dir>/.fr/"
+    from fr.config.space import SPACE_DIR
+
+    where = f"{SPACE_DIR}/" if depth == 0 else f"<target-dir>/{SPACE_DIR}/"
     listed = _git(cwd, "ls-tree", "-r", "-z", "--name-only", sha)
     if listed.returncode != 0:
         raise SettingsError(
@@ -976,20 +1079,128 @@ def write_switch(
     *,
     network: Network | None = None,
     push: Push | None = None,
-) -> None:
-    """Write the quiet switch: `.fr/settings.yaml` on `fr-config`, then the same bytes as
-    the root `settings.yaml` on `fr` (R6), each committed and pushed (plain, never forced),
-    each only when it differs. A branch origin does not have yet is created as an orphan.
+) -> str | None:
+    """Write the quiet switch (R5, R6; plan decision p2-config-changes-by-pr).
 
-    The legacy copy on `fr` is written until the release R14's owed entry names
+    When origin has no `fr-config` yet, this is its creation (`fr settings init`, the
+    migration): `.fr/settings.yaml` on a new orphan `fr-config`, then the same bytes as
+    the root `settings.yaml` on `fr` (`write_legacy`). When `fr-config` already holds
+    *text*, only the legacy copy is landed, so a retry after a partial failure converges.
+    Any other change to an existing `fr-config` is reviewed: fr opens a pull request from
+    `fr-config-change/<slug>` (`fr.config.change.open_change`) and returns its URL; the
+    legacy copy follows after the merge (`_settle_differing`).
+
+    The legacy copy is written until the release R14's owed entry names
     (`s1-refuse-old-paths`); that release drops it."""
     root = Path(root)
-    for branch, tracking, rel in (
-        (CONFIG_BRANCH, paths.SWITCH_REF, paths.SWITCH_SETTINGS),
-        (QUIET_BRANCH, paths.MEMORY_REF, paths.LEGACY_SWITCH_SETTINGS),
-    ):
-        write_branch_file(root, branch, tracking, rel, text, message, network=network, push=push)
+    net = network or _default_network(root)
+    _fetch_both(root, net, None)
+    common = paths._common_dir(root)
+    exists = common is not None and _ref_sha(common, paths.SWITCH_REF) is not None
+    new, _ = switch_texts(root)
+    if exists and (new is None or new[1] != text):
+        from fr.config.change import open_change
+
+        _check_config_refs(root)
+        url = open_change(
+            root,
+            remote=_git(root, "config", "--get", "remote.origin.url").stdout.strip(),
+            base_branch=CONFIG_BRANCH,
+            base_ref=paths.SWITCH_REF,
+            rel=paths.SWITCH_SETTINGS,
+            text=text,
+            message=message,
+        )
+        print(
+            f"fr: opened {url}: the change to {paths.SWITCH_SETTINGS} waits for review on "
+            f"`{CONFIG_BRANCH}`; once it merges, fr brings the old copy on `{QUIET_BRANCH}` "
+            "in step",
+            file=sys.stderr,
+        )
+        _CACHE.clear()
+        return url
+    if not exists:
+        write_branch_file(
+            root, CONFIG_BRANCH, paths.SWITCH_REF, paths.SWITCH_SETTINGS, text, message,
+            network=net, push=push,
+        )  # fmt: skip
+    write_legacy(root, text, message, network=net, push=push)
     _CACHE.clear()
+    return None
+
+
+_LEGACY_ATTEMPTS: Final = 3
+"""How many times `write_legacy` refetches and retries a push origin refused as not a
+fast-forward (another clone pushed to `fr` meanwhile)."""
+
+
+class _NotFastForwardError(SettingsError):
+    """Origin refused a push because its branch moved meanwhile."""
+
+
+def write_legacy(
+    root: Path,
+    text: str,
+    message: str,
+    *,
+    network: Network | None = None,
+    push: Push | None = None,
+) -> None:
+    """Make the root `settings.yaml` on `fr` hold *text* (R6), robust against the memory
+    branch moving: fetch `fr` immediately before committing, bring the local `fr` onto it
+    (fast-forward, or a rebase of fr's own unpushed commits), commit, push; a push refused
+    as not a fast-forward is retried a bounded number of times. Nothing is ever forced.
+    *push* (`fr placement move`'s own pusher) replaces the plain push; its refusal is not
+    retried."""
+    root = Path(root)
+    net = network or _default_network(root)
+    for _ in range(_LEGACY_ATTEMPTS):
+        fetched = net(["git", "fetch", "--quiet", "--no-tags", "origin", FETCH_REFSPEC])
+        if fetched.returncode != 0:
+            probe = net(["git", "ls-remote", "--exit-code", "origin", QUIET_REF])
+            if probe.returncode != 2:
+                raise unreachable((fetched.stderr or "git fetch failed").strip(), None)
+        _onto_memory(root)
+        try:
+            write_branch_file(
+                root, QUIET_BRANCH, paths.MEMORY_REF, paths.LEGACY_SWITCH_SETTINGS, text,
+                message, network=net, push=push,
+            )  # fmt: skip
+            return
+        except _NotFastForwardError:
+            continue
+    raise SettingsError(
+        f"placement quiet: origin's `{QUIET_BRANCH}` kept moving while fr wrote the old "
+        f"switch ({paths.LEGACY_SWITCH_SETTINGS}); {_LEGACY_ATTEMPTS} attempts were refused "
+        "as not fast-forwards. Nothing was forced; run the command again"
+    )
+
+
+def _onto_memory(root: Path) -> None:
+    """Bring the local `fr` (its worktree) onto the freshly fetched `origin/fr`: a
+    fast-forward when behind, a rebase of fr's own unpushed commits when the two
+    diverged. A rebase that stops refuses (and is aborted), never resolved by guessing."""
+    common = paths._common_dir(root)
+    if common is None or _ref_sha(common, paths.MEMORY_REF) is None:
+        return
+    if _git(root, "rev-parse", "--verify", "--quiet", QUIET_REF).returncode != 0:
+        return
+    wt = ensure_worktree(root)
+    with fr_worktree_lock(wt):
+        if _git(wt, "merge-base", "--is-ancestor", "HEAD", paths.MEMORY_REF).returncode == 0:
+            _git(wt, "merge", "--ff-only", "--quiet", paths.MEMORY_REF)
+            return
+        if _git(wt, "merge-base", "--is-ancestor", paths.MEMORY_REF, "HEAD").returncode == 0:
+            return
+        done = _git(wt, "rebase", "--quiet", paths.MEMORY_REF)
+        if done.returncode != 0:
+            _git(wt, "rebase", "--abort")
+            raise SettingsError(
+                f"placement quiet: the local `{QUIET_BRANCH}` holds unpushed commits that do "
+                f"not rebase onto origin/{QUIET_BRANCH} "
+                f"({(done.stderr or done.stdout).strip()}); fr refuses rather than guess. "
+                f"Inspect them (`git -C {wt} log origin/{QUIET_BRANCH}..HEAD`) and retry"
+            )
 
 
 def write_branch_file(
@@ -1046,7 +1257,13 @@ def write_branch_file(
     if pushed.returncode != 0:
         if created is not None:  # never leave an unrelated root behind to be adopted
             _git(root, "update-ref", "-d", f"refs/heads/{branch}", created)
-        raise SettingsError(
+        why = (pushed.stderr or pushed.stdout or "").lower()
+        refused = (
+            _NotFastForwardError
+            if ("non-fast-forward" in why or "fetch first" in why)
+            else SettingsError
+        )
+        raise refused(
             f"placement quiet: origin refused the push of `{branch}` ({rel}): "
             f"{(pushed.stderr or pushed.stdout or 'git push failed').strip()}. Nothing was "
             "forced; fix the remote (or pull its changes) and retry"

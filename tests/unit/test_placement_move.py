@@ -352,8 +352,14 @@ def _land(root: Path, branch: str) -> None:
 
 
 def test_move_back_to_repo_copies_through_a_branch_and_switches_by_a_new_commit(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from fr.config import change
+
+    opened: list[str] = []
+    monkeypatch.setattr(
+        change, "open_pr", lambda remote, head, base, title, body: opened.append(head) or "u"
+    )
     root = repo_with_artifacts(tmp_path)
     before = fold(root, ref="refs/remotes/origin/main", include_pending=False)
     _run(root, "quiet")
@@ -366,6 +372,11 @@ def test_move_back_to_repo_copies_through_a_branch_and_switches_by_a_new_commit(
     assert quiet.read_switch(root) is not None  # not switched before the copy merged
 
     _land(root, "chore/fr-placement-move-to-repo")
+    # spec §B (decision p2-config-changes-by-pr): the switch on fr-config changes by review
+    out = "\n".join(_run(root, "repo"))
+    assert "paused" in out and opened and opened[0].startswith("fr-config-change/")
+    assert quiet.read_switch(root) is not None  # not switched before the PR merged
+    git(origin, "update-ref", "refs/heads/fr-config", git(origin, "rev-parse", opened[0]).strip())
     _run(root, "repo")
     assert quiet.read_switch(root) is None
     new_tip = git(origin, "rev-parse", "fr").strip()

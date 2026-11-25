@@ -88,5 +88,6 @@ if [ -n "$drift" ]; then
   deny "fr-isolation: edit to \`$file\` blocked — $drift (#553)"
   exit 0
 fi
-deny "fr-isolation: edit to \`$file\` blocked — not inside an fr-isolation workspace. Enter isolation (\`fr isolation up --branch <branch>\` / fr-goal) and edit in the worktree; or add the path to \`.fr/isolation-allow\`; or set FR_BASE_OK=1 for a deliberate base-clone edit. See ~/.claude/rules/fr-isolation-required.md (#328)."
+note=$(fr_switch_differ_note "$file")
+deny "fr-isolation: edit to \`$file\` blocked — not inside an fr-isolation workspace.${note:+ $note} Enter isolation (\`fr isolation up --branch <branch>\` / fr-goal) and edit in the worktree; or add the path to \`.fr/isolation-allow\`; or set FR_BASE_OK=1 for a deliberate base-clone edit. See ~/.claude/rules/fr-isolation-required.md (#328)."
 exit 0

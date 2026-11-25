@@ -265,7 +265,7 @@ def stealth_config_space(root: Path, tracking: str, target: str) -> ConfigSpace:
     )
 
 
-def write_settings(space: ConfigSpace, text: str, *, message: str) -> None:
+def write_settings(space: ConfigSpace, text: str, *, message: str) -> str | None:
     """The one writer of the settings file (spec 2026-11-19-event-driven-a-la-carte R6).
 
     Under `repo` it writes `.fr/settings.yaml` in the product working tree (committing is
@@ -274,22 +274,28 @@ def write_settings(space: ConfigSpace, text: str, *, message: str) -> None:
     on `<branch>-config`), then the same bytes at the old path (the root `settings.yaml`
     on `fr`, `<target-dir>/settings.yaml` on `<branch>`), so an fr below S1 and older hooks
     still read the placement. The legacy copy ends at the release R14's owed entry
-    `s1-refuse-old-paths` names."""
+    `s1-refuse-old-paths` names.
+
+    That is the creation (and a retry that only lands the legacy copy). A change to a
+    configuration branch that already exists is reviewed (spec §B, plan decision
+    p2-config-changes-by-pr): fr opens a pull request from `fr-config-change/<slug>` and
+    returns its URL, None otherwise."""
     if space.placement == _QUIET:
         from fr.placement.quiet import write_switch
 
-        write_switch(space.product, text, message)
-        return
+        return write_switch(space.product, text, message)
     if space.placement == _STEALTH:
         from fr.placement.stealth import parse_ref, write_target_settings
 
         assert space.tracking is not None
         target = space.prefix.removesuffix(f"/{SPACE_DIR}")
-        write_target_settings(space.product, parse_ref(space.tracking), target, text, message)
-        return
+        return write_target_settings(
+            space.product, parse_ref(space.tracking), target, text, message
+        )
     path = space.file("settings")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
+    return None
 
 
 def config_space(root: Path) -> ConfigSpace:

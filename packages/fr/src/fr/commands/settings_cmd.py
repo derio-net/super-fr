@@ -246,13 +246,17 @@ def init_stealth(root: Path, text: str) -> str:
     if old is not None:
         # An existing target (plan decision p2-create-at-init-and-migration): its space
         # is created here, holding the old file's bytes; the old file stays in step (R6).
-        write_settings(space, old, message=message)
+        url = write_settings(space, old, message=message)
+        if url is not None:
+            return f"opened {url}: it adds {target}/{stealth.TARGET_SETTINGS} to {cref.text}"
         return (
             f"moved {target}/{stealth.LEGACY_TARGET_SETTINGS} on {ref.text} to {target}/"
             f"{stealth.TARGET_SETTINGS} on {cref.text} (byte for byte); the old file stays, "
             "in step, for older fr (R6)"
         )
-    write_settings(space, render_init("stealth"), message=message)
+    url = write_settings(space, render_init("stealth"), message=message)
+    if url is not None:
+        return f"opened {url}: it adds {target}/{stealth.TARGET_SETTINGS} to {cref.text}"
     return (
         f"pushed {target}/{stealth.TARGET_SETTINGS} to {cref.text} and "
         f"{target}/{stealth.LEGACY_TARGET_SETTINGS} to {ref.text}: start a run with "
@@ -340,8 +344,13 @@ def paths_cmd(
     if shell == as_json:
         typer.echo("pass exactly one of --shell or --json", err=True)
         raise typer.Exit(2)
-    try:
-        answers = paths_answers(_toplevel(), create=not no_create)
+    from contextlib import nullcontext
+
+    from fr.placement.quiet import read_only
+
+    try:  # --no-create is what hooks call: it never writes, not even the R6 legacy copy
+        with read_only() if no_create else nullcontext():
+            answers = paths_answers(_toplevel(), create=not no_create)
     except SettingsError as e:
         typer.echo(f"{PATHS_REFUSAL_PREFIX}{e}", err=True)
         raise typer.Exit(2) from e

@@ -740,6 +740,26 @@ fr_isolation_drift_reason() {
   printf '%s\n' "this workspace was registered for $_fr_marker_branch but has $_fr_head_branch checked out, so fr's state no longer describes it. Switch back with \`git switch $_fr_marker_branch\`; to keep working on $_fr_head_branch, then give it its own workspace with \`fr isolation up --branch $_fr_head_branch\`."
 }
 
+# FR_SWITCH_DIFFER_NOTE — the sentence a deny appends when the two quiet switches differ
+# (spec 2026-11-19-event-driven-a-la-carte R6): the hooks cannot write, so they name the fr
+# command that brings the old copy in step. marker.ts `SWITCH_DIFFER_NOTE` is the same text.
+FR_SWITCH_DIFFER_NOTE="The two quiet switches (origin/fr-config:.fr/settings.yaml and origin/fr:settings.yaml) differ, so this repo is gated: run \`fr settings show\` to bring the old copy in step after a reviewed change to fr-config, or make the two identical by hand."
+
+# fr_switch_differ_note <file> — prints FR_SWITCH_DIFFER_NOTE when the file's repo has
+# both switches and they differ by blob (as `_fr_read_switch` reads them), else nothing.
+fr_switch_differ_note() {
+  _fr_dir=$(dirname "$1")
+  while [ ! -d "$_fr_dir" ] && [ "$_fr_dir" != "/" ] && [ "$_fr_dir" != "." ]; do
+    _fr_dir=$(dirname "$_fr_dir")
+  done
+  _fr_rtop=$(_fr_toplevel_of "$_fr_dir") || return 0
+  fr_switch_ref_maybe "$_fr_rtop" || return 0
+  fr_git_resolve || return 0
+  _fr_read_switch "$_fr_rtop" || return 0
+  [ "$_fr_switch" = 'placement: two switches that differ' ] || return 0
+  printf '%s\n' "$FR_SWITCH_DIFFER_NOTE"
+}
+
 # fr_isolation_marker_valid <dir>
 #   0 -> dir's git toplevel IS a genuine fr isolation workspace (valid marker)
 #   1 -> it is not (plain repo, base clone, non-repo, stale/forged marker)

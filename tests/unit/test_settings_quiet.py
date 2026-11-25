@@ -157,22 +157,16 @@ def test_init_quiet_refuses_when_origin_already_has_fr_config(repo: Path, tmp_pa
     assert git(tmp_path / "origin.git", "branch", "--list", "fr").strip() == ""
 
 
-def test_write_settings_rewrites_both_switches_and_they_never_differ(
+def test_write_settings_again_with_the_same_text_changes_nothing(
     repo: Path, tmp_path: Path
 ) -> None:
     from fr.config.space import quiet_config_space, write_settings
 
     assert _fr(repo, "settings", "init", "--quiet").exit_code == 0
-    text = "schema: 1\nplacement: quiet\nforge:\n  labels: off\n"
-    write_settings(quiet_config_space(repo), text, message="chore(fr): settings")
     origin = tmp_path / "origin.git"
-    assert git(origin, "show", "refs/heads/fr-config:.fr/settings.yaml") == text
-    assert git(origin, "show", "refs/heads/fr:settings.yaml") == text
-    eff = load_settings(repo)
-    assert eff.settings.forge.labels == "off" and eff.ref == "refs/remotes/origin/fr-config"
-    # the second write is a no-op: no new commit on either branch
+    text = git(origin, "show", "refs/heads/fr-config:.fr/settings.yaml")
     heads = [git(origin, "rev-parse", b).strip() for b in ("fr-config", "fr")]
-    write_settings(quiet_config_space(repo), text, message="chore(fr): settings")
+    assert write_settings(quiet_config_space(repo), text, message="chore(fr): settings") is None
     assert [git(origin, "rev-parse", b).strip() for b in ("fr-config", "fr")] == heads
 
 

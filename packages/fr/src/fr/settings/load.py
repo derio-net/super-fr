@@ -335,12 +335,9 @@ def _stealth(root: Path) -> EffectiveSettings | None:
     )
     new_text = _show(clone, new_sha, new_rel) if new_sha is not None else None
     if new_text is not None and old_text is not None and new_text != old_text:
-        raise SettingsError(
-            f"placement stealth: the two settings files differ: {cref.text}:{new_rel} "
-            f"({new_sha[:12] if new_sha else ''}) and {ref.text}:{old_rel} ({sha[:12]}). fr "
-            "writes both with the same bytes until the old one is retired (R6): make them "
-            f"identical (the `{cref.branch}` file is the one fr reads) and push both"
-        )
+        from fr.placement.stealth import settle_differing_target
+
+        settle_differing_target(root, ref, target, new_text, f"{new_sha or ''}"[:12], sha[:12])
     text: str | None
     if new_text is not None and new_sha is not None:
         text, rel_path, sha, source = new_text, new_rel, new_sha, f"{cref.text}:{new_rel}"

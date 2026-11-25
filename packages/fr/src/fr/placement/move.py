@@ -1192,7 +1192,9 @@ def _switch_text(root: Path, ref: str, rel: str) -> str | None:
     return out.decode() if out else None
 
 
-def _settle_switch(root: Path, rewrite: Callable[[str | None], str | None], subject: str) -> None:
+def _settle_switch(
+    root: Path, rewrite: Callable[[str | None], str | None], subject: str, to: str
+) -> None:
     """Make the switch say what *rewrite* wants, on `fr-config` and in step on `fr` (S1 R5,
     R6), then push both. Idempotent mid-step (review p7-r2): the decision reads the LOCAL
     branches (`fr-config` first, then `fr`, each fast-forwarded to origin first), so a
@@ -1211,11 +1213,18 @@ def _settle_switch(root: Path, rewrite: Callable[[str | None], str | None], subj
     text = rewrite(current)
     if text is None:
         text = current
+    url = None
     if text is not None:
-        quiet.write_switch(
+        url = quiet.write_switch(
             root, text, _fr_message(root, subject), push=lambda r, b: _push_branch(r, b)
         )
     paths_cache_reset()
+    if url is not None:
+        # spec §B, decision p2-config-changes-by-pr: an existing fr-config changes by review
+        raise _PausedError(
+            f"paused: opened {url} to change the switch on `{quiet.CONFIG_BRANCH}`; merge it, "
+            f"then re-run `fr placement move --to {to}` to finish"
+        )
 
 
 def _to_quiet(text: str | None) -> str | None:
@@ -1260,7 +1269,9 @@ def _switch(ctx: Ctx) -> None:
         return
     ctx.check_source("switch")
     if ctx.to == paths.QUIET:
-        _settle_switch(root, _to_quiet, "chore(fr): switch this repo to the quiet placement")
+        _settle_switch(
+            root, _to_quiet, "chore(fr): switch this repo to the quiet placement", ctx.to
+        )
         ctx.emit("switched: origin/fr says placement: quiet")
         return
     if ctx.to == paths.REPO:
@@ -1277,7 +1288,9 @@ def _switch(ctx: Ctx) -> None:
     if ctx.source == paths.QUIET:
         if ctx.to == paths.STEALTH:
             refuse_live_quiet(root)
-        _settle_switch(root, _to_repo, "chore(fr): switch this repo back to the repo placement")
+        _settle_switch(
+            root, _to_repo, "chore(fr): switch this repo back to the repo placement", ctx.to
+        )
         ctx.emit("switched: origin/fr says placement: repo (a new commit; nothing forced)")
     if ctx.to == paths.STEALTH:
         ctx.emit(

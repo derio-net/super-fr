@@ -61,7 +61,7 @@ R2. One module resolves the configuration space, and every reader of repo config
 R3. Under `quiet` and `stealth`, a feature branch cannot change repo configuration: every read that compares a branch's `.fr/` with the default branch's reads the configuration branch's tip for both sides. A change to `.fr/` there is a pull request to the configuration branch.
 R4. Under `quiet` and `stealth`, the product checkout's own `.fr/` is ignored except for `isolation-allow` (R8), and fr says so once per command, naming the ignored files.
 R5. Under `quiet` the switch and settings are `.fr/settings.yaml` on `fr-config`; under `stealth` they are `<target-dir>/.fr/settings.yaml` on `<branch>-config`. Every reader of the switch, the edit-gate hooks on every harness included, recognises it there, and the edit gate treats the `fr-config` worktree and the stealth configuration clone as placement write targets, as it treats the `fr` worktree and the tracking clone today.
-R6. Until the release named in R14, fr also keeps the old settings file (the root `settings.yaml` on `fr`, `<target-dir>/settings.yaml` on the tracking `<branch>`) identical to the new one, writing both together, so an older fr or older hooks still read the placement correctly. fr refuses to act when the two differ.
+R6. Until the release named in R14, fr also keeps the old settings file (the root `settings.yaml` on `fr`, `<target-dir>/settings.yaml` on the tracking `<branch>`) identical to the new one, writing both together, so an older fr or older hooks still read the placement correctly. fr refuses to act when the two differ, except when the old file holds the bytes the new one held at an earlier commit of the configuration branch's first-parent history (a reviewed change merged and the old file has not followed yet): then fr writes the old file in step and proceeds, while the hooks, which cannot write, keep denying and name `fr settings show`.
 R7. Configuration that runs commands or decides merges is **executable configuration**: `.fr/candidate-install`, the command keys of `.fr/triage.yaml` (`post_merge` and the version commands), `.fr/ops.yaml`, and `.fr/ci.yaml`'s `gate_checks`. Under `quiet` and `stealth`, fr runs or gates on it only when the forge enforces a pull-request rule on the configuration branch, read from the forge's effective rules for that branch. When the forge cannot enforce one (a GitHub free-plan private repo, a forge fr cannot read rules from) or the read fails, fr refuses that action and says why and what to change. Other configuration is read whether or not the branch is protected.
 R8. The base-clone edit allowlist is `.fr/isolation-allow` in the working tree of the checkout it governs, under every placement, tracked or not, read by the edit gate on every harness as `.fr-isolation-allow` is today.
 R9. The repo's workflow overrides and own workflows live in `.fr/workflows/<name>.yaml`, its verification strategies in `.fr/verifications/<name>.yaml`, its model bindings in `.fr/models.yaml`, its trackers in `.fr/trackers.yaml`, its plan format in `.fr/plan-config.yaml`, and its devcontainer profile declarations in `.fr/profiles.yaml`. The `.devcontainer/<profile>/` directories stay in the product checkout. `fr settings paths` prints the configuration-space locations.
@@ -145,7 +145,9 @@ Under `quiet`, `fr-config` is an orphan branch beside `fr`; its tree is `.fr/`. 
 `<branch>-config` is an orphan branch of the tracking repo whose tree is `<target-dir>/.fr/`. fr
 creates either one, with the configuration it holds, at the migration (§D) or at `fr settings init`
 under that placement, and opens a pull request for every later change: a change to repo
-configuration is reviewed, as it is under `repo`.
+configuration is reviewed, as it is under `repo`. The pull request's branch is
+`fr-config-change/<slug>`, cut from the configuration branch's tip (under stealth, on the tracking
+repo), and fr writes no old file for it until it merges.
 
 `paths.SWITCH_REF` becomes `refs/remotes/origin/fr-config` with `SWITCH_SETTINGS =
 ".fr/settings.yaml"`; `stealth.TARGET_SETTINGS` becomes `<target-dir>/.fr/settings.yaml` on
@@ -160,10 +162,13 @@ names.
 
 **Older readers (R6).** An fr below S1, or an older plugin's hooks, read only the root
 `settings.yaml` on `fr` (or `<target-dir>/settings.yaml`). Without it they would read `repo` and
-write artifacts to product branches. So until R14's release every fr write of the settings writes
-the old file too, with the same bytes, in the same commit sequence (configuration branch first,
-then the memory branch). Every new reader compares the two and refuses, naming both, when they
-differ; the hooks deny, as they do for an unreadable switch.
+write artifacts to product branches. So until R14's release fr writes the old file too, with the
+same bytes, when it creates the configuration branch (configuration branch first, then the memory
+branch), and brings it in step after every reviewed change. Every new reader compares the two and refuses, naming both, when they
+differ; the hooks deny, as they do for an unreadable switch. After a reviewed change merges, the
+old file lags by one merge: a reader that finds the old file's bytes earlier on the configuration
+branch's first-parent history brings it in step (fetching it first, retrying a refused push) and
+proceeds, saying so once.
 
 **This is a guard change.** The edit gate decides which writes reach the `fr`, `fr-config` and
 stealth clones, so its PR gets an independent adversarial review before merge, of the hook library,

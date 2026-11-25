@@ -273,12 +273,24 @@ def test_quiet_to_stealth_refuses_while_a_quiet_feature_is_unmerged(
     assert "features/" not in git(bare, "ls-tree", "-r", "--name-only", "main")
 
 
-def test_quiet_to_stealth_moves_once_every_feature_merged(tmp_path: Path) -> None:
+def test_quiet_to_stealth_moves_once_every_feature_merged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.config import change
+
+    opened: list[str] = []
+    monkeypatch.setattr(
+        change, "open_pr", lambda remote, head, base, title, body: opened.append(head) or "u"
+    )
     root = repo_with_artifacts(tmp_path)
     before = fold(root, ref="refs/remotes/origin/main", include_pending=False)
     _run(root, "quiet")
     _land(root, REMOVAL)
     bare = make_tracking(tmp_path)
+    # the switch on fr-config changes by review (spec §B, decision p2-config-changes-by-pr)
+    assert "paused" in "\n".join(_run(root, "stealth", tracking=f"{bare}@main"))
+    origin = _origin(root)
+    git(origin, "update-ref", "refs/heads/fr-config", git(origin, "rev-parse", opened[0]).strip())
     _run(root, "stealth", tracking=f"{bare}@main")
     assert quiet.read_switch(root) is None
     assert before.matrix.rows

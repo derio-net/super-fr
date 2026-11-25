@@ -27,7 +27,12 @@ FR_BRANCH_PUSHERS = {
     # quiet's `fr` branch (with the product branch only when product calls it, code=True)
     ("fr.git_policy.push", "_atomic_push"),
     ("fr.placement.move", "_push_fr_branch"),
-    ("fr.commands.settings_cmd", "init_quiet"),
+    # quiet's `fr` and `fr-config` (spec 2026-11-19-event-driven-a-la-carte R5, R6): the
+    # creation of the configuration branch and the legacy switch on `fr`, plain pushes
+    ("fr.placement.quiet", "write_branch_file"),
+    # a configuration change's `fr-config-change/<slug>` branch, the head of its pull
+    # request (plan decision p2-config-changes-by-pr); never the configuration branch
+    ("fr.config.change", "open_change"),
 }
 TRACKING_REPO_PUSHERS = {
     # compare-and-swap ref pushes: the stealth tracking repo and triage's state refs

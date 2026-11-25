@@ -832,20 +832,114 @@ def _put_back(path: Path, before: str | None) -> None:
 
 def write_target_settings(
     root: Path, ref: StealthRef, target: str, text: str, message: str
-) -> None:
-    """Write the target's settings (R6): `<target>/.fr/settings.yaml` on `<branch>-config`
-    first, then the same bytes as `<target>/settings.yaml` on `<branch>`, each pushed
-    compare-and-swap. The legacy copy ends at R14's owed release (`s1-refuse-old-paths`)."""
+) -> str | None:
+    """Write the target's settings (R5, R6; plan decision p2-config-changes-by-pr).
+
+    When the tracking repo has no `<branch>-config`, this is its creation: an orphan
+    holding `<target>/.fr/settings.yaml`, then the same bytes as `<target>/settings.yaml`
+    on `<branch>` (`write_legacy_target`). When `<branch>-config` already holds *text*,
+    only the legacy copy is landed (a retry converges). Any other change is reviewed: a
+    pull request on the TRACKING repo from `fr-config-change/<slug>` into
+    `<branch>-config`, whose URL is returned; the legacy copy follows after the merge.
+    The legacy copy ends at R14's owed release (`s1-refuse-old-paths`)."""
     cref = config_ref(ref)
     wt = ensure_worktree(root, ref)
     new_rel = f"{target}/{TARGET_SETTINGS}"
     if not (worktree_path(root, cref) / ".git").exists() and not _remote_has(cref, root):
         _create_branch(root, wt, cref, {new_rel: text}, message)
+        ensure_worktree(root, cref)
     else:
         check_config_branch(root, ref)
-    clone = ensure_worktree(root, cref)
-    _commit_file(root, cref, clone, new_rel, text, message)
-    _commit_file(root, ref, wt, f"{target}/{LEGACY_TARGET_SETTINGS}", text, message)
+        clone = ensure_worktree(root, cref)
+        if _at_tip(clone, cref, new_rel) != text:
+            from fr.config.change import open_change
+
+            check_privacy(ref, origin_url(root), target_root=root)
+            url = open_change(
+                clone, remote=ref.repo, base_branch=cref.branch, base_ref=_remote_ref(cref),
+                rel=new_rel, text=text, message=message,
+            )  # fmt: skip
+            print(
+                f"fr: opened {url}: the change to {new_rel} waits for review on "
+                f"{cref.text}; once it merges, fr brings {ref.text}:{target}/"
+                f"{LEGACY_TARGET_SETTINGS} in step",
+                file=sys.stderr,
+            )
+            return url
+    write_legacy_target(root, ref, target, text, message)
+    return None
+
+
+def settle_differing_target(
+    root: Path, ref: StealthRef, target: str, new_text: str, new_sha: str, old_sha: str
+) -> None:
+    """The target's two settings files differ (R6). When the old one's bytes are those
+    the configuration branch held at an earlier commit of its first-parent history (a
+    reviewed change advanced it), fr brings the old file in step and the read proceeds;
+    a read that may not write (`fr.placement.quiet.read_only`) refuses, naming the
+    command that does. Any other difference refuses, naming both refs and both remedies.
+    `fr.placement.quiet._settle_differing` is the quiet twin."""
+    from fr.placement.quiet import _READ_ONLY, _blob, legacy_lags
+
+    cref = config_ref(ref)
+    clone = worktree_path(root, cref)
+    wt = worktree_path(root, ref)
+    new_at = f"{cref.text}:{target}/{TARGET_SETTINGS} ({new_sha})"
+    old_at = f"{ref.text}:{target}/{LEGACY_TARGET_SETTINGS} ({old_sha})"
+    old_blob = _blob(wt, f"{_remote_ref(ref)}:{target}/{LEGACY_TARGET_SETTINGS}")
+    if legacy_lags(clone, _remote_ref(cref), f"{target}/{TARGET_SETTINGS}", old_blob):
+        if _READ_ONLY[0]:
+            raise SettingsError(
+                f"placement stealth: the old settings file {old_at} lags {new_at}: a "
+                f"reviewed change advanced {cref.text}. Run `fr settings show` (any fr "
+                "command that reads the settings) to bring it in step; this read does not "
+                "write"
+            )
+        from fr.placement.quiet import settled_message
+
+        message = settled_message(root, new_text, f"bring {target}'s old settings in step")
+        write_legacy_target(root, ref, target, new_text, message)
+        print(
+            f"fr: brought {old_at} in step with {new_at} (a reviewed change advanced it; "
+            "older fr read the old file, R6)",
+            file=sys.stderr,
+        )
+        return
+    raise SettingsError(
+        f"placement stealth: the two settings files differ: {new_at} and {old_at}, and "
+        "the old one holds no earlier version of the new one, so fr cannot tell which is "
+        "meant (R6). Either make the old file an earlier version again and run `fr "
+        f"settings show`, which brings it in step after a reviewed change to {cref.text}; "
+        f"or, if neither is right, edit both by hand to the same bytes ({cref.text} "
+        "through a pull request) and push them"
+    )
+
+
+_LEGACY_ATTEMPTS: Final = 3
+
+
+def write_legacy_target(root: Path, ref: StealthRef, target: str, text: str, message: str) -> None:
+    """`<target>/settings.yaml` on the tracking `<branch>` = *text* (R6), robust against
+    the branch moving: the tracking clone is synced (fetched, fast-forwarded or replayed)
+    immediately before the commit, and a compare-and-swap push lost to another host is
+    retried a bounded number of times. Nothing is forced."""
+    from fr.artifacts.commit import StealthPushError
+
+    rel = f"{target}/{LEGACY_TARGET_SETTINGS}"
+    last: Exception | None = None
+    for _ in range(_LEGACY_ATTEMPTS):
+        wt = ensure_worktree(root, ref)  # sync: fetch, then fast-forward or replay
+        try:
+            _commit_file(root, ref, wt, rel, text, message)
+            return
+        except StealthPushError as e:
+            last = e
+            continue
+    raise SettingsError(
+        f"placement stealth: {ref.text} kept moving while fr wrote {rel}; "
+        f"{_LEGACY_ATTEMPTS} compare-and-swap pushes were lost. Nothing was forced; run the "
+        "command again"
+    ) from last
 
 
 def enter(root: Path, branch: str, ref: StealthRef) -> dict[str, str]:
