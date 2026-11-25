@@ -9415,6 +9415,8 @@ batches:
     pr: 1583
     head: 32ea57d588e97e43b2e577f5013f7c2419b18654
     patch_id: ca06ca377d637c384f203c352f625b65bec57862
+  - kind: post_merge
+    at: '2026-11-25T00:44:58.395949Z'
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
@@ -10495,3 +10497,8 @@ queues:
     patch_id: ca06ca377d637c384f203c352f625b65bec57862
     base: e3e25316b6975853a9fe325adac08728c31c395d
     parent: e3e25316b6975853a9fe325adac08728c31c395d
+  - kind: queue_land
+    at: '2026-11-25T00:44:23.135153Z'
+    main: 555f38f71caf0d6cf2d06cd5a2512841b35cc933
+    entries:
+    - batch: consumer-followups
