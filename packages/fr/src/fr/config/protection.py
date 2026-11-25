@@ -94,7 +94,20 @@ class ProtectionReadError(ProtectionError):
     """The forge's rules could not be read (network, auth, a 5xx): neither answer."""
 
 
-_CACHE: dict[tuple[str, str], Answer] = {}
+_CACHE: dict[tuple[str, str | None, str, str], Answer] = {}
+"""Answers by `(forge identity, host, repo, branch)`: one forge's answer never stands for
+another's (a GitHub Enterprise host and github.com, or a glab client, with the same slug)."""
+
+
+def _forge_identity(client: object) -> tuple[str, str | None]:
+    """The adapter's class and host; a wrapper (triage's `ClientForge`) is seen through."""
+    inner = getattr(client, "_client", None) or client
+    kind = f"{type(inner).__module__}.{type(inner).__qualname__}"
+    backend = getattr(inner, "backend", None)
+    if isinstance(backend, str):
+        kind = f"{kind}:{backend}"
+    host = getattr(inner, "_host", None)
+    return kind, host if isinstance(host, str) else None
 
 
 def forget() -> None:
@@ -159,7 +172,7 @@ def branch_protection(client: object, repo: str, branch: str) -> Answer:
     *client* is any forge adapter with `branch_rules(repo=, branch=)` (a `GhClient`, or
     triage's `ClientForge`); one without it cannot read rules. Raises `ProtectionReadError`
     on a failed read, which is never cached."""
-    key = (repo.lower(), branch)
+    key = (*_forge_identity(client), repo.lower(), branch)
     if key in _CACHE:
         return _CACHE[key]
     answer = _ask(client, repo, branch)
@@ -274,4 +287,41 @@ def require_protected(space: ConfigSpace, client: object | None, what: str) -> N
     raise ProtectionError(
         f"fr will not {what}: {answer.branch} on {answer.repo} is not protected "
         f"({answer.reason}); {fix_text(answer.branch)}"
+    )
+
+
+def refusal_at(root: Path, client: object | None, what: str) -> str | None:
+    """`require_protected` for the checkout at *root*, as the reason it refuses (None: go
+    ahead). A configuration space that cannot be resolved refuses too."""
+    from fr.config.space import config_space
+
+    try:
+        require_protected(config_space(root), client, what)
+    except SettingsError as exc:
+        return str(exc)
+    return None
+
+
+# --- `.fr/triage.yaml`'s guarded keys --------------------------------------------------
+
+
+def guarded_present(data: object) -> list[str]:
+    """The `GUARDED_TRIAGE_KEYS` *data* (a parsed `.fr/triage.yaml`) sets."""
+    if not isinstance(data, dict):
+        return []
+    return [k for k in GUARDED_TRIAGE_KEYS if k in data]
+
+
+def without_guarded(data: object) -> object:
+    """*data* with every guarded key removed (a non-mapping is returned as it is)."""
+    if not isinstance(data, dict):
+        return data
+    return {k: v for k, v in data.items() if k not in GUARDED_TRIAGE_KEYS}
+
+
+def ignored_line(keys: list[str], answer: NotEnforced, where: str) -> str:
+    """The one line a reader says when it ignores *keys* of *where*."""
+    return (
+        f"ignoring {', '.join(keys)} in {where}: {answer.branch} on {answer.repo} is not "
+        f"protected ({answer.reason}); {fix_text(answer.branch)}"
     )

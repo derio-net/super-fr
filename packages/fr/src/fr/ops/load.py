@@ -97,6 +97,19 @@ class OpsConfig(BaseModel):
     """A probe's bound; a timeout reads CANNOT-VERIFY (R5)."""
 
 
+def _protected(repo_root: Path) -> None:
+    """Spec 2026-11-19-event-driven-a-la-carte R7: `.fr/ops.yaml` names the runbook a probe
+    runs and the environment it receives, so under quiet and stealth it is read only when the
+    forge enforces a pull-request rule on the configuration branch."""
+    from fr.config.protection import require_protected
+    from fr.settings import SettingsError
+
+    try:
+        require_protected(config_space(repo_root), None, f"run ops with {CONFIG_REL}")
+    except SettingsError as e:
+        raise OpsLoadError(str(e)) from e
+
+
 def load_ops_config(repo_root: Path) -> OpsConfig:
     """The repo's `.fr/ops.yaml`, or an empty config when there is none."""
     from fr.settings import SettingsError
@@ -107,6 +120,7 @@ def load_ops_config(repo_root: Path) -> OpsConfig:
         raise OpsLoadError(f"cannot tell where {CONFIG_REL} lives: {e}") from e
     if not path.is_file():
         return OpsConfig()
+    _protected(repo_root)
     data = _safe_load(path.read_text(), path, 0)
     try:
         return OpsConfig.model_validate(data or {})

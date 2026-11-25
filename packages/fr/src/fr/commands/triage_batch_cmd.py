@@ -327,6 +327,7 @@ from fr.triage.model import (
     ReplacementEvent,
     RequeuedEvent,
     Scope,
+    TriageConfig,
     load_judgements,
     load_scope_facts,
     normalize_key,
@@ -1494,10 +1495,8 @@ def _config_fresh(
         if not hold_unknown:
             raise
         raise DefaultBranchUnknown(owner_repo, exc) from exc
-    ignored = check_config_fresh(
-        facts.config.get(owner_repo),
-        checkout.show(default, TRIAGE_CONFIG_PATH),
-    )
+    collected = facts.config.get(owner_repo)
+    ignored = check_config_fresh(collected, *_triage_on_origin(checkout, default, collected))
     if ignored:
         err_console.print(
             f"[yellow]warning:[/yellow] {escape(owner_repo)}: ignoring {TRIAGE_CONFIG_PATH} "
@@ -1505,6 +1504,30 @@ def _config_fresh(
             soft_wrap=True,
         )
     return default
+
+
+def _triage_on_origin(
+    checkout: Checkout, default: str, collected: TriageConfig | None
+) -> tuple[str | None, bool]:
+    """The `.fr/triage.yaml` the collected config is compared with, and whether its guarded
+    keys are left out of the comparison. Under repo: *default*'s. Under quiet and stealth: the
+    configuration branch's (spec 2026-11-19-event-driven-a-la-carte R1); when the collected
+    config carries no guarded key (`fr.config.protection.GUARDED_TRIAGE_KEYS`, which collect
+    drops from an unprotected branch, R7), the branch's are left out too, so a dropped key is
+    no change. Their executors ask the protection again before running."""
+    from fr.config.protection import GUARDED_TRIAGE_KEYS
+    from fr.config.space import config_space
+    from fr.settings import SettingsError
+
+    try:
+        space = config_space(checkout.path)
+        if space.ref is None:
+            return checkout.show(default, TRIAGE_CONFIG_PATH), False
+        text = space.at_default("triage")
+    except SettingsError as exc:
+        raise TriageError(f"{TRIAGE_CONFIG_PATH} cannot be read: {exc}") from exc
+    carried = collected is not None and bool(collected.model_fields_set & set(GUARDED_TRIAGE_KEYS))
+    return text, not carried
 
 
 def _work_item(
@@ -6690,6 +6713,11 @@ class _Driver:
         command = facts.config_for(repo).post_merge
         if not command:
             return "no post_merge configured", False
+        from fr.config.protection import refusal_at
+
+        why = refusal_at(checkout.path, self.client(facts, repo), "run post_merge")  # R7
+        if why is not None:
+            return f"post_merge held: {why}", False
         try:
             ran = self.adapter.post_merge(checkout, command)  # the host's (R20)
         except TriageError as exc:
@@ -6973,6 +7001,14 @@ class _Driver:
         base branch that requires a forge merge queue is held: the queue lands by pushing
         the tested combination, which that rule refuses, and fr no longer enqueues."""
         why = forge_refusal(self.client(facts, repo))
+        if why is not None:
+            return why
+        from fr.config.protection import refusal_at
+
+        why = refusal_at(  # R7: the queue gates, versions and runs post_merge on configuration
+            self.checkout(repo).path, self.client(facts, repo),
+            "run the merge queue (gate_checks, version commands, post_merge)",
+        )  # fmt: skip
         if why is not None:
             return why
         try:

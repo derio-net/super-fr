@@ -86,7 +86,18 @@ def load_remap(repo_root: Path) -> tuple[dict[str, str], str | None]:
         config, _ = parse_triage_config(yaml.safe_load(path.read_text()) or {})
     except (OSError, UnicodeDecodeError, yaml.YAMLError, ValidationError) as e:
         return {}, f"{_shown(path, repo_root)} is not valid triage config: {e}"
-    return (dict(config.exit.gates) if config.exit else {}), None
+    if not config.exit:
+        return {}, None
+    why = _unprotected(repo_root)
+    if why is not None:  # R7: a gate remap decides what a merge owes
+        return {}, f"ignoring `exit:` in {_shown(path, repo_root)}: {why}"
+    return dict(config.exit.gates), None
+
+
+def _unprotected(repo_root: Path) -> str | None:
+    from fr.config.protection import refusal_at
+
+    return refusal_at(repo_root, None, "remap a gate with `exit:`")
 
 
 @dataclass(frozen=True)

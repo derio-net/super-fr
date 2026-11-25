@@ -215,8 +215,12 @@ class HostCheckout:
                     return False
                 text: str | None = git(["show", f"{at}:{path}"], self.primary)
             else:
+                from fr.config.protection import require_protected
+
                 at = space.ref
                 text = space.at_default("triage")
+                if text is not None and "queue" in (yaml.safe_load(text) or {}):
+                    require_protected(space, None, "release to the merge queue its `queue:` names")
             if text is None:
                 return False
             data = yaml.safe_load(text)

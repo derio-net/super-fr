@@ -1107,9 +1107,42 @@ def read_config_lenient(forge: Forge, repo: str) -> tuple[TriageConfig | None, t
             return None, ()
         raise
     try:
-        return parse_triage_config(yaml.safe_load(body) or {})
-    except (yaml.YAMLError, ValidationError) as exc:
+        data = yaml.safe_load(body) or {}
+    except yaml.YAMLError as exc:
         raise TriageError(f"{repo}: {CONFIG_PATH} is not valid triage config: {exc}") from exc
+    if ref != DEFAULT_BRANCH_REF:
+        data = _guarded(forge, repo, ref, data)
+    try:
+        return parse_triage_config(data)
+    except ValidationError as exc:
+        raise TriageError(f"{repo}: {CONFIG_PATH} is not valid triage config: {exc}") from exc
+
+
+_IGNORED_SAID: set[tuple[str, str]] = set()
+"""(repo, line) pairs this process has said, so a driver's passes say each once."""
+
+
+def _guarded(forge: Forge, repo: str, ref: str, data: object) -> object:
+    """*data* read from the configuration branch *ref* (spec 2026-11-19 R7, findings sec-1 and
+    p1-r1): its commands and trust keys (`fr.config.protection.GUARDED_TRIAGE_KEYS`) count only
+    when the forge enforces a pull-request rule on *ref*; otherwise they are dropped, said once.
+    A failed protection read refuses this repo's config, naming the error."""
+    from fr.config import protection
+
+    keys = protection.guarded_present(data)
+    if not keys:
+        return data
+    try:
+        answer = protection.branch_protection(forge, repo, ref)
+    except protection.ProtectionReadError as exc:
+        raise TriageError(f"{repo}: {CONFIG_PATH} on {ref} is not used: {exc}") from exc
+    if isinstance(answer, protection.Enforced):
+        return data
+    line = protection.ignored_line(keys, answer, f"{repo}:{ref}:{CONFIG_PATH}")
+    if (repo, line) not in _IGNORED_SAID:
+        _IGNORED_SAID.add((repo, line))
+        print(f"fr triage: {line}", file=sys.stderr)
+    return protection.without_guarded(data)
 
 
 def _comment_facts(

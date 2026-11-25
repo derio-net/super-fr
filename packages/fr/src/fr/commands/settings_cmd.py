@@ -371,6 +371,38 @@ def _sync_placement(root: Path) -> str | None:
     return outside_repo(root)
 
 
+def _protected_tip(root: Path, placement: str) -> str:
+    """`--yes` without `--expect` (plan discovery p2-phase3-sync-needs-protection): the
+    configuration branch's tip, when the forge enforces a pull-request rule on it, so every
+    change there was reviewed; otherwise the refusal naming the preview (spec R6, R7)."""
+    from fr.config.protection import ProtectionReadError, require_protected
+    from fr.config.space import quiet_config_space, stealth_config_space
+    from fr.placement import quiet, stealth
+
+    if placement == "quiet":
+        space = quiet_config_space(root)
+    else:
+        found = stealth.marker_tracking(root)
+        assert found is not None
+        ref, target = found
+        space = stealth_config_space(root, ref.text, target)
+    try:
+        require_protected(space, None, "bring the old settings copy in step without `--expect`")
+    except ProtectionReadError:
+        raise
+    except SettingsError as e:
+        raise SettingsError(
+            f"{e}. Run `{quiet.SYNC_COMMAND}` to preview the change, then "
+            f"`{quiet.SYNC_COMMAND} --yes --expect <tip>`"
+        ) from e
+    if placement == "quiet":
+        tip = quiet.sync_plan(root).tip
+    else:
+        tip = stealth.sync_plan_target(root, ref, target).tip
+    typer.echo(f"the configuration branch is forge-protected: writing from its tip {tip}")
+    return str(tip)
+
+
 @settings_app.command("sync")
 def sync_cmd(
     yes: bool = typer.Option(
@@ -384,6 +416,8 @@ def sync_cmd(
     root = resolve_repo_root()
     try:
         placement = _sync_placement(root)
+        if yes and expect is None and placement in ("quiet", "stealth"):
+            expect = _protected_tip(root, placement)
         if placement == "quiet":
             from fr.placement import quiet
 

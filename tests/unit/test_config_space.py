@@ -266,7 +266,7 @@ def _quiet_with_config(tmp_path: Path, home: Path) -> tuple[Path, Path]:
 
 
 def test_quiet_readers_read_the_config_space_and_ignore_the_product(
-    tmp_path: Path, _home: Path
+    tmp_path: Path, _home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from fr.debt.engine import load_stale_days
     from fr.docs.load import load_config as docs_config
@@ -275,6 +275,7 @@ def test_quiet_readers_read_the_config_space_and_ignore_the_product(
     from fr.verification.rows import load_remap
 
     root, _ = _quiet_with_config(tmp_path, _home)
+    _enforced(monkeypatch)
     docs = docs_config(root)
     assert docs is not None and docs.pages == ["config.md"]
     assert lens_config(root).disable == ("errors",)
@@ -348,18 +349,116 @@ def test_forge_ref_is_fr_config_only_when_it_carries_a_quiet_switch() -> None:
     assert forge_ref(quiet, "o/r") == "fr-config"
 
 
-def test_forge_side_triage_config_follows_the_quiet_switch() -> None:
+_GUARDED_TRIAGE = (
+    "post_merge: [./config.sh]\npr_authors: [mallory]\nstale_dispatch_days: 9\n"
+    "mirrors: [[./regen]]\nqueue:\n  ci: none\nexit:\n  gates:\n    live: none\n"
+)
+
+
+class _RulesForge(_Forge):
+    """A forge whose `branch_rules` answers *rules* (a list, or an exception to raise)."""
+
+    def __init__(self, files: dict[tuple[str, str], str], rules: object) -> None:
+        super().__init__(files)
+        self.rules = rules
+        self.asked: list[tuple[str, str]] = []
+
+    def branch_rules(self, *, repo: str, branch: str) -> object:
+        self.asked.append((repo, branch))
+        if isinstance(self.rules, Exception):
+            raise self.rules
+        return self.rules
+
+
+def _protected_rules() -> list[dict[str, object]]:
+    rules = Path(__file__).resolve().parents[1] / "fixtures/github_rest/rules/pull-request.json"
+    return list(json.loads(rules.read_text()))
+
+
+def test_forge_side_triage_config_follows_the_quiet_switch(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Finding sec-1 / p1-r1: a pushed fr-config with no pull_request rule supplies no
+    command and no trust key; the rest of its configuration is read, and the reason is said
+    once."""
     from fr.triage.collect import read_config_lenient
 
-    forge = _Forge(
+    forge = _RulesForge(
         {
             (".fr/settings.yaml", "fr-config"): QUIET,
-            (".fr/triage.yaml", "fr-config"): "post_merge: [./config.sh]\n",
+            (".fr/triage.yaml", "fr-config"): _GUARDED_TRIAGE,
             (".fr/triage.yaml", "HEAD"): "post_merge: [./product.sh]\n",
-        }
+        },
+        [],
     )
     config, _ = read_config_lenient(forge, "o/r")  # type: ignore[arg-type]
-    assert config is not None and config.post_merge == ["./config.sh"]
+    assert config is not None
+    assert config.post_merge == [] and config.pr_authors == [] and config.mirrors == []
+    assert config.queue is None and config.exit is None
+    assert config.stale_dispatch_days == 9  # not executable: still read
+    read_config_lenient(forge, "o/r")  # type: ignore[arg-type]
+    err = capsys.readouterr().err
+    assert err.count("ignoring") == 1
+    assert "post_merge" in err and "pr_authors" in err and "protect fr-config" in err
+
+
+def test_forge_side_triage_config_from_a_protected_fr_config_supplies_every_key() -> None:
+    from fr.triage.collect import read_config_lenient
+
+    forge = _RulesForge(
+        {
+            (".fr/settings.yaml", "fr-config"): QUIET,
+            (".fr/triage.yaml", "fr-config"): _GUARDED_TRIAGE,
+        },
+        _protected_rules(),
+    )
+    config, _ = read_config_lenient(forge, "o/r")  # type: ignore[arg-type]
+    assert config is not None
+    assert config.post_merge == ["./config.sh"] and config.pr_authors == ["mallory"]
+    assert config.queue is not None and config.exit is not None
+    assert forge.asked == [("o/r", "fr-config")]
+
+
+def test_forge_side_triage_config_refuses_when_the_protection_read_fails() -> None:
+    """A failed read is not "unprotected": that repo's config read refuses, naming it."""
+    from fr.triage.collect import read_config_lenient
+    from fr.triage.errors import TriageError
+
+    forge = _RulesForge(
+        {
+            (".fr/settings.yaml", "fr-config"): QUIET,
+            (".fr/triage.yaml", "fr-config"): _GUARDED_TRIAGE,
+        },
+        RuntimeError("HTTP 502: bad gateway"),
+    )
+    with pytest.raises(TriageError, match="HTTP 502"):
+        read_config_lenient(forge, "o/r")  # type: ignore[arg-type]
+
+
+def test_forge_side_triage_config_without_guarded_keys_asks_nothing() -> None:
+    from fr.triage.collect import read_config_lenient
+
+    forge = _RulesForge(
+        {
+            (".fr/settings.yaml", "fr-config"): QUIET,
+            (".fr/triage.yaml", "fr-config"): "stale_dispatch_days: 5\n",
+        },
+        AssertionError("no guarded key, no forge read"),
+    )
+    config, _ = read_config_lenient(forge, "o/r")  # type: ignore[arg-type]
+    assert config is not None and config.stale_dispatch_days == 5
+
+
+def test_default_branch_triage_config_is_read_whole_without_asking() -> None:
+    """Under repo (no quiet switch) nothing changes: the default branch's file is read."""
+    from fr.triage.collect import read_config_lenient
+
+    forge = _RulesForge(
+        {(".fr/triage.yaml", "HEAD"): "post_merge: [./product.sh]\n"},
+        AssertionError("repo placement never asks"),
+    )
+    config, _ = read_config_lenient(forge, "o/r")  # type: ignore[arg-type]
+    assert config is not None and config.post_merge == ["./product.sh"]
 
 
 def test_forge_side_settings_follow_the_quiet_switch() -> None:
@@ -499,7 +598,7 @@ def test_the_queue_refuses_its_required_checks_when_fr_config_is_missing(
 
 
 def test_the_ops_gate_reads_the_queue_block_from_the_configuration_space(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Review p1-r5 found `queue_configured` building `<rev>:.fr/triage.yaml` itself: under
     quiet it reads `fr-config`, and refuses while that space is missing."""
@@ -510,6 +609,7 @@ def test_the_ops_gate_reads_the_queue_block_from_the_configuration_space(
     with pytest.raises(StageFailed, match="origin/fr-config"):
         HostCheckout(root).queue_configured("main")
     _push_orphan(root, "fr-config", {".fr/triage.yaml": "queue:\n  ci: push\n"})
+    _enforced(monkeypatch)
     assert HostCheckout(root).queue_configured("main") is True
 
 
@@ -587,3 +687,18 @@ def test_lens_config_changed_is_never_true_under_quiet(tmp_path: Path) -> None:
     _commit(root, ".fr/lenses.yaml", "disable: [errors]\n", push=False)
     _push_orphan(root, "fr-config", {".fr/lenses.yaml": "disable: [tests]\n"})
     assert _lens_config_changed(root, base, (".fr/lenses.yaml",)) is False
+
+
+def _enforced(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The configuration branch reads as forge-protected (spec R7), so executable
+    configuration is read; `tests/unit/test_config_protection_executors.py` covers the rest."""
+    from fr.config import protection
+
+    rules = _protected_rules()
+
+    class _Client:
+        def branch_rules(self, repo: str, branch: str) -> object:
+            return rules
+
+    monkeypatch.setattr(protection, "_origin_slug", lambda root: "example-org/example-repo")
+    monkeypatch.setattr(protection, "_default_client", lambda space: _Client())

@@ -531,6 +531,9 @@ def collect_into(
     (exit-gates §D Facts): its merged PR's labels are read, and its open PR's run cursor
     position is read through *cursor_at* (the drive's `gitseam` reader; None reads none).
     """
+    from fr.config.protection import forget
+
+    forget()  # R7: each pass (each collect) reads every branch's protection afresh
     judgements = target_dir / "judgements.yaml"
     loaded = load_judgements(judgements) if judgements.exists() else None
     # Every judged key, and every `duplicate_of` target (R6: a closed original must

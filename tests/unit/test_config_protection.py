@@ -204,6 +204,31 @@ def test_the_answer_is_cached_for_the_command_and_a_failure_is_not() -> None:
     assert len(ffake.calls) == 2
 
 
+def test_two_forges_with_the_same_slug_get_their_own_answers() -> None:
+    """Security review: a GitHub Enterprise host's answer never stands for github.com's,
+    nor a GitHub client's for a GitLab one's."""
+    from fr.real_glabclient import RealGlabClient
+
+    class _Hosted:
+        def __init__(self, host: str | None, gh: _Gh) -> None:
+            self._host, self.gh = host, gh
+
+        def branch_rules(self, repo: str, branch: str) -> Any:
+            return json.loads(self.gh(["api", f"repos/{repo}/rules/branches/{branch}"]))
+
+    enforced = _Gh(_reply("pull-request.json"))
+    bare = _Gh(_reply("empty.json"))
+    ghe = _Hosted("ghe.example.com", enforced)
+    dotcom = _Hosted(None, bare)
+    assert protection.branch_protection(ghe, REPO, "fr-config") == Enforced(REPO, "fr-config")
+    assert isinstance(protection.branch_protection(dotcom, REPO, "fr-config"), NotEnforced)
+    assert isinstance(
+        protection.branch_protection(RealGlabClient(), REPO, "fr-config"), NotEnforced
+    )
+    assert protection.branch_protection(ghe, REPO, "fr-config") == Enforced(REPO, "fr-config")
+    assert len(enforced.calls) == 1 and len(bare.calls) == 1
+
+
 def test_the_cache_lives_in_memory_only() -> None:
     """Never on disk: the module holds no path."""
     source = Path(protection.__file__).read_text()

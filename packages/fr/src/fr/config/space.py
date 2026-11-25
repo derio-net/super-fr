@@ -81,6 +81,11 @@ def rel(name: str) -> str:
     return f"{SPACE_DIR}/{below}" if below else SPACE_DIR
 
 
+def in_space(path: str) -> bool:
+    """Whether the repo-relative *path* names a configuration file (`.fr/<file>`)."""
+    return path.removeprefix("./").startswith(f"{SPACE_DIR}/")
+
+
 def _below(name: str) -> str:
     """*name* (`ci.yaml`, a `SPACE_FILES` key, or `.fr/ci.yaml`) relative to `.fr/`."""
     name = name.removeprefix("./")

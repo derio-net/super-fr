@@ -150,6 +150,39 @@ def test_sync_yes_needs_the_previewed_tip(
     assert git(origin, "rev-parse", "fr").strip() == fr_before
 
 
+def test_sync_yes_without_expect_refuses_on_an_unprotected_fr_config(
+    repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]]
+) -> None:
+    """Discovery p2-phase3-sync-needs-protection: the old copy follows without the previewed
+    tip only when the forge enforces a pull-request rule on fr-config. A local origin is no
+    forge repository, so it is not."""
+    _merged(repo, tmp_path, prs)
+    fr_before = git(_origin(tmp_path), "rev-parse", "fr").strip()
+    bare = _sync(repo, "--yes")
+    assert bare.exit_code == 2
+    assert "not protected" in bare.output and "--expect" in bare.output
+    assert git(_origin(tmp_path), "rev-parse", "fr").strip() == fr_before
+
+
+def test_sync_yes_without_expect_writes_on_a_protected_fr_config(
+    repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.config import protection
+
+    from tests.unit.test_config_space import _enforced
+
+    _merged(repo, tmp_path, prs)
+    _enforced(monkeypatch)
+    done = _sync(repo, "--yes")
+    assert done.exit_code == 0, done.output
+    assert git(_origin(tmp_path), "show", "fr:settings.yaml") == NEW
+    assert "forge-protected" in done.output
+    assert protection.config_target(quiet_config_space(repo)) == (
+        "example-org/example-repo",
+        "fr-config",
+    )
+
+
 def _merge_commit(tmp_path: Path, second: str, subject: str) -> str:
     """A merge commit on origin's fr-config whose second parent is *second*."""
     other = _other_clone(tmp_path, f"m{len(subject)}")

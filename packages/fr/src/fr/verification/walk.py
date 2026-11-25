@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING
 import yaml
 
 from fr.config.space import rel
-from fr.verification.effective import install_problem
+from fr.verification.effective import install_path, install_problem
 from fr.verification.model import StrategyManifest
 
 if TYPE_CHECKING:
@@ -365,6 +365,23 @@ def _contract(repo_root: Path, manifest: StrategyManifest) -> None:
         raise WalkError(problem)
 
 
+def _protected(repo_root: Path, manifest: StrategyManifest, forge: object | None) -> None:
+    """Spec 2026-11-19-event-driven-a-la-carte R7: under quiet and stealth an install program
+    read from the configuration branch (`.fr/candidate-install`) runs only when the forge
+    enforces a pull-request rule on that branch; *forge* is the client to ask (None: the
+    repo's own)."""
+    from fr.config.protection import require_protected
+    from fr.config.space import config_space, in_space
+    from fr.settings import SettingsError
+
+    if not manifest.install or not in_space(manifest.install[0]):
+        return
+    try:
+        require_protected(config_space(repo_root), forge, "run the candidate install")
+    except SettingsError as exc:
+        raise WalkError(str(exc)) from exc
+
+
 def run_walk(
     *,
     repo_root: Path,
@@ -377,6 +394,7 @@ def run_walk(
     client: Path | None = None,
     env: Mapping[str, str] | None = None,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
+    forge: object | None = None,
 ) -> tuple[Path, WalkLog]:
     """Install, smoke, scenarios; write the log; return `(path, log)`.
 
@@ -391,6 +409,7 @@ def run_walk(
     from fr.verification.resolve import strategy_identity
 
     base = dict(os.environ if env is None else env)
+    _protected(repo_root, manifest, forge)
     _contract(repo_root, manifest)
     manifest_source, manifest_sha256 = strategy_identity(manifest.verification, repo_root)
     if manifest.source == "prerelease":
@@ -444,7 +463,7 @@ def run_walk(
             argv = render_argv(template, {**values, **extra})
             # A repo-relative program (`.fr/candidate-install`) runs from the repo.
             if "/" in argv[0] and not os.path.isabs(argv[0]):
-                argv[0] = str(repo_root / argv[0])
+                argv[0] = str(install_path(argv[0], repo_root))
             return argv
 
         def operator_fr_moved() -> str | None:
