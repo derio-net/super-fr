@@ -79,8 +79,9 @@ pipeline skill ran this session.
    ever exempted by one, whatever name (case, link, non-ASCII spelling) reaches it.
 6. Otherwise → **deny** with a message naming the three ways forward. When the
    repo's two quiet switches (`origin/fr-config:.fr/settings.yaml` and the older
-   `origin/fr:settings.yaml`) differ, it also says so and names `fr settings show`,
-   which brings the old copy in step after a reviewed change; the hooks cannot write.
+   `origin/fr:settings.yaml`) differ, it also says so and names `fr settings sync`
+   (a preview of the move) and `fr settings sync --yes`, which writes the old copy:
+   neither the hooks nor any fr reader write it on their own.
 
 One dependency failure is fail-**open**, and it is the only one: when `git`
 itself cannot be resolved (nothing on `PATH`, nothing in

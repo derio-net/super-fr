@@ -82,30 +82,66 @@ def test_a_change_to_an_existing_fr_config_opens_a_pull_request(
     assert prs[1][1] == head
 
 
-def test_after_the_merge_fr_brings_the_legacy_copy_in_step(
-    repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]], capsys: pytest.CaptureFixture[str]
-) -> None:
+def _merged(repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]]) -> None:
     write_settings(quiet_config_space(repo), NEW, message="chore(fr): labels off")
     _merge(tmp_path, prs[0][1])
     git(repo, "fetch", "-q", "origin", "+refs/heads/fr-config:refs/remotes/origin/fr-config")
-    eff = load_settings(repo)
-    assert eff.settings.forge.comments == "off"
-    assert git(_origin(tmp_path), "show", "fr:settings.yaml") == NEW
-    assert "brought" in capsys.readouterr().err
+    quiet._CACHE.clear()
 
 
-def test_a_read_that_may_not_write_refuses_a_lagging_copy_naming_the_sync(
+def test_after_the_merge_readers_refuse_naming_the_sync_and_write_nothing(
+    repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]]
+) -> None:
+    """Security review of decision 4c: no reader writes the old copy on its own, or a push
+    straight to an unprotected fr-config would be copied silently."""
+    _merged(repo, tmp_path, prs)
+    fr_before = git(_origin(tmp_path), "rev-parse", "fr").strip()
+    with pytest.raises(SettingsError) as caught:
+        load_settings(repo)
+    message = str(caught.value)
+    assert "fr settings sync" in message and "fr settings sync --yes" in message
+    assert "earlier version" in message
+    assert git(_origin(tmp_path), "rev-parse", "fr").strip() == fr_before
+
+
+def _sync(repo: Path, *argv: str):  # type: ignore[no-untyped-def]
+    env = {**os.environ, "FR_REPO_ROOT": str(repo)}
+    return CliRunner().invoke(app, ["settings", "sync", *argv], env=env)
+
+
+def test_fr_settings_sync_previews_then_writes_the_old_copy(
+    repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]]
+) -> None:
+    _merged(repo, tmp_path, prs)
+    origin = _origin(tmp_path)
+    fr_before = git(origin, "rev-parse", "fr").strip()
+    preview = _sync(repo)
+    assert preview.exit_code == 0, preview.output
+    assert "origin/fr-config:.fr/settings.yaml" in preview.output
+    assert "origin/fr:settings.yaml" in preview.output
+    assert "NOT a reviewed merge" in preview.output  # the test's merge is a fast-forward
+    assert "--yes" in preview.output
+    assert git(origin, "rev-parse", "fr").strip() == fr_before  # the preview writes nothing
+    done = _sync(repo, "--yes")
+    assert done.exit_code == 0, done.output
+    assert git(origin, "show", "fr:settings.yaml") == NEW
+    quiet._CACHE.clear()
+    assert load_settings(repo).settings.forge.comments == "off"
+    assert "in step" in _sync(repo).output
+
+
+def test_sync_reports_a_merge_commit_of_a_change_branch(
     repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]]
 ) -> None:
     write_settings(quiet_config_space(repo), NEW, message="chore(fr): labels off")
-    _merge(tmp_path, prs[0][1])
+    other = _other_clone(tmp_path)
+    git(other, "checkout", "-q", "fr-config")
+    git(other, "merge", "-q", "--no-ff", "-m", f"Merge {prs[0][1]}", f"origin/{prs[0][1]}")
+    git(other, "push", "-q", "origin", "fr-config")
     git(repo, "fetch", "-q", "origin", "+refs/heads/fr-config:refs/remotes/origin/fr-config")
-    fr_before = git(_origin(tmp_path), "rev-parse", "fr").strip()
     quiet._CACHE.clear()
-    with quiet.read_only(), pytest.raises(SettingsError) as caught:
-        quiet.read_switch(repo)
-    assert "fr settings show" in str(caught.value)
-    assert git(_origin(tmp_path), "rev-parse", "fr").strip() == fr_before
+    out = _sync(repo).output
+    assert "merge of a fr-config-change/* branch" in out, out
 
 
 def test_two_switches_edited_apart_name_both_refs_and_both_remedies(
@@ -123,8 +159,9 @@ def test_two_switches_edited_apart_name_both_refs_and_both_remedies(
     message = str(caught.value)
     assert "origin/fr-config:.fr/settings.yaml" in message
     assert "origin/fr:settings.yaml" in message
-    assert "fr settings show" in message and "by hand" in message
+    assert "neither matches" in message and "by hand" in message
     assert "one was edited by hand" not in message
+    assert _sync(repo, "--yes").exit_code == 2  # sync never picks a side
 
 
 def test_the_legacy_write_rebases_onto_a_moved_fr_and_keeps_every_commit(
@@ -143,10 +180,8 @@ def test_the_legacy_write_rebases_onto_a_moved_fr_and_keeps_every_commit(
     (wt / "mine.md").write_text("mine\n")
     git(wt, "add", "mine.md")
     git(wt, "commit", "-qm", "my artifact")
-    write_settings(quiet_config_space(repo), NEW, message="chore(fr): labels off")
-    _merge(tmp_path, prs[0][1])
-    git(repo, "fetch", "-q", "origin", "+refs/heads/fr-config:refs/remotes/origin/fr-config")
-    load_settings(repo)
+    _merged(repo, tmp_path, prs)
+    assert _sync(repo, "--yes").exit_code == 0
     origin = _origin(tmp_path)
     files = git(origin, "ls-tree", "-r", "--name-only", "fr").split()
     assert {"features/theirs.md", "mine.md", "settings.yaml"} <= set(files)
@@ -227,8 +262,14 @@ def test_a_stealth_change_opens_a_pull_request_on_the_tracking_repo_then_syncs(
     remote, head, base = prs[0]
     assert remote == ref.repo and base == "main-config"
     assert git(track, "show", f"{head}:local--origin/.fr/settings.yaml") == text
-    # the forge merges it; the next read brings the old file in step
+    # the forge merges it; readers refuse until `fr settings sync --yes`
     git(track, "update-ref", "refs/heads/main-config", git(track, "rev-parse", head).strip())
     stealth.ensure_worktree(target, stealth.config_ref(ref))
-    assert load_settings(state.worktree).settings.artifacts.gates == "off"
+    with pytest.raises(SettingsError, match="fr settings sync"):
+        load_settings(state.worktree)
+    env = {**os.environ, "FR_REPO_ROOT": str(state.worktree)}
+    monkeypatch.chdir(state.worktree)
+    done = CliRunner().invoke(app, ["settings", "sync", "--yes"], env=env)
+    assert done.exit_code == 0, done.output
     assert git(track, "show", "main:local--origin/settings.yaml") == text
+    assert load_settings(state.worktree).settings.artifacts.gates == "off"

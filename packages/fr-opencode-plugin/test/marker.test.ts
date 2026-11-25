@@ -879,11 +879,11 @@ describe("review p2-r5: the marker, file identity and non-ASCII names", () => {
 });
 
 describe("R6: a deny over differing switches names the sync", () => {
-  test("switchDifferNote is empty for one switch and names fr settings show for two that differ", () => {
+  test("switchDifferNote is empty for one switch and names fr settings sync for two that differ", () => {
     const { switchDifferNote } = require("../src/marker");
     quietSwitch(repo, "placement: quiet\n");
     withoutFr(() => expect(switchDifferNote(repo)).toBe(""));
     configSwitch(repo, "placement: quiet\n# reviewed\n", false);
-    withoutFr(() => expect(switchDifferNote(repo)).toContain("fr settings show"));
+    withoutFr(() => expect(switchDifferNote(repo)).toContain("fr settings sync"));
   });
 });

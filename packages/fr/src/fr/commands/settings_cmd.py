@@ -344,13 +344,8 @@ def paths_cmd(
     if shell == as_json:
         typer.echo("pass exactly one of --shell or --json", err=True)
         raise typer.Exit(2)
-    from contextlib import nullcontext
-
-    from fr.placement.quiet import read_only
-
-    try:  # --no-create is what hooks call: it never writes, not even the R6 legacy copy
-        with read_only() if no_create else nullcontext():
-            answers = paths_answers(_toplevel(), create=not no_create)
+    try:
+        answers = paths_answers(_toplevel(), create=not no_create)
     except SettingsError as e:
         typer.echo(f"{PATHS_REFUSAL_PREFIX}{e}", err=True)
         raise typer.Exit(2) from e
@@ -359,6 +354,78 @@ def paths_cmd(
         return
     for key, value in answers.items():
         typer.echo(f"{key}={shlex.quote(value)}")
+
+
+def _sync_placement(root: Path) -> str | None:
+    """The placement `sync` works under. The usual reader refuses while the two copies
+    differ, which is exactly the state `sync` exists for: a stealth marker answers first,
+    then quiet whenever origin has both switches (whatever they say)."""
+    from fr.artifacts.paths import outside_repo
+    from fr.placement import quiet, stealth
+
+    if stealth.marker_tracking(root) is not None:
+        return "stealth"
+    new, old = quiet.switch_texts(root)
+    if new is not None and old is not None:
+        return "quiet"
+    return outside_repo(root)
+
+
+@settings_app.command("sync")
+def sync_cmd(
+    yes: bool = typer.Option(
+        False, "--yes", help="Write the old settings copy (otherwise only preview)."
+    ),
+) -> None:
+    """Bring the old settings copy in step after a reviewed change (spec R6)."""
+    root = resolve_repo_root()
+    try:
+        placement = _sync_placement(root)
+        if placement == "quiet":
+            from fr.placement import quiet
+
+            plan = quiet.sync_legacy(root) if yes else quiet.sync_plan(root)
+        elif placement == "stealth":
+            from fr.placement import stealth
+
+            found = stealth.marker_tracking(root)
+            assert found is not None
+            ref, target = found
+            plan = (
+                stealth.sync_legacy_target(root, ref, target)
+                if yes
+                else stealth.sync_plan_target(root, ref, target)
+            )
+        else:
+            typer.echo("placement repo: there is no old settings copy to keep in step")
+            return
+    except SettingsError as e:
+        raise _refuse(e) from e
+    typer.echo(f"configuration branch: {plan.new_at}")
+    typer.echo(f"old copy:             {plan.old_at}")
+    if plan.state == "in-step":
+        typer.echo("in step: nothing to do")
+        return
+    if plan.state == "none":
+        typer.echo("one of the two is absent: nothing to sync (fr reads the one there, R13)")
+        return
+    if plan.state == "mismatch":  # only the preview gets here; --yes refuses above
+        typer.echo(
+            "neither matches the other at any earlier version: edit them by hand to the same "
+            "bytes (the configuration branch through a pull request)",
+            err=True,
+        )
+        raise typer.Exit(2)
+    typer.echo("the configuration branch moved since the old copy's version:")
+    for sha, subject, merged in plan.commits:
+        how = "merge of a fr-config-change/* branch" if merged else "NOT a reviewed merge"
+        typer.echo(f"  {sha[:12]}  {how}  {subject}")
+    if yes:
+        typer.echo("wrote the old copy: the two are in step")
+    else:
+        typer.echo(
+            "review the commits above, then run `fr settings sync --yes` to write the old copy"
+        )
 
 
 @settings_app.command("check")

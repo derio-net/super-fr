@@ -873,46 +873,62 @@ def write_target_settings(
 def settle_differing_target(
     root: Path, ref: StealthRef, target: str, new_text: str, new_sha: str, old_sha: str
 ) -> None:
-    """The target's two settings files differ (R6). When the old one's bytes are those
-    the configuration branch held at an earlier commit of its first-parent history (a
-    reviewed change advanced it), fr brings the old file in step and the read proceeds;
-    a read that may not write (`fr.placement.quiet.read_only`) refuses, naming the
-    command that does. Any other difference refuses, naming both refs and both remedies.
-    `fr.placement.quiet._settle_differing` is the quiet twin."""
-    from fr.placement.quiet import _READ_ONLY, _blob, legacy_lags
+    """The target's two settings files differ (R6): refuse, saying whether the old one
+    lags (an earlier first-parent version of the configuration branch's file, naming
+    `fr settings sync`) or neither matches. Never writes; the quiet twin is
+    `fr.placement.quiet._settle_differing`."""
+    from fr.placement.quiet import _blob, lag_refusal, legacy_lags, mismatch_refusal
 
+    del new_text
     cref = config_ref(ref)
-    clone = worktree_path(root, cref)
-    wt = worktree_path(root, ref)
     new_at = f"{cref.text}:{target}/{TARGET_SETTINGS} ({new_sha})"
     old_at = f"{ref.text}:{target}/{LEGACY_TARGET_SETTINGS} ({old_sha})"
-    old_blob = _blob(wt, f"{_remote_ref(ref)}:{target}/{LEGACY_TARGET_SETTINGS}")
-    if legacy_lags(clone, _remote_ref(cref), f"{target}/{TARGET_SETTINGS}", old_blob):
-        if _READ_ONLY[0]:
-            raise SettingsError(
-                f"placement stealth: the old settings file {old_at} lags {new_at}: a "
-                f"reviewed change advanced {cref.text}. Run `fr settings show` (any fr "
-                "command that reads the settings) to bring it in step; this read does not "
-                "write"
-            )
-        from fr.placement.quiet import settled_message
-
-        message = settled_message(root, new_text, f"bring {target}'s old settings in step")
-        write_legacy_target(root, ref, target, new_text, message)
-        print(
-            f"fr: brought {old_at} in step with {new_at} (a reviewed change advanced it; "
-            "older fr read the old file, R6)",
-            file=sys.stderr,
-        )
-        return
-    raise SettingsError(
-        f"placement stealth: the two settings files differ: {new_at} and {old_at}, and "
-        "the old one holds no earlier version of the new one, so fr cannot tell which is "
-        "meant (R6). Either make the old file an earlier version again and run `fr "
-        f"settings show`, which brings it in step after a reviewed change to {cref.text}; "
-        f"or, if neither is right, edit both by hand to the same bytes ({cref.text} "
-        "through a pull request) and push them"
+    old_blob = _blob(
+        worktree_path(root, ref), f"{_remote_ref(ref)}:{target}/{LEGACY_TARGET_SETTINGS}"
     )
+    what = "the target's two settings files"
+    if legacy_lags(
+        worktree_path(root, cref), _remote_ref(cref), f"{target}/{TARGET_SETTINGS}", old_blob
+    ):
+        raise lag_refusal(what, new_at, old_at)
+    raise mismatch_refusal(what, new_at, old_at)
+
+
+def sync_plan_target(root: Path, ref: StealthRef, target: str) -> Any:
+    """The stealth `fr settings sync` preview (reads the last fetched clones only)."""
+    from fr.placement.quiet import SyncPlan, _blob, changes_since, legacy_lags
+
+    cref = config_ref(ref)
+    clone, wt = worktree_path(root, cref), worktree_path(root, ref)
+    new_rel, old_rel = f"{target}/{TARGET_SETTINGS}", f"{target}/{LEGACY_TARGET_SETTINGS}"
+    new_text, old_text = target_settings_texts(root, ref, target)
+    new_at, old_at = f"{cref.text}:{new_rel}", f"{ref.text}:{old_rel}"
+    if new_text is None or old_text is None:
+        return SyncPlan(new_at, old_at, "none")
+    if new_text == old_text:
+        return SyncPlan(new_at, old_at, "in-step")
+    blob = _blob(wt, f"{_remote_ref(ref)}:{old_rel}")
+    if blob is None or not legacy_lags(clone, _remote_ref(cref), new_rel, blob):
+        return SyncPlan(new_at, old_at, "mismatch")
+    commits = changes_since(clone, _remote_ref(cref), new_rel, blob)
+    return SyncPlan(new_at, old_at, "lags", commits, new_text)
+
+
+def sync_legacy_target(root: Path, ref: StealthRef, target: str) -> Any:
+    """`fr settings sync --yes` under stealth: both clones fetched first, then, in the lag
+    case only, `write_legacy_target`. Refuses a mismatch."""
+    from fr.placement.quiet import mismatch_refusal, settled_message
+
+    ensure_worktree(root, ref)
+    if (worktree_path(root, config_ref(ref)) / ".git").exists():
+        ensure_worktree(root, config_ref(ref))
+    plan = sync_plan_target(root, ref, target)
+    if plan.state == "mismatch":
+        raise mismatch_refusal("the target's two settings files", plan.new_at, plan.old_at)
+    if plan.state == "lags" and plan.text is not None:
+        message = settled_message(root, plan.text, f"bring {target}'s old settings in step")
+        write_legacy_target(root, ref, target, plan.text, message)
+    return plan
 
 
 _LEGACY_ATTEMPTS: Final = 3

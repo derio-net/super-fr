@@ -291,6 +291,8 @@ def test_quiet_to_stealth_moves_once_every_feature_merged(
     assert "paused" in "\n".join(_run(root, "stealth", tracking=f"{bare}@main"))
     origin = _origin(root)
     git(origin, "update-ref", "refs/heads/fr-config", git(origin, "rev-parse", opened[0]).strip())
+    git(root, "fetch", "-q", "origin", "+refs/heads/fr-config:refs/remotes/origin/fr-config")
+    quiet.sync_legacy(root)  # the operator's `fr settings sync --yes` after the review
     _run(root, "stealth", tracking=f"{bare}@main")
     assert quiet.read_switch(root) is None
     assert before.matrix.rows

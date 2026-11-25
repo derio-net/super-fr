@@ -380,9 +380,9 @@ def test_a_deny_over_differing_switches_names_the_sync(tmp_path: Path) -> None:
     reason = json.loads(run_hook(payload(repo / "src.py"), env).stdout)["hookSpecificOutput"][
         "permissionDecisionReason"
     ]
-    assert "fr settings show" not in reason
+    assert "fr settings sync" not in reason
     push_config_switch(repo, "placement: quiet\n# reviewed\n")
     reason = json.loads(run_hook(payload(repo / "src.py"), env).stdout)["hookSpecificOutput"][
         "permissionDecisionReason"
     ]
-    assert "fr settings show" in reason and "origin/fr-config:.fr/settings.yaml" in reason
+    assert "fr settings sync" in reason and "origin/fr-config:.fr/settings.yaml" in reason

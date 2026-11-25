@@ -377,6 +377,8 @@ def test_move_back_to_repo_copies_through_a_branch_and_switches_by_a_new_commit(
     assert "paused" in out and opened and opened[0].startswith("fr-config-change/")
     assert quiet.read_switch(root) is not None  # not switched before the PR merged
     git(origin, "update-ref", "refs/heads/fr-config", git(origin, "rev-parse", opened[0]).strip())
+    git(root, "fetch", "-q", "origin", "+refs/heads/fr-config:refs/remotes/origin/fr-config")
+    quiet.sync_legacy(root)  # the operator's `fr settings sync --yes` after the review
     _run(root, "repo")
     assert quiet.read_switch(root) is None
     new_tip = git(origin, "rev-parse", "fr").strip()

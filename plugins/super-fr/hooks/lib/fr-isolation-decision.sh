@@ -753,7 +753,7 @@ fr_isolation_drift_reason() {
 # FR_SWITCH_DIFFER_NOTE — the sentence a deny appends when the two quiet switches differ
 # (spec 2026-11-19-event-driven-a-la-carte R6): the hooks cannot write, so they name the fr
 # command that brings the old copy in step. marker.ts `SWITCH_DIFFER_NOTE` is the same text.
-FR_SWITCH_DIFFER_NOTE="The two quiet switches (origin/fr-config:.fr/settings.yaml and origin/fr:settings.yaml) differ, so this repo is gated: run \`fr settings show\` to bring the old copy in step after a reviewed change to fr-config, or make the two identical by hand."
+FR_SWITCH_DIFFER_NOTE="The two quiet switches (origin/fr-config:.fr/settings.yaml and origin/fr:settings.yaml) differ, so this repo is gated: review the move with \`fr settings sync\` and bring the old copy in step with \`fr settings sync --yes\`, or, if neither matches, make the two identical by hand."
 
 # fr_switch_differ_note <file> — prints FR_SWITCH_DIFFER_NOTE when the file's repo has
 # both switches and they differ by blob (as `_fr_read_switch` reads them), else nothing.

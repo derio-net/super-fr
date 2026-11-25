@@ -217,25 +217,8 @@ def _read(root: Path) -> Switch | None:
     return result
 
 
-_READ_ONLY: list[bool] = [False]
-"""Set by `read_only()`: a reader that must not write (the hooks' `fr settings paths
---no-create`) refuses a lagging legacy copy instead of bringing it in step."""
-_SYNCED: set[str] = set()
-"""Common dirs whose lagging legacy switch this process already brought in step (said once)."""
 _HISTORY_LIMIT: Final = 500
 """How far back fr-config's first-parent history is searched for the legacy copy's bytes."""
-
-
-@contextmanager
-def read_only() -> Iterator[None]:
-    """Within it, `_read` never writes: a lagging legacy copy refuses (naming the command
-    that brings it in step) rather than being pushed."""
-    before = _READ_ONLY[0]
-    _READ_ONLY[0] = True
-    try:
-        yield
-    finally:
-        _READ_ONLY[0] = before
 
 
 def history_blobs(cwd: Path, ref: str, rel: str, limit: int = _HISTORY_LIMIT) -> set[str]:
@@ -281,42 +264,110 @@ def settled_message(root: Path, text: str, summary: str) -> str:
     return _with_trailer(render_subject(settings, "chore", "fr", summary, None), kind)
 
 
-def _settle_differing(root: Path, new: tuple[str, str], old: tuple[str, str]) -> None:
-    """The two switches differ (R6). When the old one is an earlier version of the new
-    one, fr brings it in step (once per process, saying so) and the read proceeds; a read
-    that may not write refuses, naming the command that does. Any other difference
-    refuses, naming both refs and both remedies."""
-    old_blob = _blob(root, _LEGACY_SOURCE)
-    if legacy_lags(root, paths.SWITCH_REF, paths.SWITCH_SETTINGS, old_blob):
-        if _READ_ONLY[0]:
-            raise SettingsError(
-                f"placement: the old quiet switch {_LEGACY_SOURCE} ({old[0][:12]}) lags "
-                f"{_SOURCE} ({new[0][:12]}): a reviewed change advanced `{CONFIG_BRANCH}`. "
-                "Run `fr settings show` (any fr command that reads the settings) to bring "
-                "the old copy in step; this read does not write"
-            )
-        message = settled_message(
-            root, new[1], f"bring the old quiet switch in step with {CONFIG_BRANCH}"
-        )
-        write_legacy(root, new[1], message)
-        common = paths._common_dir(root)
-        key = str(common)
-        if key not in _SYNCED:
-            _SYNCED.add(key)
-            print(
-                f"fr: brought {_LEGACY_SOURCE} in step with {_SOURCE} (a reviewed change "
-                f"advanced `{CONFIG_BRANCH}`; older fr read the old file, R6)",
-                file=sys.stderr,
-            )
-        return
-    raise SettingsError(
-        f"placement: the two quiet switches differ: {_SOURCE} ({new[0][:12]}) and "
-        f"{_LEGACY_SOURCE} ({old[0][:12]}), and the old one holds no earlier version of "
-        f"the new one, so fr cannot tell which is meant (R6). Either make the old file "
-        f"an earlier version again and run `fr settings show`, which brings it in step "
-        f"after a reviewed change to `{CONFIG_BRANCH}`; or, if neither is right, edit both "
-        f"by hand to the same bytes (`{CONFIG_BRANCH}` through a pull request) and push them"
+SYNC_COMMAND: Final = "fr settings sync"
+"""The operator's command that brings a lagging legacy copy in step (R6): it previews; with
+`--yes` it writes. No reader writes the legacy copy on its own (review of decision
+p2-config-changes-by-pr): a push straight to an unprotected configuration branch would
+otherwise be copied silently, and the one signal that it moved outside review would go."""
+
+
+def lag_refusal(what: str, new_at: str, old_at: str) -> SettingsError:
+    """R6's refusal when the old copy holds an earlier first-parent version of the new."""
+    return SettingsError(
+        f"placement: {what} differ: {new_at} and {old_at}. The old one holds an earlier "
+        f"version of the new one (the configuration branch moved on since), so fr will not "
+        f"act until they are in step (R6). Review the move with `{SYNC_COMMAND}` (both refs, "
+        f"the commits between, and whether each merged a `fr-config-change/*` pull "
+        f"request), then `{SYNC_COMMAND} --yes` writes the old copy"
     )
+
+
+def mismatch_refusal(what: str, new_at: str, old_at: str) -> SettingsError:
+    """R6's refusal when neither file is an earlier version of the other."""
+    return SettingsError(
+        f"placement: {what} differ: {new_at} and {old_at}, and neither matches the other "
+        "at any earlier version, so fr cannot tell which is meant (R6). Edit them by hand to "
+        "the same bytes (the configuration branch through a pull request) and push them"
+    )
+
+
+def _settle_differing(root: Path, new: tuple[str, str], old: tuple[str, str]) -> None:
+    """The two switches differ (R6): refuse, saying whether the old one lags (and naming
+    `fr settings sync`) or neither matches. Never writes."""
+    what = "the two quiet switches"
+    new_at = f"{_SOURCE} ({new[0][:12]})"
+    old_at = f"{_LEGACY_SOURCE} ({old[0][:12]})"
+    if legacy_lags(root, paths.SWITCH_REF, paths.SWITCH_SETTINGS, _blob(root, _LEGACY_SOURCE)):
+        raise lag_refusal(what, new_at, old_at)
+    raise mismatch_refusal(what, new_at, old_at)
+
+
+@dataclass(frozen=True)
+class SyncPlan:
+    """What `fr settings sync` would do: the two refs, the commits of the configuration
+    branch since the old copy's version (first-parent, newest first, each with whether it
+    merged a `fr-config-change/*` branch), and whether the old copy lags at all."""
+
+    new_at: str
+    old_at: str
+    state: str  # "in-step" | "lags" | "mismatch" | "none"
+    commits: tuple[tuple[str, str, bool], ...] = ()
+    text: str | None = None
+
+
+def changes_since(cwd: Path, ref: str, rel: str, blob: str) -> tuple[tuple[str, str, bool], ...]:
+    """The first-parent commits of *ref* after the last one where *rel* was *blob*,
+    newest first: (sha, subject, whether it is a merge of a `fr-config-change/*` branch,
+    read from its second parent's branch name in the merge subject or a fetched ref)."""
+    listed = _git(cwd, "log", "--first-parent", "--format=%H%x09%P%x09%s",
+                  "-n", str(_HISTORY_LIMIT), ref)  # fmt: skip
+    changes = _git(cwd, "for-each-ref", "--format=%(objectname)",
+                   "refs/remotes/origin/fr-config-change/")  # fmt: skip
+    heads = set(changes.stdout.split())
+    out: list[tuple[str, str, bool]] = []
+    for line in listed.stdout.splitlines():
+        sha, parents, subject = (line.split("\t", 2) + ["", ""])[:3]
+        if _blob(cwd, f"{sha}:{rel}") == blob:
+            break
+        second = parents.split()[1:2]
+        merged = bool(second) and ("fr-config-change/" in subject or second[0] in heads)
+        out.append((sha, subject, merged))
+    return tuple(out)
+
+
+def sync_plan(root: Path) -> SyncPlan:
+    """The quiet `fr settings sync` preview (reads only)."""
+    new, old = switch_texts(Path(root))
+    new_at = f"{_SOURCE} ({new[0][:12]})" if new else f"{_SOURCE} (absent)"
+    old_at = f"{_LEGACY_SOURCE} ({old[0][:12]})" if old else f"{_LEGACY_SOURCE} (absent)"
+    if new is None or old is None:
+        return SyncPlan(new_at, old_at, "none")
+    if new[1] == old[1]:
+        return SyncPlan(new_at, old_at, "in-step")
+    blob = _blob(root, _LEGACY_SOURCE)
+    if not legacy_lags(root, paths.SWITCH_REF, paths.SWITCH_SETTINGS, blob):
+        return SyncPlan(new_at, old_at, "mismatch")
+    assert blob is not None
+    commits = changes_since(root, paths.SWITCH_REF, paths.SWITCH_SETTINGS, blob)
+    return SyncPlan(new_at, old_at, "lags", commits, new[1])
+
+
+def sync_legacy(root: Path) -> SyncPlan:
+    """`fr settings sync --yes` under quiet: in the lag case only, fetch first, then write
+    the old copy with `write_legacy`. Refuses a mismatch."""
+    root = Path(root)
+    _fetch_both(root, _default_network(root), None)
+    _CACHE.clear()
+    plan = sync_plan(root)
+    if plan.state == "mismatch":
+        raise mismatch_refusal("the two quiet switches", plan.new_at, plan.old_at)
+    if plan.state == "lags" and plan.text is not None:
+        message = settled_message(
+            root, plan.text, f"bring the old quiet switch in step with {CONFIG_BRANCH}"
+        )
+        write_legacy(root, plan.text, message)
+        _CACHE.clear()
+    return plan
 
 
 def parse_switch_text(
