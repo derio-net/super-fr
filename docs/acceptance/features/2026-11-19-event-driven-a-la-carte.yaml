@@ -240,3 +240,10 @@ amendments:
     ref: super-fr:tests/unit/test_triage_state_workspace.py#test_state_lives_in_the_workspace_and_is_excluded_through_the_common_dir
     why: S1 R17 moved the state out of the workspace into the cache repository; the
       two workspace tests were replaced by test_triage_state_home.py's
+  - row: cloud-triage-state-ref
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_triage_state_workspace.py#test_the_home_cache_is_imported_once_and_left_in_place
+    why: S1 R17 moved the state out of the workspace into the cache repository; the
+      two workspace tests were replaced by test_triage_state_home.py's
