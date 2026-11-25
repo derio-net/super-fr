@@ -95,6 +95,17 @@ journal:
       token-level three-way merge, mirrors regenerated; three explainer stamps keep both
       sides; batch_dispatch keeps main's `unicodedata` and drops the `shlex` the move left
       unused); every module stays within its budget.
+  - kind: discovery
+    id: p2-fast-tier-tripwires
+    phase: 2
+    title: "The fast tier caught two tripwires: the archive preview's method sets and the approval-label prose"
+    body: |
+      `fr.archive_preview.READS` must name every GhClient method, so `repo_default_branch`
+      joined it. `test_tripwire_approval_label_prose` refuses a shipped sentence asking anyone
+      but the operator to add `approved-fr`; the skill's preapproval sentence now says the
+      operator approves in advance and the driver labels on the operator's behalf, which is
+      what R13 grants. The first fast tier run (10252 passed, these 2 failed) covered the whole
+      branch; after the fix the tier was run again over the fix commit's delta.
   - kind: lens
     lens: security
     title: "preapproval lets the driver add approved-fr itself; check the adder, PR trust, conflict and patch-id gates and the audit comment"
