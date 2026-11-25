@@ -952,7 +952,9 @@ def sync_plan_target(root: Path, ref: StealthRef, target: str) -> Any:
         return SyncPlan(new_at, old_at, "none")
     ensure_worktree(root, cref)
     unlabelled = change_fetch_problem(
-        network(["git", "fetch", "--quiet", "--no-tags", "--prune", "origin", CHANGE_REFSPEC], clone)
+        network(
+            ["git", "fetch", "--quiet", "--no-tags", "--prune", "origin", CHANGE_REFSPEC], clone
+        )
     )
     new_text, old_text = target_settings_texts(root, ref, target)
     if new_text is None:

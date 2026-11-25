@@ -488,7 +488,9 @@ def test_a_failed_read_of_the_declaration_leaves_the_state_repo_undecided(
     monkeypatch.setattr(triage_cmd, "make_forge", lambda: forge)
     state = tmp_path / "s"
     _assert_undecided(state, _collect(state))
-    monkeypatch.setattr(triage_cmd, "make_forge", lambda: _forge({(REPO, SETTINGS, "HEAD"): DECLARED}))
+    monkeypatch.setattr(
+        triage_cmd, "make_forge", lambda: _forge({(REPO, SETTINGS, "HEAD"): DECLARED})
+    )
     assert _collect(state).exit_code == 0
     assert load_durable(state).state_repo == "example-org/triage-refs"  # decided next time
 

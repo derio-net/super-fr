@@ -460,9 +460,10 @@ def test_a_failed_fetch_after_a_push_still_moves_the_tracking_ref(
     quiet.write_branch_file(
         root, "demo", "refs/remotes/origin/demo", "a.txt", "one\n", "m", network=network
     )
-    assert git(root, "rev-parse", "refs/remotes/origin/demo").strip() == git(
-        _origin(tmp_path), "rev-parse", "demo"
-    ).strip()
+    assert (
+        git(root, "rev-parse", "refs/remotes/origin/demo").strip()
+        == git(_origin(tmp_path), "rev-parse", "demo").strip()
+    )
 
 
 def test_a_failed_rules_read_under_sync_yes_names_the_expect_remedy(
