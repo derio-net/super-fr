@@ -311,10 +311,48 @@ def test_two_forges_with_the_same_slug_get_their_own_answers() -> None:
     assert len(enforced.calls) == 1 and len(bare.calls) == 1
 
 
-def test_the_cache_lives_in_memory_only() -> None:
-    """Never on disk: the module holds no path."""
-    source = Path(protection.__file__).read_text()
-    assert "Path(" not in source and "open(" not in source
+_ASK_TWICE = """
+import json, sys
+from fr.config import protection
+
+class Rules:
+    calls = 0
+    def branch_rules(self, repo, branch):
+        Rules.calls += 1
+        return json.loads(open(sys.argv[1]).read())
+
+client = Rules()
+for _ in range(2):
+    assert isinstance(protection.branch_protection(client, sys.argv[2], "fr-config"),
+                      protection.Enforced)
+print(Rules.calls)
+"""
+
+
+def test_the_cache_lives_in_memory_only(tmp_path: Path) -> None:
+    """Never on disk (lens review l-tests-r5, a behaviour test): a process asks the forge
+    once and answers its second ask from memory, a second process asks the forge again, and
+    neither leaves a file under its HOME or its working directory."""
+    import os
+    import subprocess
+    import sys
+
+    home, cwd = tmp_path / "home", tmp_path / "cwd"
+    home.mkdir()
+    cwd.mkdir()
+    env = {**os.environ, "HOME": str(home), "XDG_CACHE_HOME": str(home / ".cache")}
+    for _ in range(2):
+        done = subprocess.run(
+            [sys.executable, "-P", "-c", _ASK_TWICE, str(RULES / APPROVED), REPO],
+            cwd=cwd,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert done.returncode == 0, done.stderr
+        assert done.stdout.strip() == "1"  # one forge read per process: nothing carried over
+    assert list(home.rglob("*")) == [] and list(cwd.rglob("*")) == []
 
 
 # --- the guard ----------------------------------------------------------------------
