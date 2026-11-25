@@ -96,11 +96,29 @@ def _stamped(text: str) -> str:
 
 
 def _config_checkout(top: Path) -> bool:
-    """Whether *top* is a configuration checkout (quiet's `fr-config` worktree or a
-    stealth configuration clone), not a product checkout."""
-    return moves.quiet_stamp(top / moves.SPACE_DIR / moves.SETTINGS) == 2 or top.name.endswith(
-        "-config"
-    )
+    """Whether *top* is a configuration checkout, decided by structure, never by a name
+    (review p4-r5): quiet's `fr-config` worktree (HEAD on `refs/heads/fr-config` at the path
+    fr computes for this repository), or the configuration space of the product being
+    migrated (`MIGRATING_ROOT`) when that product's placement is quiet or stealth (the
+    stealth configuration clone its valid marker names)."""
+    import subprocess
+
+    from fr.artifacts.paths import REPO
+    from fr.config.space import CONFIG_BRANCH, quiet_checkout
+
+    top = Path(top)
+    head = subprocess.run(
+        ["git", "-C", str(top), "symbolic-ref", "-q", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    if head == f"refs/heads/{CONFIG_BRANCH}" and top.resolve() == quiet_checkout(top).resolve():
+        return True
+    product = MIGRATING_ROOT.get()
+    if product is None or moves.placement_of(product) == REPO:
+        return False
+    return top.resolve() == moves.space_root(product).resolve()
 
 
 def _profiles_destination(path: Path) -> Path:
