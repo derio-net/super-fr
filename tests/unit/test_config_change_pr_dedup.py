@@ -62,20 +62,64 @@ def test_the_change_branch_names_the_kind() -> None:
     )
 
 
+def _pr(state: str, **over: Any) -> dict[str, Any]:
+    return {
+        "state": state,
+        "url": "https://example.com/pr/7",
+        "same_repo": True,
+        "base": "fr-config",
+        **over,
+    }
+
+
+def _push_proposal(root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A real earlier proposal: its head branch on origin holds the change."""
+    _forge(monkeypatch, [])
+    m.QuietWriter(root).propose(".fr/models.yaml", TEXT, "chore(fr): models")
+
+
 def test_an_open_pull_request_for_the_same_content_is_reused_not_reproposed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _root(tmp_path)
-    opened = _forge(monkeypatch, [{"state": "OPEN", "url": "https://example.com/pr/7"}])
+    _push_proposal(root, monkeypatch)
+    opened = _forge(monkeypatch, [_pr("OPEN")])
     url = m.QuietWriter(root).propose(".fr/models.yaml", TEXT, "chore(fr): models")
     assert url == "https://example.com/pr/7" and opened == []
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        _pr("OPEN", same_repo=False),  # a fork PR whose head carries the same name
+        _pr("CLOSED", same_repo=False),
+        _pr("OPEN", base="main"),  # not into the configuration branch
+        _pr("CLOSED", base="main"),
+    ],
+)
+def test_an_untrusted_earlier_pull_request_is_ignored_and_a_fresh_one_made(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, record: dict[str, Any]
+) -> None:
+    root = _root(tmp_path)
+    opened = _forge(monkeypatch, [record])
+    url = m.QuietWriter(root).propose(".fr/models.yaml", TEXT, "chore(fr): models")
+    assert url == "https://example.com/pr/new" and len(opened) == 1
+
+
+def test_an_open_pull_request_whose_head_lacks_the_bytes_is_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _root(tmp_path)  # no head branch was ever pushed: nothing proves the content
+    opened = _forge(monkeypatch, [_pr("OPEN")])
+    url = m.QuietWriter(root).propose(".fr/models.yaml", TEXT, "chore(fr): models")
+    assert url == "https://example.com/pr/new" and len(opened) == 1
 
 
 def test_a_closed_unmerged_pull_request_refuses_naming_it_and_how_to_repropose(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _root(tmp_path)
-    opened = _forge(monkeypatch, [{"state": "CLOSED", "url": "https://example.com/pr/7"}])
+    opened = _forge(monkeypatch, [_pr("CLOSED")])
     with pytest.raises(SettingsError, match="--repropose") as refused:
         m.QuietWriter(root).propose(".fr/models.yaml", TEXT, "chore(fr): models")
     assert "https://example.com/pr/7" in str(refused.value) and opened == []
@@ -89,9 +133,32 @@ def test_a_merged_or_absent_pull_request_proposes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _root(tmp_path)
-    opened = _forge(monkeypatch, [{"state": "MERGED", "url": "https://example.com/pr/7"}])
+    opened = _forge(monkeypatch, [_pr("MERGED")])
     assert m.QuietWriter(root).propose(".fr/models.yaml", TEXT, "m") == "https://example.com/pr/new"
     assert len(opened) == 1
+
+
+def test_the_default_forge_read_keeps_only_same_repo_records(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import fr.hostclient as hostclient
+
+    class _Client:
+        def list_prs_by_head(self, repo: str, head: str) -> list[dict[str, Any]]:
+            return [
+                {"number": 1, "state": "OPEN", "url": "u1", "isCrossRepository": True},
+                {"number": 2, "state": "CLOSED", "url": "u2", "isCrossRepository": False},
+            ]
+
+        def pr_view(self, repo: str, number: int) -> dict[str, Any]:
+            assert number == 2
+            return {"base_ref": "fr-config", "head_oid": "abc"}
+
+    monkeypatch.setattr(hostclient, "client_for_url", lambda _u: _Client())
+    found = change._forge_prs_for_head("https://github.com/example-org/r.git", "h")
+    assert found == [
+        {"state": "CLOSED", "url": "u2", "same_repo": True, "base": "fr-config", "head_oid": "abc"}
+    ]
 
 
 def test_the_migrate_command_takes_repropose(tmp_path: Path) -> None:

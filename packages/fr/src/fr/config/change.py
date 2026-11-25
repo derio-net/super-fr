@@ -88,22 +88,44 @@ open_pr: OpenPr = _forge_open_pr
 """The forge seam (tests replace it; nothing here calls a forge in a test)."""
 
 PrsForHead = Callable[[str, str], list[dict[str, object]]]
-"""(remote URL, head branch) -> every pull request from that head, any state, as
-`{state: OPEN | CLOSED | MERGED, url}` records."""
+"""(remote URL, head branch) -> the pull requests from that head, any state, as
+`{state: OPEN | CLOSED | MERGED, url, same_repo, base, head_oid}` records. `same_repo` is
+True only when the head lives in the target repo itself (never a fork carrying the same
+branch name); `base` is the branch the pull request merges into."""
 
 
 def _forge_prs_for_head(remote: str, head: str) -> list[dict[str, object]]:
-    """The default `PrsForHead`; a forge fr cannot ask answers none (the change is then
-    proposed as before, and `open_pr` still reuses an open pull request)."""
+    """The default `PrsForHead` (security review of p4-r12): `list_prs_by_head`, keeping
+    only the pull requests whose head is in the target repo (`isCrossRepository` False,
+    the same test `open_pr_in_repo` makes by head-repo full name), each read with `pr_view`
+    for its base and head commit. A forge fr cannot ask answers none (the change is then
+    proposed, and `open_pr` still reuses an open pull request)."""
     from fr._hosts import slug_from_url
+    from fr.ghclient import UnsupportedForgeOperation
     from fr.hostclient import FORGE_ERRORS, client_for_url
 
     slug = slug_from_url(remote) if "://" in remote or "@" in remote else None
     if not slug:
         return []
+    slug = slug.removesuffix(".git")
     try:
-        return list(client_for_url(remote).list_prs_by_head(slug, head))
-    except FORGE_ERRORS:
+        client = client_for_url(remote)
+        out: list[dict[str, object]] = []
+        for pr in client.list_prs_by_head(slug, head):
+            if pr.get("isCrossRepository") is not False:
+                continue  # a fork's head, or one fr cannot place: never trusted
+            view = client.pr_view(slug, int(pr["number"]))
+            out.append(
+                {
+                    "state": str(pr.get("state", "")),
+                    "url": str(pr.get("url", "")),
+                    "same_repo": True,
+                    "base": str(view.get("base_ref", "")),
+                    "head_oid": str(view.get("head_oid", "")),
+                }
+            )
+        return out
+    except (*FORGE_ERRORS, UnsupportedForgeOperation):
         return []
 
 
@@ -111,16 +133,24 @@ prs_for_head: PrsForHead = _forge_prs_for_head
 """The forge seam for earlier proposals (tests replace it)."""
 
 
-def _earlier_proposal(remote: str, head: str, rel: str) -> str | None:
-    """The URL of an OPEN pull request from *head* (reuse it), or None (propose). A pull
-    request closed unmerged refuses, naming it and how to propose it again."""
+def _earlier_proposal(
+    cwd: Path, remote: str, head: str, base: str, rel: str, text: str
+) -> str | None:
+    """The URL of an earlier OPEN pull request to reuse, or None (propose). A pull request
+    counts only when its head is in the target repo and it merges into *base*; an open one
+    also only when origin's *head* holds *rel* = *text* exactly. One closed unmerged
+    refuses, naming it and how to propose it again. Any other is ignored."""
     if os.environ.get(REPROPOSE_ENV):
         return None
-    found = prs_for_head(remote, head)
-    for pr in found:
-        if str(pr.get("state", "")).upper() == "OPEN":
+    trusted = [
+        pr
+        for pr in prs_for_head(remote, head)
+        if pr.get("same_repo") is True and str(pr.get("base", "")) == base
+    ]
+    for pr in trusted:
+        if str(pr.get("state", "")).upper() == "OPEN" and _already_proposed(cwd, head, rel, text):
             return str(pr.get("url", ""))
-    for pr in found:
+    for pr in trusted:
         if str(pr.get("state", "")).upper() == "CLOSED":
             raise SettingsError(
                 f"the change to {rel} was proposed in {pr.get('url', '')} and that pull "
@@ -221,7 +251,7 @@ def open_change(
     without it."""
     base_sha = _run(cwd, "rev-parse", "--verify", f"{base_ref}^{{commit}}")
     head = change_branch(rel, text)
-    earlier = _earlier_proposal(remote, head, rel)
+    earlier = _earlier_proposal(cwd, remote, head, base_branch, rel, text)
     if earlier:
         return earlier
     approved = _approve(product, head, f"{base_sha[:12]}+{head.rsplit('-', 1)[-1]}")
