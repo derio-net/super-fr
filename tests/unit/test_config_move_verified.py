@@ -87,7 +87,9 @@ class _Writer:
         return "placement: stealth\n"
 
 
-def test_a_creation_that_did_not_land_removes_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_creation_that_did_not_land_removes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     root = _quiet(tmp_path)
     src = _put(root, MODELS, TEXT)
     writer = _Writer(race=False, other=None)
@@ -97,7 +99,9 @@ def test_a_creation_that_did_not_land_removes_nothing(tmp_path: Path, monkeypatc
     assert src.read_text() == TEXT
 
 
-def test_a_lost_lease_falls_into_the_exists_cases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_lost_lease_falls_into_the_exists_cases(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     root = _quiet(tmp_path)
     src = _put(root, MODELS, TEXT)
 
