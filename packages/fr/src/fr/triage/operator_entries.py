@@ -15,10 +15,38 @@ from typing import Any
 
 from fr.triage.approval import is_approved, settle_entry_approval
 from fr.triage.batch import allowed_authors, batch_branch, distrust, last_dispatch
-from fr.triage.batch_drive import HOUSEKEEPING_PREFIX, Action, LivePr, checks_verdict
+from fr.triage.batch_drive import (
+    ARCHIVE_PREFIXES,
+    COLLECTED_PREFIX,
+    EXPORT_PREFIX,
+    HOUSEKEEPING_PREFIX,
+    Action,
+    LivePr,
+    checks_verdict,
+)
 from fr.triage.errors import TriageError
 from fr.triage.model import Facts, Judgements, QueueApprovalEvent, QueueBuiltEvent, QueueEntryRef
 from fr.triage.scope_config import scope_id
+
+
+def reserved_entry(repo: str, number: int, head_ref: str, judgements: Judgements) -> str | None:
+    """What kind of fr's own queue entry *repo*'s PR *number* on *head_ref* already is
+    (`close-out`, `archive`, `export`, `housekeeping`), or None: such a PR is never an
+    operator entry (spec 2026-11-24-wave-queue-gaps R11). Read from the head branch fr
+    names it by and the close-out and export records."""
+    if head_ref.startswith(HOUSEKEEPING_PREFIX):
+        return "housekeeping"
+    if head_ref.startswith(EXPORT_PREFIX) or any(
+        e.repo == repo and e.pr == number for e in judgements.exports
+    ):
+        return "export"
+    if head_ref.startswith(COLLECTED_PREFIX) or any(
+        c.repo == repo and c.pr == number for c in judgements.closeouts
+    ):
+        return "close-out"
+    if head_ref.startswith(ARCHIVE_PREFIXES):
+        return "archive"
+    return None
 
 
 def housekeeping_reads(

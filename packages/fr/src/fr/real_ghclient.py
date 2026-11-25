@@ -577,6 +577,15 @@ class RealGhClient:
         return _gh.repo_visibility(_gh._run_gh, self._host, repo)
 
     @_hosted
+    def repo_default_branch(self, repo: str) -> str:
+        """`default_branch` of `GET repos/{repo}`; raises when the answer holds none."""
+        raw = json.loads(_gh._run_gh(["api", f"repos/{repo}"]))
+        name = raw.get("default_branch") if isinstance(raw, dict) else None
+        if not isinstance(name, str) or not name:
+            raise _gh.GhError(f"GET repos/{repo}: no default_branch in the answer")
+        return name
+
+    @_hosted
     def pages_visibility(self, repo: str) -> str:
         """`public` of `GET repos/{repo}/pages`; `unknown` on a 404 (no site) or any failure."""
         from fr.acceptance.pages import UNKNOWN, from_github

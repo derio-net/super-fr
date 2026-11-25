@@ -1268,4 +1268,5 @@ import fr.commands.triage_drive_cmd  # noqa: E402, F401
 import fr.commands.triage_history_cmd  # noqa: E402, F401
 import fr.commands.triage_kanban_cmd  # noqa: E402, F401
 import fr.commands.triage_origins_cmd  # noqa: E402, F401
+import fr.commands.triage_queue_cmd  # noqa: E402, F401
 import fr.commands.triage_state_cmd  # noqa: E402, F401
