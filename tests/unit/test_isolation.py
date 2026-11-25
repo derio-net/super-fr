@@ -4401,18 +4401,69 @@ def test_gc_keeps_merged_by_content_workspace_with_a_running_step(
     assert wt.is_dir()
 
 
+@pytest.mark.parametrize("dry_run", [True, False])
+@pytest.mark.parametrize(
+    "body",
+    ["run: [unclosed\n  : : :\n", "run: bad\nbranch: feat/bad\nsteps: [deliver]\n"],
+    ids=["broken-yaml", "steps-not-a-mapping"],
+)
 def test_gc_keeps_merged_workspace_with_an_unreadable_cursor(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dry_run: bool, body: str
 ) -> None:
     repo, _runner, target, up = _gc_env(tmp_path, monkeypatch, pr_by_branch={"feat/bad": _MERGED})
     wt = up("feat/bad")
     runs = wt / "docs" / "superpowers" / "runs"
     runs.mkdir(parents=True)
-    _commit_in_worktree(wt, "docs/superpowers/runs/bad.yaml", "run: [unclosed\n  : : :\n")
+    _commit_in_worktree(wt, "docs/superpowers/runs/bad.yaml", body)
+    # Pushed, so only the R9 guard (not the unpushed-changes hazard) can keep it.
+    subprocess.run(["git", "-C", str(wt), "push", "-q", "origin", "HEAD:main"], check=True)
 
-    (action,) = [a for a in target.gc(dry_run=True) if a.branch == "feat/bad"]
-    assert action.action == "skipped" and action.detail.startswith("kept: run bad")
-    assert wt.is_dir()
+    (action,) = [a for a in target.gc(dry_run=dry_run) if a.branch == "feat/bad"]
+    assert action.action == "skipped"
+    assert action.detail.startswith("kept: run bad is unreadable")
+    assert wt.is_dir() and load_state(repo, "feat/bad") is not None
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_gc_keeps_merged_workspace_with_a_running_unit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dry_run: bool
+) -> None:
+    import yaml
+
+    repo, _runner, target, up = _gc_env(tmp_path, monkeypatch, pr_by_branch={"feat/unit": _MERGED})
+    wt = up("feat/unit")
+    doc = {
+        "schema_version": 5,
+        "run": "r9u",
+        "workflow": "fr-goal@1",
+        "branch": "feat/unit",
+        "started": "2026-09-23T00:00:00+00:00",
+        "cursor": "implement",
+        "steps": {
+            "implement": {
+                "state": "pending",
+                "units": {"phase/2/implement-phase": {"state": "running"}},
+            }
+        },
+    }
+    (wt / "docs" / "superpowers" / "runs").mkdir(parents=True)
+    _commit_in_worktree(wt, "docs/superpowers/runs/r9u.yaml", yaml.safe_dump(doc, sort_keys=False))
+    subprocess.run(["git", "-C", str(wt), "push", "-q", "origin", "HEAD:main"], check=True)
+
+    (action,) = [a for a in target.gc(dry_run=dry_run) if a.branch == "feat/unit"]
+    assert action.action == "skipped"
+    assert action.detail == "kept: run r9u step implement is running"
+    assert wt.is_dir() and load_state(repo, "feat/unit") is not None
+
+
+def test_gc_still_reaps_merged_workspace_with_no_cursor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _repo, _runner, target, up = _gc_env(tmp_path, monkeypatch, pr_by_branch={"feat/none": _MERGED})
+    up("feat/none")
+
+    (action,) = [a for a in target.gc(dry_run=True) if a.branch == "feat/none"]
+    assert action.action == "would-reap"
 
 
 @pytest.mark.parametrize("dry_run", [True, False])
