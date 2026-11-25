@@ -250,7 +250,7 @@ def plan_overlap_report(
 
 
 def source_for_clones(
-    cwd: Path, checkouts: Mapping[str, Path] | None
+    cwd: Path, checkouts: Mapping[str, Path | None] | None
 ) -> Callable[[str], PlanSource | str]:
     """The clone to read *repo* through (R9): the driver's own clone from *checkouts*, else
     the clone *cwd* sits in when its `origin` is *repo*. Never raises: a reason string

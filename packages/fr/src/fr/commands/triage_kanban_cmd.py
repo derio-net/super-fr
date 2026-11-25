@@ -415,7 +415,7 @@ def write_board(
     loader: Callable[[str], Runner] | None = None,
     ci_none: Collection[str] | None = None,
     now: datetime | None = None,
-    checkouts: Mapping[str, Path] | None = None,
+    checkouts: Mapping[str, Path | None] | None = None,
 ) -> tuple[Path, int]:
     """Render the Batches page into the state directory *target* from the facts and
     judgements on disk now, with live session statuses, and remove the page's old-named
