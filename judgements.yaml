@@ -10485,3 +10485,13 @@ queues:
   events:
   - kind: queue_open
     at: '2026-11-25T00:17:58.104472Z'
+  - kind: queue_built
+    at: '2026-11-25T00:21:17.296307Z'
+    slot: 1
+    sha: 555f38f71caf0d6cf2d06cd5a2512841b35cc933
+    entry:
+      batch: consumer-followups
+    head: 32ea57d588e97e43b2e577f5013f7c2419b18654
+    patch_id: ca06ca377d637c384f203c352f625b65bec57862
+    base: e3e25316b6975853a9fe325adac08728c31c395d
+    parent: e3e25316b6975853a9fe325adac08728c31c395d
