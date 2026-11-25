@@ -1,0 +1,28 @@
+schema_version: 12
+run: 2026-11-25-feat-wave-plan-file-overlap
+workflow: fr-goal@1
+branch: feat/wave-plan-file-overlap
+started: '2026-11-25T12:55:25+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  lens-review:
+    state: pending
+  deliver:
+    state: pending
+fr_version: 9.0.0rc10
+issue: 1577
