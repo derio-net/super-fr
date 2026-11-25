@@ -1,0 +1,160 @@
+# Step record. Fill it as you work and commit it with your work; then
+#   fr run resolve 2026-11-19-feat-event-driven-a-la-carte --step implement-phase --item phase/4 --record docs/superpowers/runs/2026-11-19-feat-event-driven-a-la-carte.records/implement-phase__phase-4.yaml
+# applies all of it in one commit (spec 2026-09-25 §5.C).
+schema_version: 12
+run: 2026-11-19-feat-event-driven-a-la-carte
+step: implement-phase
+item: phase/4
+outcome: done
+ticks: [P4.T1.S1, P4.T1.S2, P4.T1.S3, P4.T2.S1, P4.T2.S2, P4.T2.S3, P4.T3.S1, P4.T3.S2, P4.T4.S1]
+refactor:
+  P4.T1: "the relocation is one runner path (_relocate) and one disk helper (relocate_file) shared by every relocating hop; R12's check is one function (both_paths_refusal) used at plan and apply time, so there was nothing duplicated to fold"
+  P4.T2: "every moved kind is generated from the one MOVED table in fr.config.migrate (registry entries and hops alike), and every reader resolves through fr.config.space.located, so no per-kind copy was left to clean"
+  P4.T3: "legacy() is one function behind located(); the owed entry is a journal write, so there was no code to clean"
+journal:
+  - kind: decision
+    id: p4-cross-space-cases
+    phase: 4
+    title: "A cross-space hop creates the configuration branch with every pending file, else removes a file already there, else opens a pull request and keeps the product file"
+    body: |
+      fr/config/migrate.py move_across (spec R10, R11; carried discovery p2-phase4-migration-creates-config).
+      1. No `fr-config` / `<branch>-config` yet: the hop CREATES it as one orphan commit holding the
+         settings (the old switch's bytes, R6; the legacy copy stays as it is) and every file the
+         migration would move there (`pending_files`: the R9 kinds at their old paths, quiet's R11
+         `.fr/` files, a profiles file only when already at version 2, at 3), pushed plainly before
+         any product file is removed; a refused push removes nothing (quiet.create_config_branch /
+         stealth.create_config_branch). Only clean tracked files ride along, so an uncommitted edit
+         is never pushed.
+      2. The branch holds the file with the same bytes: the product file is removed (in the
+         product's one `chore(fr): migrate` commit). Other bytes: R12's refusal, naming both.
+      3. The branch exists without the file: fr opens a pull request (`fr.config.change.open_change`,
+         honouring git.pr) and refuses that artifact naming the URL; the product file stays until the
+         change merges and the migration runs again. A foreign branch is refused
+         (quiet._check_config_refs / stealth.check_config_branch) before anything is written.
+      `settings-location` 1 -> 2 runs the same creation from the old switch (via the runner's
+      MIGRATING_ROOT, since its file sits in the `fr` worktree); a branch already holding identical
+      settings reads as migrated (the old file is R6's legacy copy, not R12's second file).
+  - kind: decision
+    id: p4-config-kinds-model
+    phase: 4
+    title: "Moved kinds are location-stamped; R12 lets a destination holding the expected bytes finish the move"
+    body: |
+      `ArtifactKind.locators` (oldest first) and `roots(repo_root, index)` say where each locator is
+      globbed (the newest one in the configuration space); `location_stamp` reads the newest matching
+      locator, `no_stamp_write` is the no-op writer. A relocating `SchemaMigration` names its
+      `destination` up front (so R12 and the uncommitted veto are checked at plan time) and may set
+      `expected` bytes (profiles 2 -> 3 writes its stamp). A destination that exists with exactly the
+      expected bytes is a move that already happened (a crash, or the branch created carrying it), so
+      it is finished, not refused. `quiet-config` is stamped by checkout (HEAD `fr-config`: 2) since
+      both ends are `.fr/<file>`. A hop that leaves its file untouched (`settings-location`) stages
+      nothing (`PlannedAction.untouched`).
+  - kind: decision
+    id: p4-profiles-refuse-whole-file
+    phase: 4
+    title: "Under quiet/stealth the profile declarations are read from the protected tip or refused whole"
+    body: |
+      Review p4-sec-profiles. `.fr/profiles.yaml` decides secrets env-files, mounts, `ops: true` and the
+      forge/CI/tracking services fr trusts; no subset is safe to take from an unreviewed branch, so
+      `profiles_config` reads it with `protection.read_checked` (require_protected at the fetched tip)
+      and an unprotected branch refuses the whole file. Under repo, and for the old product path
+      (R13), nothing changes.
+  - kind: decision
+    id: p4-scaffold-declaration-path
+    phase: 4
+    title: "fr init scaffold writes .fr/profiles.yaml at 3, the old path at 2 while only that exists, and refuses under quiet/stealth once the branch holds it"
+    body: |
+      §E's quiet/stealth pull request for the declaration is not built (no phase of this plan names it):
+      under quiet/stealth scaffold keeps writing the product's old `.devcontainer/fr-profiles.yaml` at
+      version 2 while the configuration branch has no declarations (the migration carries it), and
+      refuses once it has them, naming the pull request path. `fr repair` and `fr migrate v1-to-v2`
+      likewise leave a plan-config that lives on the configuration branch alone (repairable_plan_config).
+  - kind: decision
+    id: p4-owed-key
+    phase: 4
+    title: "s1-refuse-old-paths carries owed_key issue:derio-net/super-fr#1653"
+    body: |
+      The plan's `fr journal add` command lacked the `owed_key:` body line every owed entry needs; the
+      entry is filed under #1653 at deliver, so its key is that issue (no Test Plan step or row owes
+      the refusal itself).
+  - kind: discovery
+    id: p4-messages-name-old-paths
+    phase: 4
+    title: "User-facing messages and docstrings still name .devcontainer/fr-profiles.yaml and docs/superpowers/plan-config.yaml (phase 7)"
+    body: |
+      acceptance/ci.py, acceptance/local.py, services/resolve.py, services/require.py, run/closeout.py,
+      _hosts.py, hostclient.py, commands/acceptance_cmd.py and the skills name the old declaration path
+      in refusals; tests assert some of them. The readers use the new path; the words are phase 7's
+      (spec §H) together with the pages.
+  - kind: discovery
+    id: p4-stealth-product-deletion
+    phase: 4
+    title: "Under stealth the product's migrate commit deletes paths stealth.FR_OWNED_PATHS lists"
+    body: |
+      A stealth target holding an old-path file (docs/superpowers/models.yaml, .devcontainer/fr-profiles.yaml)
+      gets a product commit deleting it; the stealth push guard refuses any commit touching an fr-owned
+      prefix, so `fr push` may refuse that deletion. A stealth target should carry no such file (R24),
+      so this is rare; not changed here.
+  - kind: finding
+    id: p4-stealth-coverage-one-kind
+    phase: 4
+    state: open
+    review_scope: in
+    title: "P4.T2.S1's stealth leg is covered for one kind (models-config), not per kind"
+    body: |
+      tests/unit/test_migration_config_kinds.py runs every R9 kind under repo and quiet, and under
+      stealth only models-config (the cross-space path is kind-generic: StealthWriter + move_across).
+      Parametrizing the stealth test over FILES is the fix if the reviewer wants each kind walked.
+  - kind: discovery
+    id: p4-import-cycle
+    phase: 4
+    title: "config_migration imported fr.settings at module level, an import cycle through fr.isolation.types"
+    body: |
+      Collecting tests/unit/test_ops_profile.py (fr.isolation.scaffold first) failed with a partially
+      initialised fr.isolation.types; fixed in 3293ec854 by importing SettingsError late.
+  - kind: finding
+    id: p4-sec-symlink
+    phase: 4
+    state: fixed
+    review_scope: in
+    title: "A cross-space hop read old paths from the working tree, so a symlink to ~/.ssh/... was pushed onto the configuration branch"
+    body: |
+      Self-raised from the automated security review of the committed phase-4 code (HIGH). Fixed in
+      3f11fc9cc: `refuse_link` refuses a symlink at the path or any directory between, and a path
+      resolving outside the checkout; `source_text` pushes a tracked file's committed blob and refuses
+      an uncommitted edit; pending_files refuses the whole creation on a symlink. relocate_file
+      refuses a symlinked source too. Tests: test_under_quiet_a_symlinked_old_path_is_refused_and_nothing_is_pushed,
+      test_a_symlink_among_the_pending_files_refuses_the_creation,
+      test_a_cross_space_hop_pushes_the_committed_bytes_and_refuses_a_dirty_file.
+  - kind: finding
+    id: p4-sec-profiles
+    phase: 4
+    state: fixed
+    review_scope: in
+    title: "profiles_config read .fr/profiles.yaml from the quiet/stealth configuration checkout unguarded"
+    body: |
+      Self-raised from the security review (MEDIUM). Fixed in 3f11fc9cc (decision
+      p4-profiles-refuse-whole-file). Test: test_quiet_profile_declarations_are_read_through_the_protection_guard.
+  - kind: finding
+    id: p4-sec-manifest-tip
+    phase: 4
+    state: fixed
+    review_scope: in
+    title: "resolve_workflow checked the branch's protection and then read the working-tree manifest"
+    body: |
+      Self-raised from the security review (MEDIUM). Fixed in 3f11fc9cc: `fr.config.space.read_checked_bytes`
+      reads a workflow manifest, a verification strategy (resolve_strategy and strategy_identity) and the
+      profile declarations from `protection.read_checked` at the fetched tip whenever they sit in a
+      quiet/stealth configuration space; under repo and at R13's product path, the file as it is.
+      Test: test_a_quiet_manifest_is_read_from_the_checked_tip_not_the_working_tree.
+resolves:
+  - id: p5-exec-manifests-guard
+    state: fixed
+    body: |
+      Closed in phase 4 (3f11fc9cc). The guard is at the manifest, not at argv[0]: a workflow
+      manifest or verification strategy resolved from a quiet/stealth configuration space is read
+      only from the protected branch's fetched, reviewed tip (`read_checked_bytes` ->
+      `protection.read_checked`, which runs `require_protected`), so every `kind: cli` `run:` argv
+      `fr run advance` executes and every `install`/`scenario` argv the walk renders comes from a
+      reviewed, protected manifest as a whole; an unprotected branch refuses the whole manifest.
+      Under repo nothing changes.
+evidence: {}
