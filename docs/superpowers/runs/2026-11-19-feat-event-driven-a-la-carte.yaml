@@ -175,15 +175,20 @@ steps:
           visual: none
           findings: p4-stealth-coverage-one-kind,p4-sec-symlink,p4-sec-profiles,p4-sec-manifest-tip,p4-r1,p4-r2,p4-r3,p4-r4,p4-r5,p4-r6,p4-r7,p4-r8,p4-r9,p4-r10,p4-r11,p4-r12
       phase/5/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-25T08:19:21+00:00'
           agent: afaf213543c74cc65
           agent_type: super-fr:fr-phase-executor
           harness: claude-code
+          model: claude-opus-5-5
           tier: standard
           bound: claude-sonnet-5
           session: eff5ea4a-9355-4349-88a2-473612f38e60
+          returned: '2026-11-25T08:40:40+00:00'
+          outcome: done
+        evidence:
+          visual: none
   journal-check:
     state: pending
   lens-review:

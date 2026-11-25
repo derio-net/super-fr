@@ -882,3 +882,44 @@ Stealth profiles walk (transform, structure check, crash window), guard wiring t
 ### p4-stealth-coverage-one-kind-resolved · finding [fixed] · resolves p4-stealth-coverage-one-kind: P4.T2.S1's stealth leg is covered for one kind (models-config), not per kind (phase 4)
 
 Covered by p4-r11's fix: the stealth profiles walk adds the kind whose stealth path differs, beside models-config.
+
+<!-- fr:journal kind=decision scope=plan id=p5-defaults-env-order created=2026-11-25T08:40:39+00:00 phase=5 -->
+### p5-defaults-env-order · decision · An explicit shipped_root replaces both variables; FR_SHIPPED_DEFAULTS_DIR/<kind> precedes the per-kind variable, which prints one notice per process (phase 5)
+
+`fr._shipped.shipped_dirs(kind, packaged=, shipped_root=)` builds
+`[$FR_SHIPPED_DEFAULTS_DIR/<kind>, $FR_SHIPPED_<KIND>_DIR, wheel fr/defaults/<kind>,
+marketplace plugins/super-fr/defaults/<kind>]`; the repo `.fr/<kind>/` is prepended by the
+workflow and verification resolvers (still read through `fr.config.degraded`, so an
+unprotected quiet/stealth configuration branch falls back to this shipped walk), never by
+lenses. An explicit `shipped_root` (tests) replaces both variables, as it replaced the one
+variable before. A per-kind variable still resolves (R16) and prints, once per process per
+variable, a stderr notice naming FR_SHIPPED_DEFAULTS_DIR (the R13 notice pattern); the
+refusal is s1-refuse-old-paths' (R14). An unknown kind is a ValueError.
+
+<!-- fr:journal kind=decision scope=plan id=p5-workflow-check-walk created=2026-11-25T08:40:39+00:00 phase=5 -->
+### p5-workflow-check-walk · decision · fr workflow check now resolves through the same walk as fr run start (phase 5)
+
+`fr workflow check` passed `default_shipped_workflows_dir()` (the env dir, else the
+marketplace clone) as an explicit shipped_root, which put the marketplace clone before the
+wheel for `check` only. It now passes no root, so `check` and `run start` search the one
+`fr._shipped` order. Its empty-`--all` refusal names $FR_SHIPPED_DEFAULTS_DIR.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-pages-name-old-homes created=2026-11-25T08:40:39+00:00 phase=5 -->
+### p5-pages-name-old-homes · discovery · Pages and two skills still name plugins/super-fr/{workflows,verifications,lenses}/ and the per-kind variables (phase 7) (phase 5)
+
+docs/explainers/01-fr-goal.md, index.md, why-fr.md, docs/reference/workflow-shapes.md,
+docs/review-lenses.md and docs/verification-strategies.md cite the old homes in prose and in
+`covers:` globs (now matching nothing); the fr-goal and fr-acceptance skills name
+$FR_SHIPPED_WORKFLOWS_DIR (still honoured). Phase 7 (spec §H) owns the pages, the covers
+globs and the skills; AGENTS.md was updated here. .test_durations keeps the three deleted
+tripwires' keys until the next refresh (only shard balance).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t1 created=2026-11-25T08:40:39+00:00 phase=5 -->
+### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
+
+the three trees and their copies are now one tree and one copy, written by one sync script and guarded by one tripwire, so no per-kind copy was left to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t2 created=2026-11-25T08:40:39+00:00 phase=5 -->
+### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
+
+fr._shipped.shipped_dirs(kind) is the one walk every resolver calls; the per-kind env/plugin_rel/packaged arguments it took before are derived from the kind, so nothing duplicated remained
