@@ -62,7 +62,9 @@ def change_branch(rel: str, text: str) -> str:
 
 def _forge_open_pr(remote: str, head: str, base: str, title: str, body: str) -> str:
     """The default `OpenPr`: the forge client for *remote*'s URL, reusing an open pull
-    request whose head is *head*."""
+    request whose head *head* lives in the target repo itself (`open_pr_in_repo`, never a
+    fork's same-named branch) and that merges into *base* (lens review l-security-r4, the
+    same tests `_earlier_proposal` makes). One into another base refuses."""
     from fr._hosts import slug_from_url
     from fr.hostclient import FORGE_ERRORS, client_for_url
 
@@ -74,8 +76,15 @@ def _forge_open_pr(remote: str, head: str, base: str, title: str, body: str) -> 
         )
     try:
         client = client_for_url(remote)
-        found = client.open_pr_for_head(slug, head)
+        slug = slug.removesuffix(".git")
+        found = client.open_pr_in_repo(slug, head)
         if found is not None:
+            into = str(client.pr_view(slug, int(found["number"])).get("base_ref", ""))
+            if into != base:
+                raise SettingsError(
+                    f"an open pull request from `{head}` ({found['url']}) merges into "
+                    f"`{into}`, not `{base}`: close it, then run the command again"
+                )
             return str(found["url"])
         made = client.create_pr(slug, head=head, base=base, title=title, body=body, draft=False)
     except FORGE_ERRORS as e:

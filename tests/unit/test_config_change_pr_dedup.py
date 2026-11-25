@@ -167,3 +167,50 @@ def test_the_migrate_command_takes_repropose(tmp_path: Path) -> None:
 
     done = CliRunner().invoke(app, ["migrate", "artifacts", "--help"])
     assert "--repropose" in done.output
+
+
+class _OpenClient:
+    """A forge client for `_forge_open_pr`: *found* is what `open_pr_in_repo` answers,
+    *base* the base `pr_view` reports for it."""
+
+    def __init__(self, found: dict[str, Any] | None, base: str = "fr-config") -> None:
+        self.found, self.base = found, base
+        self.created: list[str] = []
+
+    def open_pr_in_repo(self, repo: str, branch: str) -> dict[str, Any] | None:
+        return self.found
+
+    def open_pr_for_head(self, repo: str, branch: str) -> dict[str, Any] | None:
+        raise AssertionError("the head filter alone matches a fork's PR (l-security-r4)")
+
+    def pr_view(self, repo: str, number: int) -> dict[str, Any]:
+        return {"base_ref": self.base, "head_oid": "abc"}
+
+    def create_pr(self, repo: str, **kw: Any) -> dict[str, Any]:
+        self.created.append(kw["base"])
+        return {"url": "https://example.com/pr/new"}
+
+
+def test_open_pr_reuses_only_a_same_repo_pull_request_into_the_base(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Lens review l-security-r4: the open pull request reused is one whose head lives in the
+    target repo (`open_pr_in_repo`) and that merges into the configuration branch."""
+    import fr.hostclient as hostclient
+
+    client = _OpenClient({"number": 3, "url": "https://example.com/pr/3"})
+    monkeypatch.setattr(hostclient, "client_for_url", lambda _u: client)
+    url = change._forge_open_pr("https://github.com/example-org/r.git", "h", "fr-config", "t", "b")
+    assert url == "https://example.com/pr/3" and client.created == []
+
+
+def test_open_pr_refuses_an_open_pull_request_into_another_base(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import fr.hostclient as hostclient
+
+    client = _OpenClient({"number": 3, "url": "https://example.com/pr/3"}, base="main")
+    monkeypatch.setattr(hostclient, "client_for_url", lambda _u: client)
+    with pytest.raises(SettingsError, match="into `main`, not `fr-config`"):
+        change._forge_open_pr("https://github.com/example-org/r.git", "h", "fr-config", "t", "b")
+    assert client.created == []
