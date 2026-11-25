@@ -175,7 +175,10 @@ def _judge(reply: object) -> str | None:
     if not isinstance(reply, list) or not all(isinstance(r, dict) for r in reply):
         return "the forge's rules answer is not a list of rules"
     if not reply:
-        return "the branch has no rules"
+        return (
+            "no ruleset on this branch (classic branch protection is not read; protect it "
+            "with a ruleset)"
+        )
     types = {r.get("type") for r in reply}
     missing = [said for kind, said in REQUIRED_RULES.items() if kind not in types]
     if "pull_request" in types and not any(_approving(r) for r in reply):

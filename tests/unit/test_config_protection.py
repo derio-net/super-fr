@@ -118,7 +118,10 @@ def test_a_branch_with_no_rules_is_not_enforced() -> None:
     client, _ = _rest(_reply("empty.json"))
     answer = protection.branch_protection(client, REPO, "fr-config")
     assert isinstance(answer, NotEnforced)
-    assert "no rules" in answer.reason
+    assert answer.reason == (
+        "no ruleset on this branch (classic branch protection is not read; protect it with a "
+        "ruleset)"
+    )
 
 
 @pytest.mark.parametrize(
@@ -368,7 +371,7 @@ def test_under_stealth_the_tracking_repos_forge_answers_never_the_given_client(
     tracking_client, tracking_calls = _rest(_reply("empty.json"))
     monkeypatch.setattr(protection, "_default_client", lambda space: tracking_client)
     space = _space("stealth", tmp_path, tracking="git@github.com:example-org/track.git@main")
-    with pytest.raises(ProtectionError, match="no rules"):
+    with pytest.raises(ProtectionError, match="no ruleset on this branch"):
         protection.require_protected(space, product_client, "run post_merge")
     assert product_calls.calls == []
     assert tracking_calls.calls == ["repos/example-org/track/rules/branches/main-config"]
