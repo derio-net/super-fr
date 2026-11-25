@@ -347,3 +347,8 @@ A cross-space move removes the product file only once the configuration branch's
 ### p6-stealth-ignores-declared · decision · R20 amended: under stealth the declared state repo is never read from the product repo
 
 Under stealth the stealth tracking repo (R19) wins over any declaration; triage.state_repo is never read from the product repo, and only from the operator's stealth configuration space when it exists, behind R7's protection guard. Outside stealth R20 is unchanged. leak_risk (R21) applies everywhere. Plan decision p6-stealth-ignores-declared.
+
+<!-- fr:journal kind=decision scope=spec id=p6-r18-amended created=2026-11-25T11:07:11+00:00 -->
+### p6-r18-amended · decision · R18 amended: older caches, the tombstone, rule 3 and rule 5
+
+Rule 2: an older cache becomes an S1 repository only through the move; from elsewhere fr refuses (p6-older-cache-from-outside). Rule 3: worktrees under the copy at any depth are never force-removed; one with work in it refuses the move. Rule 4: the exclude line stays while a tombstone or another worktree's .fr/triage-state/ remains. Rule 5: every file but the scratch, locks, facts.json and pages is compared; files only the copy holds are carried into the cache. A retired copy leaves a tombstone an fr below S1 fails on (p6-rc6-tombstone).
