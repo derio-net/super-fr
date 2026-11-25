@@ -357,6 +357,7 @@ from fr.triage.queue_exec import (
     required_names,
 )
 from fr.triage.queue_handback import handback_onto
+from fr.triage.queue_requests import reader_repos
 from fr.triage.quota import Pace
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
@@ -4613,17 +4614,20 @@ class _Driver:
                 if now - event.at >= STALE_CLOSEOUT:  # is its tab still live? (gh#1025)
                     stale.append(b)
             self._queue_needs, self._queue_live = {}, live
-            queue_reads = self._wave_queue_reads(facts, judgements, repos, {*unread, *carried})
+            # p2-r3: a repo only a queue request names is read too (`queue add` takes any)
+            qrepos = reader_repos(repos, judgements.queue_requests, scope_id(self.scope),
+                                  facts.repos)  # fmt: skip
+            queue_reads = self._wave_queue_reads(facts, judgements, qrepos, {*unread, *carried})
             queue_reads["queue_housekeeping"] = self._housekeeping_reads(
-                facts, judgements, repos, {*unread, *carried}
+                facts, judgements, qrepos, {*unread, *carried}
             )
-            queue_reads.update(operator_reads(self, facts, judgements, repos, {*unread, *carried}))
+            queue_reads.update(operator_reads(self, facts, judgements, qrepos, {*unread, *carried}))
             gated_in, gated_runs = self._barrier_reads(
-                facts, judgements, repos, queue, live, {*unread, *carried}
+                facts, judgements, qrepos, queue, live, {*unread, *carried}
             )
             queue_reads["queue_released"], queue_reads["queue_runs"] = gated_in, gated_runs
             queue_reads.update(lineage_reads(
-                self, facts, judgements, repos, live, queue_reads["bases"], {*unread, *carried}
+                self, facts, judgements, qrepos, live, queue_reads["bases"], {*unread, *carried}
             ))  # fmt: skip
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
@@ -4706,11 +4710,11 @@ class _Driver:
             awaiting_unlabelled=awaiting_unlabelled(facts),
             ledger_unknown=fact_ledger_unknown(judgements.batches, facts, stages),
             post_merge_repos=frozenset(
-                r for r in set(repos.values()) if facts.config_for(r).post_merge
+                r for r in set(qrepos.values()) if facts.config_for(r).post_merge
             )
             if self.adapter.kind == "host"
             else frozenset(),
-            placements=self._placements(repos, {*unread, *carried}),
+            placements=self._placements(qrepos, {*unread, *carried}),
             **queue_reads,
             **claim_plan,
         )

@@ -9,7 +9,7 @@ replaces them here too.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime
 from typing import Any, Final
 
@@ -307,12 +307,19 @@ def _queue_conflict_at(records: Iterable[Any], key: str, head: str) -> bool:
 def _preapprove(
     driver: Any, facts: Facts, repo: str, n: int, view: dict[str, Any], *, by: str,
     allowed: frozenset[str], conflicted: bool, checks: str,
+    record: Callable[[str, str], None],
 ) -> dict[str, Any]:  # fmt: skip
     """R13: add `approved-fr` to preapproved PR *n* at its head, with the audit comment, when
     the adder *by* is an allowed author now, its own checks are green, the forge does not
     read it as conflicting and no queue conflict is recorded at that head (*conflicted*).
     Returns *view* with the label when it was added. Nothing is written without --yes, and
-    a patch-id git cannot read holds it for this pass, never a durable record."""
+    a patch-id git cannot read holds it for this pass, never a durable record.
+
+    The order is the audit comment, then the approval *record*ed at the vetted head and
+    patch-id (a batch's `approval` or the queue's), then the label (review p2-r1): a label
+    fr adds never stands without an approval naming the head its comment names, so a push
+    before the next settle voids by patch-id, and a write that fails leaves no label the
+    next pass would read as a first approval at an unvetted head."""
     from fr.labels import APPROVED_FR
     from fr.triage.approval import _labels_off, ensure_approval_label
 
@@ -350,12 +357,37 @@ def _preapprove(
         driver._report_once(f"preapprove\0{repo}\0labels", f"{repo}#{n} not preapproved: {off}")
         return view
     ensure_approval_label(client, repo, _say, seen=vars(driver).setdefault("_preapproved", set()))
-    client.edit_issue_labels(repo, n, add=frozenset({APPROVED_FR.name}), remove=frozenset())
     command = " ".join(["fr", "triage", "queue", "remove", "--pr", str(n),
                         *getattr(driver, "scope_args", ())])  # fmt: skip
     client.comment_pr(repo, n, preapproval_comment(head, patch_id, by, command))
+    record(head, patch_id)
+    client.edit_issue_labels(repo, n, add=frozenset({APPROVED_FR.name}), remove=frozenset())
     _say(f"preapproved {repo}#{n} at {head[:12]} (patch-id {patch_id[:12]}), added by {by}")
     return {**view, "labels": [*labels, APPROVED_FR.name]}
+
+
+def _approver(
+    driver: Any, facts: Facts, n: int, batch: Any,
+    record: Callable[[QueueApprovalEvent], None],
+) -> Callable[[str, str], None]:  # fmt: skip
+    """How `_preapprove` records its approval of PR *n* at `(head, patch_id)` (p2-r1): a
+    batch PR's in the batch's own events, through the one batch event writer, so the
+    batch's settle on the next pass judges the vetted head; any other PR's as the queue's
+    `operator` approval."""
+    from fr.commands import triage_batch_cmd as cmd  # the command layer's clock and writer
+    from fr.triage.model import ApprovalEvent
+
+    def approve(head: str, patch_id: str) -> None:
+        if batch is not None:
+            write = cmd.event_writer(driver.target, facts, read_errors=True)
+            write(batch.id, ApprovalEvent(kind="approval", at=cmd._now(), pr=n, head=head,
+                                          patch_id=patch_id))  # fmt: skip
+            return
+        record(QueueApprovalEvent(kind="approval", at=cmd._now(),
+                                  entry=QueueEntryRef(pr=n, kind=OPERATOR_KIND), head=head,
+                                  patch_id=patch_id))  # fmt: skip
+
+    return approve
 
 
 def operator_reads(
@@ -364,7 +396,7 @@ def operator_reads(
     """The Snapshot's operator-entry fields (spec 2026-11-24-wave-queue-gaps R12-R15, §C).
 
     For each PR `fr triage queue add` put in and nothing took out: R13's preapproval, a batch
-    PR's included (only its label: the batch's own settle records the approval); then, for a
+    PR's included (recorded in the batch's events at the vetted head, p2-r1); then, for a
     PR that is no batch's, the housekeeping PR's trust rule (open, same-repo branch, allowed
     author) and its `approved-fr` settled on the queue's `approval` events as an `operator`
     entry. `queue_operator` holds the admitted `(LivePr, at)` pairs by repo; `queue_pending`
@@ -420,20 +452,23 @@ def operator_reads(
                 client.pr_required_checks(repo, n), _live_counts(client.pr_checks(repo, n)),
                 ci_none=driver._ci_none(repo),
             )  # fmt: skip
-            if request.preapproved:
-                conflicted = _queue_conflict_at(records, batch.id if batch else key, head) or (
-                    batch is not None and any(isinstance(e, ConflictEvent) and e.head == head
-                                              for e in batch.events))  # fmt: skip
-                view = _preapprove(driver, facts, repo, n, view, by=request.by, allowed=allowed,
-                                   conflicted=conflicted, checks=checks)  # fmt: skip
-            if batch is not None or known is None:
-                continue
 
             def record(event: QueueApprovalEvent, repo: str = repo) -> None:
                 checkout = driver._fetched_reader(repo)
                 base = checkout.rev_parse(f"origin/{checkout.default_branch()}")
                 cmd.queue_writer(driver.target, repo, sid)(event, base=base)
                 events.append(event)
+
+            if request.preapproved:
+                conflicted = _queue_conflict_at(records, batch.id if batch else key, head) or (
+                    batch is not None and any(isinstance(e, ConflictEvent) and e.head == head
+                                              for e in batch.events))  # fmt: skip
+                approve = _approver(driver, facts, n, batch, record)
+                view = _preapprove(driver, facts, repo, n, view, by=request.by, allowed=allowed,
+                                   conflicted=conflicted, checks=checks,
+                                   record=approve)  # fmt: skip
+            if batch is not None or known is None:
+                continue
 
             verdict, at = settle_entry_approval(
                 client, record, repo, QueueEntryRef(pr=n, kind=OPERATOR_KIND), events, view,

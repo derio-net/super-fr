@@ -21,6 +21,7 @@ from fr.triage.wave_queue import (
     QueuePlan,
     QueueSnapshot,
     SlotCheck,
+    operator_work,
     plan_queue,
     replay,
 )
@@ -168,6 +169,19 @@ def test_a_pending_entry_that_held_the_drain_for_stall_hours_is_a_need_naming_re
     need = _one(plan, "queue-need")
     assert "fr triage queue remove --pr 7 --repo derio-net/super-fr" in need.detail
     assert "queue-drain" not in _kinds(plan)
+
+
+def test_a_pending_entry_is_the_drivers_work_until_its_stall_need_makes_it_the_operators(
+) -> None:  # fmt: skip
+    """Review p2-r2: the drive counts a pending entry as pending work, and a stalled one not
+    again (its Need is already blocked)."""
+    waiting = {OP: NOW - timedelta(hours=1)}
+    stalled = {OP: NOW - timedelta(hours=5)}
+    assert operator_work({REPO: waiting}, [plan_queue(_landed_wave(pending_operator=waiting))]) == 1
+    plan = plan_queue(_landed_wave(pending_operator=stalled, config=QueueConfig(stall_hours=1)))
+    assert _one(plan, "queue-need").entries == (OP,)
+    assert operator_work({REPO: stalled}, [plan]) == 0
+    assert operator_work({REPO: waiting}, []) == 1  # no queue planned: still work
 
 
 def test_the_stall_counts_from_the_later_of_the_add_and_the_last_landing() -> None:

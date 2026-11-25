@@ -1038,8 +1038,19 @@ def _operator_stall(record: QueueRecord, qs: QueueSnapshot) -> list[QueueAction]
             "queue-need", qs.repo, f"{key} was added to {qs.repo}'s merge queue and has held "
             f"wave {record.wave}'s drain for {qs.config.stall_hours} h without landing: land it "
             f"(a valid approved-fr, green checks), or take it out with `fr triage queue remove "
-            f"--pr {n}{args}`", wave=record.wave))  # fmt: skip
+            f"--pr {n}{args}`", wave=record.wave, entries=(key,)))  # fmt: skip
     return out
+
+
+def operator_work(pending: Mapping[str, Mapping[str, datetime]], plans: Sequence[QueuePlan]) -> int:
+    """How many operator entries are the driver's work this pass (review p2-r2, R14, R15):
+    every pending one (added, not removed, open, not landed) but those whose stall Need
+    *plans* report, which count as the operator's (a `queue-need` is blocked). So a drive
+    whose batches have all finished keeps running while an added PR has yet to land: a
+    wave queue it holds open still drains, and a between-waves queue still lands."""
+    stalled = {(q.repo, k) for q in plans for a in q.actions if a.kind == "queue-need"
+               for k in a.entries}  # fmt: skip
+    return sum((repo, k) not in stalled for repo, keys in pending.items() for k in keys)
 
 
 def _tail(

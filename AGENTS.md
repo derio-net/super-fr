@@ -222,7 +222,10 @@ uv workspace monorepo, version lockstepped across every manifest (see
      the `patch_id` of an approval and an update (wave-merge-queue R12, R24); current
      writers stamp 14 (read 1–14), adding the `conflict` event's `onto` and `reissue`
      and the operator's `queue_requests:` (`queue_add`/`queue_remove`, folded by
-     `fr.triage.queue_requests`; wave-queue-gaps R11, R16).
+     `fr.triage.queue_requests`; wave-queue-gaps R11, R16). The driver's queue readers
+     read every collected repo a request names, batch or not (`reader_repos`), and a
+     pending operator entry counts as `pending` work (`wave_queue.operator_work`), so the
+     loop never reads `done` over an undrained queue.
     `fr triage batch replace` owns scope then pane locks, checkpoints and cross-store
     repair, never replaying uncertain submission; `drive` runs waves to completion.
     `batch_drive.py` is the pure pass (a `Snapshot` in, ordered `closeout`,

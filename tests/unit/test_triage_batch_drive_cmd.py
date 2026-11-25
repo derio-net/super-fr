@@ -6171,3 +6171,120 @@ def test_a_removed_pr_reaches_the_planner_as_removed_and_is_not_read(
 
     assert snaps[-1].queue_removed[REPO] == frozenset({"operator#300"})
     assert REPO not in snaps[-1].queue_operator and "pr_view 300" not in world.calls
+
+
+def _finished_with_added(tmp_path: Path, world: World, *requests: dict[str, Any],
+                         queues: list[dict[str, Any]] | None = None) -> None:  # fmt: skip
+    """Review p2-r2: every batch finished (b0 cancelled) and PR #300, no batch's, added with
+    `fr triage queue add` (*requests*), unlabelled: the operator's entry is all that is left."""
+    from fr.triage.model import Scope
+    from fr.triage.scope_config import scope_id
+
+    world.config = {"queue": {"ci": "push", "land": "push"}}
+    world.issues[1] = "open"
+    world.pr(300, "fix/typo", [], labels=[])
+    cancel = "      - {kind: cancel, at: 2026-10-01T11:00:00Z}\n"
+    _state(tmp_path, world, _batch("b0", 1, events=_dispatch_event("b0") + cancel))
+    _at_14(tmp_path)
+    sid = scope_id(Scope(kind="repo", target=REPO))
+    docs = [{"repo": REPO, "scope": sid, "pr": 300, "by": "operator",
+             "at": "2026-10-02T11:00:00Z", **r} for r in requests]  # fmt: skip
+    extra: dict[str, Any] = {"queue_requests": docs}
+    if queues:
+        extra["queues"] = [{"scope": sid, **q} for q in queues]
+    path = tmp_path / "judgements.yaml"
+    path.write_text(path.read_text("utf-8") + yaml.safe_dump(extra), "utf-8")
+
+
+def test_an_added_operator_entry_keeps_a_finished_drive_from_reading_done(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+) -> None:  # fmt: skip
+    _finished_with_added(tmp_path, world, {"kind": "queue_add"})
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 3, out  # waiting, never `done`: the entry is work (R14, R15)
+    assert "pending 1" in _summary(out), out
+
+
+def test_a_removed_or_landed_operator_entry_lets_the_drive_read_done(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+) -> None:  # fmt: skip
+    _finished_with_added(tmp_path, world, {"kind": "queue_add"},
+                         {"kind": "queue_remove", "at": "2026-10-02T11:30:00Z"})  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert "pending 0" in _summary(out), out
+
+    land = {"kind": "queue_land", "at": "2026-10-02T12:00:00Z",
+            "entries": [{"pr": 300, "kind": "operator"}], "main": "m" * 40}  # fmt: skip
+    _finished_with_added(tmp_path, world, {"kind": "queue_add"}, queues=[
+        {"repo": REPO, "wave": None, "base": "m" * 40,
+         "events": [{"kind": "queue_open", "at": "2026-10-02T11:10:00Z"}, land]},
+    ])  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert "pending 0" in _summary(out), out
+
+
+def test_the_loop_waits_on_an_added_entry_and_ends_once_it_is_removed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    from fr.triage.model import Scope
+    from fr.triage.scope_config import scope_id
+
+    _finished_with_added(tmp_path, world, {"kind": "queue_add"})
+    sleeps: list[float] = []
+
+    def _sleep(seconds: float) -> None:  # the operator takes it out while the loop waits
+        sleeps.append(seconds)
+        if len(sleeps) > 3:
+            raise AssertionError("the loop did not end")
+        path = tmp_path / "judgements.yaml"
+        doc = yaml.safe_load(path.read_text("utf-8"))
+        sid = scope_id(Scope(kind="repo", target=REPO))
+        doc["queue_requests"].append({
+            "kind": "queue_remove", "repo": REPO, "scope": sid,
+            "pr": 300, "by": "operator", "at": "2026-10-02T11:30:00Z",
+        })  # fmt: skip
+        path.write_text(yaml.safe_dump(doc, sort_keys=False), "utf-8")
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _sleep)
+
+    code, out = _drive(tmp_path, "--yes")
+
+    assert code == 0, out
+    assert sleeps, out  # the first pass did not read done
+
+
+def test_an_added_pr_in_a_repo_with_no_batch_is_read_and_lands_between_waves(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Review p2-r3: `queue add` takes any collected repo, so the driver reads the repos its
+    queue requests name, not only its batches'. No batch here at all: PR #300's approval is
+    settled and it opens a between-waves queue (R14)."""
+    from fr.triage.model import Scope
+    from fr.triage.scope_config import scope_id
+
+    world.config = {"queue": {"ci": "push", "land": "push"}}
+    world.issues[1] = "open"
+    world.pr(300, "fix/typo", [])
+    _state(tmp_path, world)
+    _at_14(tmp_path)
+    doc = {"queue_requests": [{"kind": "queue_add", "repo": REPO, "pr": 300, "by": "operator",
+                               "scope": scope_id(Scope(kind="repo", target=REPO)),
+                               "at": "2026-10-02T11:00:00Z"}]}  # fmt: skip
+    path = tmp_path / "judgements.yaml"
+    path.write_text(path.read_text("utf-8") + yaml.safe_dump(doc), "utf-8")
+    snaps = _snapshots(monkeypatch)
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert snaps[-1].queue_pending[REPO].keys() == {"operator#300"}, out
+    assert snaps[-1].repos == {}  # the batch map stays the batches'
+    ((live, _),) = snaps[-1].queue_operator[REPO]
+    assert live.number == 300
+    (opened,) = [a for a in world.queue_plans if a.kind == "queue-open"]
+    assert (opened.wave, opened.entries) == (None, ("operator#300",))

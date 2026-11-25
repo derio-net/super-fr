@@ -15,6 +15,7 @@ from typing import Any
 import yaml
 from fr.commands.triage_cmd import _scope
 from fr.triage.model import (
+    ApprovalEvent,
     Facts,
     Issue,
     Judgements,
@@ -152,6 +153,11 @@ def _state(tmp_path: Path, *requests: dict[str, Any], queues: list[Any] | None =
 
 def _read(driver: Driver, facts: Facts, judgements: Judgements) -> dict[str, Any]:
     return operator_reads(driver, facts, judgements, {"a": REPO}, ())
+
+
+def _batch_approvals(tmp_path: Path) -> list[ApprovalEvent]:
+    return [e for b in load_judgements(tmp_path / "judgements.yaml").batches for e in b.events
+            if isinstance(e, ApprovalEvent)]  # fmt: skip
 
 
 def _approvals(tmp_path: Path) -> list[QueueApprovalEvent]:
@@ -374,7 +380,9 @@ def test_preapproval_writes_nothing_in_a_dry_run(tmp_path: Path) -> None:
     assert forge.writes == [] and _approvals(tmp_path) == []
 
 
-def test_a_preapproved_batch_pr_gets_the_label_alone(tmp_path: Path) -> None:
+def test_a_preapproved_batch_pr_records_the_batch_approval_at_the_vetted_head(
+    tmp_path: Path,
+) -> None:
     forge = Forge()
     forge.view(17)
     judgements = _state(tmp_path, _request(17, preapproved=True), batch_pr=True)
@@ -382,8 +390,95 @@ def test_a_preapproved_batch_pr_gets_the_label_alone(tmp_path: Path) -> None:
     out = _read(Driver(tmp_path, forge), _facts(_pr(17, "feat/batch-a")), judgements)
 
     assert ("labels", (17, ["approved-fr"], [])) in forge.writes
-    assert _approvals(tmp_path) == []  # the batch's own settle records it
+    assert _approvals(tmp_path) == []  # no queue event: the batch holds its approval
+    (event,) = _batch_approvals(tmp_path)  # p2-r1: in the same pass, at the vetted head
+    assert event.pr == 17 and event.head == H1 and event.patch_id == "pid-1111"
     assert REPO not in out["queue_operator"]
+
+
+def test_a_push_between_the_preapproval_and_the_next_settle_voids_a_batch_approval(
+    tmp_path: Path,
+) -> None:
+    """p2-r1: the batch's settle runs at the start of the NEXT pass. A session push to H2
+    between the label and that settle must void, never be recorded approved at H2."""
+    from fr.commands.triage_batch_cmd import event_writer
+    from fr.triage.approval import Unlabelled, settle_approvals
+
+    forge = Forge()
+    forge.view(17)
+    facts = _facts(_pr(17, "feat/batch-a"))
+    _read(Driver(tmp_path, forge), facts, _state(tmp_path, _request(17, preapproved=True),
+                                                 batch_pr=True))  # fmt: skip
+    comment = next(w[1][1] for w in forge.writes if w[0] == "comment")
+    assert H1 in comment
+
+    forge.views[17]["head_oid"] = H2  # the session pushes; the label stays on
+    batch = load_judgements(tmp_path / "judgements.yaml").batches[0]
+    verdicts = settle_approvals(
+        forge, event_writer(tmp_path, facts), REPO, [(batch, 17)], lambda _: None,
+        now=datetime(2026, 11, 24, 12, tzinfo=UTC),
+        patch_id_of=Driver(tmp_path, forge)._patch_id_of(facts, REPO),
+    )  # fmt: skip
+
+    assert verdicts == {"a": Unlabelled()}
+    assert ("labels", (17, [], ["approved-fr"])) in forge.writes
+    approvals = _batch_approvals(tmp_path)
+    assert approvals[-1].head == H1 and approvals[-1].voided_at == H2
+    assert all(e.head != H2 or e.voided_at for e in approvals)
+
+
+def test_a_failed_audit_comment_leaves_no_label_and_no_approval(tmp_path: Path) -> None:
+    """p2-r1: the audit comment goes first. A comment the forge refuses leaves no label, so
+    the next pass cannot read the label as a first approval at an unvetted head."""
+    import pytest
+    from fr.gh import GhError
+
+    forge = Forge()
+    forge.view(10)
+
+    def refuse(repo: str, n: int, body: str) -> None:
+        raise GhError("HTTP 502")
+
+    forge.comment_pr = refuse  # type: ignore[method-assign]
+    judgements = _state(tmp_path, _request(10, preapproved=True))
+
+    with pytest.raises(GhError):
+        _read(Driver(tmp_path, forge), _facts(_pr(10, "fix/10")), judgements)
+
+    assert forge.writes == [] and forge.views[10]["labels"] == []
+    assert _approvals(tmp_path) == []
+    forge.views[10]["head_oid"] = H2  # a push before the next pass
+    del forge.comment_pr
+    out = _read(Driver(tmp_path, forge), _facts(_pr(10, "fix/10", head=H2)),
+                load_judgements(tmp_path / "judgements.yaml"))  # fmt: skip
+    ((_, (_, body)),) = [w for w in forge.writes if w[0] == "comment"]
+    assert H2 in body  # the head it approves is the head the audit comment names
+    assert _approvals(tmp_path)[-1].head == H2
+    assert out["queue_operator"][REPO][0][0].head == H2
+
+
+def test_a_preapproved_operator_pr_is_recorded_before_it_is_labelled(tmp_path: Path) -> None:
+    """p2-r1: the approval event is written in the preapproval itself, before the label: a
+    label fr adds never stands without the approval naming the head the comment names."""
+    forge = Forge()
+    forge.view(10)
+    seen: list[int] = []
+    edit = forge.edit_issue_labels
+
+    def edit_after_record(repo: str, n: int, *, add: frozenset[str],
+                          remove: frozenset[str]) -> None:  # fmt: skip
+        seen.append(len(_approvals(tmp_path)))
+        edit(repo, n, add=add, remove=remove)
+
+    forge.edit_issue_labels = edit_after_record  # type: ignore[method-assign]
+    judgements = _state(tmp_path, _request(10, preapproved=True))
+
+    _read(Driver(tmp_path, forge), _facts(_pr(10, "fix/10")), judgements)
+
+    assert seen == [1]
+    assert [w[0] for w in forge.writes] == ["comment", "labels"]
+    (event,) = _approvals(tmp_path)
+    assert event.head == H1 and event.patch_id == "pid-1111"
 
 
 def test_a_batch_pr_with_a_conflict_event_at_its_head_is_not_preapproved(tmp_path: Path) -> None:

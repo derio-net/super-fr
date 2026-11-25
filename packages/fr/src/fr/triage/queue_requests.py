@@ -7,7 +7,7 @@ forge, git or a file.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -37,3 +37,23 @@ def added(
         else:
             out.pop(event.pr, None)
     return out
+
+
+REQUEST_REPO_KEY = "\0queue-request:"
+"""The key prefix `reader_repos` gives a repo only queue requests name: no batch id can be it."""
+
+
+def reader_repos(
+    repos: Mapping[str, str],
+    requests: Iterable[QueueAddEvent | QueueRemoveEvent],
+    scope: str,
+    collected: Iterable[str],
+) -> dict[str, str]:
+    """The driver's batch-to-repo map *repos* plus every collected repo (*collected*, the
+    facts' repos) a queue request of *scope* names, each under a key no batch has (review
+    p2-r3): `fr triage queue add` takes any collected repo, so the queue readers read a repo
+    with no batch too, and R14's between-waves queue works there. The readers use only the
+    map's values; the Snapshot's own `repos` stays the batches'."""
+    have, known = set(repos.values()), set(collected)
+    extra = sorted({e.repo for e in requests if e.scope == scope and e.repo in known} - have)
+    return {**repos, **{f"{REQUEST_REPO_KEY}{r}": r for r in extra}}

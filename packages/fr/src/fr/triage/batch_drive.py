@@ -2053,7 +2053,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     # 4. Dispatch.
     # The cap counts every batch in flight, selected or not (review rg-3); the
     # summary's own figure is the selection's, which is what this drive waits on.
-    from fr.triage.wave_queue import waits_on_queue
+    from fr.triage.wave_queue import operator_work, waits_on_queue
 
     occupants = {
         b.id for b in snap.batches
@@ -2067,6 +2067,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     by_id = {b.id: b for b in snap.batches}
     queue_needs = sum(a.kind == "queue-need" for q in queues for a in q.actions)
     pending, blocked = 0, exports_blocked + archives_blocked + closeouts_held + queue_needs
+    pending += operator_work(snap.queue_pending, queues)  # p2-r2: an added PR is work
     for batch in sorted(chosen, key=_dispatch_key):
         if stages.get(batch.id) != "proposed" or batch.id in held_ids:
             continue
