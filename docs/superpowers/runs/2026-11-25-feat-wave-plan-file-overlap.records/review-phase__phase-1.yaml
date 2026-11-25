@@ -1,0 +1,19 @@
+schema_version: 12
+run: 2026-11-25-feat-wave-plan-file-overlap
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - {kind: finding, id: p1-r1, phase: 1, review_scope: in, title: "A branch YAML with a bad-date scalar raises ValueError and crashes fr triage check", body: "plan_overlap._load caught only TriageError/YAMLError; yaml.safe_load('a: 2020-13-45') raises ValueError (reproduced), and check_command had no guard, so check exited non-zero against R6."}
+  - {kind: finding, id: p1-r2, phase: 1, review_scope: in, title: "_is_glob treats `[` as a glob, so identical bracketed literal paths never overlap", body: "A literal such as app/[id]/page.tsx was moved to the glob set and never compared literal-to-literal: a false negative."}
+  - {kind: finding, id: p1-r3, phase: 1, review_scope: in, title: "fr-triage.md does not say check reads only the cwd clone's repo", body: "R9: a reader running check from another repo sees every batch not compared; the page did not say so."}
+  - {kind: finding, id: p1-r4, phase: 1, review_scope: in, title: "The board re-reads every batch's plan with git subprocesses on every driver pass", body: "About 3 + phases git calls per dispatched batch per pass, with no cache."}
+  - {kind: finding, id: p1-r5, phase: 1, review_scope: out, title: "overlaps() compares repo names case-sensitively", body: "Relies on batch_repo's single spelling; the casing rule predates this change."}
+  - {kind: review, id: review-p1, phase: 1, title: "phase 1 code review: 5 findings", body: "Dispatched reviewer read the diff 238e6c66..68f7df2f against spec R1-R9 and plan phase 1; ran 135 targeted tests green. Findings p1-r1..p1-r5 (4 in scope, 1 out). Verdict: with fixes. Fixes landed in one commit with new tests (bad-date YAML unreadable; bracketed literal path; check exits 0 when the read raises)."}
+resolves:
+  - {id: p1-r1, state: fixed, body: "_load also catches ValueError and RecursionError; check_command uses the new checked_report, which turns any unexpected exception into one not-compared line. Tests: test_a_yaml_scalar_that_is_not_a_real_date_is_unreadable_never_raised, test_check_exits_zero_when_the_overlap_read_raises."}
+  - {id: p1-r2, state: fixed, body: "_is_glob counts only `*` and `?`; test_a_bracketed_literal_path_is_a_literal_not_a_glob pins both the literal-literal and the glob-literal case."}
+  - {id: p1-r3, state: fixed, body: "fr-triage.md's plan overlap bullet now says check reads only the clone it runs in (its repo's batches), the driver's page reads every clone it was given, and an empty set means nothing overlaps, not nothing read."}
+  - {id: p1-r4, state: refuted, body: "The cost is bounded by the in-flight batches (the driver's max_inflight cap) at a few local git plumbing calls each (cat-file, ls-tree, show on refs the pass already fetched), beside the much larger per-pass work the driver already does (fetches, trial merges, cursor reads). A cross-pass cache would add process-global state keyed on ref commits for no measured cost; the board is a view the driver renders once per pass."}
+  - {id: p1-r5, state: out-of-scope, body: "batch_repo and Facts.config_for already decide the repo spelling for every triage reader; this change adds no new casing rule, and source_for_clones lowercases where it matches a clone."}
+evidence: {review: review-p1, reviewer: a4cd5a1f28c90c472, model: claude-opus-5-5}
