@@ -1462,16 +1462,20 @@ def _lens_finding_cells(lens: str, entries: list[JournalEntry]) -> str:
     return ", ".join(out) or "none"
 
 
-def _shape_has_lens_review(repo_root: Path, state: RunState) -> bool:
-    """Whether the run's shape declares a `lens-review` step (a shape that does not, like
-    `fr-debugging`, has no lens review to predate). Unreadable: assume it does."""
+def _no_lens_review(repo_root: Path, state: RunState) -> str:
+    """The section for a run with no `lens-review` step: its shape declares none (like
+    `fr-debugging`), its run predates the step, or, when the shape cannot be resolved or
+    parsed (`WorkflowError`, an unreadable file), that error, never a guess (l-errors-r4)."""
+    from fr.workflow.model import WorkflowError
     from fr.workflow.resolve import resolve_workflow
 
     try:
         manifest = resolve_workflow(state.workflow.partition("@")[0], repo_root)
-    except Exception:  # noqa: BLE001 - the section is informational, never a refusal
-        return True
-    return any(step.id == "lens-review" for step in manifest.steps)
+    except (WorkflowError, OSError) as e:
+        return f"fr could not read the workflow shape: {e}"
+    if any(step.id == "lens-review" for step in manifest.steps):
+        return "This run predates review lenses."
+    return "This workflow has no lens review."
 
 
 def _review_lenses(repo_root: Path, state: RunState) -> str:
@@ -1481,9 +1485,7 @@ def _review_lenses(repo_root: Path, state: RunState) -> str:
     from fr.lenses.model import LensError
 
     if "lens-review" not in state.steps:
-        if not _shape_has_lens_review(repo_root, state):
-            return "This workflow has no lens review."
-        return "This run predates review lenses."
+        return _no_lens_review(repo_root, state)
     try:
         lenses = lens_set(repo_root, state)
     except LensError as e:

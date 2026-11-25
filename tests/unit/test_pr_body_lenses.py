@@ -7,6 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from fr.journal.model import (
     JournalEntry,
     append_journal_entry,
@@ -193,3 +194,34 @@ def test_a_shape_with_no_lens_review_step_says_so(tmp_path: Path) -> None:
     state = _state(None, with_step=False)
     state.workflow = "fr-debugging@1"
     assert _section(root, state) == "This workflow has no lens review."
+
+
+def test_a_shape_fr_cannot_read_is_named_never_called_predating(tmp_path: Path) -> None:
+    """l-errors-r4: a workflow shape that does not resolve, or does not parse, is said with
+    its error; the section never guesses "predates" over it."""
+    root = lens_repo(tmp_path)
+    state = _state(None, with_step=False)
+    state.workflow = "no-such-shape@1"
+    section = _section(root, state)
+    assert section.startswith("fr could not read the workflow shape: unknown workflow shape")
+    assert "predates" not in section
+    shapes = root / "docs" / "superpowers" / "workflows"
+    shapes.mkdir(parents=True)
+    (shapes / "broken.yaml").write_text("steps: [unclosed\n")
+    state.workflow = "broken@1"
+    assert _section(root, state).startswith("fr could not read the workflow shape: invalid YAML")
+
+
+def test_a_bug_in_reading_the_shape_is_not_swallowed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the workflow resolver's own errors are rendered; anything else propagates."""
+    import fr.workflow.resolve as resolve
+
+    def boom(name: str, repo_root: Path) -> None:
+        raise RuntimeError("a bug")
+
+    monkeypatch.setattr(resolve, "resolve_workflow", boom)
+    root = lens_repo(tmp_path)
+    with pytest.raises(RuntimeError, match="a bug"):
+        _section(root, _state(None, with_step=False))
