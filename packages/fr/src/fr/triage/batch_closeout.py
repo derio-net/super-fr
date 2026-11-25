@@ -163,11 +163,14 @@ def closeout_owed(
     *,
     named: Collection[str] = (),
     reserved: Collection[str] = (),
+    resuming: str | None = None,
 ) -> list[Batch]:
     """R15's batches: landed, not gated, and not closed out (no close-out event, or one
     whose collected PR was closed unmerged). A batch held by an earlier close-out is owed
     only when *named* (the explicit retry). A landed batch whose merged PR's labels could
-    not be read is not known ungated (p4-r1), so it waits."""
+    not be read is not known ungated (p4-r1), so it waits. A batch whose close-out is the
+    one on branch *resuming* is still that close-out's own work (gh#1496: its session
+    re-records the head)."""
     stages = {b.id: derive_batch_stage(b, facts) for b in batches}
     ledgers = fact_ledgers(batches, facts, stages)
     unknown = fact_ledger_unknown(batches, facts, stages)
@@ -176,7 +179,8 @@ def closeout_owed(
     for b in batches:
         if stages[b.id] not in LANDED or b.id in unknown:
             continue
-        if closeout_of(b, markers) is not None:
+        event = closeout_of(b, markers)
+        if event is not None and (resuming is None or event.archive != resuming):
             continue
         if closeout_hold(b) is not None and b.id not in named:
             continue
@@ -299,9 +303,12 @@ def handback_brief(*, pr: int, branch: str, base: str, checks: Sequence[str]) ->
     )
     return (
         f"The collected close-out PR #{pr} on {branch} {what}.\n"
-        f"Fix it on {branch}: merge origin/{base} in, resolve, run the failing checks "
-        f"locally, and push; then run `fr triage batch closeout --branch {branch} --yes`, "
-        f"which records the new head (the driver merges only a head the verb recorded). "
+        f"Fix it on {branch}: rebase its commits onto origin/{base} (never merge it in: "
+        f"the driver queues a close-out unapproved only with the verb's own commits past the "
+        f"base), "
+        f"resolve, run the failing checks locally, and push with --force-with-lease; then "
+        f"run `fr triage batch closeout --branch {branch} --yes`, which records the new "
+        f"head (the driver merges only a head the verb recorded). "
         f"This is its one hand-back: a second failure goes to the operator.\n"
         f"{MANAGED_SENTENCE}"
     )
@@ -325,6 +332,16 @@ def owned_stale(stale: Iterable[str], moves: Iterable[str]) -> list[str]:
         rel for rel in stale
         if rel in wanted or any(rel.startswith(w + "/") for w in wanted)
     ]  # fmt: skip
+
+
+def unowned_stale(stale: Sequence[str], moves: Sequence[Sequence[str] | None]) -> list[str] | None:
+    """The stale artifacts the close-out's own migration (R16) leaves alone, given what each
+    member's archive moves: what makes `fr archive` refuse, so what a close-out waits for
+    (gh#1569). None when some archive's moves are unknown (the verb then decides)."""
+    if any(m is None for m in moves):
+        return None
+    owned = set(owned_stale(stale, [p for m in moves for p in m or ()]))
+    return [p for p in stale if p not in owned]
 
 
 def migrate_args(paths: Sequence[str]) -> list[str]:
@@ -380,6 +397,20 @@ def _why(step: Step, code: int, out: str) -> str:
     return f"`{step.line}` exited {code}" + (f": {last}" if last else "")
 
 
+def release_pending(kind: str, code: int, out: str) -> bool:
+    """Whether a close-out step was refused only by the artifact-migration gate (exit 2
+    over stale artifacts): a release's migration fixes it, so the batch stays owed and is
+    never held (gh#1569)."""
+    from fr.artifacts.trigger import STALE_REFUSAL
+
+    if kind != "archive" or code != 2:
+        return False
+    # The gate's own first line, never the sentence anywhere in the words (which may echo
+    # repo text): `fr: artifacts in <root> <STALE_REFUSAL>`.
+    first = " ".join(next((ln for ln in out.splitlines() if ln.strip()), "").split())
+    return first.startswith("fr: artifacts in ") and first.endswith(STALE_REFUSAL)
+
+
 def execute(
     members: Sequence[Member],
     *,
@@ -418,6 +449,9 @@ def execute(
                     "nothing either way, the merged PR stands")  # fmt: skip
                 continue
             why = _why(step, code, out)
+            if release_pending(step.kind, code, out):  # gh#1569: owed, never held
+                why = f"`{step.line}` waits for the release that migrates this repo's artifacts"
+                break
             durable = (step.kind, code) == ("verify-merge", 1) or step.kind == "archive"
             break
         if why:

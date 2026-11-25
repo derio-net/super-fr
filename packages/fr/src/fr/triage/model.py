@@ -85,7 +85,12 @@ from fr.triage.stage import Stage, derive_stage
 # 16 adds (2026-11-19-wave-merge-queue §Config) per-config `TriageConfig.queue`, the wave merge
 # queue's block: `to_json` dumps it, `null` included, which a closed-world schema-15 reader
 # rejects; a file below 16 reads it as None, so no repo is driven by the queue until collect.
-FACTS_SCHEMA: Final[int] = 16
+# 17 adds (2026-11-22-triage-hardening R1, R5, R7) `Issue.content_digest`, `admit_digest`,
+# `admit_read`, `admit_unread` and `Facts.ignored_claims`: `to_json` dumps them, which a
+# closed-world schema-16 reader rejects; a file below 17 reads them as their defaults, so a
+# `ready-fr` issue in it is ineligible until the next collect, and `load_facts` withholds its
+# ineligible issues' titles and bodies.
+FACTS_SCHEMA: Final[int] = 17
 FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
 # The version this fr WRITES: every engine write stamps 13 (the wave merge queue's
 # `queues:` list and its events, a batch's `deferred` and `requeued` events and an
@@ -405,6 +410,14 @@ class Issue(_Strict):
     # The author's association with the repo (`OWNER`, `MEMBER`, `COLLABORATOR`,
     # `CONTRIBUTOR`, `NONE`, ...), facts schema 15; None when never read (intake R1).
     author_association: str | None = None
+    # Facts schema 17 (2026-11-22-triage-hardening R5): the digest of the issue's own full
+    # title and body (`fr.triage.admit.content_digest`, before any truncation or
+    # withholding), the digest of the latest trusted admit marker, whether the comments were
+    # read for it, and the read's failure text when they were not (None on success).
+    content_digest: str | None = None
+    admit_digest: str | None = None
+    admit_read: bool = False
+    admit_unread: str | None = None
 
     @property
     def key(self) -> str:
@@ -419,6 +432,20 @@ class Issue(_Strict):
 class Skipped(_Strict):
     repo: str
     reason: str
+
+
+class IgnoredClaims(_Strict):
+    """The claim markers collect ignored on one issue because their authors are not
+    trusted (2026-11-22-triage-hardening R7, facts schema 17): the fix is to list each
+    account that drives a scope in the repo's `pr_authors`."""
+
+    repo: str
+    number: int
+    authors: list[str]
+
+    @property
+    def key(self) -> str:
+        return issue_key(self.repo, self.number)
 
 
 class Unviewed(_Strict):
@@ -709,6 +736,8 @@ class Facts(_Strict):
     # (gate-backfill §I, schema 13).
     gated_prs: list[PullRequest] = []
     gated_unread: list[GatedUnread] = []
+    # Claim markers ignored as untrusted, per issue (2026-11-22-triage-hardening R7, schema 17).
+    ignored_claims: list[IgnoredClaims] = []
 
     @field_validator("schema_")
     @classmethod
@@ -1660,13 +1689,15 @@ def load_facts(path: Path) -> Facts:
         facts = Facts.model_validate(_check_schema(path, data, FACTS_READS, "re-run collect"))
     except ValidationError as exc:
         raise TriageError(f"{path}: invalid facts: {exc}") from exc
-    if facts.schema_ < 15:
+    if facts.schema_ < 17:
         # A file written before the association was read kept an outside author's body
-        # (triage-intake R3): judge it as collect does, so no reader sees it.
-        from fr.triage.collect import _withhold_untrusted_bodies
+        # (triage-intake R3), and one written before 16 kept every ineligible issue's title
+        # and the text of issues the label alone admitted (2026-11-22-triage-hardening R1):
+        # judge it as collect does, so no reader sees it.
+        from fr.triage.collect import _withhold_untrusted_text
 
         facts = facts.model_copy(
-            update={"issues": _withhold_untrusted_bodies(facts.issues, facts.config, facts.viewer)}
+            update={"issues": _withhold_untrusted_text(facts.issues, facts.config, facts.viewer)}
         )
     return facts
 

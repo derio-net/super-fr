@@ -350,6 +350,44 @@ def test_a_branch_no_run_names_reads_no_run(tmp_path: Any) -> None:
     assert closeout_read(_closeout_repo(tmp_path), "origin/main", "fix/x", REPO).run is None
 
 
+def test_gh1569_an_archive_refused_only_by_the_migration_gate_is_transient_never_a_hold() -> None:
+    """`fr archive` refused over stale artifacts a release will migrate: still owed."""
+    from fr.artifacts.trigger import STALE_REFUSAL
+
+    refusal = (f"fr: artifacts in /x {STALE_REFUSAL}\n  HEAD is main\n  detail\n"
+               "  apply:    fr migrate artifacts --yes\n")  # fmt: skip
+    assert STALE_REFUSAL in refusal
+    from fr.triage.batch_closeout import release_pending
+
+    assert release_pending("archive", 2, refusal)
+    assert not release_pending("archive", 1, refusal)
+    assert not release_pending("verify-merge", 2, refusal)
+    assert not release_pending("archive", 2, "fr archive: Test Plan step 2 has no outcome")
+
+
+def test_gh1569_a_batch_whose_archive_awaits_a_release_is_skipped_never_held() -> None:
+    from fr.artifacts.trigger import STALE_REFUSAL
+
+    refusal = f"fr: artifacts in /x {STALE_REFUSAL}\n  apply:    fr migrate artifacts --yes"
+    tree = FakeTree(codes={("archive", "feat/batch-a"): 2},
+                    outs={("archive", "feat/batch-a"): refusal})  # fmt: skip
+    result, recorded = _run([PLAIN], tree, FakeForge())
+    assert HOLDS == [] and recorded == []
+    ((bid, why),) = result.skipped
+    assert bid == "a" and "waits for the release" in why
+
+
+def test_gh1569_only_the_gates_own_first_line_counts_never_the_sentence_echoed_later() -> None:
+    from fr.artifacts.trigger import STALE_REFUSAL
+    from fr.triage.batch_closeout import release_pending
+
+    echoed = f"fr archive: plan title 'x {STALE_REFUSAL}' has no outcome\n"
+    assert not release_pending("archive", 2, echoed)
+    assert not release_pending(
+        "archive", 2, f"something first\nfr: artifacts in /x {STALE_REFUSAL}"
+    )
+
+
 # ----------------------------------------- R16: the migration commit before the archive
 
 
@@ -413,3 +451,17 @@ def test_owned_stale_is_the_archives_move_set_exactly_and_a_plan_folder_covers_i
          "docs/superpowers/runs/r-a.records/x.yaml", "docs/superpowers/plans/plan-ab/_meta.yaml"],
         MOVES_A,
     ) == [RUN_A, PLAN_A, JOURNAL_A, SPEC_A]  # fmt: skip
+
+
+def test_gh1569_only_a_stale_artifact_the_closeouts_own_migration_leaves_alone_is_waited_for() -> (
+    None
+):
+    """R16 migrates what the archive moves; the rest still makes `fr archive` refuse."""
+    from fr.triage.batch_closeout import unowned_stale
+
+    stale = ["docs/superpowers/runs/r.yaml", "docs/superpowers/plans/p/_meta.yaml",
+             "docs/superpowers/runs/other.yaml"]  # fmt: skip
+    moves = [["docs/superpowers/runs/r.yaml"], ["docs/superpowers/plans/p"]]
+    assert unowned_stale(stale, moves) == ["docs/superpowers/runs/other.yaml"]
+    assert unowned_stale(stale[:2], moves) == []
+    assert unowned_stale(stale, [["docs/superpowers/runs/r.yaml"], None]) is None

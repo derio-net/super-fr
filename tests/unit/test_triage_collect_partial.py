@@ -272,7 +272,8 @@ def test_an_outside_authors_body_is_cleared_on_a_full_collect() -> None:
     assert _body(facts, "alpha#1") == "" and _body(facts, "beta#3") == ""
     assert _body(facts, "alpha#2") == _TEXT  # the viewer's own issue keeps its body
     outside = next(i for i in facts.issues if i.key == "alpha#1")
-    assert outside.title == "t1"  # the title is kept
+    assert outside.title == ""  # the title is withheld too (2026-11-22-triage-hardening R1)
+    assert outside.url
 
 
 def test_an_outside_authors_body_is_cleared_on_the_view_issue_path() -> None:
@@ -281,11 +282,25 @@ def test_an_outside_authors_body_is_cleared_on_the_view_issue_path() -> None:
     assert viewed.state == "closed" and viewed.body == ""
 
 
-def test_a_label_admits_and_keeps_the_body() -> None:
+def test_a_label_with_a_matching_admit_marker_admits_and_keeps_the_body() -> None:
+    from fr.triage.admit import admit_marker, content_digest
+
+    forge = _intake_forge()
+    raw = forge.issues[A][0]
+    raw["labels"] = [{"name": "ready-fr"}]
+    marker = admit_marker(content_digest(raw["title"], raw.get("body") or ""))
+    forge.comments[(A, raw["number"])] = [
+        {"author": "operator", "body": marker, "created_at": "2026-09-20T00:00:00Z", "id": 1}
+    ]
+    facts = collect_facts_counted(forge, ORG, now=NOW)[0]
+    assert _body(facts, "alpha#1") == _TEXT
+
+
+def test_a_label_alone_no_longer_keeps_the_body() -> None:
     forge = _intake_forge()
     forge.issues[A][0]["labels"] = [{"name": "ready-fr"}]
     facts = collect_facts_counted(forge, ORG, now=NOW)[0]
-    assert _body(facts, "alpha#1") == _TEXT
+    assert _body(facts, "alpha#1") == ""
 
 
 def test_a_carried_schema_13_issue_by_an_outside_author_is_cleared_by_a_partial_collect() -> None:

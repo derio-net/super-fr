@@ -49,10 +49,11 @@ from fr.triage.model import (
 from fr.triage.timestamps import parse_aware
 
 BatchStage = Literal[
-    "proposed", "cancelled", "dispatched", "pr-open", "merged", "partial", "abandoned"
+    "proposed", "obsolete", "cancelled", "dispatched", "pr-open", "merged", "partial", "abandoned"
 ]
 BATCH_STAGES: tuple[BatchStage, ...] = (
     "proposed",
+    "obsolete",
     "cancelled",
     "dispatched",
     "pr-open",
@@ -61,8 +62,11 @@ BATCH_STAGES: tuple[BatchStage, ...] = (
     "abandoned",
 )
 # A batch at one of these no longer holds its members (spec §3.A): `partial` and
-# `abandoned` are terminal and release their still-open members, like a cancel.
-CLOSED_OUT: frozenset[BatchStage] = frozenset({"cancelled", "merged", "partial", "abandoned"})
+# `abandoned` are terminal and release their still-open members, like a cancel. `obsolete`
+# (2026-11-22-triage-hardening R8) is a never-dispatched batch with nothing left to do.
+CLOSED_OUT: frozenset[BatchStage] = frozenset(
+    {"cancelled", "merged", "partial", "abandoned", "obsolete"}
+)
 
 BRANCH_PREFIX = "feat/batch-"
 FIX_BRANCH_PREFIX = "fix/batch-"
@@ -324,11 +328,23 @@ def lifecycle_events(batch: Batch) -> list[DispatchEvent | CancelEvent]:
     return [e for e in batch.events if isinstance(e, (DispatchEvent, CancelEvent))]
 
 
+def _all_closed(batch: Batch, facts: Facts) -> bool:
+    """Whether every member is in the facts and closed or awaiting its live walk. A member
+    missing from the facts is not known to be closed. One that awaits its live walk counts
+    as closed: a Refs PR merged its fix and left it open on purpose (spec
+    2026-10-06-verification-strategies §F, R17), so the batch is done."""
+    found = {i.key: i for i in facts.issues}
+    return all(
+        k in found and (found[k].state == "closed" or FR_AWAITING_LIVE.name in found[k].labels)
+        for k in batch.ids
+    )
+
+
 def derive_batch_stage(batch: Batch, facts: Facts) -> BatchStage:
     """The spec §3.A stage table, from the last event and the facts. Never stored."""
     events = lifecycle_events(batch)
     if not events:
-        return "proposed"
+        return "obsolete" if _all_closed(batch, facts) else "proposed"
     if events[-1].kind == "cancel":
         return "cancelled"
     pr = batch_pr(batch, facts)
@@ -338,19 +354,11 @@ def derive_batch_stage(batch: Batch, facts: Facts) -> BatchStage:
         return "pr-open"
     if pr.state == "CLOSED":
         return "abandoned"
-    found = {i.key: i for i in facts.issues}
-    # A member missing from the facts is not known to be closed. One that awaits its
-    # live walk counts as closed: a Refs PR merged its fix and left it open on purpose
-    # (spec 2026-10-06-verification-strategies §F, R17), so the batch is done.
-    all_closed = all(
-        k in found and (found[k].state == "closed" or FR_AWAITING_LIVE.name in found[k].labels)
-        for k in batch.ids
-    )
-    return "merged" if all_closed else "partial"
+    return "merged" if _all_closed(batch, facts) else "partial"
 
 
 def is_open(batch: Batch, facts: Facts) -> bool:
-    """Open unless cancelled, merged, partial or abandoned (spec §3.A)."""
+    """Open unless cancelled, merged, partial, abandoned or obsolete (spec §3.A)."""
     return derive_batch_stage(batch, facts) not in CLOSED_OUT
 
 
@@ -402,13 +410,20 @@ def check_dependencies(batches: Sequence[Batch]) -> None:
         visit(node, [])
 
 
+def meets_dependency(stage: str | None) -> bool:
+    """Whether a batch at *stage* satisfies an `after` on it: `merged`, or `obsolete` (it
+    has no work left, so nothing is left to wait for; 2026-11-22-triage-hardening R8)."""
+    return stage in {"merged", "obsolete"}
+
+
 def dependency_state(dep_id: str, batches: Sequence[Batch], facts: Facts) -> DependencyState:
-    """What waiting on batch *dep_id* means now: only stage `merged` satisfies it."""
+    """What waiting on batch *dep_id* means now: only stage `merged` or `obsolete`
+    satisfies it."""
     dep = next((b for b in batches if b.id == dep_id), None)
     if dep is None:
         return "unknown"
     stage = derive_batch_stage(dep, facts)
-    if stage == "merged":
+    if meets_dependency(stage):
         return "satisfied"
     return "unsatisfiable" if stage in UNSATISFIABLE else "waiting"
 

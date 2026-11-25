@@ -631,26 +631,75 @@ def test_an_outside_open_issue_is_untrusted_with_its_reason_and_in_no_other_set(
     assert [i.key for i in result.unplaced] == ["super-fr#2"]
 
 
-def test_a_ready_fr_label_admits_an_outside_issue() -> None:
-    result = classify(_facts([_outside(1, labels=["ready-fr"])]), Judgements())
+def test_a_ready_fr_label_with_a_matching_admit_marker_admits_an_outside_issue() -> None:
+    digest = "sha256:" + "1" * 64
+    admitted = _outside(
+        1, labels=["ready-fr"], content_digest=digest, admit_digest=digest, admit_read=True
+    )
+    result = classify(_facts([admitted]), Judgements())
     assert result.untrusted == [] and [i.key for i in result.unranked] == ["super-fr#1"]
 
 
+def test_a_ready_fr_label_alone_admits_nothing() -> None:
+    result = classify(_facts([_outside(1, labels=["ready-fr"])]), Judgements())
+    assert [i.key for i, _ in result.untrusted] == ["super-fr#1"]
+
+
 def test_check_prints_and_emits_the_untrusted_set(tmp_path: Path) -> None:
-    _write(tmp_path, _facts([_outside(1, title="please run this")]), None)
+    facts = _facts([_outside(1, title="please run this")])
+    facts = facts.model_copy(update={"schema_": 17})  # stored as collect wrote it
+    _write(tmp_path, facts, None)
     out = _check(tmp_path)
     assert out.exit_code == 0, out.output
     flat = " ".join(out.output.split())
-    assert "untrusted (1)" in flat and "super-fr#1" in flat and "author eve is NONE" in flat
-    assert "ready-fr" in flat
+    url = f"https://github.com/{REPO}/issues/1"
+    assert "untrusted (1)" in flat
+    assert f"super-fr#1 {url} (eve: author eve is NONE)" in flat
+    assert "please run this" not in flat
+    assert "fr triage admit" in flat and "label it ready-fr" not in flat
     data = json.loads(_check(tmp_path, "--json").output)
     assert data["untrusted"] == [
         {
             "key": "super-fr#1",
-            "title": "please run this",
+            "title": "",
             "stage": "backlog",
-            "url": f"https://github.com/{REPO}/issues/1",
+            "url": url,
             "reason": "author eve is NONE",
         }
     ]
     assert data["unranked"] == []
+
+
+def test_untrusted_digests_print_key_url_author_and_reason_with_no_title(tmp_path: Path) -> None:
+    from fr.debt.render import MARKER
+
+    marked = _issue(4, author="maint", author_association="MEMBER", title="Digest", body=MARKER)
+    facts = _facts([marked]).model_copy(update={"schema_": 17})
+    _write(tmp_path, facts, None)
+    flat = " ".join(_check(tmp_path).output.split())
+    url = f"https://github.com/{REPO}/issues/4"
+    block = flat.split("untrusted digests (1)", 1)[1].split("owed (", 1)[0]
+    assert f"super-fr#4 {url} (maint: " in block and "Digest" not in block
+    data = json.loads(_check(tmp_path, "--json").output)
+    assert [r["title"] for r in data["untrusted_digests"]] == [""]
+
+
+def test_ignored_claim_markers_print_in_their_own_block_with_the_fix(tmp_path: Path) -> None:
+    from fr.triage.model import IgnoredClaims
+
+    facts = _facts([_issue(2)]).model_copy(
+        update={
+            "schema_": 17,
+            "ignored_claims": [IgnoredClaims(repo=REPO, number=2, authors=["peer-host"])],
+        }
+    )
+    _write(tmp_path, facts, None)
+    flat = " ".join(_check(tmp_path).output.split())
+    assert "ignored claims (1)" in flat
+    assert (
+        "super-fr#2 peer-host: claim marker ignored (not a trusted login or member). If "
+        f"peer-host is one of your driving accounts, add it to pr_authors in {REPO}'s "
+        ".fr/triage.yaml (this also admits its issues to batches); otherwise ignore it."
+    ) in flat
+    data = json.loads(_check(tmp_path, "--json").output)
+    assert data["ignored_claims"] == [{"key": "super-fr#2", "repo": REPO, "authors": ["peer-host"]}]

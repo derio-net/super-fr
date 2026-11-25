@@ -1181,7 +1181,41 @@ def test_spec_fully_implemented_degrades_on_a_propagating_glab_error(tmp_path):
     gh.file_exists = boom  # type: ignore[method-assign]
     implemented, note = _spec_fully_implemented(spec, tmp_path, gh)
     assert implemented is False
-    assert note == "row 'Remote plan' unresolved locally (cross-repo?) — confirm and re-run"
+    assert note == (
+        "row 'Remote plan' unresolved locally (cross-repo?) — confirm and re-run "
+        "(the forge refused: glab: HTTP 400)"
+    )
+
+
+def test_spec_fully_implemented_names_a_tea_login_page(tmp_path):
+    """A tea login page re-raised by `file_exists` (gh#1554) still degrades
+    the row to "confirm", and the note names the cause (l-errors-r1)."""
+    from fr import tea as _tea
+    from fr.migrate import _spec_fully_implemented
+
+    from tests.unit.fakes import FakeGhClient
+
+    spec = tmp_path / "docs" / "superpowers" / "specs" / "2026-05-10-fixture.md"
+    spec.parent.mkdir(parents=True)
+    spec.write_text(
+        "# Fixture\n\n## Implementation Plans\n\n"
+        "| Plan | Repo | File | Depends on |\n"
+        "|---|---|---|---|\n"
+        "| Remote plan | `derio-net/other` | `2026-05-10-x` | — |\n"
+    )
+    gh = FakeGhClient()
+    message = f"HTTP 302: {_tea.REDIRECT_REFUSAL}"
+
+    def login_page(repo: str, path: str) -> bool:
+        raise _tea.TeaError(message)
+
+    gh.file_exists = login_page  # type: ignore[method-assign]
+    implemented, note = _spec_fully_implemented(spec, tmp_path, gh)
+    assert implemented is False
+    assert note.startswith(
+        "row 'Remote plan' unresolved locally (cross-repo?) — confirm and re-run"
+    )
+    assert _tea.REDIRECT_REFUSAL in note
 
 
 def test_migrate_dirs_repairs_stale_refs_in_passing(tmp_path, monkeypatch):

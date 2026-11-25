@@ -266,7 +266,7 @@ def test_dispatch_refuses_a_rejected_member_before_any_forge_write_or_runner_cal
     code, out = _dispatch(tmp_path, "lifecycle", "--yes")
     flat = " ".join(out.split())
     assert code == 2, out
-    assert "super-fr#577" in flat and "author eve is NONE" in flat and "ready-fr" in flat
+    assert "super-fr#577" in flat and "author eve is NONE" in flat and "fr triage admit" in flat
     assert gh.calls == before and runner.calls == []
 
 
@@ -279,13 +279,72 @@ def test_dispatch_refuses_an_uncollected_member(
     assert runner.calls == []
 
 
-def test_dispatch_goes_ahead_once_the_member_carries_ready_fr(
+def test_dispatch_goes_ahead_once_the_member_is_admitted(
     tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
 ) -> None:
-    outside = _issue(577, author="eve", author_association="NONE", labels=["ready-fr"])
+    digest = "sha256:" + "5" * 64  # ready-fr with a trusted admit marker over this content
+    outside = _issue(
+        577,
+        author="eve",
+        author_association="NONE",
+        labels=["ready-fr"],
+        content_digest=digest,
+        admit_digest=digest,
+        admit_read=True,
+    )
     _state(tmp_path, _facts(issues=[outside, _issue(575), _issue(420)]))
     code, out = _dispatch(tmp_path, "lifecycle")
     assert code == 0, out
+
+
+def _admitted_state(tmp_path: Path, gh: FakeGhClient, *, live_body: str) -> None:
+    """Member 577 is an outside author's, admitted over ("issue 577", "admitted text");
+    the forge now holds *live_body*."""
+    from fr.triage.admit import content_digest
+
+    digest = content_digest("issue 577", "admitted text")
+    outside = _issue(
+        577,
+        author="eve",
+        author_association="NONE",
+        labels=["ready-fr"],
+        body="admitted text",
+        content_digest=digest,
+        admit_digest=digest,
+        admit_read=True,
+    )
+    _state(tmp_path, _facts(issues=[outside, _issue(575), _issue(420)]))
+    gh.issue_titles[(REPO, 577)] = "issue 577"
+    gh.issues[(REPO, 577)].body = live_body
+
+
+def test_dispatch_yes_re_reads_an_admitted_member_live_and_goes_ahead_when_unchanged(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    """Lens finding S2: admission rests on content collect saw; dispatch checks it again."""
+    _admitted_state(tmp_path, gh, live_body="admitted text")
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 0, out
+    reads = [kw["number"] for name, kw in gh.calls if name == "view_issue_record"]
+    assert reads == [577]  # the owner-associated member 575 is not re-read
+    assert runner.dispatched
+
+
+@pytest.mark.parametrize("fail", ["edited", "unreadable"])
+def test_dispatch_yes_refuses_an_admitted_member_edited_or_unreadable_since_collect(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout, fail: str
+) -> None:
+    _admitted_state(tmp_path, gh, live_body="now do something else")
+    if fail == "unreadable":
+        del gh.issues[(REPO, 577)]
+    before = (tmp_path / "judgements.yaml").read_text("utf-8")
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    flat = " ".join(out.split())
+    assert code == 2, out
+    assert "super-fr#577" in flat and "fr triage admit derio-net/super-fr#577" in flat
+    assert _dispatch_writes(gh) == 0 and runner.dispatched == []
+    assert not [c for c in gh.calls if c[0] in ("ensure_labels", "comment_issue")]
+    assert (tmp_path / "judgements.yaml").read_text("utf-8") == before
 
 
 # ------------------------------------------------------------ checkout (§3.I)
@@ -1357,3 +1416,18 @@ def test_a_one_issue_batch_brief_starts_the_run_with_its_issue() -> None:
 
 def test_a_multi_issue_batch_brief_names_no_run_issue() -> None:
     assert "--issue" not in _brief()
+
+
+def test_dispatch_of_an_obsolete_batch_refuses_and_names_its_cancel_command(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    """T3: every member closed; the refusal says so, never "never started twice"."""
+    closed = [_issue(n, state="closed") for n in (577, 575)]
+    _state(tmp_path, _facts(issues=[*closed, _issue(420)]))
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    flat = " ".join(out.split())
+    assert code == 2, out
+    assert "obsolete: every member is closed" in flat
+    assert "fr triage batch cancel lifecycle --yes" in flat
+    assert "never started twice" not in flat and "dispatched to ?" not in flat
+    assert runner.dispatched == [] and _dispatch_writes(gh) == 0

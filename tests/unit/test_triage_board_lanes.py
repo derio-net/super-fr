@@ -87,7 +87,7 @@ def test_the_pass_still_counts_a_conflicting_pr_ready_for_the_queue() -> None:
 def test_the_columns_are_r17s_in_order() -> None:
     assert COLUMNS == (
         "proposed", "waiting", "running", "needs-developer", "pr-open", "needs-reviewer",
-        "needs-tester", "needs-devops", "closing-out", "partial", "done",
+        "needs-tester", "needs-devops", "closing-out", "partial", "obsolete", "done",
     )  # fmt: skip
     assert COLUMN_TITLES["needs-developer"] == "Needs you · Developer"
     assert COLUMN_TITLES["needs-devops"] == "Needs you · DevOps"

@@ -1,5 +1,5 @@
 {
-  "schema": 16,
+  "schema": 17,
   "scope": "example-org--widgets",
   "kind": "repo",
   "collected_at": "2026-10-06T00:00:00Z",
@@ -34,7 +34,11 @@
         }
       ],
       "author": null,
-      "author_association": "OWNER"
+      "author_association": "OWNER",
+      "content_digest": null,
+      "admit_digest": null,
+      "admit_read": false,
+      "admit_unread": null
     },
     {
       "repo": "example-org/widgets",
@@ -51,7 +55,11 @@
       "dispatch_marker_at": null,
       "claims": [],
       "author": null,
-      "author_association": "OWNER"
+      "author_association": "OWNER",
+      "content_digest": null,
+      "admit_digest": null,
+      "admit_read": false,
+      "admit_unread": null
     }
   ],
   "prs": [],
@@ -66,5 +74,6 @@
   "stale_in_progress": [],
   "config_ignored": {},
   "gated_prs": [],
-  "gated_unread": []
+  "gated_unread": [],
+  "ignored_claims": []
 }

@@ -903,6 +903,7 @@ def _spec_fully_implemented(
     → counts as done; nothing found (or no gh / gh outage) → blocks with
     a "confirm and re-run" note. Unresolved never silently passes.
     """
+    from fr.hostclient import FORGE_ERRORS
     from fr.spec import _resolve_local_plan_dir, parse_spec
 
     meta = parse_spec(spec_path)
@@ -931,7 +932,11 @@ def _spec_fully_implemented(
                         legacy_path and gh.file_exists(ref.repo, legacy_path)
                     ):
                         continue  # remote row is archived — counts as done
-                except Exception:  # noqa: BLE001 — gh outage degrades to "confirm"
+                except FORGE_ERRORS as exc:
+                    # A forge outage still degrades to "confirm", but names the
+                    # cause: a login page (gh#1554) is otherwise re-run forever.
+                    note = f"{note} (the forge refused: {exc})"
+                except Exception:  # noqa: BLE001 — any other probe failure degrades to "confirm"
                     pass
             return False, note
         try:
