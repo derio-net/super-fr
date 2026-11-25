@@ -39,6 +39,8 @@ printf 'fr_version: 5.17.0\n' >> "$DRIFT_CURSORS/r-b2.yaml"
 # The scope's state, pushed to the ref: three dispatched batches and their sessions.
 state="$HOME/.cache/fr/triage/$scope"  # the host cache (spec 2026-11-19 R17)
 mkdir -p "$state"
+# An S1 cache is a git repository of its own (R17), never a bare directory (review p6-r2).
+git init -q "$state" && printf '*\n' > "$state/.git/info/exclude" || fail "state repo"
 {
   printf 'schema: 6\ntiers: [{n: 1, title: Now}]\nissues:\n'
   for m in 432 458 471; do printf '  super-fr#%s: {tier: 1}\n' "$m"; done

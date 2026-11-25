@@ -39,6 +39,9 @@ ref_sha() { git -C "$world/state.git" for-each-ref --format='%(objectname)' refs
 a="$PWD"
 seed="$HOME/.cache/fr/triage/$scope"
 mkdir -p "$seed"
+# An S1 cache is a git repository of its own (R17); a bare directory of files is an older
+# fr's, which S1 only adopts through the move (review p6-r2).
+git init -q "$seed" && printf '*\n' > "$seed/.git/info/exclude" || fail "seed repo"
 printf 'schema: 6\ntiers: [{n: 1, title: Now}]\nissues: {}\n' > "$seed/judgements.yaml"
 printf 'state_repo: %s\n' "$repo" > "$seed/scope-durable.yaml"
 # A dispatch the agent never answered: pending in the scope's state, in the runner's format.
