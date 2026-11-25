@@ -229,6 +229,52 @@ def running_hold(runs: list[BranchRun]) -> str | None:
     return None
 
 
+def _listing_failure(root: Path) -> str | None:
+    """Why the runs dir below *root* exists and cannot be listed, else None. An absent dir
+    is no cursor; `Path.glob`, which `branch_runs` lists with, reads an unlistable one as
+    empty, i.e. "nothing running" (l-security-r2)."""
+    runs = below(root, "run")
+    try:
+        os.listdir(runs)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        return f"{runs} cannot be listed: {exc.strerror or exc}"
+    return None
+
+
+def gc_run_hold(worktree: Path, branch: str) -> str | None:
+    """Why gc must keep the workspace at *worktree* (R9), under every placement, or None.
+
+    The run cursors live at the placement's own artifact root (l-security-r1): the
+    worktree itself under `repo`, the feature's root in the repo's `fr` worktree under
+    quiet, or in the stealth tracking clone (`fr.artifacts.paths.space_for`, computed with
+    `create=False`, so gc never creates a quiet worktree). Both that root and the worktree
+    are read, and either one running, unreadable or unlistable keeps it. Fail closed: a
+    placement that cannot be resolved (the error, e.g. a lost marker whose state records
+    quiet), or a non-`repo` root that is absent, is `run cursor location unknown`."""
+    from fr.artifacts.paths import REPO, feature_root, space_for
+
+    wt = Path(worktree)
+    try:
+        space = space_for(wt, create=False)
+    except Exception as exc:  # any failure is unknown, and unknown keeps it (fail closed)
+        return f"run cursor location unknown ({exc})"
+    roots = [wt]
+    if space.placement != REPO:
+        if not space.root.is_dir():
+            return (
+                f"run cursor location unknown (the {space.placement} root {space.root} is absent)"
+            )
+        roots.insert(0, feature_root(space))
+    for root in dict.fromkeys(roots):
+        if (failed := _listing_failure(root)) is not None:
+            return f"run cursor location unknown ({failed})"
+        if (hold := running_hold(branch_runs(root, branch))) is not None:
+            return hold
+    return None
+
+
 def branch_runs(worktree: Path, branch: str) -> list[BranchRun]:
     """This branch's run files under `docs/superpowers/runs/`, read with plain
     `yaml.safe_load` — never the live `extra="forbid"` model, so an old stamp or

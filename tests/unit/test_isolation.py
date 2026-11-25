@@ -4456,6 +4456,28 @@ def test_gc_keeps_merged_workspace_with_a_running_unit(
     assert wt.is_dir() and load_state(repo, "feat/unit") is not None
 
 
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_gc_keeps_a_workspace_whose_run_cursor_location_is_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dry_run: bool
+) -> None:
+    """l-security-r1: under quiet or stealth the cursor is the placement's, not the
+    worktree's; a placement gc cannot resolve keeps the workspace, merged or not."""
+    from fr.artifacts import paths
+    from fr.settings import SettingsError
+
+    repo, _runner, target, up = _gc_env(tmp_path, monkeypatch, pr_by_branch={"feat/q": _MERGED})
+    wt = up("feat/q")
+
+    def lost(root: Path, create: bool = True) -> paths.ArtifactSpace:
+        raise SettingsError("placement quiet: no marker")
+
+    monkeypatch.setattr(paths, "space_for", lost)
+    (action,) = [a for a in target.gc(dry_run=dry_run) if a.branch == "feat/q"]
+    assert action.action == "skipped"
+    assert action.detail == "kept: run cursor location unknown (placement quiet: no marker)"
+    assert wt.is_dir() and load_state(repo, "feat/q") is not None
+
+
 def test_gc_still_reaps_merged_workspace_with_no_cursor(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
