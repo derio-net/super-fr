@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from fr.config import protection
+from fr.config import protection, tip
 from fr.config.space import quiet_checkout
 
 from tests.unit.settings_repo import git, make_repo
@@ -198,82 +198,84 @@ def test_a_scenario_program_in_the_configuration_space_is_refused_before_anythin
     assert not installed.exists() and not scenario_ran.exists()
 
 
-# --- the reviewed tip, not a local copy of it (review p3-r2, decision p3-run-the-checked-tip)
+# --- the reviewed tip, not a local copy of it (review p3-r2, decisions p3-run-the-checked-tip,
+# p3-execute-the-exported-tip)
+
+TIP_INSTALL = """#!/bin/sh
+echo tip >> "{log}"
+mkdir -p "$1/bin"
+printf '#!/bin/sh\\necho fake\\n' > "$1/bin/fakefr"
+chmod +x "$1/bin/fakefr"
+echo fakefr
+"""
 
 
 def _protected_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
-    sentinel = tmp_path / "ran"
-    root = _quiet_with_config(
-        tmp_path, {".fr/candidate-install": INSTALL.format(sentinel=sentinel)}
-    )
+    log = tmp_path / "ran.log"
+    root = _quiet_with_config(tmp_path, {".fr/candidate-install": TIP_INSTALL.format(log=log)})
     monkeypatch.setattr(protection, "_origin_slug", lambda r: SLUG)
-    return root, sentinel
+    return root, log
 
 
-def test_a_local_edit_in_the_fr_config_worktree_is_refused_and_nothing_runs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from fr.verification.walk import WalkError
-
-    root, sentinel = _protected_install(tmp_path, monkeypatch)
+def _edit_install(root: Path, log: Path) -> Path:
     edited = quiet_checkout(root) / ".fr" / "candidate-install"
-    edited.write_text(edited.read_text() + "echo unreviewed\n")
-    with pytest.raises(WalkError) as caught:
-        _walk(root, forge=_Rules())
-    text = str(caught.value)
-    assert "not the reviewed tip" in text and ".fr/candidate-install" in text
-    assert "pull request" in text and "stash" in text
-    assert not sentinel.exists()
+    edited.write_text(edited.read_text().replace("echo tip", "echo local"))
+    return edited
 
 
-def test_an_untracked_file_in_the_fr_config_worktree_is_refused(
+def test_an_assume_unchanged_edit_in_the_worktree_never_runs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from fr.verification.walk import WalkError
-
-    root, sentinel = _protected_install(tmp_path, monkeypatch)
-    (quiet_checkout(root) / ".fr" / "planted").write_text("x\n")
-    with pytest.raises(WalkError, match="planted"):
-        _walk(root, forge=_Rules())
-    assert not sentinel.exists()
-
-
-def test_a_local_commit_ahead_of_origin_is_refused(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from fr.verification.walk import WalkError
-
-    root, sentinel = _protected_install(tmp_path, monkeypatch)
+    """Security review: index flags blind `git status`, so fr does not run the working tree
+    at all: it runs the fetched tip's file, exported to a private directory."""
+    root, log = _protected_install(tmp_path, monkeypatch)
     where = quiet_checkout(root)
-    (where / ".fr" / "candidate-install").write_text("#!/bin/sh\ntouch unreviewed\n")
-    git(where, "commit", "-qam", "unreviewed")
-    with pytest.raises(WalkError) as caught:
-        _walk(root, forge=_Rules())
-    assert "1 local commit(s) ahead of origin/fr-config" in str(caught.value)
-    assert "reset --keep origin/fr-config" in str(caught.value)
-    assert not sentinel.exists()
+    git(where, "update-index", "--assume-unchanged", ".fr/candidate-install")
+    _edit_install(root, log)
+    assert git(where, "status", "--porcelain").strip() == ""  # blinded
+    _walk(root, forge=_Rules())
+    assert log.read_text().splitlines() == ["tip"]
 
 
-def test_a_worktree_behind_the_fetched_tip_is_refused_with_the_fast_forward(
+def test_a_local_commit_ahead_of_origin_never_runs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The walk fetches first: a change merged on origin since the last fetch is the
-    reviewed tip, and the worktree that lacks it is not what was reviewed."""
-    from fr.verification.walk import WalkError
+    root, log = _protected_install(tmp_path, monkeypatch)
+    _edit_install(root, log)
+    git(quiet_checkout(root), "commit", "-qam", "unreviewed")
+    _walk(root, forge=_Rules())
+    assert log.read_text().splitlines() == ["tip"]
 
-    root, sentinel = _protected_install(tmp_path, monkeypatch)
+
+def test_the_walk_fetches_first_and_runs_what_origin_has_now(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, log = _protected_install(tmp_path, monkeypatch)
     other = tmp_path / "other"
     origin = git(root, "remote", "get-url", "origin").strip()
     git(tmp_path, "clone", "-q", "--branch", "fr-config", origin, str(other))
-    (other / ".fr" / "lenses.yaml").write_text("disable: []\n")
-    git(other, "add", "-A")
-    git(other, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "merged")
+    script = other / ".fr" / "candidate-install"
+    script.write_text(script.read_text().replace("echo tip", "echo merged"))
+    git(other, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qam", "m")
     git(other, "push", "-q", "origin", "fr-config")
-    with pytest.raises(WalkError) as caught:
-        _walk(root, forge=_Rules())
-    assert "1 commit(s) behind origin/fr-config" in str(caught.value)
-    assert "merge --ff-only origin/fr-config" in str(caught.value)
-    assert not sentinel.exists()
+    _walk(root, forge=_Rules())
+    assert log.read_text().splitlines() == ["merged"]
+
+
+def test_the_export_is_private_keeps_the_mode_and_is_removed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.config.space import config_space
+
+    root, _ = _protected_install(tmp_path, monkeypatch)
+    space = config_space(root)
+    out = tip.export_checked(space, _Rules(), "run x")
+    program = out / space.tree_path("candidate-install")
+    assert stat.S_IMODE(out.stat().st_mode) == 0o700
+    assert program.stat().st_mode & stat.S_IXUSR
+    assert not out.is_relative_to(quiet_checkout(root))
+    protection.forget()
+    assert not out.exists()
 
 
 def test_a_failed_fetch_of_the_configuration_branch_refuses(
@@ -281,11 +283,11 @@ def test_a_failed_fetch_of_the_configuration_branch_refuses(
 ) -> None:
     from fr.verification.walk import WalkError
 
-    root, sentinel = _protected_install(tmp_path, monkeypatch)
+    root, log = _protected_install(tmp_path, monkeypatch)
     git(root, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
     with pytest.raises(WalkError, match="cannot fetch fr-config"):
         _walk(root, forge=_Rules())
-    assert not sentinel.exists()
+    assert not log.exists()
 
 
 def test_no_fetch_reads_the_last_fetched_tip_and_says_it_may_be_stale(
@@ -295,25 +297,23 @@ def test_no_fetch_reads_the_last_fetched_tip_and_says_it_may_be_stale(
 
     root, _ = _protected_install(tmp_path, monkeypatch)
     git(root, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    protection.require_checked_tip(
-        config_space(root), _Rules(), "run x", working_tree=True, no_fetch=True
-    )
+    tip.export_checked(config_space(root), _Rules(), "run x", no_fetch=True)
     assert "may be stale" in capsys.readouterr().err
 
 
-def test_a_clean_worktree_at_the_fetched_tip_runs(
+def test_under_quiet_an_origin_that_is_not_the_checked_repo_refuses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root, sentinel = _protected_install(tmp_path, monkeypatch)
-    _walk(root, forge=_Rules())
-    assert sentinel.exists()
+    from fr.config.space import config_space
+
+    root, _ = _protected_install(tmp_path, monkeypatch)
+    space = config_space(root)
+    monkeypatch.setattr(protection, "_target", lambda s: ("example-org/other-repo", "fr-config"))
+    with pytest.raises(protection.UncheckedTipError, match="not the repository"):
+        protection.fetch_tip(space, "run x")
 
 
-def test_under_stealth_the_configuration_clone_must_be_its_fetched_tip(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The stealth configuration clone fetches `<branch>-config` itself and is held to the
-    same rule as the quiet worktree."""
+def _stealth_space(tmp_path: Path, origin_of_clone: Path | None = None) -> Any:
     from fr.config.space import ConfigSpace
 
     track = tmp_path / "track.git"
@@ -328,46 +328,61 @@ def test_under_stealth_the_configuration_clone_must_be_its_fetched_tip(
     git(seed, "push", "-q", "origin", "main-config")
     clone = tmp_path / "stealth--track--main-config"
     git(tmp_path, "clone", "-q", "-b", "main-config", str(track), str(clone))
-    space = ConfigSpace(
+    if origin_of_clone is not None:
+        git(clone, "remote", "set-url", "origin", str(origin_of_clone))
+    return ConfigSpace(
         "stealth", clone / "local--work" / ".fr", clone, tmp_path, "origin/main-config",
-        "local--work/.fr", "git@github.com:example-org/track.git@main",
+        "local--work/.fr", f"{track}@main",
     )  # fmt: skip
-    monkeypatch.setattr(protection, "_default_client", lambda s: _Rules())
-    protection.require_checked_tip(space, None, "run ops", working_tree=True)
-    protection.forget()
-    (clone / "local--work" / ".fr" / "ops.yaml").write_text("env_passthrough: [B]\n")
-    with pytest.raises(protection.UncheckedTipError, match="local--work/.fr/ops.yaml"):
-        protection.require_checked_tip(space, None, "run ops", working_tree=True)
 
 
-def test_ops_config_from_a_dirty_fr_config_worktree_refuses(
+def test_under_stealth_the_tip_of_the_tracking_repo_is_read(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from fr.ops.load import OpsLoadError, load_ops_config
+    space = _stealth_space(tmp_path)
+    monkeypatch.setattr(protection, "_target", lambda s: ("example-org/track", "main-config"))
+    monkeypatch.setattr(protection, "_default_client", lambda s: _Rules())
+    (space.dir / "ops.yaml").write_text("env_passthrough: [LOCAL]\n")
+    text = protection.read_checked(space, None, "ops", "run ops")
+    assert text == "env_passthrough: [A]\n"
+
+
+def test_under_stealth_a_clone_whose_origin_is_another_repo_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    elsewhere = tmp_path / "elsewhere.git"
+    git(tmp_path, "init", "-q", "--bare", "-b", "main-config", str(elsewhere))
+    space = _stealth_space(tmp_path, origin_of_clone=elsewhere)
+    monkeypatch.setattr(protection, "_target", lambda s: ("example-org/track", "main-config"))
+    monkeypatch.setattr(protection, "_default_client", lambda s: _Rules())
+    with pytest.raises(protection.UncheckedTipError, match="not the repository"):
+        protection.read_checked(space, None, "ops", "run ops")
+
+
+def test_ops_config_is_read_from_the_fetched_tip_not_the_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.ops.load import load_ops_config
 
     root = _quiet_with_config(tmp_path, {".fr/ops.yaml": "env_passthrough: [SECRET]\n"})
     monkeypatch.setattr(protection, "_origin_slug", lambda r: SLUG)
     monkeypatch.setattr(protection, "_default_client", lambda space: _Rules())
     (quiet_checkout(root) / ".fr" / "ops.yaml").write_text("env_passthrough: [OTHER]\n")
-    with pytest.raises(OpsLoadError, match="not the reviewed tip"):
-        load_ops_config(root)
+    assert load_ops_config(root).env_passthrough == ("SECRET",)
 
 
-def test_an_exit_remap_from_a_dirty_fr_config_worktree_is_ignored(
+def test_an_exit_remap_is_read_from_the_fetched_tip_not_the_worktree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from fr.verification.rows import load_remap
 
-    root = _quiet_with_config(tmp_path, {".fr/triage.yaml": "exit:\n  gates:\n    tester: none\n"})
+    root = _quiet_with_config(tmp_path, {".fr/triage.yaml": "exit:\n  gates:\n    live: none\n"})
     monkeypatch.setattr(protection, "_origin_slug", lambda r: SLUG)
     monkeypatch.setattr(protection, "_default_client", lambda space: _Rules())
-    assert load_remap(root)[0]  # clean: read
-    protection.forget()
     (quiet_checkout(root) / ".fr" / "triage.yaml").write_text(
-        "exit:\n  gates:\n    tester: none\n    devops: none\n"
+        "exit:\n  gates:\n    live: none\n    other: none\n"
     )
-    remap, why = load_remap(root)
-    assert remap == {} and why is not None and "not the reviewed tip" in why
+    assert load_remap(root) == ({"live": "none"}, None)
 
 
 def test_under_repo_the_walk_asks_nothing(tmp_path: Path) -> None:

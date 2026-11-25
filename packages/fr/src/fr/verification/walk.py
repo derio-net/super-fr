@@ -368,39 +368,36 @@ def _contract(repo_root: Path, manifest: StrategyManifest) -> None:
 def _protected(repo_root: Path, manifest: StrategyManifest, forge: object | None) -> None:
     """Spec 2026-11-19-event-driven-a-la-carte R7: under quiet and stealth a program the
     install or scenario template reads from the configuration branch
-    (`.fr/candidate-install`) runs only when the forge
-    enforces a pull-request rule on that branch and the configuration checkout is exactly
-    its freshly fetched tip (review p3-r2); *forge* is the client to ask (None: the repo's
-    own)."""
-    from fr.config.protection import require_checked_tip
-    from fr.config.space import config_space, in_space
-    from fr.settings import SettingsError
+    (`.fr/candidate-install`) runs only when the forge enforces a pull-request rule on that
+    branch, and only as its freshly fetched tip has it (review p3-r2,
+    `protection.export_checked`); *forge* is the client to ask (None: the repo's own). Asked
+    before anything runs, so a refusal leaves nothing half done."""
+    from fr.config.space import in_space
 
     programs = [t[0] for t in (manifest.install, manifest.scenario) if t]
-    if not any(in_space(p) for p in programs):
-        return
-    try:
-        require_checked_tip(
-            config_space(repo_root), forge, "run the candidate install", working_tree=True
-        )
-    except SettingsError as exc:
-        raise WalkError(str(exc)) from exc
+    if any(in_space(p) for p in programs):
+        first = next(p for p in programs if in_space(p))
+        _program(first, repo_root, forge, "run the candidate install")
 
 
-def _program(argv0: str, repo_root: Path, forge: object | None) -> str:
-    """The repo-relative program *argv0*'s path; one in the configuration space passes the
-    protection guard first, so no template reaches it unguarded (R7), and the checkout must
-    still be the reviewed tip when it runs (review p3-r2)."""
-    from fr.config.protection import require_checked_tip
+def _program(argv0: str, repo_root: Path, forge: object | None, what: str = "") -> str:
+    """The repo-relative program *argv0*'s path. One in the configuration space under quiet
+    or stealth passes the protection guard and runs from the exported fetched tip, never the
+    configuration checkout (R7, review p3-r2), so no template reaches it unguarded."""
     from fr.config.space import config_space, in_space
+    from fr.config.tip import export_checked
     from fr.settings import SettingsError
 
-    if in_space(argv0):
-        try:
-            require_checked_tip(config_space(repo_root), forge, f"run {argv0}", working_tree=True)
-        except SettingsError as exc:
-            raise WalkError(str(exc)) from exc
-    return str(install_path(argv0, repo_root))
+    if not in_space(argv0):
+        return str(install_path(argv0, repo_root))
+    try:
+        space = config_space(repo_root)
+        if space.ref is None:
+            return str(install_path(argv0, repo_root))
+        out = export_checked(space, forge, what or f"run {argv0}")
+        return str(out / space.tree_path(argv0))
+    except SettingsError as exc:
+        raise WalkError(str(exc)) from exc
 
 
 def run_walk(

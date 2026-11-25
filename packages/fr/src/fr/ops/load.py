@@ -17,13 +17,16 @@ import textwrap
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError
 
 from fr.config.space import config_space, rel
 from fr.ops.model import LegacyOp, LegacyState, Op
+
+if TYPE_CHECKING:
+    from fr.config.space import ConfigSpace
 
 OPS_FILE = "ops.yaml"
 CONFIG_REL = Path(rel("ops"))
@@ -97,18 +100,16 @@ class OpsConfig(BaseModel):
     """A probe's bound; a timeout reads CANNOT-VERIFY (R5)."""
 
 
-def _protected(repo_root: Path) -> None:
+def _tip_text(space: ConfigSpace) -> str | None:
     """Spec 2026-11-19-event-driven-a-la-carte R7: `.fr/ops.yaml` names the runbook a probe
-    runs and the environment it receives, so under quiet and stealth it is read only when the
-    forge enforces a pull-request rule on the configuration branch, and the configuration
-    checkout is exactly its freshly fetched tip (review p3-r2)."""
-    from fr.config.protection import require_checked_tip
+    runs and the environment it receives, so under quiet and stealth it is read from the
+    freshly fetched tip of a protected configuration branch (review p3-r2,
+    `protection.read_checked`), never the configuration checkout's working tree."""
+    from fr.config.protection import read_checked
     from fr.settings import SettingsError
 
     try:
-        require_checked_tip(
-            config_space(repo_root), None, f"run ops with {CONFIG_REL}", working_tree=True
-        )
+        return read_checked(space, None, CONFIG_REL.as_posix(), f"run ops with {CONFIG_REL}")
     except SettingsError as e:
         raise OpsLoadError(str(e)) from e
 
@@ -118,13 +119,23 @@ def load_ops_config(repo_root: Path) -> OpsConfig:
     from fr.settings import SettingsError
 
     try:
-        path = config_space(repo_root).file(CONFIG_REL.as_posix())
+        space = config_space(repo_root)
+        path = space.file(CONFIG_REL.as_posix())
+        last = None if space.ref is None else space.at_default(CONFIG_REL.as_posix())
     except SettingsError as e:  # review p1-r4: the placement is unreadable, said as ours
         raise OpsLoadError(f"cannot tell where {CONFIG_REL} lives: {e}") from e
-    if not path.is_file():
-        return OpsConfig()
-    _protected(repo_root)
-    data = _safe_load(path.read_text(), path, 0)
+    if space.ref is None:
+        if not path.is_file():
+            return OpsConfig()
+        text = path.read_text()
+    else:
+        if last is None and not path.is_file():
+            return OpsConfig()  # neither the last fetched tip nor the checkout has one
+        found = _tip_text(space)
+        if found is None:
+            return OpsConfig()
+        text = found
+    data = _safe_load(text, path, 0)
     try:
         return OpsConfig.model_validate(data or {})
     except ValidationError as e:

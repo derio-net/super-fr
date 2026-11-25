@@ -23,14 +23,16 @@ starts afresh), never on disk.
 
 `require_protected(space, client, what)` is the one guard every executor calls: under `repo`
 it returns at once; otherwise it refuses with `ProtectionError` naming the reason and the fix.
-`require_checked_tip` adds that fr runs exactly what was reviewed (review p3-r2): it fetches
-the configuration branch (`fetch_tip`, once per command) and, for a reader of the working
-tree, refuses a configuration checkout that is dirty, ahead of or behind that fetched tip.
+fr also runs exactly what was reviewed (review p3-r2): `fetch_tip` fetches the configuration
+branch from the repository whose rules were read, `read_checked` reads a file at that tip,
+and `fr.config.tip.export_checked` exports the tip's `.fr/` to a private directory a program
+runs from; the configuration checkout's working tree is never run.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final
 
@@ -130,13 +132,17 @@ def _forge_identity(client: object) -> tuple[str, str | None]:
 
 
 _FETCHED: set[tuple[str, str]] = set()
-"""`(git repo, ref)` pairs `require_checked_tip` fetched this command (cleared by `forget`)."""
+"""`(git repo, ref)` pairs `fetch_tip` fetched this command (cleared by `forget`)."""
 
 
 def forget() -> None:
-    """Drop every cached answer: the next ask reads the forge (and fetches) again."""
+    """Drop every cached answer and exported tip: the next ask reads the forge (and
+    fetches) again."""
+    from fr.config.tip import drop_exports
+
     _CACHE.clear()
     _FETCHED.clear()
+    drop_exports()
 
 
 def _chain(exc: BaseException) -> list[BaseException]:
@@ -329,55 +335,41 @@ def require_protected(space: ConfigSpace, client: object | None, what: str) -> N
         raise ProtectionReadError(f"fr will not {what}: {exc}") from exc
     if answer is None or isinstance(answer, Enforced):
         return
-    raise ProtectionError(
+    raise _not_protected(answer, what)
+
+
+def _not_protected(answer: NotEnforced, what: str) -> ProtectionError:
+    return ProtectionError(
         f"fr will not {what}: {answer.branch} on {answer.repo} is not protected "
         f"({answer.reason}); {fix_text(answer.branch)}"
     )
 
 
 class UncheckedTipError(ProtectionError):
-    """The configuration fr would run is not the fetched, reviewed tip of its branch."""
-
-
-def require_checked_tip(
-    space: ConfigSpace,
-    client: object | None,
-    what: str,
-    *,
-    working_tree: bool,
-    no_fetch: bool = False,
-    command: str | None = None,
-) -> None:
-    """`require_protected`, then the content fr runs is exactly the reviewed tip (review
-    p3-r2, plan decision p3-run-the-checked-tip). Under `repo` it returns at once.
-
-    The configuration branch is fetched first (once per command); a failed fetch refuses,
-    since fr could not tell what the reviewed tip is. *no_fetch* (the command's own
-    `--no-fetch`, named *command*) skips it and says the tip may be stale. With
-    *working_tree* (a reader of `space.dir`: the walk's programs, `ops.yaml`, the `exit:`
-    remap) the configuration checkout (the quiet `fr-config` worktree, the stealth
-    configuration clone) must also be clean, untracked and ignored files included, with HEAD
-    at the fetched tip; otherwise fr refuses naming each difference and its remedy. Without
-    it (a blob reader, `at_default`) the read is of the fetched tip itself."""
-    if space.placement == _REPO:
-        return
-    require_protected(space, client, what)
-    fetch_tip(space, what, no_fetch=no_fetch, command=command)
-    if working_tree:
-        assert space.ref is not None
-        _check_checkout(space.checkout, f"refs/remotes/{space.ref}", space.ref, what)
+    """fr cannot tell, or cannot read, the fetched, reviewed tip of the configuration branch."""
 
 
 def fetch_tip(
     space: ConfigSpace, what: str, *, no_fetch: bool = False, command: str | None = None
 ) -> None:
     """Fetch *space*'s configuration branch into its remote-tracking ref, once per command
-    (nothing under `repo`), so a read at `at_default` is of the reviewed tip as origin has it
-    now; a failed fetch refuses `UncheckedTipError`. *no_fetch* says the tip may be stale."""
+    (nothing under `repo`), so a read at `at_default` is of the tip origin has now (review
+    p3-r2). The repo fetched from must be the one whose protection was read (`_target`):
+    under quiet the product clone's `origin`, under stealth the configuration clone's
+    `origin`, which must be the tracking repo; any other refuses, as does a failed fetch
+    (`UncheckedTipError`). *no_fetch* (the command's own `--no-fetch`) skips the fetch and
+    says the tip may be stale."""
     if space.placement == _REPO or space.ref is None:
         return
     repo = space.product if space.placement != _STEALTH else space.checkout
     ref = f"refs/remotes/{space.ref}"
+    if (str(repo), ref) in _FETCHED:
+        return
+    if not (repo / ".git").exists():
+        raise UncheckedTipError(
+            f"fr will not {what}: {repo} does not exist, so {space.ref} cannot be read"
+        )
+    _check_origin(space, repo, what)
     if no_fetch:
         import sys
 
@@ -385,18 +377,62 @@ def fetch_tip(
             f"fr: --no-fetch: {what} reads the last fetched {space.ref}, which may be stale",
             file=sys.stderr,
         )
-    elif (str(repo), ref) not in _FETCHED:
-        _fetch_tip(repo, space.ref.removeprefix("origin/"), ref, what, command)
-        _FETCHED.add((str(repo), ref))
+    else:
+        _fetch(repo, space.ref.removeprefix("origin/"), ref, what, command)
+    _FETCHED.add((str(repo), ref))
 
 
-def _fetch_tip(repo: Path, branch: str, ref: str, what: str, command: str | None) -> None:
+def _check_origin(space: ConfigSpace, repo: Path, what: str) -> None:
+    """*repo*'s `origin` is the repository whose rules were read, or `UncheckedTipError`:
+    under quiet its `owner/repo` is the checked one (`_target` reads the product's origin);
+    under stealth the configuration clone's origin is the tracking repo itself (the same URL,
+    or the same host and `owner/repo`), which is the repo `_target` asked about."""
+    found = _target(space)
+    if isinstance(found, NotEnforced):  # no forge protects it: never fetch it
+        raise _not_protected(found, what)
+    checked, _ = found
+    url = (_git_out(repo, "remote", "get-url", "origin") or "").strip()
+    if space.placement == _STEALTH:
+        from fr.placement.stealth import _same_repo, parse_ref
+
+        assert space.tracking is not None
+        tracking = parse_ref(space.tracking).repo
+        same = bool(url) and (
+            _same_repo(url, tracking)
+            or (
+                _host(url) is not None
+                and (_host(url), _slug(url)) == (_host(tracking), _slug(tracking))
+            )
+        )
+    else:
+        slug = _origin_slug(repo)
+        same = slug is not None and slug.removesuffix(".git").lower() == checked.lower()
+    if same:
+        return
+    raise UncheckedTipError(
+        f"fr will not {what}: the origin of {repo} ({url or 'none'}) is not the repository "
+        f"whose protection fr read ({checked}), so its tip proves nothing; point origin back "
+        f"at {checked} (`git -C {repo} remote set-url origin <url>`)"
+    )
+
+
+def _host(url: str) -> str | None:
+    from fr._hosts import _REMOTE_HOST_RE
+
+    m = _REMOTE_HOST_RE.match(url.strip())
+    return m.group(1).lower() if m else None
+
+
+def _slug(url: str) -> str | None:
+    from fr._hosts import slug_from_url
+
+    slug = slug_from_url(url)
+    return slug.removesuffix(".git").lower() if slug else None
+
+
+def _fetch(repo: Path, branch: str, ref: str, what: str, command: str | None) -> None:
     from fr.placement.quiet import _default_network
 
-    if not (repo / ".git").exists():
-        raise UncheckedTipError(
-            f"fr will not {what}: {repo} does not exist, so {branch} cannot be fetched"
-        )
     done = _default_network(repo)(
         ["git", "fetch", "--quiet", "--no-tags", "origin", f"+refs/heads/{branch}:{ref}"]
     )
@@ -419,66 +455,37 @@ def _git_out(where: Path, *args: str) -> str | None:
     return done.stdout if done.returncode == 0 else None
 
 
-def _check_checkout(checkout: Path, ref: str, short: str, what: str) -> None:
-    """*checkout* is clean and at *ref*, or `UncheckedTipError` naming every difference."""
-    head = "the configuration checkout"
-    if not (checkout / ".git").exists():
-        raise UncheckedTipError(
-            f"fr will not {what}: {head} {checkout} does not exist; `fr isolation up` "
-            "creates it at the configuration branch's tip"
-        )
-    status = _git_out(
-        checkout, "status", "--porcelain", "--untracked-files=all", "--ignored=matching"
-    )
-    tip = _git_out(checkout, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
-    at = _git_out(checkout, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
-    if status is None or not tip or not at:
-        raise UncheckedTipError(
-            f"fr will not {what}: git could not read {head} {checkout} or {short}, so fr "
-            "cannot tell that it holds the reviewed tip"
-        )
-    problems: list[str] = []
-    remedies: list[str] = []
-    dirty = [line[3:] for line in status.splitlines() if line.strip()]
-    if dirty:
-        shown = ", ".join(dirty[:5]) + (f" and {len(dirty) - 5} more" if len(dirty) > 5 else "")
-        problems.append(f"local changes not on {short}: {shown}")
-        remedies.append(
-            "a configuration change goes through a pull request: move the edit to one, then "
-            f"discard it there (`git -C {checkout} stash push --include-untracked`)"
-        )
-    if at.strip() != tip.strip():
-        counts = _git_out(checkout, "rev-list", "--left-right", "--count", f"HEAD...{ref}")
-        ahead, behind = (counts or "? ?").split()[:2]
-        if ahead != "0":
-            problems.append(f"{ahead} local commit(s) ahead of {short}")
-            remedies.append(
-                f"open a pull request for them, then `git -C {checkout} reset --keep {short}`"
-            )
-        if behind != "0":
-            problems.append(f"{behind} commit(s) behind {short}")
-            remedies.append(f"`git -C {checkout} merge --ff-only {short}`")
-    if problems:
-        raise UncheckedTipError(
-            f"fr will not {what}: {head} {checkout} is not the reviewed tip of {short} "
-            f"({'; '.join(problems)}); {'; '.join(remedies)}"
-        )
-
-
-def refusal_at(
-    root: Path, client: object | None, what: str, *, working_tree: bool = False
+def read_checked(
+    space: ConfigSpace,
+    client: object | None,
+    name: str,
+    what: str,
+    *,
+    guarded: Callable[[str], bool] = lambda text: True,
+    no_fetch: bool = False,
+    command: str | None = None,
 ) -> str | None:
+    """Configuration file *name* as the freshly fetched, reviewed tip has it (review p3-r2,
+    decision p3-execute-the-exported-tip), never the configuration checkout's working tree:
+    under `repo`, `at_default` as before. Under quiet and stealth the branch is fetched
+    (`fetch_tip`) and, when the text is there and *guarded* says it holds something
+    guarded, `require_protected` must pass. None: absent at the tip."""
+    if space.placement == _REPO:
+        return space.at_default(name)
+    fetch_tip(space, what, no_fetch=no_fetch, command=command)
+    text = space.at_default(name)
+    if text is not None and guarded(text):
+        require_protected(space, client, what)
+    return text
+
+
+def refusal_at(root: Path, client: object | None, what: str) -> str | None:
     """`require_protected` for the checkout at *root*, as the reason it refuses (None: go
-    ahead); with *working_tree*, `require_checked_tip` for a reader of the configuration
-    checkout's files. A configuration space that cannot be resolved refuses too."""
+    ahead). A configuration space that cannot be resolved refuses too."""
     from fr.config.space import config_space
 
     try:
-        space = config_space(root)
-        if working_tree:
-            require_checked_tip(space, client, what, working_tree=True)
-        else:
-            require_protected(space, client, what)
+        require_protected(config_space(root), client, what)
     except SettingsError as exc:
         return str(exc)
     return None

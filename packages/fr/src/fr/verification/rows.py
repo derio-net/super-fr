@@ -23,6 +23,7 @@ from fr.verification.spec_section import Section, parse_section
 
 if TYPE_CHECKING:
     from fr.acceptance.model import Row
+    from fr.config.space import ConfigSpace
     from fr.run.model import RunState
 
 __all__ = [
@@ -77,27 +78,53 @@ def load_remap(repo_root: Path) -> tuple[dict[str, str], str | None]:
     from fr.triage.model import parse_triage_config
 
     try:
-        path = config_space(repo_root).file("triage")
+        space = config_space(repo_root)
+        path = space.file("triage")
+        last = None if space.ref is None else space.at_default("triage")
     except SettingsError as e:  # review p1-r4: lenient, so an unreadable placement is no remap
         return {}, f"cannot tell where {rel('triage')} lives: {e}"
-    if not path.is_file():
-        return {}, None
+    shown = _shown(path, repo_root)
     try:
-        config, _ = parse_triage_config(yaml.safe_load(path.read_text()) or {})
+        if space.ref is None:
+            if not path.is_file():
+                return {}, None
+            text: str | None = path.read_text()
+        elif last is None and not path.is_file():
+            return {}, None
+        else:  # R7, review p3-r2: the fetched tip of a protected branch, never the checkout
+            text = _tip_text(space)
+            shown = f"{rel('triage')} on {space.ref}"
+        if text is None:
+            return {}, None
+        config, _ = parse_triage_config(yaml.safe_load(text) or {})
+    except _UnprotectedError as e:  # a gate remap decides what a merge owes: ignored, said
+        return {}, f"ignoring `exit:` in {shown}: {e}"
     except (OSError, UnicodeDecodeError, yaml.YAMLError, ValidationError) as e:
-        return {}, f"{_shown(path, repo_root)} is not valid triage config: {e}"
-    if not config.exit:
-        return {}, None
-    why = _unprotected(repo_root)
-    if why is not None:  # R7: a gate remap decides what a merge owes
-        return {}, f"ignoring `exit:` in {_shown(path, repo_root)}: {why}"
-    return dict(config.exit.gates), None
+        return {}, f"{shown} is not valid triage config: {e}"
+    return (dict(config.exit.gates) if config.exit else {}), None
 
 
-def _unprotected(repo_root: Path) -> str | None:
-    from fr.config.protection import refusal_at
+class _UnprotectedError(Exception):
+    """The `exit:` remap's configuration branch could not be read as a protected tip."""
 
-    return refusal_at(repo_root, None, "remap a gate with `exit:`", working_tree=True)
+
+def _tip_text(space: ConfigSpace) -> str | None:
+    import yaml
+
+    from fr.config.protection import read_checked
+    from fr.settings import SettingsError
+
+    def has_exit(text: str) -> bool:
+        try:
+            data = yaml.safe_load(text)
+        except yaml.YAMLError:
+            return True  # unreadable: refused as not triage config, never trusted
+        return isinstance(data, dict) and "exit" in data
+
+    try:
+        return read_checked(space, None, "triage", "remap a gate with `exit:`", guarded=has_exit)
+    except SettingsError as e:
+        raise _UnprotectedError(str(e)) from e
 
 
 @dataclass(frozen=True)
