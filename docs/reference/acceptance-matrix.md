@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-19 the scaffolded Gitea matrix job keeps no checkout token (batch consumer-followups, gh#1553); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-18 scaffolded CI pins every action and fr by commit, the stale-pin warning, per-forge debt credentials (consumer-delivery); 2026-11-17 an origin-only reword keeps the row's statement, and the -design fragment repair (gh#1439, gh#1461); 2026-11-15 deliver refuses a stale fresh log and stamps a merged local row by amendment (gh#1454, gh#1462)
+reviewed: 2026-11-25 the scaffolded GitLab debt job logs glab in before its fr commands (gh#1691); 2026-11-19 the scaffolded Gitea matrix job keeps no checkout token (batch consumer-followups, gh#1553); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-18 scaffolded CI pins every action and fr by commit, the stale-pin warning, per-forge debt credentials (consumer-delivery); 2026-11-17 an origin-only reword keeps the row's statement, and the -design fragment repair (gh#1439, gh#1461); 2026-11-15 deliver refuses a stale fresh log and stamps a merged local row by amendment (gh#1454, gh#1462)
 ---
 
 # The acceptance matrix
@@ -219,4 +219,7 @@ prints one warning. It also clears an `extraheader` that checkout kept in
   job's own token when that secret is unset. `tea` keeps the login in the job's temporary
   folder, and the last step logs out.
 - GitLab: the job installs a pinned `glab`. It stops with one line when the masked CI/CD
-  variable `FR_DEBT_TOKEN` (scope `api`) is not set.
+  variable `FR_DEBT_TOKEN` (scope `api`) is not set. Before the first `fr` command, the job
+  logs `glab` in to its own server with `FR_DEBT_TOKEN`, in a temporary config folder. fr
+  sends `glab` only to a host that `glab` is logged in to. A `GITLAB_TOKEN` alone is not a
+  login.
