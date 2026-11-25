@@ -19,6 +19,8 @@ from typing import Any
 import pytest
 import yaml
 
+pytestmark = pytest.mark.own_artifacts
+
 WORKFLOWS = Path(__file__).resolve().parents[2] / ".github" / "workflows"
 
 # The github.* contexts whose value a pull request's author can shape (a branch name,

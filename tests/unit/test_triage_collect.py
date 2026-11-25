@@ -1278,6 +1278,25 @@ def test_a_bot_issue_keeps_its_body_only_with_the_digest_marker() -> None:
     assert {i.number: i.body for i in facts.issues} == {1: f"{MARKER}\ndigest", 2: ""}
 
 
+@pytest.mark.parametrize(
+    ("check", "bucket"),
+    [
+        ({"conclusion": "CANCELLED"}, "pending"),
+        ({"conclusion": "TIMED_OUT"}, "fail"),
+        ({"conclusion": "STALE"}, "fail"),
+        ({"conclusion": "STARTUP_FAILURE"}, "fail"),
+        ({"state": "error"}, "fail"),
+        ({"conclusion": "SKIPPED"}, "pass"),
+        ({"state": "IN_PROGRESS"}, "pending"),
+    ],
+)
+def test_collect_buckets_a_cancelled_check_as_pending(check: dict[str, Any], bucket: str) -> None:
+    """Spec 2026-11-24-ci-economy R3: collect's counts read a cancelled check as pending."""
+    from fr.triage.collect import _bucket
+
+    assert _bucket(check) == bucket
+
+
 # ------------------------------- withheld titles, pinned admission (2026-11-22 R1, R4, R5, R7)
 
 

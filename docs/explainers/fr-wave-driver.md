@@ -90,7 +90,21 @@ is true now, not from what it remembers. In order, a pass:
     housekeeping one with your label. When the checks of a combination fail twice, or the
     pull request conflicts, it leaves the queue and the driver hands it back to the batch's
     session if that session is idle, at most twice per dispatch. If the session is gone, or
-    after those two hand-backs, the pull request shows under **Needs you now**. A repo whose
+    after those two hand-backs, the pull request shows under **Needs you now**. A cancelled
+    check does not count as failed. CI cancels a run when a newer run replaces it, so the
+    driver waits for the new run. If no new run comes within `queue.check_wait_minutes`, the
+    check shows under **Needs you now**, the same as a check that never reported. Some
+    conflicts are not real, and the queue settles them itself. Two pages that both moved
+    their `reviewed:` date keep the later date. A generated file, or a generated block in a
+    page, is written again by the commands the repo lists as `mirrors:` in
+    `.fr/triage.yaml`, and the files those commands write in whole are listed as
+    `generated:`. The commands come from the base branch, but the scripts they run come
+    from the pull requests in the combination. The queue trusts that code as far as it
+    tests it. The commands run in a copy of the files with no git folder, with no forge
+    token, no SSH agent and an empty home folder, and the queue takes back only the
+    generated files they wrote. This keeps a mistake small, but it is not a sandbox: the
+    commands run as your user. If a command fails, or it changes any other file, the pull
+    request goes back to its session. A repo whose
     base branch requires a forge merge queue, or that has not said how its checks run on the
     combinations (`queue.ci` in `.fr/triage.yaml`), is held, and the driver says what to add.
     A pull request that `gate:devops` holds before merge is a barrier. The DevOps stage
@@ -277,8 +291,10 @@ The driver hands a real merge conflict back to the batch's session when that ses
 idle, or to a fresh session on the batch's branch. It does not wait for the queue to take a pull request. Each pass it tries every open batch
 pull request that the forge shows as conflicting, draft or ready, approved or not. A pull
 request that the queue holds in a slot is left to the queue, which rebases or ejects it. The try is a trial merge with the default
-branch in a scratch checkout that the driver always removes. It uses the same rules as the
-real merge, so a version file or a lock file that the driver would resolve is not a conflict.
+branch in a scratch checkout that the driver always removes. It uses the real merge's rules
+for version files and lock files, so one that the driver would resolve is not a conflict. A
+`reviewed:` stamp or a generated file or block still counts as a conflict in this try: the
+queue settles those only when it builds a combination.
 The driver tries a given head against a given default-branch commit once for each process.
 A pull request that has been handed back for its current head is not shown as awaiting
 approval: its card says it is conflicting and handed back. The brief says to merge the base without

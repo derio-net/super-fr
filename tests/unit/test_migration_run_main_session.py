@@ -21,6 +21,8 @@ from fr.run.legacy import StepRecordV6 as StepRecord
 from fr.run.legacy import parse_run_state_v6
 from pydantic import ValidationError
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 V5 = (
     REPO_ROOT

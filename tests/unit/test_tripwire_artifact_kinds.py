@@ -28,7 +28,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
 from fr.artifacts.registry import ARTIFACT_KINDS
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

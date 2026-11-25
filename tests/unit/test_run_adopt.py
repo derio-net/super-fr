@@ -38,6 +38,8 @@ from fr.run.adopt import AdoptError, adopt_run, adoptable_plans
 from fr.run.model import load_run_state, run_path
 from typer.testing import CliRunner
 
+pytestmark = pytest.mark.own_artifacts
+
 runner_cli = CliRunner()
 
 # Deliberately unlike any run id derived from the branches used below

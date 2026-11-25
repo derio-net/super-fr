@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FR_DEBUGGING = REPO_ROOT / "plugins/super-fr/skills/fr-debugging/SKILL.md"
 

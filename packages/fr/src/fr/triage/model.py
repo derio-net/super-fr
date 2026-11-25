@@ -90,7 +90,11 @@ from fr.triage.stage import Stage, derive_stage
 # closed-world schema-16 reader rejects; a file below 17 reads them as their defaults, so a
 # `ready-fr` issue in it is ineligible until the next collect, and `load_facts` withholds its
 # ineligible issues' titles and bodies.
-FACTS_SCHEMA: Final[int] = 17
+# 18 adds (2026-11-24-ci-economy R8, R14) per-config `TriageConfig.generated`, the globs of the
+# files the repo's `mirrors:` write in whole: `to_json` dumps it, `[]` included, which a
+# closed-world schema-17 reader rejects; a file below 18 reads it as `[]`, so no conflicted
+# path is taken as generated until the next collect.
+FACTS_SCHEMA: Final[int] = 18
 FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
 # The version this fr WRITES: every engine write stamps 13 (the wave merge queue's
 # `queues:` list and its events, a batch's `deferred` and `requeued` events and an
@@ -603,6 +607,10 @@ class TriageConfig(_Strict):
     # (spec 2026-10-06-verification-strategies §G): a conflict hand-back's brief names
     # them, so a session regenerates a mirror instead of hand-resolving it.
     mirrors: list[Annotated[list[str], Field(min_length=1)]] = []
+    # The path globs (`fnmatch`, `*` spans `/`) of the files those `mirrors:` write in whole
+    # (spec 2026-11-24-ci-economy R8): the wave merge queue takes the combination's side of
+    # such a file when it conflicts, then runs the mirrors to regenerate it (R9, R11).
+    generated: list[str] = []
     # After a pass in which `post_merge` succeeded, the wave driver asks the close-out's
     # runner to restart its idle sessions, once (driver-sessions §B, R6). `none` is off.
     post_merge_restart: Literal["none", "idle"] = "none"

@@ -22,15 +22,19 @@ import fnmatch
 import os
 import re
 import shlex
+import shutil
+import signal
 import stat
 import subprocess
-from collections.abc import Mapping, Sequence
+import tempfile
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal
 
 from fr.safe_spawn import fr_argv, safe_fr_env
 from fr.triage.errors import TriageError
+from fr.triage.regen import IRREGULAR
 
 
 class GitError(TriageError):
@@ -413,6 +417,137 @@ def tree_files(cwd: Path, sha: str) -> list[tuple[str, str, str]]:
 def blob_bytes(cwd: Path, sha: str) -> bytes:
     """The bytes of blob *sha*, exactly as stored."""
     return git_bytes(["cat-file", "blob", sha], cwd)
+
+
+MIRROR_ENV_NAMES: Final[tuple[str, ...]] = (
+    "PATH", "USER", "LOGNAME", "SHELL", "LANG", "TERM", "TMPDIR", "TMP", "TEMP", "SYSTEMROOT",
+)  # fmt: skip
+"""What a `mirrors:` command inherits by name (spec 2026-11-24-ci-economy R11, security
+review), beside every `LC_*` and `MIRROR_UV_NAMES`: enough to find its programs. No forge
+token, no `FR_*` setting, no `SSH_AUTH_SOCK`, and not the operator's HOME: the command runs
+the queued PRs' code."""
+MIRROR_UV_NAMES: Final[tuple[str, ...]] = (
+    "UV_CACHE_DIR", "UV_PYTHON_INSTALL_DIR", "UV_PYTHON", "UV_NO_PROGRESS", "UV_OFFLINE",
+    "UV_FROZEN",
+)  # fmt: skip
+"""The uv settings a mirror inherits, by name: never an index URL or a credential."""
+
+
+def _uv_dirs(env: Mapping[str, str]) -> dict[str, str]:
+    """uv's cache and Python install directories as the operator's environment resolves
+    them (uv's own defaults: `$XDG_CACHE_HOME/uv`, `$XDG_DATA_HOME/uv/python`), so a mirror
+    with an empty HOME still reuses them."""
+    home = Path(env.get("HOME") or Path.home())
+    cache = env.get("XDG_CACHE_HOME") or str(home / ".cache")
+    data = env.get("XDG_DATA_HOME") or str(home / ".local" / "share")
+    return {
+        "UV_CACHE_DIR": env.get("UV_CACHE_DIR") or str(Path(cache) / "uv"),
+        "UV_PYTHON_INSTALL_DIR": env.get("UV_PYTHON_INSTALL_DIR")
+        or str(Path(data) / "uv" / "python"),
+    }
+
+
+def mirror_env(home: Path) -> dict[str, str]:
+    """The WHOLE environment a mirror command runs with: `MIRROR_ENV_NAMES`, every `LC_*`,
+    `MIRROR_UV_NAMES` (uv's cache and Python directories resolved from this environment
+    first), an empty *home* as HOME and its XDG config and data directories (so no
+    `~/.config/gh`, `~/.ssh`, `~/.netrc` or `~/.git-credentials` is reachable)."""
+    env = {k: v for k, v in os.environ.items()
+           if k in MIRROR_ENV_NAMES or k in MIRROR_UV_NAMES or k.startswith("LC_")}  # fmt: skip
+    env.update(_uv_dirs(os.environ))
+    env.update(
+        HOME=str(home),
+        XDG_CONFIG_HOME=str(home / ".config"),
+        XDG_DATA_HOME=str(home / ".local" / "share"),
+    )
+    return env
+
+
+def _kill_group(pid: int) -> None:
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except ProcessLookupError, PermissionError:
+        pass
+
+
+def run_mirror(argv: Sequence[str], cwd: Path, timeout: float) -> None:
+    """Run one `mirrors:` argument list in *cwd*, the git-less export of a combination (spec
+    2026-11-24-ci-economy R11), with `mirror_env` as its whole environment, in a session and
+    process group of its own. Once it exits or times out the whole group is killed, so no
+    background child it left outlives the step. A non-zero exit, or a run past *timeout*
+    seconds, raises `GitError` naming the command."""
+    if not argv:
+        raise GitError("an empty mirrors command was declared")
+    words = shlex.join(argv)
+    with (
+        tempfile.TemporaryDirectory(prefix="fr-mirror-home-") as home,
+        tempfile.TemporaryFile() as out,
+    ):
+        try:
+            proc = subprocess.Popen(
+                list(argv), cwd=cwd, env=mirror_env(Path(home)), stdin=subprocess.DEVNULL,
+                stdout=out, stderr=subprocess.STDOUT, start_new_session=True,
+            )  # fmt: skip
+        except OSError as exc:
+            raise GitError(f"cannot run `{words}`: {exc}") from exc
+        try:
+            code = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            _kill_group(proc.pid)
+            proc.wait()
+            raise GitError(f"`{words}` timed out after {timeout:g}s") from exc
+        finally:
+            _kill_group(proc.pid)
+        if code != 0:
+            out.seek(0)
+            tail = " ".join(out.read().decode("utf-8", "replace").split()[-40:])
+            raise GitError(f"`{words}` failed (exit {code}): {tail}")
+
+
+def _regular_text(path: Path) -> str:
+    return path.read_bytes().decode("utf-8", "surrogateescape")
+
+
+def snapshot_export(
+    root: Path, tracked: Sequence[str], ignored: Callable[[list[str]], Sequence[str]]
+) -> dict[str, str]:
+    """Every path under *root* (an export, no `.git`) that a mirror may be judged by: each
+    regular file's text, `IRREGULAR` plus a kind for anything else, symlinks never followed.
+    A new path or directory the repo's ignore rules exclude (*ignored*, asked of the scratch
+    worktree with paths relative to *root*) is left out, so a `.venv` or `__pycache__` the
+    commands made is not a change. A path with a `.git` component is never asked and always
+    kept, so the caller sees a mirror that wrote git metadata."""
+    known = set(tracked)
+    known_dirs = {str(parent) for t in known for parent in Path(t).parents}
+    out: dict[str, str] = {}
+    new: list[str] = []
+    for top, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
+        rel_top = os.path.relpath(top, root)
+        prefix = "" if rel_top == "." else rel_top + "/"
+        fresh = [
+            d
+            for d in dirnames
+            if prefix + d not in known_dirs
+            and not os.path.islink(os.path.join(top, d))
+            and d != ".git"  # never asked of the ignore rules: always seen (review #1647)
+        ]
+        asked = ignored([prefix + d + "/" for d in fresh]) if fresh else ()
+        dropped = {d.rstrip("/") for d in asked}
+        dirnames[:] = [d for d in dirnames if prefix + d not in dropped]
+        for name in [*filenames, *(d for d in dirnames if os.path.islink(os.path.join(top, d)))]:
+            rel, full = prefix + name, Path(top) / name
+            if full.is_symlink():
+                out[rel] = f"{IRREGULAR}symlink -> {os.readlink(full)}"
+            elif stat.S_ISREG(full.lstat().st_mode):
+                out[rel] = _regular_text(full)
+            else:
+                out[rel] = f"{IRREGULAR}special"
+            if rel not in known:
+                new.append(rel)
+    asked_new = [rel for rel in new if ".git" not in rel.split("/")]
+    for rel in ignored(asked_new) if asked_new else ():
+        out.pop(rel, None)
+    return out
 
 
 def run_declared(command: str, cwd: Path, **fields: str) -> None:
@@ -1070,7 +1205,8 @@ class Worktree:
 
     def read(self, file: str) -> str | None:
         target = self.path / file
-        return target.read_text(encoding="utf-8") if target.is_file() else None
+        # newline="": a CRLF file keeps its line endings through a hunk resolution.
+        return target.read_text(encoding="utf-8", newline="") if target.is_file() else None
 
     def run(self, command: str, **fields: str) -> None:
         run_declared(command, self.path, **fields)
@@ -1095,6 +1231,87 @@ class Worktree:
         markers: the combination's, when a queue entry is merged into it."""
         git(["checkout", "--ours", "--", *paths], self.path)
         git(["add", "--", *paths], self.path)
+
+    def write_resolved(self, path: str, text: str) -> None:
+        """Write *path*'s resolved *text* (no conflict markers left) and stage it."""
+        (self.path / path).write_text(text, encoding="utf-8", newline="")
+        git(["add", "--", path], self.path)
+
+    def export_tracked(self, dest: Path) -> list[str]:
+        """Copy this worktree's tracked files into *dest*, a fresh directory with no `.git`
+        and no link to any git dir (spec 2026-11-24-ci-economy R11, the mirrors' copy):
+        regular files with their mode, symlinks recreated as symlinks and never followed.
+        The tracked paths, in `git ls-files` order."""
+        paths = [p for p in git(["ls-files", "-z"], self.path).split("\0") if p]
+        for rel in paths:
+            src, dst = self.path / rel, dest / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if src.is_symlink():
+                os.symlink(os.readlink(src), dst)
+            elif stat.S_ISREG(src.lstat().st_mode):
+                shutil.copyfile(src, dst, follow_symlinks=False)
+                os.chmod(dst, src.lstat().st_mode & 0o777)
+        return paths
+
+    def _safe_parent(self, rel: str) -> Path:
+        """*rel*'s directory in this worktree, every component lstat-checked not to be a
+        symlink (and made when missing); a symlinked component raises `GitError`."""
+        here = self.path
+        for part in Path(rel).parts[:-1]:
+            here = here / part
+            if here.is_symlink():
+                raise GitError(f"{rel}: {here.relative_to(self.path)} is a symlink")
+            if not here.exists():
+                here.mkdir()
+            elif not here.is_dir():
+                raise GitError(f"{rel}: {here.relative_to(self.path)} is not a directory")
+        return here
+
+    def take_generated(self, export: Path, paths: Sequence[str]) -> None:
+        """Copy each of *paths* back from *export* (a regular file there) or delete it (gone
+        there), never through a symlink: each parent component is lstat-checked and the file
+        is opened with `O_NOFOLLOW`. A path the copy may not take raises `GitError`."""
+        for rel in paths:
+            parent = self._safe_parent(rel)
+            dst, src = parent / Path(rel).name, export / rel
+            if not os.path.lexists(src):
+                if dst.is_symlink() or dst.is_file():
+                    dst.unlink()
+                continue
+            if src.is_symlink() or not stat.S_ISREG(src.lstat().st_mode):
+                raise GitError(f"{rel} is not a regular file after the mirrors ran")
+            mode = src.lstat().st_mode & 0o777
+            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                fd = os.open(dst, flags, mode)
+            except OSError as exc:
+                raise GitError(f"{rel}: cannot write it in the worktree: {exc}") from exc
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(src.read_bytes())
+            os.chmod(dst, mode)
+
+    def run_mirror(self, argv: Sequence[str], export: Path, timeout: float) -> None:
+        """`run_mirror` in *export*, the git-less copy this worktree's `export_tracked` made."""
+        run_mirror(argv, export, timeout)
+
+    def snapshot_export(self, export: Path, tracked: Sequence[str]) -> dict[str, str]:
+        """`snapshot_export` of *export*, judged by this worktree's ignore rules."""
+        return snapshot_export(export, tracked, self.ignored)
+
+    def unmerged_stages(self) -> dict[str, dict[int, str]]:
+        """Each conflicted path's index stages, stage number to mode (`git ls-files -u`)."""
+        out: dict[str, dict[int, str]] = {}
+        for entry in git(["ls-files", "-u", "-z"], self.path).split("\0"):
+            if not entry:
+                continue
+            meta, _, path = entry.partition("\t")
+            mode, _sha, stage = meta.split()
+            out.setdefault(path, {})[int(stage)] = mode
+        return out
+
+    def stage_all(self) -> None:
+        """Stage every change and every new file git does not ignore (what a mirror wrote)."""
+        git(["add", "--all"], self.path)
 
     def write_tree(self) -> str:
         """The tree the index holds now."""

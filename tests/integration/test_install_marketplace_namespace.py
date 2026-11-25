@@ -42,6 +42,8 @@ from tests.integration.test_install_sh import (  # noqa: F401  (fake_home is a f
     fake_home,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 MARKETPLACE_NAME = "derio-net--super-fr"
 LEGACY_NAME = "derio-net"
 OWN_IDS = (f"super-fr@{MARKETPLACE_NAME}", f"super-fr-dispatch@{MARKETPLACE_NAME}")

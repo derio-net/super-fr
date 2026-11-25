@@ -12,7 +12,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from fr.lenses.model import Lens, parse_lens
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIPPED_DIR = REPO_ROOT / "plugins" / "super-fr" / "lenses"

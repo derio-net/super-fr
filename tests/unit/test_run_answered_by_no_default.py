@@ -24,6 +24,8 @@ from tests.unit.test_run_cli import (
     _write_shape,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 
 def _squash(text: str) -> str:
     return " ".join(text.split())

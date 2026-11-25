@@ -950,3 +950,19 @@ def test_issue_associations_limit_counts_issues_not_prs(monkeypatch: pytest.Monk
     )
     assert client.issue_associations(REPO, "open", 2) == {1: "NONE", 3: "MEMBER"}
     assert len(asked) == 1  # the limit was met on page one: no needless second read
+
+
+def test_a_rollup_holding_only_a_cancelled_check_is_pending() -> None:
+    """Spec 2026-11-24-ci-economy R3: the REST rollup reads a cancelled run as superseded."""
+    from fr.real_ghrestclient import _check_row, _ci
+
+    cancelled = {"__typename": "CheckRun", "name": "test", "status": "COMPLETED",
+                 "conclusion": "CANCELLED"}  # fmt: skip
+    timed_out = dict(cancelled, name="lint", conclusion="TIMED_OUT")
+    assert _ci([cancelled]) == "PENDING"
+    assert _ci([cancelled, timed_out]) == "FAIL"
+    assert _check_row(cancelled)["bucket"] == "cancel"
+    assert (
+        _check_row({"__typename": "StatusContext", "context": "x", "state": "error"})["bucket"]
+        == "fail"
+    )

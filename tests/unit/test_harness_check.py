@@ -19,10 +19,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fr.harness import load_matrix
 from fr.harness.check import Finding, check, pairing
 from fr.harness.model import Matrix, parse_matrix
 from fr.harness.observe import OBSERVABLE_HARNESSES, observe, shipped_scripts
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

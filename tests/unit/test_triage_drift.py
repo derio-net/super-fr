@@ -51,6 +51,8 @@ from tests.unit.test_triage_driver_pass import (  # noqa: F401 - fixtures
     visibility,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 ITEM = f"{REPO}/run/batch-b3"
 CURSOR_PATH = "docs/superpowers/runs/2026-10-08-feat-batch-b3.yaml"
 

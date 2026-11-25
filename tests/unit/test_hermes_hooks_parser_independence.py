@@ -40,10 +40,13 @@ EDIT_GATE = HERMES / "fr-isolation-required.sh"
 PUSH_GUARD = HERMES / "fr-merged-pr-push-guard.sh"
 ALL_HERMES_HOOKS = (GUARD, EDIT_GATE, PUSH_GUARD)
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("git") is None,
-    reason="hermes hooks need git",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        shutil.which("git") is None,
+        reason="hermes hooks need git",
+    ),
+    pytest.mark.own_artifacts,
+]
 
 
 # --- helpers ---------------------------------------------------------------

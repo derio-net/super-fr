@@ -20,6 +20,8 @@ from pathlib import Path
 import pytest
 from fr.release_status import hold_verdict
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "release.py"
 spec = importlib.util.spec_from_file_location("release_script", SCRIPT)

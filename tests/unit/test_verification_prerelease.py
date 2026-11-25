@@ -17,6 +17,8 @@ from fr.real_glabclient import RealGlabClient
 from fr.real_teaclient import RealTeaClient
 from typer.testing import CliRunner
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 runner = CliRunner()
 REMOTE = "https://github.com/example-org/example-repo"

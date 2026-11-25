@@ -21,10 +21,13 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "plugins" / "super-fr" / "hooks" / "hermes" / "fr-isolation-guard.sh"
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("git") is None,
-    reason="hermes guard needs git",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        shutil.which("git") is None,
+        reason="hermes guard needs git",
+    ),
+    pytest.mark.own_artifacts,
+]
 
 
 def _git(repo: Path, *args: str) -> None:

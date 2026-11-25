@@ -19,6 +19,8 @@ from tests.unit.acceptance_helpers import write_matrix_fragments
 from tests.unit.record_support import RUN, commit_all, fr, write_record
 from tests.unit.requirements_support import row, seed_requirements
 
+pytestmark = pytest.mark.own_artifacts
+
 
 def _manifest(install: list[str] | None) -> StrategyManifest:
     return resolve_strategy("candidate", None).model_copy(update={"install": install})

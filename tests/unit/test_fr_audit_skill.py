@@ -13,6 +13,8 @@ from pathlib import Path
 import pytest
 from fr.commands import skills_cmd
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 SKILL = REPO / "plugins" / "super-fr" / "skills" / "fr-audit" / "SKILL.md"
 

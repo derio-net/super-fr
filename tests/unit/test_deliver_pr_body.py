@@ -22,6 +22,8 @@ from tests.unit.record_support import (
     write_record,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 PR = "https://github.com/derio-net/super-fr/pull/1"
 
 

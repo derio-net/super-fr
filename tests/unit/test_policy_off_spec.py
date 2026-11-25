@@ -11,6 +11,8 @@ from fr.settings import DISABLED, spec_policy_problems
 
 from tests.unit.settings_repo import land_on_main, make_repo
 
+pytestmark = pytest.mark.own_artifacts
+
 PLAN_SPEC = "# S\n\n## Test Plan\n\n1. do it\n"
 GATE_SPEC = "# S\n\n## Verification\n\nstrategy: none\ngate: tester\n"
 

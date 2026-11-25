@@ -11,7 +11,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 AGENT = REPO_ROOT / "plugins/super-fr/agents/fr-phase-executor.md"

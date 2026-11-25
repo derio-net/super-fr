@@ -27,6 +27,8 @@ import yaml
 from fr.artifacts import MIGRATIONS
 from fr.artifacts.runner import ArtifactMigrationError
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = REPO_ROOT / "tests" / "fixtures" / "run_cursors"
 ARTIFACTS_SRC = REPO_ROOT / "packages" / "fr" / "src" / "fr" / "artifacts"

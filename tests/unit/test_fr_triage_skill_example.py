@@ -25,6 +25,8 @@ import pytest
 import yaml
 from fr.triage.model import JUDGEMENTS_SCHEMA, Cx, load_judgements
 
+pytestmark = pytest.mark.own_artifacts
+
 SKILL = Path(__file__).resolve().parents[2] / "plugins/super-fr/skills/fr-triage/SKILL.md"
 
 

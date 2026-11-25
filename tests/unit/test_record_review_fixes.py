@@ -33,6 +33,8 @@ from tests.unit.requirements_support import seed_requirements
 from tests.unit.test_deliver_pr_body import PR, _at_deliver, _body
 from tests.unit.test_record_apply import _implemented, _resolve, _review_record
 
+pytestmark = pytest.mark.own_artifacts
+
 
 def _world(root: Path) -> dict[str, object]:
     """Everything a resolve decides, minus timestamps — what "converges to the

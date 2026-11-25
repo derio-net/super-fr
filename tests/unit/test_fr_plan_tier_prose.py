@@ -14,7 +14,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fr.types import PHASE_TIERS
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CANONICAL = REPO_ROOT / "plugins" / "super-fr" / "skills" / "fr-plan" / "SKILL.md"

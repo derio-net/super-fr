@@ -17,7 +17,7 @@ from tests.unit.test_forge_quiet_pr_body import _land_policy
 
 __all__ = ["live"]
 
-pytestmark = pytest.mark.usefixtures("complete_live_pr")
+pytestmark = [pytest.mark.usefixtures("complete_live_pr"), pytest.mark.own_artifacts]
 
 HEAD = "c" * 40
 REPO = "derio-net/super-fr"

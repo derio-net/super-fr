@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 from fr.triage.gitseam import Worktree, run_this_fr
 
+pytestmark = pytest.mark.own_artifacts
+
 SRC = Path(__file__).resolve().parents[2] / "packages"
 
 

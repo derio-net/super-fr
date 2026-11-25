@@ -30,6 +30,8 @@ from tests.unit.test_run_cli import (
 )
 from tests.unit.test_run_evidence import _shape
 
+pytestmark = pytest.mark.own_artifacts
+
 
 def _code_done_review_never_advanced(tmp_path: Path) -> tuple[Path, Path]:
     repo = _repo(tmp_path)

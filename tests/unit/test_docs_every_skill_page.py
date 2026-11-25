@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fr.docs.check import check
 from fr.docs.gate import evaluate
 from fr.docs.load import load_config
 from fr.docs.model import Page
+
+pytestmark = pytest.mark.own_artifacts
 
 ROOT = Path(__file__).resolve().parents[2]
 

@@ -27,6 +27,8 @@ from fr.settings.model import parse_settings
 
 from tests.unit.settings_repo import git, land_on_main, make_repo
 
+pytestmark = pytest.mark.own_artifacts
+
 DEFAULTS = parse_settings({}, source="test")
 CUSTOM = parse_settings(
     {

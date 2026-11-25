@@ -14,8 +14,11 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+import pytest
 from fr.agents import AGENT_NAMES, CANONICAL_SHA256, PINNED_AT_VERSION, canonical_text
 from fr.artifacts.registry import ARTIFACT_KINDS
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIPPED_DIR = REPO_ROOT / "plugins" / "super-fr" / "agents"

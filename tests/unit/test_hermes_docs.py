@@ -19,6 +19,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HERMES_MD = REPO_ROOT / "HERMES.md"
 # The README is a front door since the docs-currency change: the Hermes install
