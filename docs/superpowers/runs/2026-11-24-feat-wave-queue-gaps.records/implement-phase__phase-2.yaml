@@ -1,0 +1,105 @@
+schema_version: 12
+run: 2026-11-24-feat-wave-queue-gaps
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T4.S1, P2.T4.S2, P2.T4.S3]
+refactor:
+  P2.T1: "two closed-world event models, a ten-line pure fold and a writer that is the sibling of save_queues over the shared _rewrite; nothing duplicated to fold"
+  P2.T2: "the verb imports _load_state, _scope, fail and push_now from triage_cmd and the trust helpers from batch; its one new forge read (repo_default_branch) sits in each adapter beside repo_visibility; the reserved-entry check lives in operator_entries, shared with the driver"
+  P2.T3: "operator_reads follows housekeeping_reads' shape on purpose (same settle, same writer) so the two trust rules read side by side; the preapproval conditions are one function (_preapprove) the batch and operator paths both call"
+journal:
+  - kind: decision
+    id: p2-default-branch-read
+    phase: 2
+    title: "queue add reads the default branch from the forge (new GhClient.repo_default_branch)"
+    body: |
+      The verb runs with no clone, and facts carry no default branch, so R11's base check
+      needs a forge read. `repo_default_branch(repo)` is on the GhClient protocol, both GitHub
+      adapters (`GET repos/{repo}`) and the unsupported mixin (glab/tea raise). It raises when
+      unread, and the verb refuses on any forge error, so no refusal or admission rests on an
+      unread answer. The driver keeps its own base check (`base_refusal`) at admission.
+  - kind: decision
+    id: p2-verb-push-now
+    phase: 2
+    title: "queue add/remove push the state ref inside the command and restore the file on a refused push"
+    body: |
+      R11 says a refused push exits 2. The deferred push of `_sync_with_ref` only warns on a
+      remote refusal, so the verb calls `push_now` after the write; any `TriageError` (a CAS
+      conflict, a refusal, the privacy guard) restores judgements.yaml byte for byte and exits
+      2 with "nothing changed, run the command again". Re-running then never meets "already
+      added" for a write that never left the host.
+  - kind: decision
+    id: p2-trust-before-preapproval
+    phase: 2
+    title: "An added non-batch PR is trust-checked before any preapproval write"
+    body: |
+      R13 lists the adder's trust, green checks and no conflict; R12's admission also needs a
+      same-repo PR by an allowed author. `operator_reads` checks the PR's own trust (and that it
+      is no reserved close-out/archive/export/housekeeping PR) first, so the driver never adds
+      `approved-fr` to a fork or a stranger's PR that collect now reads differently. Such a PR
+      stays pending (R15: added, open, unlanded), so it holds the drain and, after
+      `stall_hours`, gives the Need naming `queue remove`.
+  - kind: decision
+    id: p2-live-checks
+    phase: 2
+    title: "Preapproval and operator admission read the PR's checks live"
+    body: |
+      `checks_verdict` falls back to the collected counts when no check is required; for an
+      operator PR those can be the counts of an older head. `operator_reads` builds the counts
+      from `pr_checks` read now, so a preapproval never approves a new head on its
+      predecessor's green.
+  - kind: decision
+    id: p2-operator-eject-no-verdict
+    phase: 2
+    title: "An operator eject is no verdict on the head: replay drops it from the order only"
+    body: |
+      A `queue_eject` with reason `operator` removes the key from `Replay.order` and records
+      nothing in `ejected`, so a PR removed and added again joins at once at the same head
+      rather than waiting for a push. The executor records the event and hands nothing back.
+  - kind: decision
+    id: p2-operator-under-placement
+    phase: 2
+    title: "Operator entries stay queue entries in a repo that keeps no fr artifacts"
+    body: |
+      `queue_snapshot` drops every non-batch entry when the repo's placement is not `repo`
+      (no close-out, archive, export or housekeeping PR lands there). An operator PR is no fr
+      artifact, so it is kept; the filter keeps `kind == "operator"` admissions.
+  - kind: discovery
+    id: p2-entry-builder-kinds
+    phase: 2
+    title: "The executor's entry builder refused every kind it did not list"
+    body: |
+      `_Driver._queue_entry` returned None for a non-batch key whose kind was not closeout,
+      archive, export or housekeeping, so an admitted operator entry would have been planned
+      and never built. The planner and RecordingQueue tests could not see it; the driver seam
+      test now calls `RecordingQueue.ports.entry_of("operator#300")`. Like a close-out, an
+      operator draft is readied when the queue builds it.
+  - kind: discovery
+    id: p2-t3-test-order
+    phase: 2
+    title: "The T3.S1 operator_reads tests were written after operator_reads"
+    body: |
+      Red was not observed for tests/unit/test_operator_reads.py: the module was written
+      first. They assert forge writes, recorded approval events and the snapshot fields the
+      read returns, which only the new code produces. The T1, T2 and T4 tests were red first;
+      the driver seam test's entry build was red with the command wiring stashed.
+  - kind: discovery
+    id: p2-archive-docstring
+    phase: 2
+    title: "archive_conflict_decision's 'never twice' docstring was accurate; reworded, not changed"
+    body: |
+      The free re-issue is the batch PR's `conflict_decision` only; an archive PR's conflict is
+      still skipped at any head that has an `archive_conflict` event. Both docstrings now say
+      which rule re-issues. The merge of origin/main resolved six conflicts (skill by a
+      token-level three-way merge, mirrors regenerated; three explainer stamps keep both
+      sides; batch_dispatch keeps main's `unicodedata` and drops the `shlex` the move left
+      unused); every module stays within its budget.
+  - kind: lens
+    lens: security
+    title: "preapproval lets the driver add approved-fr itself; check the adder, PR trust, conflict and patch-id gates and the audit comment"
+  - kind: lens
+    lens: errors
+    title: "queue add's forge reads and state push, and operator_reads' unreadable patch-id, must fail closed for the pass, never write a durable event"
+resolves: []
+evidence: {}
