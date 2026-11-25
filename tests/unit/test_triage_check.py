@@ -746,7 +746,10 @@ def test_check_reports_overlapping_plans_and_the_batches_it_could_not_compare(
     flat = " ".join(out.output.split())
     assert "b1 b2" in flat and "shared.py" in flat
     assert "fr triage batch edit b2 --after b1" in flat
-    assert "not compared b3 no ref origin/feat/batch-b3" in flat
+    assert (
+        "not compared b3 no ref origin/feat/batch-b3 (not fetched in this clone? git fetch origin)"
+        in flat
+    )
 
 
 def test_check_json_carries_the_plan_overlap_key(
@@ -765,7 +768,12 @@ def test_check_json_carries_the_plan_overlap_key(
         ("b1", "b2", [1, 2], ["shared.py"])
     ]
     assert "fr triage batch edit b2 --after b1" in data["overlaps"][0]["fix"]
-    assert data["unread"] == [{"batch": "b3", "reason": "no ref origin/feat/batch-b3"}]
+    assert data["unread"] == [
+        {
+            "batch": "b3",
+            "reason": "no ref origin/feat/batch-b3 (not fetched in this clone? git fetch origin)",
+        }
+    ]
 
 
 def test_check_exits_zero_when_every_batch_is_unread(
@@ -801,3 +809,31 @@ def test_check_exits_zero_when_the_overlap_read_raises(
         )
         assert out.exit_code == 0, out.output
         assert "source exploded" in out.output
+
+
+def test_check_reads_plans_through_the_clone_it_runs_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No monkeypatched source: `check` itself resolves Path.cwd()'s clone and its origin
+    # (l-tests-r4).
+    from tests.unit.test_triage_plan_overlap import _commit_tree, clone, world
+
+    state = tmp_path / "state"
+    state.mkdir()
+    _overlap_state(state)
+    root = clone(tmp_path / "c", origin=f"https://github.com/{REPO}.git")
+    for bid, paths in (("b1", ["pkg/a.py", "shared.py"]), ("b2", ["shared.py"])):
+        branch = f"feat/batch-{bid}"
+        _commit_tree(
+            root, branch, world(branch, {"1": paths}).refs[f"refs/remotes/origin/{branch}"]
+        )
+    monkeypatch.chdir(root)
+
+    out = CliRunner().invoke(
+        app, ["triage", "check", "--repo", REPO, "--dir", str(state), "--json"]
+    )
+
+    assert out.exit_code == 0, out.output
+    data = json.loads(out.output)["plan_overlap"]
+    assert [(o["a"], o["b"], o["paths"]) for o in data["overlaps"]] == [("b1", "b2", ["shared.py"])]
+    assert [u["batch"] for u in data["unread"]] == ["b3"]

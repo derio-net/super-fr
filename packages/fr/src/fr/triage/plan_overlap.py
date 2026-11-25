@@ -124,22 +124,25 @@ def read_plan_paths(source: PlanSource, branch: str) -> PlanPaths | Unread:
     ref = f"refs/remotes/origin/{branch}"
     try:
         if not source.exists_at(ref, ""):
-            return Unread(f"no ref origin/{branch}")
+            # The read never fetches, so the usual cause is a branch this clone never fetched.
+            return Unread(f"no ref origin/{branch} (not fetched in this clone? git fetch origin)")
         names = [n for n in source.list_dir(ref, RUNS_DIR) if n.endswith(".yaml")]
     except TriageError as exc:
         return Unread(f"unreadable {RUNS_DIR}: {' '.join(str(exc).split())}")
     plan: str | None = None
     found = False
+    broken: Unread | None = None  # an unreadable cursor matters only if none names the branch
     for name in names:
         doc = _load(source, ref, f"{RUNS_DIR}/{name}")
         if isinstance(doc, Unread):
-            return doc
+            broken = broken or doc
+            continue
         if _names_branch(doc, branch):
             found = True
             plan = _cursor_plan(doc)
             break
     if not found:
-        return Unread("no run cursor")
+        return broken or Unread("no run cursor")
     if plan is None:
         return Unread("no recorded plan")
     try:
@@ -154,6 +157,9 @@ def read_plan_paths(source: PlanSource, branch: str) -> PlanPaths | Unread:
         if isinstance(doc, Unread):
             return doc
         paths.extend(p for p in _phase_files(doc) if p not in paths)
+    if not paths:
+        # Compared with no paths, the batch would read as "no overlap": say it was not read.
+        return Unread(f"plan names no files ({plan})")
     return PlanPaths(tuple(paths), plan)
 
 
@@ -166,7 +172,12 @@ def _is_glob(path: str) -> bool:
 
 
 def _matches(path: str, globs: Sequence[str]) -> bool:
-    return any(fnmatchcase(path, g) for g in globs)
+    """`fnmatchcase`, where `*` spans `/`, except that a `**/` segment also matches no
+    directory at all (`tests/**/*.py` matches `tests/x.py`), as plan authors mean it."""
+    return any(
+        fnmatchcase(path, g) or ("**/" in g and fnmatchcase(path, g.replace("**/", "")))
+        for g in globs
+    )
 
 
 def _shared(a: Entry, b: Entry, ignore: Sequence[str]) -> tuple[str, ...]:
@@ -283,11 +294,11 @@ def source_for_clones(
                 return Checkout.at(path) if path is not None else f"no clone of {repo} here"
             top = gitseam.toplevel(cwd)
             if top is None:
-                return "no clone here"
+                return f"no clone here: {cwd} is not inside a git clone"
             clone = Checkout(top)
             origin = clone.origin_repo()
-        except GitError, OSError:
-            return "no clone here"
+        except (GitError, OSError) as exc:  # keep the cause: a stale --checkout path, no origin
+            return f"no clone here: {' '.join(str(exc).split()) or type(exc).__name__}"
         if origin is None or origin.lower() != repo.lower():
             return f"no clone of {repo} here"
         return clone

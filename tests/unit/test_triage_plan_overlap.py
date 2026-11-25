@@ -20,6 +20,7 @@ from fr.triage.plan_overlap import (
     OverlapReport,
     PlanPaths,
     Unread,
+    _before,
     card_lines,
     fix_text,
     overlaps,
@@ -125,7 +126,9 @@ def test_a_plan_recorded_under_another_step_name_is_still_found() -> None:
 
 
 def test_an_absent_ref_is_not_compared() -> None:
-    assert read_plan_paths(FakeSource({}), "feat/batch-x") == Unread("no ref origin/feat/batch-x")
+    assert read_plan_paths(FakeSource({}), "feat/batch-x") == Unread(
+        "no ref origin/feat/batch-x (not fetched in this clone? git fetch origin)"
+    )
 
 
 def test_no_cursor_naming_the_branch_is_not_compared() -> None:
@@ -143,13 +146,21 @@ def test_a_cursor_that_records_no_plan_is_not_compared() -> None:
     assert read_plan_paths(src, "feat/batch-x") == Unread("no recorded plan")
 
 
-def test_invalid_yaml_in_a_cursor_is_unreadable() -> None:
+def test_an_unreadable_cursor_does_not_hide_the_readable_one_naming_the_branch() -> None:
     src = world("feat/batch-x", {"1": ["a.py"]})
-    path = f"{RUNS}/0000-broken.yaml"
+    path = f"{RUNS}/0000-broken.yaml"  # sorts before the real cursor
     src.refs["refs/remotes/origin/feat/batch-x"][path] = "a: [unclosed\n"
+    assert read_plan_paths(src, "feat/batch-x") == PlanPaths(("a.py",), PLAN)
+
+
+def test_invalid_yaml_in_a_cursor_is_unreadable_when_no_cursor_names_the_branch() -> None:
+    src = world("feat/batch-x", {"1": ["a.py"]})
+    tree = src.refs["refs/remotes/origin/feat/batch-x"]
+    real = f"{RUNS}/2026-11-25-feat-batch-x.yaml"
+    tree[real] = "a: [unclosed\n"
     found = read_plan_paths(src, "feat/batch-x")
     assert isinstance(found, Unread)
-    assert found.reason.startswith(f"unreadable {path}: ")
+    assert found.reason.startswith(f"unreadable {real}: ")
 
 
 def test_invalid_yaml_in_a_phase_file_is_unreadable() -> None:
@@ -336,7 +347,9 @@ def test_an_unreadable_batch_is_listed_and_never_overlaps() -> None:
     only_b1 = world("feat/batch-b1", {"1": ["x.py"]})
     report = plan_overlap_report(jd, f, clones({REPO: only_b1}))
     assert report.overlaps == ()
-    assert report.unread == (("b2", "no ref origin/feat/batch-b2"),)
+    assert report.unread == (
+        ("b2", "no ref origin/feat/batch-b2 (not fetched in this clone? git fetch origin)"),
+    )
 
 
 def test_generated_and_version_files_from_the_repo_config_are_ignored() -> None:
@@ -393,7 +406,9 @@ def test_checkouts_open_the_named_clone(tmp_path: Path) -> None:
 
 
 def test_checkouts_pointing_at_no_clone_say_no_clone_here(tmp_path: Path) -> None:
-    assert source_for_clones(tmp_path, {"o/r": tmp_path / "gone"})("o/r") == "no clone here"
+    got = source_for_clones(tmp_path, {"o/r": tmp_path / "gone"})("o/r")
+    # the cause stays in the reason, so a stale --checkout path is actionable
+    assert isinstance(got, str) and got.startswith("no clone here: ") and "gone" in got
 
 
 def test_the_cwd_clone_serves_only_the_repo_that_is_its_origin_case_insensitively(
@@ -408,16 +423,19 @@ def test_the_cwd_clone_serves_only_the_repo_that_is_its_origin_case_insensitivel
 def test_a_cwd_outside_a_clone_or_a_clone_with_no_origin_never_raises(tmp_path: Path) -> None:
     outside = tmp_path / "plain"
     outside.mkdir()
-    assert source_for_clones(outside, None)("o/r") == "no clone here"
-    assert source_for_clones(clone(tmp_path / "noorigin", origin=None), None)("o/r") == (
-        "no clone here"
+    assert source_for_clones(outside, None)("o/r") == (
+        f"no clone here: {outside} is not inside a git clone"
     )
+    got = source_for_clones(clone(tmp_path / "noorigin", origin=None), None)("o/r")
+    assert isinstance(got, str) and got.startswith("no clone here: ")
 
 
 def test_a_real_clone_satisfies_the_plan_source_for_a_missing_ref(tmp_path: Path) -> None:
     root = clone(tmp_path / "c")
     got = source_for_clones(root, None)("o/r")
-    assert read_plan_paths(got, "feat/batch-x") == Unread("no ref origin/feat/batch-x")  # type: ignore[arg-type]
+    assert read_plan_paths(got, "feat/batch-x") == Unread(
+        "no ref origin/feat/batch-x (not fetched in this clone? git fetch origin)"
+    )  # type: ignore[arg-type]
 
 
 # ----------------------------------------------------------------- the wording and the card text
@@ -462,3 +480,53 @@ def test_the_json_form_carries_overlaps_and_unread() -> None:
         ],
         "unread": [{"batch": "b3", "reason": "no run cursor"}],
     }
+
+
+# ------------------------------------------------------- lens-review additions (2026-11-25)
+
+
+def test_a_double_star_segment_also_matches_no_directory() -> None:
+    # fnmatch's `tests/**/*.py` needs two slashes; plan authors mean "anywhere under tests/"
+    # (l-tests-r3).
+    assert shared(["tests/**/*.py"], ["tests/test_x.py"]) == ("tests/test_x.py",)
+    assert shared(["docs/x.md"], ["docs/**/*.md"]) == ("docs/x.md",)
+    assert shared(["tests/**/*.py"], ["testsx.py"]) == ()
+
+
+def test_a_plan_that_names_no_files_is_not_compared() -> None:
+    # Compared with no paths it would silently read as "no overlap" (l-errors-r2).
+    src = world("feat/batch-x", {"1": []})
+    assert read_plan_paths(src, "feat/batch-x") == Unread(f"plan names no files ({PLAN})")
+    no_phases = world("feat/batch-x", {})
+    assert read_plan_paths(no_phases, "feat/batch-x") == Unread(f"plan names no files ({PLAN})")
+
+
+def test_an_after_cycle_or_an_unknown_id_neither_loops_nor_raises() -> None:
+    assert _before("a", {"a": ["b"], "b": ["a"]}) == frozenset({"a", "b"})
+    assert _before("a", {"a": ["ghost"]}) == frozenset({"ghost"})
+    assert _before("a", {}) == frozenset()
+
+
+def _commit_tree(root: Path, branch: str, files: dict[str, str]) -> None:
+    """Commit *files* on a fresh branch of *root* and point `refs/remotes/origin/<branch>`
+    at it, the way a fetch would."""
+    git(root, "checkout", "-q", "--orphan", branch)
+    for rel, text in files.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text)
+    git(root, "add", "-A")
+    git(root, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "plan")
+    git(root, "update-ref", f"refs/remotes/origin/{branch}", "HEAD")
+
+
+def test_a_real_clone_reads_the_cursor_plan_and_phase_files(tmp_path: Path) -> None:
+    # The FakeSource restates git's semantics; this drives the real `Checkout` through
+    # exists_at(ref, ""), list_dir and show on a real ref (l-tests-r1).
+    root = clone(tmp_path / "c")
+    tree = world("feat/batch-x", {"1": ["a.py", "tests/**/*.py"], "2": ["b.py"]})
+    _commit_tree(root, "feat/batch-x", tree.refs["refs/remotes/origin/feat/batch-x"])
+    got = source_for_clones(root, None)("o/r")
+    assert not isinstance(got, str)
+    assert read_plan_paths(got, "feat/batch-x") == PlanPaths(
+        ("a.py", "tests/**/*.py", "b.py"), PLAN
+    )

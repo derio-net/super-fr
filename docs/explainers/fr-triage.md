@@ -132,7 +132,8 @@ It always exits 0 and prints sets, not verdicts:
   generates, files every batch bumps, and batches ordered with `after` are left out. It is
   advice only: it reads the branches your local clone already has, never fetches, and changes
   nothing. `check` reads only the clone you run it in, so it compares only the batches of that
-  clone's repo; the driver's Batches page reads every clone the driver was given. A batch it
+  clone's repo. The Batches page does the same when you run `fr triage batches` yourself, and
+  reads every clone the driver was given when the driver writes it. A batch it
   could not read is listed with the reason, so an empty set means nothing overlaps, not that
   nothing was read. To fix an overlap, merge the
   two batches, or run `fr triage batch edit <id> --after <other>`, or give one a later wave;
