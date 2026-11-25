@@ -1,0 +1,28 @@
+schema_version: 12
+run: 2026-11-24-feat-batch-merge-readiness
+step: implement-phase
+item: phase/4
+outcome: done
+ticks: [P4.T1.S1, P4.T1.S2, P4.T2.S1, P4.T2.S2, P4.T3.S1, P4.T3.S2]
+refactor:
+  P4.T1: "a new manifest and one vocabulary token; nothing existing to clean"
+  P4.T2: "the readers gained one branch each, the slug logic sits in the new fr.run.debug_journal; run_cmd.py stayed at its 9100 budget by trimming two comments"
+  P4.T3: "prose rewritten to fit the 120-line skill cap; mirrors regenerated"
+journal:
+  - kind: decision
+    id: p4-debug-journal-module
+    title: The debug journal's slug lives in fr.run.debug_journal (phase 4)
+    body: |
+      run_cmd.py sits exactly at its 9100-line budget, so `debug_slug` and `require_debug_slug`
+      (the emitted `debug` path's stem) are a sibling module that apply.py, run_cmd's review-entry
+      lookup and tests share. `debug` joins REPO_TRACKED_ARTIFACTS, so `--emitted debug=` is
+      path-normalised and must exist; pr_body._journals reads `debug` the same way. No artifact
+      shape changed (the `emitted` map and `journal:<scope>` vocabulary already admitted it), so no
+      stamp bump or migration.
+    phase: 4
+  - kind: discovery
+    id: p4-skill-line-cap
+    title: The fr-debugging skill sat at the 120-line cap (phase 4)
+    body: The run steps were folded into long lines in sections 0, 3 and 4; the skill is now 110 lines.
+    phase: 4
+evidence: {}
