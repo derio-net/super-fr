@@ -114,7 +114,8 @@ def _at_tip(space: ConfigSpace) -> str | None:
     the file is ignored, as though absent (every key fr reads from it is guarded), and the
     reason is said once: no `tests: ci`, so a local full-suite log is owed at `deliver`, no
     `fast_tier` in any brief, and the gate set falls back to the base's required checks. A
-    failed protection read refuses."""
+    failed protection read refuses, and so does a failed fetch of the tip, or an origin that
+    is not the repository whose rules are read (`fetch_tip`)."""
     from fr.settings import SettingsError
 
     try:
@@ -130,14 +131,27 @@ def _at_tip(space: ConfigSpace) -> str | None:
     keys = [k for k in GUARDED_CI_KEYS if isinstance(data, dict) and k in data]
     if not keys:
         return text
-    from fr.config.protection import NotEnforced, ProtectionReadError, ignored_line, protection_of
+    from fr.config.protection import (
+        NotEnforced,
+        ProtectionReadError,
+        fetch_tip,
+        ignored_line,
+        protection_of,
+    )
 
     try:
         answer = protection_of(space)
     except ProtectionReadError as e:
         raise CiEvidenceRefused(f"fr will not read {', '.join(keys)} in {CI_CONFIG}: {e}") from e
     if not isinstance(answer, NotEnforced):
-        return text
+        # Enforced: the keys are trusted only at the tip fetched from the repository whose
+        # rules were read (lens review l-security-r3, like `read_checked`); a
+        # remote-tracking ref moved locally, or fetched from another origin, proves no review.
+        try:
+            fetch_tip(space, f"read {', '.join(keys)} in {CI_CONFIG}")
+            return space.at_default(CI_CONFIG)
+        except SettingsError as e:
+            raise CiEvidenceRefused(str(e)) from e
     said = (str(space.product), answer.reason)
     if said not in _IGNORED_SAID:
         _IGNORED_SAID.add(said)

