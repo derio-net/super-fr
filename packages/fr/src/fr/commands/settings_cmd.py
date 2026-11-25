@@ -138,6 +138,9 @@ def init_quiet(root: Path) -> str:
                 "fr settings init --quiet: this repository has no `origin`; quiet keeps the "
                 "`fr` and `fr-config` branches on origin, so add one first"
             )
+        probe = git_answer(root, "ls-remote", "--exit-code", "origin", QUIET_REF, CONFIG_REF)
+        if probe.returncode == 0 and _origin_has_only_old_switch(root, probe.stdout):
+            return _create_from_old_switch(root)
         for ref, name in ((QUIET_REF, QUIET_BRANCH), (CONFIG_REF, CONFIG_BRANCH)):
             if git_answer(root, "rev-parse", "--verify", "--quiet", ref).returncode == 0:
                 # p3-r9: the root commit made here is unrelated to any existing local
@@ -148,7 +151,6 @@ def init_quiet(root: Path) -> str:
                     f"is about to create. Rename or delete it (`git branch -m {name} "
                     f"{name}-old`) and retry"
                 )
-        probe = git_answer(root, "ls-remote", "--exit-code", "origin", QUIET_REF, CONFIG_REF)
     except GitUnavailableError as e:
         raise SettingsError(f"fr settings init --quiet: {e}") from e
     if probe.returncode == 0:
@@ -176,6 +178,41 @@ def init_quiet(root: Path) -> str:
     )
 
 
+def _origin_has_only_old_switch(root: Path, listing: str) -> bool:
+    """*listing* (`ls-remote origin fr fr-config`) names `fr` alone, and that branch, once
+    fetched, is a quiet switch: an existing quiet repo whose configuration space is not
+    created yet (plan decision p2-create-at-init-and-migration)."""
+    from fr.placement.quiet import FETCH_REFSPEC, QUIET_REF, _read_legacy
+
+    heads = {line.split("\t", 1)[1].strip() for line in listing.splitlines() if "\t" in line}
+    if heads != {QUIET_REF}:
+        return False
+    from fr.git import git_answer
+
+    fetched = git_answer(root, "fetch", "--quiet", "--no-tags", "origin", FETCH_REFSPEC)
+    if fetched.returncode != 0:
+        raise SettingsError(
+            f"fr settings init --quiet: cannot fetch origin/fr: {fetched.stderr.strip()}"
+        )
+    return _read_legacy(root) is not None
+
+
+def _create_from_old_switch(root: Path) -> str:
+    """Create `fr-config` holding the old switch's bytes (`quiet.ensure_config_branch`)."""
+    from fr.placement.quiet import CONFIG_BRANCH, QUIET_BRANCH, ensure_config_branch
+
+    if not ensure_config_branch(root):
+        raise SettingsError(
+            f"fr settings init --quiet: origin already has `{CONFIG_BRANCH}`; fr never "
+            f"overwrites the switch (edit `.fr/settings.yaml` on `{CONFIG_BRANCH}` instead)"
+        )
+    return (
+        f"created the `{CONFIG_BRANCH}` branch on origin holding the quiet switch from "
+        f"origin/{QUIET_BRANCH}:settings.yaml (byte for byte): this repo's configuration "
+        f"space now exists. The old file stays, in step, for older fr (R6)."
+    )
+
+
 def init_stealth(root: Path, text: str) -> str:
     """Write the target's settings (from `render_init("stealth")`): `<target-dir>/.fr/
     settings.yaml` on the tracking repo's `<branch>-config`, then the same bytes as
@@ -199,19 +236,23 @@ def init_stealth(root: Path, text: str) -> str:
     if stealth._remote_has(cref, root):
         stealth.ensure_worktree(root, cref)
     new, old = stealth.target_settings_texts(root, ref, target)
-    for found, where, rel in (
-        (new, cref.text, stealth.TARGET_SETTINGS),
-        (old, ref.text, stealth.LEGACY_TARGET_SETTINGS),
-    ):
-        if found is not None:
-            raise SettingsError(
-                f"fr settings init --stealth: {where} already holds {target}/{rel}; fr never "
-                "overwrites it (edit it there instead)"
-            )
+    if new is not None:
+        raise SettingsError(
+            f"fr settings init --stealth: {cref.text} already holds {target}/"
+            f"{stealth.TARGET_SETTINGS}; fr never overwrites it (edit it there instead)"
+        )
     message = fr_message(root, f"chore(fr): stealth settings for {target}")
-    write_settings(
-        stealth_config_space(root, ref.text, target), render_init("stealth"), message=message
-    )
+    space = stealth_config_space(root, ref.text, target)
+    if old is not None:
+        # An existing target (plan decision p2-create-at-init-and-migration): its space
+        # is created here, holding the old file's bytes; the old file stays in step (R6).
+        write_settings(space, old, message=message)
+        return (
+            f"moved {target}/{stealth.LEGACY_TARGET_SETTINGS} on {ref.text} to {target}/"
+            f"{stealth.TARGET_SETTINGS} on {cref.text} (byte for byte); the old file stays, "
+            "in step, for older fr (R6)"
+        )
+    write_settings(space, render_init("stealth"), message=message)
     return (
         f"pushed {target}/{stealth.TARGET_SETTINGS} to {cref.text} and "
         f"{target}/{stealth.LEGACY_TARGET_SETTINGS} to {ref.text}: start a run with "

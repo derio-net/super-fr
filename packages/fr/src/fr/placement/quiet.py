@@ -792,11 +792,12 @@ def fetch_switch(
     reached refuses; a branch origin does not have deletes its stale tracking ref, so a
     deleted switch is noticed (the sticky check then refuses in a quiet workspace).
 
-    Under quiet a fetch also makes sure the configuration space exists (S1 R5): a repo
-    whose switch is still only the old root settings.yaml on `fr` gets an `fr-config`
-    branch holding the same bytes (`ensure_config_branch`), so no quiet repo is left with
-    a configuration space `fr.config.space` refuses to read. Then both worktrees are
-    brought up to their refs."""
+    Under quiet both worktrees are then brought up to their refs: the `fr-config` one
+    only when that branch exists (`ensure_config_worktree` adopts it). Entering a
+    workspace fetches and never pushes (spec 2026-11-19-event-driven-a-la-carte §B; plan
+    decision p2-create-at-init-and-migration): fr creates `fr-config` only at the
+    migration and at `fr settings init --quiet`, and until then a configuration read
+    refuses, naming both (`fr.config.space.ConfigSpace._missing`)."""
     root = Path(root)
     if not _has_origin(root):
         return paths.REPO
@@ -811,8 +812,6 @@ def fetch_switch(
         _fetch_both(root, net, command)
     placement = paths.QUIET if read_switch(root) is not None else paths.REPO
     if placement == paths.QUIET:
-        if not no_fetch:
-            ensure_config_branch(root, network=net)
         fast_forward(root)
         ensure_config_worktree(root)
     return placement
@@ -853,8 +852,9 @@ def ensure_config_branch(root: Path, *, network: Network | None = None) -> bool:
     (S1 R5, R6): one orphan commit whose tree is `.fr/settings.yaml`, holding the old
     root settings.yaml's bytes, pushed with a plain push (never forced). Whether it
     pushed. Nothing to do when `origin/fr-config` already holds settings or there is no
-    old switch. The rest of `.fr/` (the product's `ci.yaml` and the like) moves with
-    `fr migrate artifacts --yes` (R11)."""
+    old switch. Called by `fr settings init --quiet` and the migration only (decision
+    p2-create-at-init-and-migration), never on entering a workspace. The rest of `.fr/`
+    (the product's `ci.yaml` and the like) moves with `fr migrate artifacts --yes` (R11)."""
     root = Path(root)
     new, old = switch_texts(root)
     if new is not None or old is None:

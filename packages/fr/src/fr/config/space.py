@@ -160,7 +160,8 @@ class ConfigSpace:
             f"the {self.placement} configuration space is not there yet: {why}, so fr "
             f"cannot read the repo's configuration and will not read it as none. Create it "
             f"with `fr migrate artifacts --yes` (it moves the switch and `{SPACE_DIR}/` to "
-            f"`{branch}`), or fetch it: `git fetch origin {branch}`"
+            f"`{branch}`) or `{_init_command(self.placement)}`; if another clone made it "
+            f"already, fetch it: `git fetch origin {branch}` (or `fr isolation up`)"
         )
 
     def at_pair(self, name: str, base: str, head: str) -> tuple[str | None, str | None]:
@@ -184,6 +185,13 @@ class ConfigSpace:
         if self.placement == _QUIET:
             return self.product
         return self.checkout if (self.checkout / ".git").exists() else None
+
+
+def _init_command(placement: str) -> str:
+    """The `fr settings init` that creates *placement*'s configuration space."""
+    if placement == _STEALTH:
+        return "fr settings init --stealth <repo>@<branch>"
+    return "fr settings init --quiet"
 
 
 def _commit(root: Path, qualified: str) -> str | None:

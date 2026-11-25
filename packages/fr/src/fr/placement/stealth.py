@@ -741,7 +741,7 @@ def target_settings_texts(
 ) -> tuple[str | None, str | None]:
     """(the configuration branch's `<target>/.fr/settings.yaml`, the tracking branch's
     `<target>/settings.yaml`), each None when absent. The configuration clone is read as
-    it was last fetched; it is absent until `ensure_config_clone` made it."""
+    it was last fetched; it is absent until `adopt_config_clone` (or a write) made it."""
     cref = config_ref(ref)
     clone = worktree_path(root, cref)
     wt = worktree_path(root, ref)
@@ -750,25 +750,18 @@ def target_settings_texts(
     return new, old
 
 
-def ensure_config_clone(root: Path, ref: StealthRef, target: str) -> Path:
-    """The configuration clone for *ref* (R5): `<branch>-config` cloned on demand, the
-    branch created on the tracking repo when it does not exist yet, and this target's old
-    `<target>/settings.yaml` carried over when only the old one holds settings. So a
-    stealth run's configuration space always exists (`fr.config.space` refuses one that
-    does not)."""
-    from fr.git_policy.templates import fr_message
-
+def adopt_config_clone(root: Path, ref: StealthRef) -> Path | None:
+    """The configuration clone for *ref* (R5) when `<branch>-config` exists: cloned on
+    demand, else fetched and fast-forwarded (`ensure_worktree`). None when the tracking
+    repo has no such branch. It never creates the branch nor pushes anything: entering a
+    run fetches only (spec 2026-11-19-event-driven-a-la-carte §B; plan decision
+    p2-create-at-init-and-migration). fr creates the branch at `fr settings init
+    --stealth` and at the migration; until then a configuration read refuses
+    (`fr.config.space.ConfigSpace._missing`)."""
     cref = config_ref(ref)
-    wt = ensure_worktree(root, ref)
-    old = _at_tip(wt, ref, f"{target}/{LEGACY_TARGET_SETTINGS}")
-    new_rel = f"{target}/{TARGET_SETTINGS}"
-    message = fr_message(root, f"chore(fr): stealth configuration for {target}")
     if not (worktree_path(root, cref) / ".git").exists() and not _remote_has(cref, root):
-        _create_branch(root, wt, cref, {new_rel: old} if old is not None else {}, message)
-    clone = ensure_worktree(root, cref)
-    if old is not None and _at_tip(clone, cref, new_rel) is None:
-        _commit_file(root, cref, clone, new_rel, old, message)
-    return clone
+        return None
+    return ensure_worktree(root, cref)
 
 
 def _commit_file(
@@ -834,7 +827,7 @@ def enter(root: Path, branch: str, ref: StealthRef) -> dict[str, str]:
     target = target_dir(root)
     wt = ensure_worktree(root, ref)
     check_owner(wt / target, fid, branch, STEALTH)
-    ensure_config_clone(root, ref, target)
+    adopt_config_clone(root, ref)
     _REACHED.add(ref.text)
     return marker_entry(ref, target)
 

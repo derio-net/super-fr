@@ -79,8 +79,7 @@ def test_up_no_fetch_reads_the_last_fetched_switch_and_says_so(
 def test_a_deleted_fr_branch_makes_the_workspace_refuse_naming_both(tmp_path: Path) -> None:
     repo = _quiet_origin(tmp_path)
     state = _target(repo).up(profile=None, branch="feat/q")
-    # S1: the switch is on `fr-config` too (up created it); deleting it means both
-    git(repo, "push", "-q", "origin", "--delete", "fr", "fr-config")  # drops both locally
+    git(repo, "push", "-q", "origin", "--delete", "fr")  # also drops origin/fr locally
     with pytest.raises(SettingsError) as caught:
         space_for(state.worktree)
     message = str(caught.value)
@@ -170,39 +169,62 @@ def test_up_again_on_a_quiet_workspace_with_a_plan_needs_no_validator_wrapper(
     assert _target(repo).up(profile=None, branch="feat/q").worktree == state.worktree
 
 
-# --- S1 (spec 2026-11-19-event-driven-a-la-carte R5): up creates the configuration space ---
+# --- S1 (spec 2026-11-19-event-driven-a-la-carte §B, R5): entering fetches, never pushes ---
+#
+# Plan-journal decision p2-create-at-init-and-migration: fr creates `fr-config` only at the
+# migration and at `fr settings init`. `up` and `run start` adopt one that exists.
 
 
-def test_up_on_an_old_quiet_repo_creates_fr_config_and_its_worktree(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """A quiet repo whose switch is only the old root settings.yaml on `fr` would leave
-    `fr.config.space` refusing every read (p1-r3): `up` creates `fr-config` holding the
-    same bytes, and its worktree beside the `fr` one."""
+def _origin_heads(tmp_path: Path) -> str:
+    return git(tmp_path / "origin.git", "for-each-ref", "--format=%(refname) %(objectname)")
+
+
+def test_up_on_an_old_quiet_repo_pushes_nothing_and_names_the_remedies(tmp_path: Path) -> None:
+    """A quiet repo whose switch is only the old root settings.yaml on `fr`: `up` reads it
+    (R13) and pushes nothing; a configuration read refuses, naming how to create the space."""
     from fr.config.space import config_space
 
     repo = _quiet_origin(tmp_path)
+    before = _origin_heads(tmp_path)
     state = _target(repo).up(profile=None, branch="feat/q")
-    origin = tmp_path / "origin.git"
-    assert git(origin, "show", "refs/heads/fr-config:.fr/settings.yaml") == QUIET
-    assert git(origin, "show", "refs/heads/fr:settings.yaml") == QUIET
-    assert "created origin/fr-config" in capsys.readouterr().err
+    assert state.placement == "quiet"
+    assert _origin_heads(tmp_path) == before
+    assert git(tmp_path / "origin.git", "branch", "--list", "fr-config").strip() == ""
     home = Path(os.environ["HOME"])
-    wt = home / ".cache/fr/worktrees/work/fr-config"
+    assert not (home / ".cache/fr/worktrees/work/fr-config").exists()
+    with pytest.raises(SettingsError) as caught:
+        config_space(state.worktree).at_default("settings")
+    message = str(caught.value)
+    assert "fr migrate artifacts --yes" in message and "fr settings init" in message
+
+
+def test_up_adopts_an_existing_fr_config_into_its_worktree(tmp_path: Path) -> None:
+    from fr.config.space import config_space
+
+    from tests.unit.test_placement_quiet import push_config_branch
+
+    repo = _quiet_origin(tmp_path)
+    push_config_branch(repo, QUIET)
+    git(repo, "update-ref", "-d", "refs/remotes/origin/fr-config")
+    before = _origin_heads(tmp_path)
+    state = _target(repo).up(profile=None, branch="feat/q")
+    assert _origin_heads(tmp_path) == before
+    wt = Path(os.environ["HOME"]) / ".cache/fr/worktrees/work/fr-config"
     assert git(wt, "symbolic-ref", "--short", "HEAD").strip() == "fr-config"
     assert (wt / ".fr" / "settings.yaml").read_text() == QUIET
     space = config_space(state.worktree)
-    assert space.placement == "quiet" and space.checkout == wt
-    assert space.at_default("settings") == QUIET  # no refusal: the space exists
-    # a second up changes nothing on origin
-    before = git(origin, "rev-parse", "refs/heads/fr-config").strip()
-    _target(repo).up(profile=None, branch="feat/q2")
-    assert git(origin, "rev-parse", "refs/heads/fr-config").strip() == before
+    assert space.checkout == wt and space.at_default("settings") == QUIET
 
 
-def test_up_no_fetch_never_pushes_fr_config(tmp_path: Path) -> None:
+@pytest.mark.parametrize("with_config", [False, True], ids=["old-switch", "fr-config"])
+def test_up_no_fetch_never_pushes(tmp_path: Path, with_config: bool) -> None:
+    from tests.unit.test_placement_quiet import push_config_branch
+
     repo = make_repo(tmp_path)
     push_fr_branch(repo, QUIET)
+    if with_config:
+        push_config_branch(repo, QUIET)
+    before = _origin_heads(tmp_path)
     state = _target(repo).up(profile=None, branch="feat/n", no_fetch=True)
     assert state.placement == "quiet"
-    assert git(tmp_path / "origin.git", "branch", "--list", "fr-config").strip() == ""
+    assert _origin_heads(tmp_path) == before

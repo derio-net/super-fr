@@ -154,29 +154,65 @@ def _push_config_settings(track: Path, tmp_path: Path, text: str) -> None:
     git(clone, "push", "-q", "origin", "main-config")
 
 
-def test_up_creates_the_config_branch_carrying_the_old_file(tmp_path: Path) -> None:
+def _heads(repo: Path) -> str:
+    return git(repo, "for-each-ref", "--format=%(refname) %(objectname)")
+
+
+@pytest.mark.parametrize("old_file", [True, False], ids=["old-file", "no-file"])
+def test_up_never_creates_the_config_branch(tmp_path: Path, old_file: bool) -> None:
+    """Decision p2-create-at-init-and-migration: entering a stealth run pushes nothing to
+    the tracking repo; the old file still reads (R13), and a configuration read names how
+    to create the space."""
     from fr.config.space import config_space
+    from fr.settings import SettingsError
+
+    target, track = stealth_pair(tmp_path)
+    text = "placement: stealth\nartifacts:\n  test_plan: off\n"
+    if old_file:
+        _push_target_settings(track, tmp_path, text)
+    before = _heads(track)
+    state = _up(target, track)
+    assert _heads(track) == before
+    assert git(track, "branch", "--list", "main-config").strip() == ""
+    effective = load_settings(state.worktree)
+    if old_file:
+        assert effective.settings.artifacts.test_plan == "off"
+        assert effective.ref == "refs/remotes/origin/main"
+    with pytest.raises(SettingsError) as caught:
+        config_space(state.worktree).at_default("settings")
+    assert "fr settings init" in str(caught.value)
+
+
+def test_up_adopts_an_existing_config_branch_without_pushing(tmp_path: Path) -> None:
+    from fr.config.space import config_space
+
+    target, track = stealth_pair(tmp_path)
+    text = "placement: stealth\nartifacts:\n  gates: off\n"
+    _push_config_settings(track, tmp_path, text)
+    before = _heads(track)
+    state = _up(target, track)
+    assert _heads(track) == before
+    assert config_space(state.worktree).at_default("settings") == text
+
+
+def test_init_stealth_carries_the_old_file_into_a_new_config_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`fr settings init --stealth` is where an existing target's space is created: the
+    old `<target>/settings.yaml` moves, byte for byte, onto a new orphan `<branch>-config`."""
+    from fr.cli import app
 
     target, track = stealth_pair(tmp_path)
     text = "placement: stealth\nartifacts:\n  test_plan: off\n"
     _push_target_settings(track, tmp_path, text)
-    state = _up(target, track)
+    monkeypatch.chdir(target)
+    env = {**os.environ, "FR_REPO_ROOT": str(target)}
+    result = CliRunner().invoke(app, ["settings", "init", "--stealth", f"{track}@main"], env=env)
+    assert result.exit_code == 0, result.output
     assert git(track, "show", "main-config:local--origin/.fr/settings.yaml") == text
-    effective = load_settings(state.worktree)
-    assert effective.settings.artifacts.test_plan == "off"
-    assert effective.ref == "refs/remotes/origin/main-config"
-    space = config_space(state.worktree)
-    assert space.at_default("settings") == text  # the space exists: no refusal
-
-
-def test_up_with_no_target_file_still_creates_the_config_branch(tmp_path: Path) -> None:
-    from fr.config.space import config_space
-
-    target, track = stealth_pair(tmp_path)
-    state = _up(target, track)
-    assert git(track, "rev-parse", "--verify", "main-config").strip()
-    assert tracked_files(track, "main-config") == []
-    assert config_space(state.worktree).at_default("settings") is None
+    sha = git(track, "rev-parse", "main-config").strip()
+    assert git(track, "rev-list", "--parents", "-n1", sha).split() == [sha]  # orphan
+    assert git(track, "show", "main:local--origin/settings.yaml") == text  # unchanged
 
 
 def test_the_config_branch_file_is_read_first(tmp_path: Path) -> None:

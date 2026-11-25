@@ -174,3 +174,24 @@ def test_write_settings_rewrites_both_switches_and_they_never_differ(
     heads = [git(origin, "rev-parse", b).strip() for b in ("fr-config", "fr")]
     write_settings(quiet_config_space(repo), text, message="chore(fr): settings")
     assert [git(origin, "rev-parse", b).strip() for b in ("fr-config", "fr")] == heads
+
+
+def test_init_quiet_on_an_old_quiet_repo_creates_fr_config_from_the_old_switch(
+    repo: Path, tmp_path: Path
+) -> None:
+    """Decision p2-create-at-init-and-migration: an existing quiet repo (switch only at
+    `origin/fr:settings.yaml`) gets its configuration space at `fr settings init --quiet`,
+    holding the old switch's bytes; the old file is untouched."""
+    from tests.unit.test_placement_quiet import QUIET
+
+    push_fr_branch(repo, QUIET)
+    origin = tmp_path / "origin.git"
+    fr_before = git(origin, "rev-parse", "refs/heads/fr").strip()
+    result = _fr(repo, "settings", "init", "--quiet")
+    assert result.exit_code == 0, result.output
+    assert "fr-config" in result.output
+    sha = git(origin, "rev-parse", "refs/heads/fr-config").strip()
+    assert git(origin, "rev-list", "--parents", "-n1", sha).split() == [sha]  # orphan
+    assert git(origin, "show", f"{sha}:.fr/settings.yaml") == QUIET
+    assert git(origin, "rev-parse", "refs/heads/fr").strip() == fr_before
+    assert load_settings(repo).ref == "refs/remotes/origin/fr-config"
