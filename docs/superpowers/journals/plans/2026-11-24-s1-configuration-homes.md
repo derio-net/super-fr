@@ -755,3 +755,8 @@ fr.config.migrate.MOVED became all_moved() (cached), so importing fr.config.migr
 ### p4-repos-sync-config-space · decision · fr repos sync reads plan-config through the space and proposes under quiet/stealth (p4-r9) (phase 4)
 
 located() decides the file (old path counts as existing); --force under repo writes .fr/plan-config.yaml and removes the old file (never both, R12); under quiet/stealth fr proposes it as a PR via the configuration writer (fr.config.change, git.pr honoured) or prints REFUSED naming fr migrate artifacts --yes when no configuration branch exists; it never writes the configuration checkout. Security follow-up: every read/write/delete of an old-path or config file goes through fr.config.space.link_problem (lstat of each parent, resolved path inside the checkout). Tests: test_repos_sync_config_space.py, test_repos_cmd.py, test_config_symlinked_parents.py.
+
+<!-- fr:journal kind=decision scope=plan id=p4-owed-names-release created=2026-11-25T08:03:52+00:00 phase=4 -->
+### p4-owed-names-release · decision · s1-refuse-old-paths names the release, its detection and R16's env vars (p4-r10) (phase 4)
+
+The owed entry's body now says: the first minor release after the one that ships S1, detected by fr's own version against the release carrying S1's fragment, ends old paths, the legacy settings copy and FR_SHIPPED_WORKFLOWS_DIR/VERIFICATIONS_DIR/LENSES_DIR. owed_key unchanged (the orchestrator repoints it at deliver).
