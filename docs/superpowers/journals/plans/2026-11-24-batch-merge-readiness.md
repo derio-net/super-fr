@@ -206,3 +206,8 @@ Reviewer confirmed R4 (board and queue read plan.queues[*].readiness from batch_
 ### p2-r6-resolved · finding [fixed] · resolves p2-r6: Test gaps: no end-to-end test for refused close-out/export, focus-command render, unconfigured verdict; the others' admits test is tautological (phase 2)
 
 9da5c3309: test_admits_follows_the_queues_conditions_written_out uses an independent oracle; test_a_refused_closeout_pr_reaches_its_batchs_card_with_its_reason and the export test go through drive_pass and kanban._others_of; focus-command and unconfigured tests above.
+
+<!-- fr:journal kind=decision scope=plan id=p3-running-in-preserve created=2026-11-25T05:38:20+00:00 phase=3 -->
+### p3-running-in-preserve · decision · The running predicate lives in preserve.py; local.py gets a 3-line guard (phase 3) (phase 3)
+
+`BranchRun.running_step`/`.running` and `preserve.running_hold(runs)` read steps and units in state `running` (an unreadable file counts); `_reap_or_classify` calls it after the external check, so dry run and live, merged and merged-by-content, are all guarded. gc reports action `skipped`, detail `kept: run <id> step <step> is running`. `_reap_hazard`, `_down_worktree_tail` and `down` are unchanged (a test pins it).
