@@ -357,6 +357,7 @@ def test_forge_ref_is_fr_config_only_when_it_carries_a_quiet_switch() -> None:
 _GUARDED_TRIAGE = (
     "post_merge: [./config.sh]\npr_authors: [mallory]\nstale_dispatch_days: 9\n"
     "mirrors: [[./regen]]\nqueue:\n  ci: none\nexit:\n  gates:\n    live: none\n"
+    "generated: ['docs/*.md']\n"
 )
 
 
@@ -403,11 +404,13 @@ def test_forge_side_triage_config_follows_the_quiet_switch(
     assert config is not None
     assert config.post_merge == [] and config.pr_authors == [] and config.mirrors == []
     assert config.queue is None and config.exit is None
+    assert config.generated == []  # which conflicts the queue regenerates (ci-economy R8)
     assert config.stale_dispatch_days == 9  # not executable: still read
     read_config_lenient(forge, "o/r")  # type: ignore[arg-type]
     err = capsys.readouterr().err
     assert err.count("ignoring") == 1
     assert "post_merge" in err and "pr_authors" in err and "protect fr-config" in err
+    assert "generated" in err
 
 
 def test_forge_side_triage_config_from_a_protected_fr_config_supplies_every_key() -> None:
@@ -424,6 +427,7 @@ def test_forge_side_triage_config_from_a_protected_fr_config_supplies_every_key(
     assert config is not None
     assert config.post_merge == ["./config.sh"] and config.pr_authors == ["mallory"]
     assert config.queue is not None and config.exit is not None
+    assert config.generated == ["docs/*.md"]
     assert forge.asked == [("o/r", "fr-config")]
 
 

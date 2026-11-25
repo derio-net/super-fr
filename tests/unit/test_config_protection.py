@@ -436,9 +436,9 @@ def test_the_guard_is_a_settings_error() -> None:
 
 
 def test_the_guarded_triage_keys_cover_commands_and_trust() -> None:
-    assert {"post_merge", "version", "mirrors", "pr_authors", "queue", "exit", "export"} <= set(
-        protection.GUARDED_TRIAGE_KEYS
-    )
+    assert {
+        "post_merge", "version", "mirrors", "generated", "pr_authors", "queue", "exit", "export"
+    } <= set(protection.GUARDED_TRIAGE_KEYS)  # fmt: skip
 
 
 def test_under_stealth_the_tracking_repos_forge_answers_never_the_given_client(

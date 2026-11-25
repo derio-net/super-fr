@@ -62,6 +62,7 @@ GUARDED_TRIAGE_KEYS: Final = (
     "post_merge",
     "version",
     "mirrors",
+    "generated",
     "pr_authors",
     "queue",
     "exit",
@@ -69,7 +70,8 @@ GUARDED_TRIAGE_KEYS: Final = (
 )
 """The top-level keys of `.fr/triage.yaml` that run a command (`post_merge`, the `version`
 commands, `mirrors`) or decide whose PRs are trusted or how they merge (`pr_authors`, the
-merge `queue`, the `exit` gate remap, the `export` PR the driver lands). Read from an
+merge `queue`, the `generated` files whose conflicts the queue resolves by regenerating them,
+the `exit` gate remap, the `export` PR the driver lands). Read from an
 unprotected configuration branch, they are ignored: each one's absence is the safe default."""
 
 
