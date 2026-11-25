@@ -82,9 +82,16 @@ rows:
       refuses with the reason and the fix
     origin:
     - spec:2026-11-19-event-driven-a-la-carte#R7
-    levels: {}
-    status: not-implemented
-    notes: candidate walk scenario, built in plan phase 7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_config_protection.py
+      - super-fr:tests/unit/test_config_protection_executors.py
+      - super-fr:tests/unit/test_config_degraded.py
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_config_homes
+    status: ci
+    notes: unit tests in CI (phases 1-6); candidate scenario tests/scenarios/config-homes.sh
+      runs in CI's scenario tier and is the deliver walk
     verify: candidate
     scenario: tests/scenarios/config-homes.sh
   - id: s1-shipped-defaults
