@@ -179,3 +179,4 @@ steps:
           model: claude-opus-5-5
           session: e4ba8d5a-76b8-46bb-aa9a-81b12b1286eb
 fr_version: 9.0.0rc6
+pr: https://github.com/derio-net/super-fr/pull/1688
