@@ -105,3 +105,11 @@ rows:
     notes: candidate walk scenario, built in plan phase 7
     verify: candidate
     scenario: tests/scenarios/config-homes.sh
+amendments:
+  - row: workflow-shape-selection
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_shipped_workflows.py
+    why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
+      when the shipped defaults merged into one tree (phase 5)
