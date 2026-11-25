@@ -78,10 +78,14 @@ def _quiet_with_config(tmp_path: Path, files: dict[str, str]) -> Path:
     where = quiet_checkout(root)
     where.parent.mkdir(parents=True, exist_ok=True)
     git(root, "worktree", "add", "-q", "-b", "fr-config", str(where), "origin/fr-config")
-    for rel in files:
-        if rel.endswith("candidate-install"):
-            p = where / rel
-            p.chmod(p.stat().st_mode | stat.S_IXUSR)
+    programs = [rel for rel in files if rel.endswith("candidate-install")]
+    for rel in programs:
+        p = where / rel
+        p.chmod(p.stat().st_mode | stat.S_IXUSR)
+    if programs:  # the executable bit is on fr-config itself: the worktree is its tip
+        git(where, "commit", "-qam", "executable")
+        git(where, "push", "-q", "origin", "fr-config")
+        git(root, "fetch", "-q", "origin", "+refs/heads/fr-config:refs/remotes/origin/fr-config")
     git(root, "checkout", "-q", "-b", "feat/q")
     return root
 
@@ -192,6 +196,178 @@ def test_a_scenario_program_in_the_configuration_space_is_refused_before_anythin
         _walk(root, manifest=manifest, rows=(row,))
     assert FIX in str(caught.value)
     assert not installed.exists() and not scenario_ran.exists()
+
+
+# --- the reviewed tip, not a local copy of it (review p3-r2, decision p3-run-the-checked-tip)
+
+
+def _protected_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    sentinel = tmp_path / "ran"
+    root = _quiet_with_config(
+        tmp_path, {".fr/candidate-install": INSTALL.format(sentinel=sentinel)}
+    )
+    monkeypatch.setattr(protection, "_origin_slug", lambda r: SLUG)
+    return root, sentinel
+
+
+def test_a_local_edit_in_the_fr_config_worktree_is_refused_and_nothing_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.verification.walk import WalkError
+
+    root, sentinel = _protected_install(tmp_path, monkeypatch)
+    edited = quiet_checkout(root) / ".fr" / "candidate-install"
+    edited.write_text(edited.read_text() + "echo unreviewed\n")
+    with pytest.raises(WalkError) as caught:
+        _walk(root, forge=_Rules())
+    text = str(caught.value)
+    assert "not the reviewed tip" in text and ".fr/candidate-install" in text
+    assert "pull request" in text and "stash" in text
+    assert not sentinel.exists()
+
+
+def test_an_untracked_file_in_the_fr_config_worktree_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.verification.walk import WalkError
+
+    root, sentinel = _protected_install(tmp_path, monkeypatch)
+    (quiet_checkout(root) / ".fr" / "planted").write_text("x\n")
+    with pytest.raises(WalkError, match="planted"):
+        _walk(root, forge=_Rules())
+    assert not sentinel.exists()
+
+
+def test_a_local_commit_ahead_of_origin_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.verification.walk import WalkError
+
+    root, sentinel = _protected_install(tmp_path, monkeypatch)
+    where = quiet_checkout(root)
+    (where / ".fr" / "candidate-install").write_text("#!/bin/sh\ntouch unreviewed\n")
+    git(where, "commit", "-qam", "unreviewed")
+    with pytest.raises(WalkError) as caught:
+        _walk(root, forge=_Rules())
+    assert "1 local commit(s) ahead of origin/fr-config" in str(caught.value)
+    assert "reset --keep origin/fr-config" in str(caught.value)
+    assert not sentinel.exists()
+
+
+def test_a_worktree_behind_the_fetched_tip_is_refused_with_the_fast_forward(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The walk fetches first: a change merged on origin since the last fetch is the
+    reviewed tip, and the worktree that lacks it is not what was reviewed."""
+    from fr.verification.walk import WalkError
+
+    root, sentinel = _protected_install(tmp_path, monkeypatch)
+    other = tmp_path / "other"
+    origin = git(root, "remote", "get-url", "origin").strip()
+    git(tmp_path, "clone", "-q", "--branch", "fr-config", origin, str(other))
+    (other / ".fr" / "lenses.yaml").write_text("disable: []\n")
+    git(other, "add", "-A")
+    git(other, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "merged")
+    git(other, "push", "-q", "origin", "fr-config")
+    with pytest.raises(WalkError) as caught:
+        _walk(root, forge=_Rules())
+    assert "1 commit(s) behind origin/fr-config" in str(caught.value)
+    assert "merge --ff-only origin/fr-config" in str(caught.value)
+    assert not sentinel.exists()
+
+
+def test_a_failed_fetch_of_the_configuration_branch_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.verification.walk import WalkError
+
+    root, sentinel = _protected_install(tmp_path, monkeypatch)
+    git(root, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    with pytest.raises(WalkError, match="cannot fetch fr-config"):
+        _walk(root, forge=_Rules())
+    assert not sentinel.exists()
+
+
+def test_no_fetch_reads_the_last_fetched_tip_and_says_it_may_be_stale(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from fr.config.space import config_space
+
+    root, _ = _protected_install(tmp_path, monkeypatch)
+    git(root, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    protection.require_checked_tip(
+        config_space(root), _Rules(), "run x", working_tree=True, no_fetch=True
+    )
+    assert "may be stale" in capsys.readouterr().err
+
+
+def test_a_clean_worktree_at_the_fetched_tip_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, sentinel = _protected_install(tmp_path, monkeypatch)
+    _walk(root, forge=_Rules())
+    assert sentinel.exists()
+
+
+def test_under_stealth_the_configuration_clone_must_be_its_fetched_tip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The stealth configuration clone fetches `<branch>-config` itself and is held to the
+    same rule as the quiet worktree."""
+    from fr.config.space import ConfigSpace
+
+    track = tmp_path / "track.git"
+    git(tmp_path, "init", "-q", "--bare", "-b", "main-config", str(track))
+    seed = tmp_path / "seed"
+    git(tmp_path, "init", "-q", "-b", "main-config", str(seed))
+    (seed / "local--work" / ".fr").mkdir(parents=True)
+    (seed / "local--work" / ".fr" / "ops.yaml").write_text("env_passthrough: [A]\n")
+    git(seed, "add", "-A")
+    git(seed, "-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "seed")
+    git(seed, "remote", "add", "origin", str(track))
+    git(seed, "push", "-q", "origin", "main-config")
+    clone = tmp_path / "stealth--track--main-config"
+    git(tmp_path, "clone", "-q", "-b", "main-config", str(track), str(clone))
+    space = ConfigSpace(
+        "stealth", clone / "local--work" / ".fr", clone, tmp_path, "origin/main-config",
+        "local--work/.fr", "git@github.com:example-org/track.git@main",
+    )  # fmt: skip
+    monkeypatch.setattr(protection, "_default_client", lambda s: _Rules())
+    protection.require_checked_tip(space, None, "run ops", working_tree=True)
+    protection.forget()
+    (clone / "local--work" / ".fr" / "ops.yaml").write_text("env_passthrough: [B]\n")
+    with pytest.raises(protection.UncheckedTipError, match="local--work/.fr/ops.yaml"):
+        protection.require_checked_tip(space, None, "run ops", working_tree=True)
+
+
+def test_ops_config_from_a_dirty_fr_config_worktree_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.ops.load import OpsLoadError, load_ops_config
+
+    root = _quiet_with_config(tmp_path, {".fr/ops.yaml": "env_passthrough: [SECRET]\n"})
+    monkeypatch.setattr(protection, "_origin_slug", lambda r: SLUG)
+    monkeypatch.setattr(protection, "_default_client", lambda space: _Rules())
+    (quiet_checkout(root) / ".fr" / "ops.yaml").write_text("env_passthrough: [OTHER]\n")
+    with pytest.raises(OpsLoadError, match="not the reviewed tip"):
+        load_ops_config(root)
+
+
+def test_an_exit_remap_from_a_dirty_fr_config_worktree_is_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.verification.rows import load_remap
+
+    root = _quiet_with_config(tmp_path, {".fr/triage.yaml": "exit:\n  gates:\n    tester: none\n"})
+    monkeypatch.setattr(protection, "_origin_slug", lambda r: SLUG)
+    monkeypatch.setattr(protection, "_default_client", lambda space: _Rules())
+    assert load_remap(root)[0]  # clean: read
+    protection.forget()
+    (quiet_checkout(root) / ".fr" / "triage.yaml").write_text(
+        "exit:\n  gates:\n    tester: none\n    devops: none\n"
+    )
+    remap, why = load_remap(root)
+    assert remap == {} and why is not None and "not the reviewed tip" in why
 
 
 def test_under_repo_the_walk_asks_nothing(tmp_path: Path) -> None:

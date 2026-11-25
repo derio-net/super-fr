@@ -196,7 +196,10 @@ Each executor of executable configuration asks it first under `quiet` and `steal
 (`triage/gitseam.py`), the ops probes and the ops gate (`ops/`), and the queue's `gate_checks`
 (`triage/queue_exec.py`). **Not enforced** refuses that action with the reason and the fix
 ("protect `fr-config` with a ruleset requiring pull requests with at least one approving review;
-keep its bypass list empty; GitHub needs a public repo or a paid plan for a private one"). Under `repo` nothing changes: the default branch's protection is the
+keep its bypass list empty; GitHub needs a public repo or a paid plan for a private one"). Each runs exactly the reviewed tip (review p3-r2): it fetches the
+configuration branch first (a failed fetch refuses), a blob read reads that fetched tip, and a
+reader of the configuration checkout's files refuses a checkout that is dirty or not at that tip,
+naming the difference and the remedy. Under `repo` nothing changes: the default branch's protection is the
 repo owner's business today, and S1 does not change it (see Non-goals).
 
 ### D. The moved files and their migration (R8 to R13)

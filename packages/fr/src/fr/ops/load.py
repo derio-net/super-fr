@@ -100,12 +100,15 @@ class OpsConfig(BaseModel):
 def _protected(repo_root: Path) -> None:
     """Spec 2026-11-19-event-driven-a-la-carte R7: `.fr/ops.yaml` names the runbook a probe
     runs and the environment it receives, so under quiet and stealth it is read only when the
-    forge enforces a pull-request rule on the configuration branch."""
-    from fr.config.protection import require_protected
+    forge enforces a pull-request rule on the configuration branch, and the configuration
+    checkout is exactly its freshly fetched tip (review p3-r2)."""
+    from fr.config.protection import require_checked_tip
     from fr.settings import SettingsError
 
     try:
-        require_protected(config_space(repo_root), None, f"run ops with {CONFIG_REL}")
+        require_checked_tip(
+            config_space(repo_root), None, f"run ops with {CONFIG_REL}", working_tree=True
+        )
     except SettingsError as e:
         raise OpsLoadError(str(e)) from e
 

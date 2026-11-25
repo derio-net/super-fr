@@ -215,12 +215,15 @@ class HostCheckout:
                     return False
                 text: str | None = git(["show", f"{at}:{path}"], self.primary)
             else:
-                from fr.config.protection import require_protected
+                from fr.config.protection import fetch_tip, require_protected
 
                 at = space.ref
+                what = "release to the merge queue its `queue:` names"
+                space.at_default("triage")  # a missing configuration space refuses first
+                fetch_tip(space, what)  # read the reviewed tip, never a stale one (p3-r2)
                 text = space.at_default("triage")
                 if text is not None and "queue" in (yaml.safe_load(text) or {}):
-                    require_protected(space, None, "release to the merge queue its `queue:` names")
+                    require_protected(space, None, what)
             if text is None:
                 return False
             data = yaml.safe_load(text)

@@ -369,9 +369,10 @@ def _protected(repo_root: Path, manifest: StrategyManifest, forge: object | None
     """Spec 2026-11-19-event-driven-a-la-carte R7: under quiet and stealth a program the
     install or scenario template reads from the configuration branch
     (`.fr/candidate-install`) runs only when the forge
-    enforces a pull-request rule on that branch; *forge* is the client to ask (None: the
-    repo's own)."""
-    from fr.config.protection import require_protected
+    enforces a pull-request rule on that branch and the configuration checkout is exactly
+    its freshly fetched tip (review p3-r2); *forge* is the client to ask (None: the repo's
+    own)."""
+    from fr.config.protection import require_checked_tip
     from fr.config.space import config_space, in_space
     from fr.settings import SettingsError
 
@@ -379,21 +380,24 @@ def _protected(repo_root: Path, manifest: StrategyManifest, forge: object | None
     if not any(in_space(p) for p in programs):
         return
     try:
-        require_protected(config_space(repo_root), forge, "run the candidate install")
+        require_checked_tip(
+            config_space(repo_root), forge, "run the candidate install", working_tree=True
+        )
     except SettingsError as exc:
         raise WalkError(str(exc)) from exc
 
 
 def _program(argv0: str, repo_root: Path, forge: object | None) -> str:
     """The repo-relative program *argv0*'s path; one in the configuration space passes the
-    protection guard first, so no template reaches it unguarded (R7)."""
-    from fr.config.protection import require_protected
+    protection guard first, so no template reaches it unguarded (R7), and the checkout must
+    still be the reviewed tip when it runs (review p3-r2)."""
+    from fr.config.protection import require_checked_tip
     from fr.config.space import config_space, in_space
     from fr.settings import SettingsError
 
     if in_space(argv0):
         try:
-            require_protected(config_space(repo_root), forge, f"run {argv0}")
+            require_checked_tip(config_space(repo_root), forge, f"run {argv0}", working_tree=True)
         except SettingsError as exc:
             raise WalkError(str(exc)) from exc
     return str(install_path(argv0, repo_root))

@@ -746,7 +746,7 @@ def required_names(client: ChecksForge, checkout: Checkout, repo: str, default: 
     `origin/<default>`, else the base's `required_check_names`. Under quiet and stealth
     `ci.yaml` is the configuration branch's (`fr.config.space.at_default`); a space that
     cannot be read raises `TriageError`, never falls back to the base's checks."""
-    from fr.config.protection import require_protected
+    from fr.config.protection import require_checked_tip
     from fr.config.space import config_space, rel
     from fr.settings import SettingsError
     from fr.triage.errors import TriageError
@@ -756,8 +756,11 @@ def required_names(client: ChecksForge, checkout: Checkout, repo: str, default: 
         if space.ref is None:
             text = checkout.show(f"origin/{default}", rel("ci"))
         else:  # R7: gate_checks decide merges, so the configuration branch must be protected
+            # and read at its freshly fetched tip (review p3-r2)
+            space.at_default("ci")  # a missing configuration space refuses first
+            what = f"gate the merge queue on {rel('ci')}'s gate_checks"
+            require_checked_tip(space, client, what, working_tree=False)
             text = space.at_default("ci")
-            require_protected(space, client, f"gate the merge queue on {rel('ci')}'s gate_checks")
     except SettingsError as exc:
         raise TriageError(f"{repo}: its {rel('ci')} cannot be read: {exc}") from exc
     declared = gate_checks_of(text)

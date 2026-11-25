@@ -97,7 +97,7 @@ def load_remap(repo_root: Path) -> tuple[dict[str, str], str | None]:
 def _unprotected(repo_root: Path) -> str | None:
     from fr.config.protection import refusal_at
 
-    return refusal_at(repo_root, None, "remap a gate with `exit:`")
+    return refusal_at(repo_root, None, "remap a gate with `exit:`", working_tree=True)
 
 
 @dataclass(frozen=True)

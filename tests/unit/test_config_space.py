@@ -258,14 +258,16 @@ def _quiet_with_config(tmp_path: Path, home: Path) -> tuple[Path, Path]:
         "ops.yaml": "env_passthrough: [CONFIG]\n",
         "debt.yaml": "stale_days: 9\n",
     }
+    # a real fr-config checkout at its fetched tip: guarded readers refuse any other (p3-r2)
+    _push_orphan(root, "fr-config", {f".fr/{n}": t for n, t in config.items()})
+    git(root, "fetch", "-q", "origin", "+refs/heads/fr-config:refs/remotes/origin/fr-config")
+    where = home / ".cache" / "fr" / "worktrees" / "work" / "fr-config"
+    where.parent.mkdir(parents=True, exist_ok=True)
+    git(root, "worktree", "add", "-q", "-b", "fr-config", str(where), "origin/fr-config")
     for name, text in product.items():
         (root / ".fr").mkdir(exist_ok=True)
         (root / ".fr" / name).write_text(text)
-    cfg = home / ".cache" / "fr" / "worktrees" / "work" / "fr-config" / ".fr"
-    cfg.mkdir(parents=True)
-    for name, text in config.items():
-        (cfg / name).write_text(text)
-    return root, cfg
+    return root, where / ".fr"
 
 
 def test_quiet_readers_read_the_config_space_and_ignore_the_product(
