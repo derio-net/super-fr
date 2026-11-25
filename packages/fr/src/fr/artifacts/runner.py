@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -62,9 +63,15 @@ from fr.artifacts.registry import (
     ArtifactError,
     ArtifactKind,
     iter_paths_of,
+    no_stamp_write,
     own_feature,
 )
 from fr.artifacts.text import NotUtf8Error
+
+MIGRATING_ROOT: ContextVar[Path | None] = ContextVar("MIGRATING_ROOT", default=None)
+"""The repo root `run_migrations` is applying under, for a hop whose artifact does not
+sit in it (S1's `settings-location`: the old switch lives in the `fr` worktree, and the
+configuration space it creates carries the PRODUCT checkout's files)."""
 
 
 def describe(e: BaseException) -> str:
@@ -134,6 +141,10 @@ class SchemaMigration:
     """Where a relocating hop puts *path*; required when `relocates`. It may be *path*
     itself: a file already at its destination whose stamp did not land (the crash
     window) is finished in place."""
+    expected: Callable[[Path], bytes] | None = None
+    """The bytes a relocating hop gives the file at its destination, when they are not
+    the source's own (profiles 2 -> 3 writes its new stamp): a destination already
+    holding them is a move that happened, not R12's clash."""
 
     def __post_init__(self) -> None:
         if self.to_version <= self.from_version:
@@ -207,6 +218,10 @@ class PlannedAction:
     moved_to: Path | None = None
     """A relocating step's destination (S1 §D.3): `path` was moved here, so the commit
     stages both, which git records as a rename."""
+    untouched: bool = False
+    """The step changed nothing at `path`: a location-stamped kind's hop that does not
+    move its file (S1 `settings-location` creates the configuration branch and keeps the
+    old switch as R6's legacy copy). Only `also_wrote` is staged."""
 
     @property
     def is_repair(self) -> bool:
@@ -253,7 +268,8 @@ class MigrationReport:
         """
         seen: dict[Path, None] = {}
         for a in self.applied:
-            seen[a.path] = None
+            if not a.untouched:
+                seen[a.path] = None
             moved = (a.moved_to,) if a.moved_to is not None else ()
             for companion in (*a.also_wrote, *a.removed, *moved):
                 seen[companion] = None
@@ -570,7 +586,7 @@ def _actions_for(
         if m.relocates and m.destination is not None:
             try:
                 moved_to = m.destination(path)
-                refusal = both_paths_refusal(path, moved_to)
+                refusal = both_paths_refusal(path, moved_to, _expected(m, path, moved_to))
             except Exception as e:
                 return [], [FailedAction(name, path, m.summary, describe(e))]
             if refusal is not None:
@@ -734,8 +750,14 @@ def run_migrations(
 
     applied: list[PlannedAction] = []
     skipped: list[PlannedAction] = []
-    for name, kind, path, actions in planned:
-        done, failures = _apply_to_one(reg, name, kind, path)
+    token = MIGRATING_ROOT.set(Path(repo_root))
+    try:
+        results = [
+            (actions, _apply_to_one(reg, name, kind, path)) for name, kind, path, actions in planned
+        ]
+    finally:
+        MIGRATING_ROOT.reset(token)
+    for actions, (done, failures) in results:
         applied.extend(done)
         failed.extend(failures)
         # `skipped` means "planned, then found unnecessary — another writer got
@@ -838,7 +860,9 @@ def _key(action: PlannedAction) -> tuple[object, ...]:
     return (action.path, action.from_version, action.to_version, action.repair)
 
 
-def both_paths_refusal(source: Path, destination: Path) -> str | None:
+def both_paths_refusal(
+    source: Path, destination: Path, expected: bytes | None = None
+) -> str | None:
     """R12's refusal when *destination* already holds OTHER bytes than *source* (both a
     file's old and new path exist), else None. A destination holding the source's own
     bytes is a move that already happened (a crash after the copy, or the configuration
@@ -846,7 +870,8 @@ def both_paths_refusal(source: Path, destination: Path) -> str | None:
     if destination == source or not destination.exists():
         return None
     try:
-        if destination.is_file() and destination.read_bytes() == source.read_bytes():
+        want = source.read_bytes() if expected is None else expected
+        if destination.is_file() and destination.read_bytes() == want:
             return None
     except OSError:
         pass
@@ -854,6 +879,12 @@ def both_paths_refusal(source: Path, destination: Path) -> str | None:
         f"both {source} and {destination} exist: fr will not choose between them. Keep the "
         f"one you want, delete the other, and run `fr migrate artifacts --yes` again (S1 R12)"
     )
+
+
+def _expected(step: SchemaMigration, path: Path, dest: Path) -> bytes | None:
+    if step.expected is None or dest == path or not dest.exists():
+        return None
+    return step.expected(path)
 
 
 def relocate_file(source: Path, destination: Path) -> None:
@@ -881,7 +912,7 @@ def _relocate(
     assert step.destination is not None
     try:
         dest = step.destination(path)
-        refusal = both_paths_refusal(path, dest)
+        refusal = both_paths_refusal(path, dest, _expected(step, path, dest))
         if refusal is not None:
             return None, FailedAction(name, path, step.summary, refusal)
         also_wrote = tuple(step.fn(path) or ())
@@ -957,8 +988,7 @@ def _apply_to_one(
                 return applied, failed
             assert moved is not None
             applied.append(moved)
-            assert moved.moved_to is not None
-            path = moved.moved_to
+            path = moved.moved_to or path  # None: finished in place (the crash window)
             continue
         try:
             also_wrote = tuple(step.fn(path) or ())
@@ -1022,6 +1052,7 @@ def _apply_to_one(
                 from_version=step.from_version,
                 to_version=step.to_version,
                 also_wrote=also_wrote,
+                untouched=kind.write_version is no_stamp_write,
             )
         )
     else:

@@ -67,7 +67,13 @@ for _fr_key in FR_PLAN_CONFIG_FILE FR_PLANS_DIR FR_ARCHIVED_PLANS_DIR FR_LEGACY_
   _fr_val="$(_fr_answer "$_fr_key")"
   if [ -n "$_fr_val" ]; then printf -v "$_fr_key" '%s' "$_fr_val"; fi
 done
-: "${FR_PLAN_CONFIG_FILE:=$REPO_ROOT/docs/superpowers/plan-config.yaml}"
+: "${FR_PLAN_CONFIG_FILE:=$REPO_ROOT/.fr/plan-config.yaml}"
+# The plan format moved to `.fr/plan-config.yaml` (S1 R9); until the release named by
+# the owed entry s1-refuse-old-paths, the old path is read while only it exists (R13).
+if [ ! -f "$FR_PLAN_CONFIG_FILE" ] && [ -f "$REPO_ROOT/docs/superpowers/plan-config.yaml" ]; then
+  FR_PLAN_CONFIG_FILE="$REPO_ROOT/docs/superpowers/plan-config.yaml"
+  echo "fr: $FR_PLAN_CONFIG_FILE is at its old location; run fr migrate artifacts --yes" >&2
+fi
 : "${FR_PLANS_DIR:=$REPO_ROOT/docs/superpowers/plans}"
 : "${FR_ARCHIVED_PLANS_DIR:=$REPO_ROOT/docs/superpowers/implemented/plans}"
 : "${FR_LEGACY_ARCHIVED_PLANS_DIR:=$REPO_ROOT/docs/superpowers/archived-plans}"

@@ -31,6 +31,7 @@ from fr.workflow.model import WorkflowError
 from fr.workflow.resolve import (
     REPO_WORKFLOWS_REL,
     default_shipped_workflows_dir,
+    repo_workflows_dir,
     resolve_workflow,
     shipped_workflow_dirs,
 )
@@ -50,7 +51,7 @@ def _search_dirs(repo_root: Path, shipped_dir: Path) -> list[Path]:
     Derived from `shipped_workflow_dirs` rather than restated, so discovery
     and resolution cannot disagree about where a shape lives.
     """
-    return [repo_root / REPO_WORKFLOWS_REL, *shipped_workflow_dirs(shipped_dir)]
+    return [repo_workflows_dir(repo_root), *shipped_workflow_dirs(shipped_dir)]
 
 
 def _discover_names(repo_root: Path, shipped_dir: Path) -> list[str]:

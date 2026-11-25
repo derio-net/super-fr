@@ -23,7 +23,7 @@ from pathlib import Path
 
 import yaml
 
-from fr.artifacts.paths import KIND_DIRS
+from fr.artifacts.paths import KIND_DIRS, LEGACY_CONFIG
 from fr.config.space import SPACE_DIR
 from fr.triage.batch_drive import RUNS_DIR, GatedRow, find_run
 from fr.triage.errors import TriageError
@@ -34,12 +34,13 @@ ARCHIVED_RUNS_DIR = KIND_DIRS["run-archived"]
 EXIT_INPUTS = (
     KIND_DIRS["acceptance-fragment"],
     SPACE_DIR,
-    KIND_DIRS["verification"],
-    KIND_DIRS["workflow"],
+    LEGACY_CONFIG["verification"],
+    LEGACY_CONFIG["workflow"],
 )
 """What `run_exit` reads besides the spec and the run's plan: the acceptance fragments
 (folded in memory in the snapshot, spec 2026-11-04 R17), the remap and the
-install contract (`.fr/`), and the repo's own strategy and workflow manifests. The plan
+install contract (`.fr/`, which holds the repo's own strategy and workflow manifests since
+S1 R9), and those manifests' old paths (R13). The plan
 dir (live and archived) is added per run, so the fr-ops R13 promotion reads its ops."""
 
 

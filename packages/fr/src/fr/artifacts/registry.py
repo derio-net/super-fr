@@ -49,17 +49,26 @@ from fr.artifacts.paths import RECORDS_SUFFIX, repo_glob, search_roots
 from fr.artifacts.structure import (
     validate_agents,
     validate_fragment,
+    validate_isolation_allow,
     validate_journal,
     validate_matrix,
+    validate_models_config,
     validate_ops,
     validate_plan,
+    validate_plan_config,
     validate_profiles,
+    validate_quiet_config,
     validate_record,
     validate_run,
+    validate_settings_location,
     validate_spec,
+    validate_trackers_config,
     validate_usage,
+    validate_verification_config,
+    validate_workflow_config,
 )
 from fr.artifacts.text import read_utf8
+from fr.config import migrate as _moves
 
 PRE_FRAMEWORK_VERSION = 1
 """What an artifact with no stamp reads as (spec §3.A)."""
@@ -648,12 +657,69 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # §3.D), migration `fr.artifacts.profiles_services`. Fields MOVE, so
             # version 1 is read only through the frozen
             # `fr.services.legacy.ProfilesV1`. An unstamped file is version 1.
-            current_version=2,
-            locator=".devcontainer/fr-profiles.yaml",
-            stamp="`schema_version` in `fr-profiles.yaml`",
+            # 2 -> 3 RELOCATES it to `.fr/profiles.yaml` in the configuration space
+            # (spec 2026-11-19-event-driven-a-la-carte S1 R9, §D), writing
+            # `schema_version: 3`, migration `fr.artifacts.config_migration`.
+            current_version=3,
+            locator=_moves.moved("profiles").new_locator,
+            locators=(_moves.LEGACY_PROFILES, _moves.moved("profiles").new_locator),
+            roots=_moves.moved_roots("profiles"),
+            stamp="`schema_version` in the profiles yaml",
             read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
             validate=validate_profiles,
+        ),
+        *(
+            # The files S1 moves into `.fr/` (R8, R9), stamped by their location: version
+            # 1 at the old path, 2 at the new one. Born at 2; the 1 -> 2 hop relocates
+            # (`fr.artifacts.config_migration`).
+            ArtifactKind(
+                name=kind,
+                current_version=2,
+                locator=_moves.moved(kind).new_locator,
+                locators=(_moves.moved(kind).old, _moves.moved(kind).new_locator),
+                roots=_moves.moved_roots(kind),
+                stamp="its location (old path: 1, `.fr/`: 2)",
+                read_stamp=location_stamp(_moves.moved(kind).old, _moves.moved(kind).new_locator),
+                write_version=no_stamp_write,
+                validate=validate,
+            )
+            for kind, validate in (
+                ("workflow-config", validate_workflow_config),
+                ("verification-config", validate_verification_config),
+                ("models-config", validate_models_config),
+                ("trackers-config", validate_trackers_config),
+                ("plan-config", validate_plan_config),
+                ("isolation-allow", validate_isolation_allow),
+            )
+        ),
+        ArtifactKind(
+            # Under quiet, the product checkout's own `.fr/` files (R11) move to
+            # `fr-config`: version 1 in the product, 2 in the `fr-config` checkout.
+            name="quiet-config",
+            current_version=2,
+            locator=_moves.rel("*"),
+            locators=(_moves.rel("*"), _moves.rel("*")),
+            roots=_moves.quiet_roots,
+            owns=_moves.quiet_owns,
+            stamp="its checkout (product: 1, `fr-config`: 2)",
+            read_stamp=_moves.quiet_stamp,
+            write_version=no_stamp_write,
+            validate=validate_quiet_config,
+        ),
+        ArtifactKind(
+            # The switch's settings file (R5, R6): the root `settings.yaml` on `fr`
+            # (stealth: `<target-dir>/settings.yaml`) is 1 until the configuration branch
+            # holds the same bytes at `.fr/settings.yaml`, then it is R6's legacy copy.
+            name="settings-location",
+            current_version=2,
+            locator=_moves.rel(_moves.SETTINGS),
+            locators=(_moves.SETTINGS, _moves.rel(_moves.SETTINGS)),
+            roots=_moves.settings_roots,
+            stamp="the configuration branch holding it (old switch only: 1)",
+            read_stamp=_moves.settings_stamp,
+            write_version=no_stamp_write,
+            validate=validate_settings_location,
         ),
         ArtifactKind(
             name="ops",

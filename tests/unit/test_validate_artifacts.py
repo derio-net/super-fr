@@ -216,6 +216,14 @@ amendments:
 )
 
 
+GOOD_WORKFLOW = (
+    "workflow: fine\nschema: 1\nunit: run\nsteps:\n  - id: a\n    kind: cli\n    run: 'true'\n"
+)
+GOOD_STRATEGY = (
+    Path(__file__).resolve().parents[2] / "plugins/super-fr/verifications/candidate.yaml"
+).read_text()
+
+
 def seed_good_repo(root: Path) -> dict[str, Path]:
     """One structurally valid live artifact per registered kind."""
     plan_dir = root / "docs" / "superpowers" / "plans" / PLAN_SLUG
@@ -232,9 +240,16 @@ def seed_good_repo(root: Path) -> dict[str, Path]:
         "spec": _w(root, f"docs/superpowers/specs/{PLAN_SLUG}-design.md", GOOD_SPEC),
         "usage": _w(root, "docs/superpowers/usage/2019-03-04-feat-widget.yaml", GOOD_USAGE),
         "record": _w(root, GOOD_RECORD_REL, GOOD_RECORD),
-        "profiles": _w(root, ".devcontainer/fr-profiles.yaml", GOOD_PROFILES),
+        "profiles": _w(root, ".fr/profiles.yaml", GOOD_PROFILES),
         # The `agents` kind is a pair: one alone is reported missing its sibling.
         "agents": _seed_agents(root),
+        # The configuration S1 moved into `.fr/` (spec 2026-11-19-event-driven-a-la-carte R9).
+        "workflow-config": _w(root, ".fr/workflows/fine.yaml", GOOD_WORKFLOW),
+        "verification-config": _w(root, ".fr/verifications/candidate.yaml", GOOD_STRATEGY),
+        "models-config": _w(root, ".fr/models.yaml", "opencode:\n  hard: m\n"),
+        "trackers-config": _w(root, ".fr/trackers.yaml", "github: {}\n"),
+        "plan-config": _w(root, ".fr/plan-config.yaml", "plan: {}\n"),
+        "isolation-allow": _w(root, ".fr/isolation-allow", "data/**\n"),
     }
 
 
@@ -245,7 +260,10 @@ def _seed_agents(root: Path) -> Path:
     return next(p for p in written if p.stem == "fr-spec-reviewer")
 
 
-LIVE_KINDS = {name for name, kind in ARTIFACT_KINDS.items() if not kind.retired}
+QUIET_ONLY_KINDS = {"quiet-config", "settings-location"}
+"""Kinds that exist only under quiet or stealth (S1 R5, R11): a `repo` fixture has none."""
+
+LIVE_KINDS = {name for name, kind in ARTIFACT_KINDS.items() if not kind.retired} - QUIET_ONLY_KINDS
 """Every kind a repo still writes: a retired one (the `matrix`, spec 2026-11-04 R19) has
 no well-formed artifact, only a stale one `fr migrate artifacts --yes` removes."""
 
@@ -363,7 +381,12 @@ MISSING_FIELD_CASES = {
 
 
 def test_the_missing_field_cases_cover_every_kind() -> None:
-    assert set(MISSING_FIELD_CASES) == LIVE_KINDS
+    from fr.artifacts.registry import no_stamp_write
+
+    # A location-stamped kind (S1 §D) has no required fields: its validator is its reader,
+    # exercised by test_migration_config_kinds.py.
+    located = {n for n, k in ARTIFACT_KINDS.items() if k.write_version is no_stamp_write}
+    assert set(MISSING_FIELD_CASES) == LIVE_KINDS - located
 
 
 def test_a_matrix_of_the_retired_kind_is_reported_as_retired(tmp_path: Path) -> None:
@@ -1012,7 +1035,7 @@ def test_a_broken_repo_authored_workflow_shape_is_reported(tmp_path: Path) -> No
     seed_good_repo(tmp_path)
     _w(
         tmp_path,
-        "docs/superpowers/workflows/broken.yaml",
+        ".fr/workflows/broken.yaml",
         "workflow: broken\nschema: 1\nunit: run\n"
         "steps:\n  - id: a\n    kind: agent\n    needs: [ghost]\n",
     )
@@ -1035,11 +1058,7 @@ def test_workflow_shapes_are_not_a_registered_artifact_kind() -> None:
 
 def test_a_valid_repo_authored_shape_does_not_fail_validation(tmp_path: Path) -> None:
     seed_good_repo(tmp_path)
-    _w(
-        tmp_path,
-        "docs/superpowers/workflows/fine.yaml",
-        "workflow: fine\nschema: 1\nunit: run\nsteps:\n  - id: a\n    kind: cli\n    run: 'true'\n",
-    )
+    _w(tmp_path, ".fr/workflows/other.yaml", GOOD_WORKFLOW.replace("fine", "other"))
 
     assert validate_repo(tmp_path).ok
 

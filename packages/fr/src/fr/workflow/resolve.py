@@ -65,6 +65,15 @@ REPO_WORKFLOWS_REL = Path(KIND_DIRS["workflow"])
 SHIPPED_WORKFLOWS_REL = Path("plugins") / "super-fr" / "workflows"
 
 
+def repo_workflows_dir(repo_root: Path) -> Path:
+    """The repo's own workflow manifests for the product checkout *repo_root*:
+    `.fr/workflows/` in its configuration space, or the old `docs/superpowers/workflows/`
+    while only that one exists (spec 2026-11-19-event-driven-a-la-carte R9, R13)."""
+    from fr.config.space import located
+
+    return located(Path(repo_root), "workflow")
+
+
 def default_shipped_workflows_dir() -> Path:
     """Where shipped manifests live once the plugin is installed.
 
@@ -132,12 +141,16 @@ def resolve_workflow(
     the operator sees exactly where to put an override — and, when the shape
     was expected to be shipped, which installation is missing it.
     """
-    candidates = _shipped.lookup_candidates(
-        name, repo_root / REPO_WORKFLOWS_REL, shipped_workflow_dirs(shipped_root)
-    )
+    repo_dir = repo_workflows_dir(repo_root)
+    candidates = _shipped.lookup_candidates(name, repo_dir, shipped_workflow_dirs(shipped_root))
 
     for path in candidates:
         if path.is_file():
+            if path.parent == repo_dir:
+                from fr.config.space import guard_manifest
+
+                # A manifest's `kind: cli` argv is executable configuration (R7).
+                guard_manifest(repo_root, path, f"run workflow shape {name!r} from {path}")
             return parse_manifest(path.read_text())
 
     searched = " and ".join(str(p) for p in candidates)

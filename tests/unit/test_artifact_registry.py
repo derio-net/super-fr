@@ -37,13 +37,28 @@ EXPECTED_KINDS = {
     "profiles",
     "agents",
 }
+"""The body-stamped kinds every per-kind fixture below seeds."""
+
+MOVED_KINDS = {
+    "workflow-config",
+    "verification-config",
+    "models-config",
+    "trackers-config",
+    "plan-config",
+    "isolation-allow",
+    "quiet-config",
+    "settings-location",
+}
+"""Location-stamped kinds (spec 2026-11-19-event-driven-a-la-carte S1 §D): their
+version is where they are, so they are covered by `test_migration_relocate.py` and
+`test_migration_config_kinds.py`, not by the stamp fixtures here."""
 
 
 # --- Task 1: the registry ------------------------------------------------
 
 
 def test_registry_covers_every_stamped_kind() -> None:
-    assert set(ARTIFACT_KINDS) == EXPECTED_KINDS
+    assert set(ARTIFACT_KINDS) == EXPECTED_KINDS | MOVED_KINDS
 
 
 def test_each_entry_carries_version_locator_and_callables() -> None:
@@ -740,7 +755,7 @@ _PRE_RESOLVER_LOCATORS = {
     "spec": "docs/superpowers/specs/*.md",
     "usage": "docs/superpowers/usage/*.yaml",
     "record": "docs/superpowers/runs/*.records/*.yaml",
-    "profiles": ".devcontainer/fr-profiles.yaml",
+    "profiles": ".fr/profiles.yaml",  # moved by S1 R9; locators[0] is the old path
     "ops": "docs/superpowers/plans/*/ops.yaml",
     "agents": ".claude/agents/fr-*.md",
 }
@@ -750,7 +765,7 @@ _PRE_RESOLVER_LOCATORS = {
 _REPO_CONFIG_KINDS = {"profiles", "agents"}
 
 
-@pytest.mark.parametrize("name", sorted(set(ARTIFACT_KINDS) - _REPO_CONFIG_KINDS))
+@pytest.mark.parametrize("name", sorted(set(ARTIFACT_KINDS) - _REPO_CONFIG_KINDS - MOVED_KINDS))
 def test_every_locator_is_the_resolvers_repo_output(name: str) -> None:
     from fr.artifacts.paths import KIND_DIRS, ArtifactSpace, kind_dir
 
@@ -764,7 +779,10 @@ def test_every_locator_is_the_resolvers_repo_output(name: str) -> None:
 
 
 def test_the_locators_did_not_move_when_the_resolver_took_them_over() -> None:
-    assert {n: k.locator for n, k in ARTIFACT_KINDS.items()} == _PRE_RESOLVER_LOCATORS
+    assert {
+        n: k.locator for n, k in ARTIFACT_KINDS.items() if n not in MOVED_KINDS
+    } == _PRE_RESOLVER_LOCATORS
+    assert ARTIFACT_KINDS["profiles"].locators[0] == ".devcontainer/fr-profiles.yaml"
 
 
 @pytest.mark.parametrize("name", ["plan", "journal", "run", "spec", "usage", "acceptance-fragment"])

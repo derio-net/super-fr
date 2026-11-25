@@ -91,17 +91,35 @@ _TABLE: Final[tuple[tuple[str, str, str], ...]] = (
     ("usage", f"{_SP}/usage", "USAGE_DIR"),
     ("usage-archived", f"{_SP}/implemented/usage", "ARCHIVED_USAGE_DIR"),
     ("audit-archived", f"{_SP}/implemented/audits", "ARCHIVED_AUDITS_DIR"),
-    ("workflow", f"{_SP}/workflows", "WORKFLOWS_DIR"),
-    ("verification", f"{_SP}/verifications", "VERIFICATIONS_DIR"),
-    ("plan-config", f"{_SP}/plan-config.yaml", "PLAN_CONFIG_FILE"),
-    ("models", f"{_SP}/models.yaml", "MODELS_FILE"),
-    ("trackers", f"{_SP}/trackers.yaml", "TRACKERS_FILE"),
+    ("workflow", ".fr/workflows", "WORKFLOWS_DIR"),
+    ("verification", ".fr/verifications", "VERIFICATIONS_DIR"),
+    ("plan-config", ".fr/plan-config.yaml", "PLAN_CONFIG_FILE"),
+    ("models", ".fr/models.yaml", "MODELS_FILE"),
+    ("trackers", ".fr/trackers.yaml", "TRACKERS_FILE"),
     ("acceptance", _ACC, "ACCEPTANCE_DIR"),
     ("acceptance-fragment", f"{_ACC}/features", "ACCEPTANCE_FRAGMENTS_DIR"),
 )
 
 KIND_DIRS: Mapping[str, str] = MappingProxyType({k: rel for k, rel, _ in _TABLE})
 """kind -> repo-relative POSIX path. The same relative path under every placement."""
+
+CONFIG_KINDS: Final = frozenset({"workflow", "verification", "models", "trackers", "plan-config"})
+"""The `KIND_DIRS` rows that are repo CONFIGURATION (S1 R9): `.fr/<file>` in the
+configuration space (`fr.config.space`), never below a feature root. `config_kind_path`
+answers where."""
+
+LEGACY_CONFIG: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "workflow": f"{_SP}/workflows",
+        "verification": f"{_SP}/verifications",
+        "plan-config": f"{_SP}/plan-config.yaml",
+        "models": f"{_SP}/models.yaml",
+        "trackers": f"{_SP}/trackers.yaml",
+    }
+)
+"""Where the configuration kinds lived before S1 (R9, R13): repo-relative, in the product
+checkout. A reader finding a file only there uses it with a notice
+(`fr.config.space.legacy`); `fr migrate artifacts --yes` moves it."""
 
 ARTIFACT_TREES: Final = (_SP, _ACC)
 """The two repo-relative trees fr's artifacts live under (the stealth push refuses a
@@ -288,8 +306,22 @@ def feature_of_artifact(repo_root: Path, rel: str) -> tuple[Path, Path | None] |
 
 
 def kind_dir(kind: str, space: ArtifactSpace) -> Path:
-    """The absolute path of *kind* in *space*; `KeyError` naming an unknown kind."""
+    """The absolute path of *kind* in *space*; `KeyError` naming an unknown kind. A
+    configuration kind (`CONFIG_KINDS`) has no place below a feature root: ask
+    `config_kind_path` with the product checkout."""
+    if kind in CONFIG_KINDS:
+        raise KeyError(f"{kind!r} is repo configuration: ask config_kind_path(<product>, kind)")
     return feature_root(space) / _known(kind, KIND_DIRS)
+
+
+def config_kind_path(product: Path, kind: str) -> Path:
+    """Where configuration kind *kind* (`CONFIG_KINDS`) lives for the product checkout
+    *product*: `<configuration space>/.fr/<file>` (S1 R9), under every placement."""
+    from fr.config.space import config_space
+
+    if kind not in CONFIG_KINDS:
+        raise KeyError(f"{kind!r} is not repo configuration (known: {sorted(CONFIG_KINDS)})")
+    return config_space(Path(product)).dir.parent / KIND_DIRS[kind]
 
 
 def below(root: Path, kind: str) -> Path:
@@ -544,22 +576,13 @@ def outside_repo(repo_root: Path) -> str | None:
     return QUIET if read_switch(root) is not None else None
 
 
-REPO_CONFIG_KINDS: Final = frozenset(
-    {"workflow", "verification", "models", "trackers", "plan-config"}
-)
-"""Kinds below the artifact directories that are REPO CONFIGURATION, authored by the repo
-owner and read from the product checkout under every placement (decision
-quiet-artifact-root-scope). Everything else below `docs/superpowers/` and
-`docs/acceptance/` is placement-bound: it lives at the placement's root (R1)."""
-
-
 def placement_bound(rel: str) -> bool:
     """Does the repo-relative path (or glob) *rel* name a placement-bound fr artifact?
-    `docs/superpowers/**` and `docs/acceptance/**` are, except `REPO_CONFIG_KINDS`;
-    repo configuration elsewhere (`.devcontainer/`, `.claude/`, `.fr/`) is not."""
+    `docs/superpowers/**` and `docs/acceptance/**` are, except the configuration kinds'
+    old paths (`LEGACY_CONFIG`, read in the product checkout until they move); repo
+    configuration elsewhere (`.devcontainer/`, `.claude/`, `.fr/`) is not."""
     rel = rel.removeprefix("./")
-    for kind in REPO_CONFIG_KINDS:
-        own = KIND_DIRS[kind]
+    for own in LEGACY_CONFIG.values():
         if rel == own or rel.startswith(f"{own}/"):
             return False
     return any(rel == root or rel.startswith(f"{root}/") for root in (_SP, _ACC))

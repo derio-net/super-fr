@@ -64,7 +64,9 @@ def is_version_two(config: dict[str, Any]) -> bool:
 
 def _read_config(repo_root: Path, *, lenient: bool) -> dict[str, Any] | None:
     """The raw file as a mapping, or None when there is no file."""
-    if not (repo_root / ".devcontainer" / "fr-profiles.yaml").is_file():
+    from fr.isolation.types import profiles_path
+
+    if not profiles_path(repo_root).is_file():
         return None
     try:
         config = profiles_config(repo_root)

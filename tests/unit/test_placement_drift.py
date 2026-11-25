@@ -88,6 +88,9 @@ def drifted(tmp_path: Path) -> tuple[Path, Path]:
     git(ws, "add", "--", FRAG)
     git(ws, "commit", "-qm", "chore(fr): acceptance row")
     _switch_to(root, QUIET)
+    # A current quiet repo: `fr-config` holds the switch too (S1 R5; an old-switch-only
+    # repo is stale until `fr migrate artifacts --yes` creates it).
+    quiet.ensure_config_branch(root)
     return root, ws
 
 

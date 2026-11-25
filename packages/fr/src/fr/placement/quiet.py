@@ -1358,6 +1358,36 @@ def write_branch_file(
     net(["git", "fetch", "--quiet", "--no-tags", "origin", f"+refs/heads/{branch}:{tracking}"])
 
 
+def create_config_branch(
+    root: Path, files: dict[str, str], message: str, *, network: Network | None = None
+) -> None:
+    """Create origin's `fr-config` as ONE orphan commit holding *files* (tree path ->
+    text), pushed with a plain push (never forced): the migration's creation of the
+    configuration space (S1 R10, plan decision p2-create-at-init-and-migration). A push
+    origin refuses raises `SettingsError` and leaves no local branch behind. Refuses when
+    origin or this clone already has a `fr-config`: a change to an existing one is a pull
+    request (`fr.config.change.open_change`)."""
+    net = network or _default_network(root)
+    common = paths._common_dir(root)
+    local = _git(root, "rev-parse", "--verify", "--quiet", f"{CONFIG_REF}^{{commit}}")
+    if local.returncode == 0 or (common is not None and _ref_sha(common, paths.SWITCH_REF)):
+        raise SettingsError(
+            f"placement quiet: `{CONFIG_BRANCH}` exists already; fr changes it only by a pull "
+            "request"
+        )
+    created = _orphan_commit(root, files, message)
+    _git(root, "update-ref", CONFIG_REF, created, "0" * 40)
+    pushed = net(["git", "push", "--quiet", "origin", f"{CONFIG_REF}:{CONFIG_REF}"])
+    if pushed.returncode != 0:
+        _git(root, "update-ref", "-d", CONFIG_REF, created)
+        raise SettingsError(
+            f"placement quiet: origin refused the push of the new `{CONFIG_BRANCH}`: "
+            f"{(pushed.stderr or pushed.stdout or 'git push failed').strip()}. Nothing was "
+            "forced and nothing was removed from the product"
+        )
+    net(["git", "fetch", "--quiet", "--no-tags", "origin", CONFIG_FETCH_REFSPEC])
+
+
 def _orphan_commit(root: Path, files: dict[str, str], message: str) -> str:
     """A parentless commit holding exactly *files* (path -> text), made with plumbing in
     a private index, so no working tree is touched."""

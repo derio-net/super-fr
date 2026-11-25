@@ -736,6 +736,13 @@ def _create_branch(
         ) from e
 
 
+def create_config_branch(root: Path, ref: StealthRef, files: dict[str, str], message: str) -> None:
+    """Create the tracking repo's `<branch>-config` as one orphan commit holding *files*
+    (S1 R10): the migration's creation of the stealth configuration space. A branch the
+    tracking repo refuses raises `SettingsError`; nothing is forced."""
+    _create_branch(root, ensure_worktree(root, ref), config_ref(ref), files, message)
+
+
 def target_settings_texts(
     root: Path, ref: StealthRef, target: str
 ) -> tuple[str | None, str | None]:

@@ -1,0 +1,558 @@
+"""Moving repo configuration into its configuration space (spec
+2026-11-19-event-driven-a-la-carte S1 §D, R9 to R12; plan 2026-11-24-s1-configuration-homes
+phase 4).
+
+`MOVED` is the one table of the files S1 moves: each kind's old locator (relative to the
+product checkout, or to the memory root for the settings file) and its place below `.fr/`.
+`fr.artifacts.registry` builds the moved kinds from it and `fr.artifacts.config_migration`
+registers their hops.
+
+**Within one checkout** (`repo`, and `isolation-allow` under every placement) a hop is a
+rename on disk; the migrate commit stages both paths, so git records a rename.
+
+**Across spaces** (`quiet`, `stealth`, R10, R11) a hop writes the destination on the
+configuration branch first, pushes it, and only then removes the product file, which
+leaves the product in the product's migrate commit. Three cases (plan decision
+p4-cross-space-cases):
+
+1. The configuration branch does not exist yet: the hop CREATES it, one orphan commit
+   holding the settings (the old switch's bytes, R6) and every file the migration would
+   move there (`pending_files`), so one push carries the whole space and the later hops
+   find their file already there. A refused push removes nothing.
+2. The branch holds the file with the same bytes: the product file is removed.
+3. The branch exists without the file: fr proposes it in a pull request
+   (`fr.config.change.open_change`, honouring `git.pr`) and refuses that artifact,
+   naming the pull request; the product file stays until the change is merged and the
+   migration runs again. A branch holding the file with OTHER bytes is R12's refusal.
+"""
+
+from __future__ import annotations
+
+import re
+import subprocess
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Final, Protocol
+
+from fr.config.space import ALLOWLIST, CONFIG_BRANCH
+from fr.config.space import SPACE_DIR as SPACE_DIR
+from fr.config.space import rel as rel
+
+if TYPE_CHECKING:
+    from fr.config.space import ConfigSpace
+
+QUIET_FILES: Final = (
+    "ci.yaml",
+    "docs.yaml",
+    "lenses.yaml",
+    "triage.yaml",
+    "ops.yaml",
+    "debt.yaml",
+    "candidate-install",
+)
+"""R11: the product checkout's own `.fr/` files that move to `fr-config` under quiet."""
+
+LEGACY_ALLOWLIST: Final = ".fr-isolation-allow"
+LEGACY_PROFILES: Final = ".devcontainer/fr-profiles.yaml"
+SETTINGS: Final = "settings.yaml"
+"""The old switch's name at the root of the memory branch (`fr`) and below a stealth
+target's directory (R6)."""
+
+
+@dataclass(frozen=True)
+class Moved:
+    """One moved kind: `old` (a glob relative to the product checkout) and `new` (the
+    same file's place below `.fr/`, `*` matching `old`'s `*`). `across` says the new
+    place is the configuration space (else the same checkout)."""
+
+    kind: str
+    old: str
+    new: str
+    across: bool = True
+
+    @property
+    def new_locator(self) -> str:
+        return rel(self.new)
+
+    def below(self, source: Path, product: Path) -> str:
+        """*source*'s (an old-locator path) place below `.fr/`."""
+        if "*" not in self.old:
+            return self.new
+        base = Path(self.old).parent
+        name = source.relative_to(product / base).as_posix()
+        return f"{Path(self.new).parent.as_posix()}/{name}"
+
+    def product_of(self, path: Path) -> Path:
+        """The product checkout an old-locator *path* sits in."""
+        depth = len(Path(self.old).parts)
+        return Path(*path.parts[: len(path.parts) - depth])
+
+
+def legacy_dirs() -> dict[str, str]:
+    """The R9 kinds' old repo-relative paths (`fr.artifacts.paths.LEGACY_CONFIG`)."""
+    from fr.artifacts.paths import LEGACY_CONFIG
+
+    return dict(LEGACY_CONFIG)
+
+
+def _moved() -> tuple[Moved, ...]:
+    old = legacy_dirs()
+    return (
+        Moved("workflow-config", f"{old['workflow']}/*.yaml", "workflows/*.yaml"),
+        Moved("verification-config", f"{old['verification']}/*.yaml", "verifications/*.yaml"),
+        Moved("models-config", old["models"], "models.yaml"),
+        Moved("trackers-config", old["trackers"], "trackers.yaml"),
+        Moved("plan-config", old["plan-config"], "plan-config.yaml"),
+        Moved("profiles", LEGACY_PROFILES, "profiles.yaml"),
+        Moved("isolation-allow", LEGACY_ALLOWLIST, ALLOWLIST, across=False),
+    )
+
+
+MOVED: Final = _moved()
+"""Every file S1 moves into `.fr/` (R9, R8), by kind."""
+
+MOVED_BY_KIND: Final = {m.kind: m for m in MOVED}
+
+
+def moved(kind: str) -> Moved:
+    return MOVED_BY_KIND[kind]
+
+
+# --- where each locator is globbed ------------------------------------------------------
+
+
+def space_root(product: Path) -> Path:
+    """The directory `.fr/` hangs from in *product*'s configuration space: the product
+    checkout under `repo`, the `fr-config` worktree under quiet, `<clone>/<target-dir>`
+    under stealth."""
+    from fr.config.space import config_space
+
+    return config_space(Path(product)).dir.parent
+
+
+def placement_of(product: Path) -> str:
+    from fr.artifacts.paths import REPO, outside_repo
+
+    return outside_repo(Path(product)) or REPO
+
+
+def moved_roots(kind: str) -> Callable[[Path, int], list[Path]]:
+    """`ArtifactKind.roots` of a moved kind: its old locator in the product checkout,
+    its new one in the configuration space (the product, for `isolation-allow`)."""
+    entry = moved(kind)
+
+    def roots(repo_root: Path, index: int) -> list[Path]:
+        if index == 0 or not entry.across:
+            return [Path(repo_root)]
+        return [space_root(repo_root)]
+
+    return roots
+
+
+def quiet_roots(repo_root: Path, index: int) -> list[Path]:
+    """`quiet-config`'s roots: the product's `.fr/` (index 0) and `fr-config`'s (index
+    1), under quiet only (R11). Under `repo` the product's `.fr/` IS the space."""
+    from fr.artifacts.paths import QUIET
+
+    if placement_of(repo_root) != QUIET:
+        return []
+    return [Path(repo_root)] if index == 0 else [space_root(repo_root)]
+
+
+def quiet_owns(path: Path) -> bool:
+    return path.name in QUIET_FILES and path.parent.name == SPACE_DIR
+
+
+def quiet_stamp(path: Path) -> int | None:
+    """`quiet-config`'s location stamp: 2 in the `fr-config` checkout (its HEAD is
+    `fr-config`), 1 in a product checkout. Both are `.fr/<file>`: the location that
+    differs is the checkout."""
+    done = subprocess.run(
+        ["git", "-C", str(path.parent), "symbolic-ref", "-q", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return 2 if done.stdout.strip() == f"refs/heads/{CONFIG_BRANCH}" else 1
+
+
+def settings_roots(repo_root: Path, index: int) -> list[Path]:
+    """`settings-location`'s roots: the old switch's directory (the `fr` worktree under
+    quiet, `<tracking clone>/<target-dir>` under stealth) and the configuration space.
+    Nothing under `repo`, whose settings were always `.fr/settings.yaml`."""
+    from fr.artifacts.paths import QUIET, STEALTH
+
+    placement = placement_of(repo_root)
+    if placement not in (QUIET, STEALTH):
+        return []
+    if index == 1:
+        return [space_root(repo_root)]
+    old = _legacy_settings_dir(Path(repo_root), placement)
+    return [old] if old is not None and old.is_dir() else []
+
+
+def _legacy_settings_dir(product: Path, placement: str) -> Path | None:
+    from fr.artifacts.paths import QUIET
+
+    if placement == QUIET:
+        from fr.placement.quiet import worktree_path
+
+        path = worktree_path(product)
+        return path if (path / ".git").exists() else None
+    from fr.placement.stealth import marker_tracking
+    from fr.placement.stealth import worktree_path as tracking_path
+
+    found = marker_tracking(product)
+    if found is None:
+        return None
+    ref, target = found
+    return tracking_path(product, ref) / target
+
+
+def settings_stamp(path: Path) -> int | None:
+    """`settings-location`'s stamp: `.fr/settings.yaml` is 2; the old switch is 2 once
+    the configuration branch holds the same bytes (it is then R6's legacy copy, not a
+    second file for R12), else 1."""
+    if Path(path).full_match(f"**/{rel(SETTINGS)}"):
+        return 2
+    held = _config_settings_for_legacy(Path(path))
+    try:
+        return 2 if held is not None and held == path.read_text() else 1
+    except OSError:
+        return 1
+
+
+def _config_settings_for_legacy(path: Path) -> str | None:
+    """The configuration branch's settings as last fetched, read from beside the old
+    switch *path*: `origin/fr-config:.fr/settings.yaml` from the `fr` worktree (a linked
+    worktree of the product repository), or the stealth configuration clone's
+    `origin/<branch>-config:<target>/.fr/settings.yaml`."""
+    from fr.settings.load import show_at_commit
+
+    def sha(cwd: Path, ref: str) -> str | None:
+        done = subprocess.run(
+            ["git", "-C", str(cwd), "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return done.stdout.strip() or None
+
+    head = subprocess.run(
+        ["git", "-C", str(path.parent), "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    if not head:
+        return None
+    top = Path(head)
+    if path.parent == top:  # quiet: the root settings.yaml of `fr`
+        found = sha(top, f"refs/remotes/origin/{CONFIG_BRANCH}")
+        return None if found is None else show_at_commit(top, found, rel(SETTINGS))
+    target = path.parent.relative_to(top).as_posix()
+    branch = subprocess.run(
+        ["git", "-C", str(top), "symbolic-ref", "--short", "-q", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    clone = top.with_name(f"{top.name}-config")
+    if not branch or not (clone / ".git").exists():
+        return None
+    found = sha(clone, f"refs/remotes/origin/{branch}-config")
+    return None if found is None else show_at_commit(clone, found, f"{target}/{rel(SETTINGS)}")
+
+
+# --- the stamp a body-stamped profiles file carries at its new place ----------------------
+
+_STAMP_LINE = re.compile(r"^schema_version\s*:[^\r\n]*", re.MULTILINE)
+
+
+def with_stamp(text: str, version: int) -> str:
+    """*text* with its top-level `schema_version:` set to *version*, every other byte
+    kept; a file with none gains one on top."""
+    if _STAMP_LINE.search(text):
+        return _STAMP_LINE.sub(f"schema_version: {version}", text, count=1)
+    newline = "\r\n" if "\r\n" in text else "\n"
+    return f"schema_version: {version}{newline}{text}"
+
+
+# --- the configuration space's writer ----------------------------------------------------
+
+
+class ProposedError(Exception):
+    """A moved file waits in a pull request to the configuration branch: the product file
+    stays until it merges (plan decision p4-cross-space-cases, case 3)."""
+
+
+class SpaceWriter(Protocol):
+    """What a cross-space hop needs of the configuration branch's remote."""
+
+    def fetch(self) -> None: ...
+    def exists(self) -> bool: ...
+    def tip(self, tree_path: str) -> str | None: ...
+    def create(self, files: dict[str, str], message: str) -> None: ...
+    def propose(self, tree_path: str, text: str, message: str) -> str: ...
+    def refresh(self) -> None: ...
+
+
+class QuietWriter:
+    """`fr-config` on the product repository's origin."""
+
+    def __init__(self, product: Path) -> None:
+        self.product = Path(product)
+
+    def fetch(self) -> None:
+        from fr.placement import quiet
+
+        quiet._fetch_both(self.product, quiet._default_network(self.product), None)
+
+    def exists(self) -> bool:
+        from fr.artifacts import paths
+        from fr.placement import quiet
+
+        common = paths._common_dir(self.product)
+        return common is not None and quiet._ref_sha(common, paths.SWITCH_REF) is not None
+
+    def tip(self, tree_path: str) -> str | None:
+        from fr.config.space import _commit
+        from fr.settings.load import show_at_commit
+
+        sha = _commit(self.product, f"refs/remotes/origin/{CONFIG_BRANCH}")
+        return None if sha is None else show_at_commit(self.product, sha, tree_path)
+
+    def create(self, files: dict[str, str], message: str) -> None:
+        from fr.placement import quiet
+
+        quiet.create_config_branch(self.product, files, message)
+
+    def propose(self, tree_path: str, text: str, message: str) -> str:
+        from fr.artifacts import paths
+        from fr.config.change import open_change
+        from fr.placement import quiet
+
+        quiet._check_config_refs(self.product)
+        remote = quiet._git(self.product, "config", "--get", "remote.origin.url").stdout.strip()
+        return open_change(
+            self.product, product=self.product, remote=remote, base_branch=CONFIG_BRANCH,
+            base_ref=paths.SWITCH_REF, rel=tree_path, text=text, message=message,
+        )  # fmt: skip
+
+    def refresh(self) -> None:
+        from fr.placement import quiet
+
+        quiet._check_config_refs(self.product)
+        quiet.ensure_config_worktree(self.product)
+
+    def legacy_settings(self) -> str | None:
+        from fr.placement import quiet
+
+        old = quiet.switch_texts(self.product)[1]
+        return None if old is None else old[1]
+
+
+class StealthWriter:
+    """`<branch>-config` on the tracking repository."""
+
+    def __init__(self, product: Path) -> None:
+        from fr.placement.stealth import config_ref, marker_tracking
+
+        self.product = Path(product)
+        found = marker_tracking(self.product)
+        if found is None:
+            from fr.settings import SettingsError
+
+            raise SettingsError(f"placement stealth: {product} carries no stealth marker")
+        self.ref, self.target = found
+        self.cref = config_ref(self.ref)
+
+    @property
+    def clone(self) -> Path:
+        from fr.placement.stealth import worktree_path
+
+        return worktree_path(self.product, self.cref)
+
+    def fetch(self) -> None:
+        from fr.placement.stealth import check_config_branch, ensure_worktree
+
+        ensure_worktree(self.product, self.ref)
+        if (self.clone / ".git").exists():
+            check_config_branch(self.product, self.ref)
+            ensure_worktree(self.product, self.cref)
+
+    def exists(self) -> bool:
+        from fr.placement.stealth import _remote_has
+
+        return (self.clone / ".git").exists() or _remote_has(self.cref, self.product)
+
+    def tip(self, tree_path: str) -> str | None:
+        from fr.placement.stealth import _at_tip
+
+        if not (self.clone / ".git").exists():
+            self.refresh()
+        return _at_tip(self.clone, self.cref, tree_path)
+
+    def create(self, files: dict[str, str], message: str) -> None:
+        from fr.placement.stealth import create_config_branch
+
+        create_config_branch(self.product, self.ref, files, message)
+
+    def propose(self, tree_path: str, text: str, message: str) -> str:
+        from fr.config.change import open_change
+        from fr.placement.stealth import _remote_ref, check_privacy, origin_url
+
+        check_privacy(self.ref, origin_url(self.product), target_root=self.product)
+        return open_change(
+            self.clone, product=self.product, remote=self.ref.repo,
+            base_branch=self.cref.branch, base_ref=_remote_ref(self.cref), rel=tree_path,
+            text=text, message=message,
+        )  # fmt: skip
+
+    def refresh(self) -> None:
+        from fr.placement.stealth import check_config_branch, ensure_worktree
+
+        check_config_branch(self.product, self.ref)
+        ensure_worktree(self.product, self.cref)
+
+    def legacy_settings(self) -> str | None:
+        from fr.placement.stealth import target_settings_texts
+
+        return target_settings_texts(self.product, self.ref, self.target)[1]
+
+
+def writer_for(product: Path) -> QuietWriter | StealthWriter:
+    """The configuration space's writer for *product* (the tests' seam)."""
+    from fr.artifacts.paths import QUIET
+
+    return QuietWriter(product) if placement_of(product) == QUIET else StealthWriter(product)
+
+
+def _message(product: Path, what: str) -> str:
+    from fr.git_policy.templates import fr_message
+
+    return fr_message(product, f"chore(fr): move {what} to the configuration space")
+
+
+def pending_files(product: Path, space: ConfigSpace) -> dict[str, str]:
+    """Every file the migration would move into *space* (tree path -> text): the R9 kinds
+    at their old paths and, under quiet, the product's R11 `.fr/` files. A profiles file
+    goes at version 3 only when it is at version 2 already (its 1 -> 2 hop rewrites it in
+    the product first; one still at 1 follows by a pull request)."""
+    from fr.artifacts.paths import QUIET
+
+    clean = _clean_tracked(product)
+    out: dict[str, str] = {}
+    for entry in MOVED:
+        if not entry.across:
+            continue
+        for source in sorted(product.glob(entry.old)):
+            if not source.is_file() or source.relative_to(product).as_posix() not in clean:
+                continue
+            text = source.read_text()
+            if entry.kind == "profiles":
+                if _profiles_version(text) != 2:
+                    continue
+                text = with_stamp(text, 3)
+            out[space.tree_path(entry.below(source, product))] = text
+    if space.placement == QUIET:
+        for name in QUIET_FILES:
+            source = product / SPACE_DIR / name
+            if source.is_file() and source.relative_to(product).as_posix() in clean:
+                out[space.tree_path(name)] = source.read_text()
+    return out
+
+
+def _clean_tracked(product: Path) -> set[str]:
+    """The product's tracked files with no uncommitted change: only these ride along in
+    the creation, so an edit the operator has not committed is never pushed (the CLI-entry
+    gate's uncommitted veto holds that file's own hop back)."""
+
+    def lines(*args: str) -> set[str]:
+        done = subprocess.run(
+            ["git", "-C", str(product), *args], capture_output=True, text=True, check=False
+        )
+        return {line for line in done.stdout.splitlines() if line}
+
+    return lines("ls-files") - lines("diff", "--name-only", "HEAD")
+
+
+def _profiles_version(text: str) -> int:
+    import yaml
+
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return 0
+    if not isinstance(data, dict):
+        return 0
+    version = data.get("schema_version", 1)
+    return version if isinstance(version, int) and not isinstance(version, bool) else 0
+
+
+def ensure_space(product: Path, *, include: dict[str, str] | None = None) -> bool:
+    """Create the configuration branch when it does not exist (R10, decision
+    p2-phase4-migration-creates-config): the settings (the old switch's bytes, R6) and
+    every pending file, in one orphan commit, pushed before anything leaves the product.
+    Whether it created one. A configuration branch that exists already is checked for a
+    foreign one and left alone."""
+    from fr.config.space import config_space
+    from fr.settings import SettingsError
+
+    product = Path(product)
+    space = config_space(product)
+    writer = writer_for(product)
+    writer.fetch()
+    if writer.exists():
+        writer.refresh()
+        return False
+    settings = writer.legacy_settings()
+    if settings is None:
+        raise SettingsError(
+            f"placement {space.placement}: no switch to carry into the configuration space "
+            f"(the old {SETTINGS} is missing); run `fr settings init` first"
+        )
+    files = {space.tree_path(SETTINGS): settings, **pending_files(product, space)}
+    files.update(include or {})
+    writer.create(files, _message(product, f"{SPACE_DIR}/ ({len(files)} files)"))
+    writer.refresh()
+    return True
+
+
+def move_across(product: Path, source: Path, below: str, text: str | None = None) -> Path:
+    """Move *source* to *below* (a path below `.fr/`) in *product*'s configuration space
+    (R10): the destination is committed and pushed there first, and the product file is
+    removed only once it is on the configuration branch. Returns the destination's
+    working-tree path. Raises `SettingsError` (R12, a refused push) or `ProposedError`
+    (a pull request opened; nothing removed)."""
+    from fr.config.space import config_space
+    from fr.settings import SettingsError
+
+    product = Path(product)
+    space = config_space(product)
+    body = source.read_text() if text is None else text
+    tree_path = space.tree_path(below)
+    writer = writer_for(product)
+    writer.fetch()
+    if not writer.exists():
+        ensure_space(product, include={tree_path: body})
+    else:
+        at_tip = writer.tip(tree_path)
+        if at_tip is None:
+            url = writer.propose(tree_path, body, _message(product, below))
+            raise ProposedError(
+                f"{source} waits for review: fr proposed it as {tree_path} on the "
+                f"configuration branch in {url}. The product file stays until that merges; "
+                "then run `fr migrate artifacts --yes` again (S1 R10)"
+            )
+        if at_tip != body:
+            raise SettingsError(
+                f"both {source} and {tree_path} on the configuration branch exist, with "
+                "different contents: fr will not choose between them. Keep the one you "
+                "want (a pull request to the configuration branch, or delete the product "
+                "file) and run `fr migrate artifacts --yes` again (S1 R12)"
+            )
+        writer.refresh()
+    source.unlink()
+    return space.file(below)

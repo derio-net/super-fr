@@ -395,3 +395,56 @@ def forge_ref(client: object, repo: str) -> str | None:
         str(text), source=f"{repo}:{CONFIG_BRANCH}:{path}", branch=CONFIG_BRANCH
     )
     return None if found is None else CONFIG_BRANCH
+
+
+# --- the transition (R13): old paths read with a notice --------------------------------------
+
+LEGACY_PROFILES: Final = ".devcontainer/fr-profiles.yaml"
+"""Where `.fr/profiles.yaml` lived before S1 (R9)."""
+PROFILES: Final = "profiles.yaml"
+
+_OLD_NOTICED: set[str] = set()
+"""Old paths this process has already named (R13: one notice per command)."""
+
+
+def legacy(new: Path, old: Path) -> Path:
+    """The path a reader reads (R13): *new* when it exists or *old* does not; otherwise
+    *old*, after one stderr notice per process naming `fr migrate artifacts --yes`. The
+    refusal of old paths is the release `s1-refuse-old-paths` (R14) names."""
+    if new.exists() or not old.exists():
+        return new
+    key = str(old)
+    if key not in _OLD_NOTICED:
+        _OLD_NOTICED.add(key)
+        print(f"fr: {old} is at its old location; run fr migrate artifacts --yes", file=sys.stderr)
+    return old
+
+
+def located(root: Path, kind: str) -> Path:
+    """Where configuration kind *kind* is read for the product checkout *root*: a
+    `fr.artifacts.paths.CONFIG_KINDS` row or `profiles`, in the configuration space (R9),
+    or at its old path in the product checkout while only that one exists (R13)."""
+    from fr.artifacts.paths import LEGACY_CONFIG, config_kind_path
+
+    root = Path(root)
+    if kind == "profiles":
+        return legacy(config_space(root).file(PROFILES), root / LEGACY_PROFILES)
+    return legacy(config_kind_path(root, kind), root / LEGACY_CONFIG[kind])
+
+
+def guard_manifest(root: Path, path: Path, what: str) -> None:
+    """Refuse *what* when *path* (a manifest about to be read) lives in a quiet or stealth
+    configuration space whose branch is not protected (R7, plan finding
+    p5-exec-manifests-guard): a workflow's `kind: cli` argv and a strategy's commands are
+    executable configuration. Under `repo`, and for a product-checkout path (R13's old
+    location, reviewed with the product), nothing is asked."""
+    space = config_space(Path(root))
+    if space.placement == _REPO:
+        return
+    try:
+        Path(path).resolve().relative_to(space.checkout.resolve())
+    except ValueError:
+        return
+    from fr.config.protection import require_protected
+
+    require_protected(space, None, what)

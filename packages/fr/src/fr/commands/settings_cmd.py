@@ -309,7 +309,14 @@ def paths_answers(toplevel: Path | None, *, create: bool = True) -> dict[str, st
     """The resolver's answers as `FR_*` variables: the placement, its root, the feature,
     then one per `fr.artifacts.paths.KIND_DIRS` entry. `FR_PLACEMENT=none` alone
     outside a git repo. Raises `SettingsError` for a placement this fr cannot serve."""
-    from fr.artifacts.paths import KIND_DIRS, kind_dir, shell_name, space_for
+    from fr.artifacts.paths import (
+        CONFIG_KINDS,
+        KIND_DIRS,
+        config_kind_path,
+        kind_dir,
+        shell_name,
+        space_for,
+    )
 
     if toplevel is None:
         return {"FR_PLACEMENT": "none"}
@@ -319,7 +326,15 @@ def paths_answers(toplevel: Path | None, *, create: bool = True) -> dict[str, st
         "FR_ARTIFACT_ROOT": str(space.root),
         "FR_FEATURE": space.feature or "",
     }
-    out.update({shell_name(kind): str(kind_dir(kind, space)) for kind in KIND_DIRS})
+    # The configuration kinds name the configuration space under every placement (S1 R9).
+    out.update(
+        {
+            shell_name(kind): str(
+                config_kind_path(toplevel, kind) if kind in CONFIG_KINDS else kind_dir(kind, space)
+            )
+            for kind in KIND_DIRS
+        }
+    )
     return out
 
 

@@ -104,6 +104,8 @@ from fr.commands.triage_drive_loop import drive_log_attached as drive_log_attach
 from fr.commands.triage_drive_loop import wait_out as wait_out
 from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
 from fr.commands.triage_kanban_cmd import probe_item, try_load
+from fr.config.space import LEGACY_PROFILES, PROFILES
+from fr.config.space import rel as space_rel
 from fr.ghclient import MERGE_METHODS, BaseRules, GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_url
 from fr.isolation.adopt import (
@@ -124,7 +126,7 @@ from fr.labels import (
     held_gates,
     passed_gates,
 )
-from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolved_config
+from fr.models import default_models_path, load_models, repo_models_path, resolved_config
 from fr.services import ServicesError
 from fr.services.resolve import resolve_services
 from fr.triage import batch_closeout as collected
@@ -1423,7 +1425,7 @@ def _orchestrator(repo_root: Path | None) -> Callable[[str], str | None]:
     §A): the ORCHESTRATOR tier binding for a harness, repo-over-user, read from
     *repo_root*'s own `docs/superpowers/models.yaml` (the checkout the run will
     work in, not the dispatcher's cwd) when one is known."""
-    repo_cfg = load_models(repo_root / REPO_MODELS_REL) if repo_root else {}
+    repo_cfg = load_models(repo_models_path(repo_root)) if repo_root else {}
     user_cfg = load_models(default_models_path())
     config = resolved_config(repo_cfg=repo_cfg, user_cfg=user_cfg)
 
@@ -3642,7 +3644,8 @@ def batch_closeout_command(
 
 DEFAULT_INTERVAL = 120
 SERVICE_PATHS: tuple[str, ...] = (
-    ".devcontainer/fr-profiles.yaml",
+    LEGACY_PROFILES,
+    space_rel(PROFILES),
     *sorted({p for paths in CI_CONFIG_PATHS.values() for p in paths}),
 )
 """What `ci none` is resolved from: the services declaration and the CI configs."""

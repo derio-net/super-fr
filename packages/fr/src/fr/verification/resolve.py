@@ -27,6 +27,15 @@ PACKAGED_VERIFICATIONS_DIRNAME = "verifications"
 SHIPPED_ENV_VAR = "FR_SHIPPED_VERIFICATIONS_DIR"
 
 
+def repo_verifications_dir(repo_root: Path) -> Path:
+    """The repo's own strategies for the product checkout *repo_root*: `.fr/verifications/`
+    in its configuration space, or the old `docs/superpowers/verifications/` while only
+    that one exists (spec 2026-11-19-event-driven-a-la-carte R9, R13)."""
+    from fr.config.space import located
+
+    return located(Path(repo_root), "verification")
+
+
 def packaged_shipped_verifications_dir() -> Path | None:
     """The shipped strategies inside the `fr` wheel, or `None` (no such data)."""
     return _shipped.packaged_dir(PACKAGED_VERIFICATIONS_DIRNAME)
@@ -68,13 +77,19 @@ def resolved_strategy_path(
         raise StrategyError(f"{RESERVED!r} is reserved: it means no strategy, it never resolves")
 
     shipped = shipped_verification_dirs(shipped_root)
+    repo_dir = repo_verifications_dir(repo_root) if repo_root is not None else None
     candidates = (
-        _shipped.lookup_candidates(name, repo_root / REPO_VERIFICATIONS_REL, shipped)
-        if repo_root is not None
+        _shipped.lookup_candidates(name, repo_dir, shipped)
+        if repo_dir is not None
         else [d / f"{name}.yaml" for d in shipped]
     )
     for path in candidates:
         if path.is_file():
+            if repo_root is not None and path.parent == repo_dir:
+                from fr.config.space import guard_manifest
+
+                # A strategy's install and scenario argv are executable configuration (R7).
+                guard_manifest(repo_root, path, f"use verification strategy {name!r} from {path}")
             return path
 
     searched = " and ".join(str(p) for p in candidates)
@@ -95,7 +110,7 @@ def strategy_identity(
 
 
 def _label(directory: Path, repo_root: Path) -> str:
-    if directory == repo_root / REPO_VERIFICATIONS_REL:
+    if directory == repo_verifications_dir(repo_root):
         return "repo"
     if directory == packaged_shipped_verifications_dir():
         return "wheel"
@@ -113,5 +128,5 @@ def list_strategies(repo_root: Path, *, shipped_root: Path | None = None) -> lis
     shipped = shipped_verification_dirs(shipped_root)
     return [
         (name, _label(directory, repo_root))
-        for name, directory in _shipped.listing(repo_root / REPO_VERIFICATIONS_REL, shipped)
+        for name, directory in _shipped.listing(repo_verifications_dir(repo_root), shipped)
     ]

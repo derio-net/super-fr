@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from fr.artifacts.paths import KIND_DIRS
-from fr.config.space import SPACE_DIR
+from fr.config.space import LEGACY_PROFILES, PROFILES, SPACE_DIR, rel
 from fr.ghclient import UnsupportedForgeOperation
 from fr.journal.model import (
     JournalEntry,
@@ -52,7 +52,9 @@ if TYPE_CHECKING:
     from fr.spec import Step as TestPlanStep
 
 STAGE_PREFIX = "gate-stage-"
-PROFILES_FILE = ".devcontainer/fr-profiles.yaml"
+PROFILES_FILES = (LEGACY_PROFILES, rel(PROFILES))
+"""The profile declarations at both their paths (S1 R9, R13): a PR rewriting either never
+brings a privileged profile up."""
 ARCHIVED_JOURNALS = KIND_DIRS["journal-archived"]
 FIRST_PUSHED_STAGE = 3  # the ops branch holds only default-branch code from the rebase on
 GATE_DIR_ENV = "FR_OPS_GATE_DIR"
@@ -687,7 +689,7 @@ def stage_1(gate: Gate) -> None:
             "nothing was brought up",
             code=2,
         )
-    pinned = [f".devcontainer/{t.profile}", PROFILES_FILE]
+    pinned = [f".devcontainer/{t.profile}", *PROFILES_FILES]
     changed = gate.host.changed_paths(default_ref, head, pinned)  # the PR's own diff
     if changed:  # p4-r1: never bring up a privileged profile the PR itself rewrote
         raise StageFailed(

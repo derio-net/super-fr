@@ -216,9 +216,10 @@ see the module docstring."""
 def _workflow_issues(repo_root: Path) -> list[ValidationIssue]:
     from fr.workflow.check import check_workflow
     from fr.workflow.model import WorkflowError, parse_manifest
+    from fr.workflow.resolve import repo_workflows_dir
 
     out: list[ValidationIssue] = []
-    for path in sorted((repo_root / WORKFLOWS_REL).glob("*.yaml")):
+    for path in sorted(repo_workflows_dir(repo_root).glob("*.yaml")):
         if not path.is_file():
             continue
         try:
