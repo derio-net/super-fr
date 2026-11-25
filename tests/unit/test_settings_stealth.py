@@ -277,3 +277,48 @@ def test_up_refuses_to_adopt_a_foreign_config_branch(tmp_path: Path, shape: str)
     message = str(caught.value)
     assert "main-config" in message
     assert ("shares history" in message) == (shape == "product-history")
+
+
+def test_a_half_initialised_stealth_target_is_finished_by_sync(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Lens review l-errors-r1 under stealth: `init --stealth` pushed `<branch>-config`, then
+    the tracking repo refused `<branch>`. The retry names the sync; the sync's preview shows
+    the absent old file, and `--yes --expect <tip>` lands it."""
+    from fr.cli import app
+
+    target, track = stealth_pair(tmp_path)
+    hook = track / "hooks" / "pre-receive"
+    hook.write_text(
+        '#!/bin/sh\nwhile read old new ref; do\n  [ "$ref" = refs/heads/main ] && exit 1\n'
+        "done\nexit 0\n"
+    )
+    hook.chmod(0o755)
+    monkeypatch.chdir(target)
+    env = {**os.environ, "FR_REPO_ROOT": str(target)}
+    init = ["settings", "init", "--stealth", f"{track}@main"]
+    first = CliRunner().invoke(app, init, env=env)
+    assert first.exit_code == 2, first.output
+    rel = "local--origin/settings.yaml"
+    assert rel not in tracked_files(track)
+    assert "local--origin/.fr/settings.yaml" in tracked_files(track, "main-config")
+    hook.unlink()
+
+    retry = CliRunner().invoke(app, init, env=env)
+    assert retry.exit_code == 2
+    flat = " ".join(retry.output.split())
+    assert "fr settings sync" in flat and "fr isolation up --stealth" in flat, retry.output
+
+    state = _up(target, track)
+    env = {**os.environ, "FR_REPO_ROOT": str(state.worktree)}
+    monkeypatch.chdir(state.worktree)
+    tip = git(track, "rev-parse", "main-config").strip()
+    preview = CliRunner().invoke(app, ["settings", "sync"], env=env)
+    assert preview.exit_code == 0, preview.output
+    assert "absent" in preview.output and tip in preview.output
+    assert rel not in tracked_files(track)
+    done = CliRunner().invoke(app, ["settings", "sync", "--yes", "--expect", tip], env=env)
+    assert done.exit_code == 0, done.output
+    assert git(track, "show", f"main:{rel}") == git(
+        track, "show", "main-config:local--origin/.fr/settings.yaml"
+    )

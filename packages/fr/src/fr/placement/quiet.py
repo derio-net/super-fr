@@ -313,11 +313,17 @@ class SyncPlan:
     file blob, its first-parent commits since the old copy's version (newest first: sha,
     second-parent sha or "", subject, whether that second parent is the tip of a fetched
     `fr-config-change/*` branch), and the state. The label is information for the
-    operator, never an authorization: only the operator's `--yes --expect <tip>` is."""
+    operator, never an authorization: only the operator's `--yes --expect <tip>` is.
+
+    `absent` (lens review l-errors-r1): the configuration branch holds the switch and the
+    old copy is not there at all, the state a write that stopped between the two pushes
+    leaves (`fr settings init` pushed the configuration branch, then origin refused the
+    old one). Its commits are the configuration branch's whole first-parent history (up
+    to the history limit), and `--yes --expect <tip>` lands the old copy from that tip."""
 
     new_at: str
     old_at: str
-    state: str  # "in-step" | "lags" | "mismatch" | "none"
+    state: str  # "in-step" | "lags" | "mismatch" | "absent" | "none"
     commits: tuple[tuple[str, str, str, bool], ...] = ()
     text: str | None = None
     tip: str = ""
@@ -373,6 +379,10 @@ def sync_plan(root: Path) -> SyncPlan:
     new, old = switch_texts(root)
     new_at = f"{_SOURCE} ({new[0][:12]})" if new else f"{_SOURCE} (absent)"
     old_at = f"{_LEGACY_SOURCE} ({old[0][:12]})" if old else f"{_LEGACY_SOURCE} (absent)"
+    if new is not None and old is None and parse_switch_text(new[1]) is not None:
+        tip, blob = new[0], _blob(root, _SOURCE) or ""
+        commits = changes_since(root, paths.SWITCH_REF, paths.SWITCH_SETTINGS, "")
+        return SyncPlan(new_at, old_at, "absent", commits, new[1], tip, blob)
     if new is None or old is None:
         return SyncPlan(new_at, old_at, "none")
     tip, blob = new[0], _blob(root, _SOURCE) or ""
@@ -386,6 +396,24 @@ def sync_plan(root: Path) -> SyncPlan:
     return SyncPlan(new_at, old_at, "lags", commits, new[1], tip, blob)
 
 
+def half_written(root: Path) -> SyncPlan | None:
+    """The `absent` sync plan when origin's `fr-config` holds the quiet switch and the old
+    copy on `fr` is missing (a write that stopped between its two pushes), else None.
+    Fetches like the preview; writes nothing."""
+    plan = sync_plan(root)
+    return plan if plan.state == "absent" else None
+
+
+def finish_refusal(command: str, plan: SyncPlan) -> SettingsError:
+    """What a command says when it meets a half-written switch (lens review l-errors-r1):
+    the sync that finishes it, previewed first."""
+    return SettingsError(
+        f"{command}: {plan.new_at} holds the switch but {plan.old_at} is missing: an "
+        "earlier write stopped before the old copy, which an older fr reads. Finish it: "
+        f"run `{SYNC_COMMAND}` to preview it, then `{SYNC_COMMAND} --yes --expect {plan.tip}`"
+    )
+
+
 def sync_legacy(root: Path, *, expect: str | None) -> SyncPlan:
     """`fr settings sync --yes --expect <tip>` under quiet: fetch, refuse unless the tip is
     *expect* and the old copy lags, then write it with `write_legacy`."""
@@ -393,7 +421,7 @@ def sync_legacy(root: Path, *, expect: str | None) -> SyncPlan:
     plan = sync_plan(root)
     if plan.state == "mismatch":
         raise mismatch_refusal("the two quiet switches", plan.new_at, plan.old_at)
-    if plan.state == "lags" and plan.text is not None:
+    if plan.state in ("lags", "absent") and plan.text is not None:
         refused = expect_refusal(plan, expect)
         if refused is not None:
             raise refused

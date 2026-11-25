@@ -946,11 +946,16 @@ def sync_plan_target(root: Path, ref: StealthRef, target: str) -> Any:
     ensure_worktree(root, cref)
     network(["git", "fetch", "--quiet", "--no-tags", "--prune", "origin", CHANGE_REFSPEC], clone)
     new_text, old_text = target_settings_texts(root, ref, target)
-    if new_text is None or old_text is None:
+    if new_text is None:
         return SyncPlan(new_at, old_at, "none")
     tip = _git(clone, "rev-parse", _remote_ref(cref)).stdout.strip()
     blob = _blob(clone, f"{_remote_ref(cref)}:{new_rel}") or ""
     new_at, old_at = f"{new_at} ({tip[:12]})", f"{old_at}"
+    if old_text is None:
+        # lens review l-errors-r1: a write stopped between its two pushes; the old file
+        # follows from the tip the operator checks (`--yes --expect <tip>`)
+        commits = changes_since(clone, _remote_ref(cref), new_rel, "")
+        return SyncPlan(new_at, f"{old_at} (absent)", "absent", commits, new_text, tip, blob)
     if new_text == old_text:
         return SyncPlan(new_at, old_at, "in-step", tip=tip, blob=blob)
     old_blob = _blob(wt, f"{_remote_ref(ref)}:{old_rel}")
@@ -968,7 +973,7 @@ def sync_legacy_target(root: Path, ref: StealthRef, target: str, *, expect: str 
     plan = sync_plan_target(root, ref, target)
     if plan.state == "mismatch":
         raise mismatch_refusal("the target's two settings files", plan.new_at, plan.old_at)
-    if plan.state == "lags" and plan.text is not None:
+    if plan.state in ("lags", "absent") and plan.text is not None:
         refused = expect_refusal(plan, expect)
         if refused is not None:
             raise refused

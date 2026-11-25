@@ -141,6 +141,12 @@ def init_quiet(root: Path) -> str:
         probe = git_answer(root, "ls-remote", "--exit-code", "origin", QUIET_REF, CONFIG_REF)
         if probe.returncode == 0 and _origin_has_only_old_switch(root, probe.stdout):
             return _create_from_old_switch(root)
+        if probe.returncode == 0 and _origin_has_only_new_switch(probe.stdout):
+            from fr.placement.quiet import finish_refusal, half_written
+
+            plan = half_written(root)
+            if plan is not None:
+                raise finish_refusal("fr settings init --quiet", plan)
         for ref, name in ((QUIET_REF, QUIET_BRANCH), (CONFIG_REF, CONFIG_BRANCH)):
             if git_answer(root, "rev-parse", "--verify", "--quiet", ref).returncode == 0:
                 # p3-r9: the root commit made here is unrelated to any existing local
@@ -197,6 +203,16 @@ def _origin_has_only_old_switch(root: Path, listing: str) -> bool:
     return _read_legacy(root) is not None
 
 
+def _origin_has_only_new_switch(listing: str) -> bool:
+    """*listing* (`ls-remote origin fr fr-config`) names `fr-config` alone: maybe a switch
+    whose old copy was never pushed (lens review l-errors-r1; `quiet.half_written` reads
+    it)."""
+    from fr.placement.quiet import CONFIG_REF
+
+    heads = {line.split("\t", 1)[1].strip() for line in listing.splitlines() if "\t" in line}
+    return heads == {CONFIG_REF}
+
+
 def _create_from_old_switch(root: Path) -> str:
     """Create `fr-config` holding the old switch's bytes (`quiet.ensure_config_branch`)."""
     from fr.placement.quiet import CONFIG_BRANCH, QUIET_BRANCH, ensure_config_branch
@@ -236,6 +252,18 @@ def init_stealth(root: Path, text: str) -> str:
     if stealth._remote_has(cref, root):
         stealth.ensure_worktree(root, cref)
     new, old = stealth.target_settings_texts(root, ref, target)
+    if new is not None and old is None:
+        # lens review l-errors-r1: an earlier init pushed the configuration branch and
+        # stopped before the old file; `fr settings sync` (in a stealth workspace) lands it
+        from fr.placement.quiet import SYNC_COMMAND
+
+        raise SettingsError(
+            f"fr settings init --stealth: {cref.text} holds {target}/{stealth.TARGET_SETTINGS} "
+            f"but {ref.text} has no {target}/{stealth.LEGACY_TARGET_SETTINGS}: an earlier "
+            "write stopped before the old file, which an older fr reads. Finish it from a "
+            f"stealth workspace: `fr isolation up --stealth {ref.text} --branch <branch>`, "
+            f"then `{SYNC_COMMAND}` to preview it and `{SYNC_COMMAND} --yes --expect <tip>`"
+        )
     if new is not None:
         raise SettingsError(
             f"fr settings init --stealth: {cref.text} already holds {target}/"
@@ -383,6 +411,8 @@ def _sync_placement(root: Path) -> str | None:
     new, old = quiet.switch_texts(root)
     if new is not None and old is not None:
         return "quiet"
+    if new is not None and quiet.parse_switch_text(new[1]) is not None:
+        return "quiet"  # the old copy is absent: `sync` offers to land it (l-errors-r1)
     return outside_repo(root)
 
 
@@ -476,10 +506,17 @@ def sync_cmd(
             err=True,
         )
         raise typer.Exit(2)
-    typer.echo(
-        "the configuration branch moved since the old copy's version (first parent, newest "
-        "first; the label is information, not a review: check the shas):"
-    )
+    if plan.state == "absent":
+        typer.echo(
+            "the old copy is absent (a write stopped before it); fr can write it from the "
+            "configuration branch's tip. Its commits (first parent, newest first; the label "
+            "is information, not a review: check the shas):"
+        )
+    else:
+        typer.echo(
+            "the configuration branch moved since the old copy's version (first parent, "
+            "newest first; the label is information, not a review: check the shas):"
+        )
     for sha, second, subject, merged in plan.commits:
         how = (
             "merge of fr-config-change/ (its tip is the second parent)"

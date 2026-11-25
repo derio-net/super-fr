@@ -225,7 +225,9 @@ root `settings.yaml` on `fr`. So fr keeps that old copy identical to the new
 fr refuses to act until you bring it in step. `fr settings sync` shows both copies and the
 commits between them. `fr settings sync --yes --expect <tip>` then writes the old copy from
 the tip you checked. fr writes it without `--expect` only when the forge protects the
-configuration branch.
+configuration branch. A write can also stop half way: fr pushed the new copy, and then
+the remote refused the old one. The same sync finishes it. Its preview says the old copy
+is absent, and `fr settings init` names that sync when you run it again.
 
 **Configuration that runs commands.** Some files run commands or decide what merges: the
 candidate install, the command keys of `.fr/triage.yaml`, `.fr/ops.yaml`, and three keys of

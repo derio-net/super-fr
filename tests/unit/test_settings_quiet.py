@@ -189,3 +189,53 @@ def test_init_quiet_on_an_old_quiet_repo_creates_fr_config_from_the_old_switch(
     assert git(origin, "show", f"{sha}:.fr/settings.yaml") == QUIET
     assert git(origin, "rev-parse", "refs/heads/fr").strip() == fr_before
     assert load_settings(repo).ref == "refs/remotes/origin/fr-config"
+
+
+def _refuse_pushes_of(origin: Path, ref: str) -> Path:
+    hook = origin / "hooks" / "pre-receive"
+    hook.write_text(
+        "#!/bin/sh\nwhile read old new ref; do\n"
+        f'  [ "$ref" = "{ref}" ] && {{ echo "refusing $ref" >&2; exit 1; }}\n'
+        "done\nexit 0\n"
+    )
+    hook.chmod(0o755)
+    return hook
+
+
+def test_a_half_initialised_quiet_repo_is_finished_by_sync(repo: Path, tmp_path: Path) -> None:
+    """Lens review l-errors-r1: `fr settings init --quiet` pushed `fr-config`, then origin
+    refused `fr`. The retry must not dead-end: init names the sync, whose preview shows the
+    absent old copy and whose `--yes --expect <tip>` lands it, so an older fr reads quiet."""
+    from fr.placement.quiet import _read_legacy
+
+    origin = tmp_path / "origin.git"
+    hook = _refuse_pushes_of(origin, "refs/heads/fr")
+    first = _fr(repo, "settings", "init", "--quiet")
+    assert first.exit_code == 2, first.output
+    assert git(origin, "branch", "--list", "fr-config").strip()
+    assert not git(origin, "branch", "--list", "fr").strip()
+    hook.unlink()
+
+    retry = _fr(repo, "settings", "init", "--quiet")
+    assert retry.exit_code == 2
+    tip = git(origin, "rev-parse", "refs/heads/fr-config").strip()
+    flat = " ".join(retry.output.split())
+    assert "fr settings sync" in flat and "--yes --expect" in flat, retry.output
+
+    preview = _fr(repo, "settings", "sync")
+    assert preview.exit_code == 0, preview.output
+    assert "absent" in preview.output and tip in preview.output
+    assert f"fr settings sync --yes --expect {tip}" in preview.output
+    assert not git(origin, "branch", "--list", "fr").strip()  # the preview writes nothing
+
+    stale = _fr(repo, "settings", "sync", "--yes", "--expect", "0" * 40)
+    assert stale.exit_code == 2 and not git(origin, "branch", "--list", "fr").strip()
+
+    done = _fr(repo, "settings", "sync", "--yes", "--expect", tip)
+    assert done.exit_code == 0, done.output
+    assert git(origin, "show", "fr:settings.yaml") == git(
+        origin, "show", "fr-config:.fr/settings.yaml"
+    )
+    legacy = _read_legacy(repo)
+    assert legacy is not None and legacy.settings.placement == "quiet"
+    assert "in step" in _fr(repo, "settings", "sync").output
