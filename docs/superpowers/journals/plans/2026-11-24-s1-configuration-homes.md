@@ -258,3 +258,8 @@ Review p2-r2. fr refuses to adopt or push a `fr-config` / `<branch>-config` whos
 ### p2-phase4-migration-creates-config · discovery · The migration creates the configuration branch before removing product files (phase 4)
 
 Decision p2-create-at-init-and-migration: entering a workspace no longer creates `fr-config` / `<branch>-config`, so phase 4's migration is where every existing quiet repo and stealth target gets one. It must create the configuration branch (an orphan whose tree is `.fr/`, stealth `<target-dir>/.fr/`; `quiet.ensure_config_branch` / `write_settings` do the settings file) and push it BEFORE it removes any product file (R10), accept one that already holds identical settings (a `fr settings init` ran first, so the old file is R6's legacy copy and not a second file for R12), and refuse a foreign one (`quiet.refuse_foreign_config`). This replaces p2-phase4-settings-already-moved, whose premise (up created the branch) no longer holds.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-phase3-sync-needs-protection created=2026-11-25T03:20:28+00:00 phase=3 -->
+### p2-phase3-sync-needs-protection · discovery · fr settings sync may run without the operator only on a forge-protected configuration branch (phase 3)
+
+Decision p2-config-changes-by-pr: no reader writes the old settings copy, because on an unprotected `fr-config` a direct push looks like a merged review. Once phase 3's `require_protected` / branch-protection reader exists, fr may bring the old copy in step without `fr settings sync --yes` ONLY when the configuration branch is forge-protected with a pull-request rule; an unprotected or unreadable answer keeps requiring the explicit command.
