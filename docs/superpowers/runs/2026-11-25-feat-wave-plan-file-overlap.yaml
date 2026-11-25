@@ -3,7 +3,7 @@ run: 2026-11-25-feat-wave-plan-file-overlap
 workflow: fr-goal@1
 branch: feat/wave-plan-file-overlap
 started: '2026-11-25T12:55:25+00:00'
-cursor: journal-check
+cursor: lens-review
 steps:
   brainstorm:
     state: done
@@ -97,7 +97,11 @@ steps:
           visual: none
           findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-25T15:50:09+00:00'
+    exit: 0
+    stdout: |
+      1 out-of-scope finding(s): p1-r5
   lens-review:
     state: pending
   deliver:
