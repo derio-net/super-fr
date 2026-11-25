@@ -76,11 +76,17 @@ rows:
       - super-fr:tests/unit/test_hooks_isolation_required.py
       - super-fr:tests/unit/test_isolation_decision_core.py
       - super-fr:tests/unit/test_config_change_pr.py
+      - super-fr:tests/unit/test_isolation_decision_cases.py
+      - super-fr:tests/unit/test_hermes_isolation_hook_edits.py
+      - super-fr:packages/fr-opencode-plugin/test/decision-cases.test.ts
+      - super-fr:packages/fr-opencode-plugin/test/marker.test.ts
       int:
       - super-fr:tests/integration/test_scenarios.py#test_config_homes
     status: ci
-    notes: unit tests in CI (phases 1-6); candidate scenario tests/scenarios/config-homes.sh
-      runs in CI's scenario tier and is the deliver walk
+    notes: 'Edit gate on every harness: the shared decision cases run by the bash library
+      (test_isolation_decision_cases.py), the OpenCode plugin (decision-cases.test.ts,
+      marker.test.ts, CI opencode-plugin-test) and Hermes end to end (test_hermes_isolation_hook_edits.py);
+      plus the Python readers and the config-homes walk (l-tests-r2).'
     verify: candidate
     scenario: tests/scenarios/config-homes.sh
   - id: s1-executable-config-protection
