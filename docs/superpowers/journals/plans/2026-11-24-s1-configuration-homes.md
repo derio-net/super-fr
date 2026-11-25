@@ -740,3 +740,8 @@ _config_checkout: quiet's fr-config worktree (HEAD refs/heads/fr-config at fr.co
 ### p4-stealth-keeps-product-file · decision · Under stealth the migration keeps the product file; supersedes discovery p4-stealth-product-deletion (p4-r6) (phase 4)
 
 Relocating hops declare SchemaMigration.keeps (stealth): the file goes to the tracking repo's <branch>-config, the product file stays (a v1 profiles file is restored to its committed bytes after fr's in-flight rewrite), fr prints once 'git -C <product> rm -- <rel>', commit_migration stages nothing for it, and a kept copy whose bytes the configuration branch's fetched tip holds is not owned by its kind (fr.config.migrate.moved_owns/kept_copy), so it never reads as stale. Spec R10 amended. Discovery p4-stealth-product-deletion is superseded. Tests: test_config_stealth_keeps_product.py.
+
+<!-- fr:journal kind=decision scope=plan id=p4-quiet-worktree-current created=2026-11-25T08:03:46+00:00 phase=4 -->
+### p4-quiet-worktree-current · decision · A quiet move refuses a dirty or diverged fr-config worktree before any unlink (p4-r7) (phase 4)
+
+QuietWriter.refresh calls fr.placement.quiet.require_current_config_worktree: after the fast-forward, the worktree must be exactly origin/fr-config with nothing uncommitted or untracked; otherwise SettingsError naming the path, the state and the remedy (PR to fr-config, stash -u, or reset --keep). Only the migration writer refuses; other readers keep the silent fast-forward. Tests: test_config_quiet_worktree_state.py.
