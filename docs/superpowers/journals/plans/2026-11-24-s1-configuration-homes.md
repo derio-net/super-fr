@@ -923,3 +923,46 @@ the three trees and their copies are now one tree and one copy, written by one s
 ### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
 
 fr._shipped.shipped_dirs(kind) is the one walk every resolver calls; the per-kind env/plugin_rel/packaged arguments it took before are derived from the kind, so nothing duplicated remained
+
+<!-- fr:journal kind=review scope=plan id=review-p5 created=2026-11-25T09:09:22+00:00 phase=5 -->
+### review-p5 · review · Phase 5 review (shipped defaults in one tree, one sync, one tripwire, one resolver order) (phase 5)
+
+Independent reviewer read db114e4..HEAD against §F, R15-R17 and the amended R7/R13. Resolver order
+matches the spec; only the repo candidate goes through fr.config.degraded, so the degraded fallback
+lands on env/wheel/marketplace, never a repo path. Built and installed the wheel in an empty HOME:
+4 lenses, 4 verifications and 2 workflows resolve from it; install.sh delivers the whole defaults/
+tree. Three in-scope findings, fixed in 6082427e6..ad4930512 (acceptance check back from 64 to 58
+errors, none naming the old tripwire); one out of scope, carried by owed s1-refuse-old-paths.
+Selection 2412 passed / 9 skipped; ruff, mypy, sync-defaults --check clean.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1 created=2026-11-25T09:09:22+00:00 phase=5 state=open review_scope=in -->
+### p5-r1 · finding [open] (reviewer: in scope) · six acceptance rows cited the deleted test_tripwire_shipped_workflows.py, adding six unresolved-ref errors (phase 5)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2 created=2026-11-25T09:09:22+00:00 phase=5 state=open review_scope=in -->
+### p5-r2 · finding [open] (reviewer: in scope) · dead per-kind shipped constants and a helper with no production caller (phase 5)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3 created=2026-11-25T09:09:22+00:00 phase=5 state=open review_scope=in -->
+### p5-r3 · finding [open] (reviewer: in scope) · sync-defaults-data printed wrote for a deleted stale copy; the lens not-found error omitted FR_SHIPPED_LENSES_DIR (phase 5)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4 created=2026-11-25T09:09:22+00:00 phase=5 state=open review_scope=out -->
+### p5-r4 · finding [open] (reviewer: out of scope) · about 20 test sites still set the old FR_SHIPPED_*_DIR variables (phase 5)
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1-resolved created=2026-11-25T09:09:22+00:00 phase=5 state=fixed resolves=p5-r1 -->
+### p5-r1-resolved · finding [fixed] · resolves p5-r1: six acceptance rows cited the deleted test_tripwire_shipped_workflows.py, adding six unresolved-ref errors (phase 5)
+
+6082427e6..e6826bcbd: fr acceptance amend drop-level/add-level on the six rows, repointed at named tests in test_tripwire_shipped_defaults.py; fr acceptance check errors 64 -> 58, none for the old file. Three notes still name the old file because amend cannot reword a note; left for the next status move.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r2-resolved created=2026-11-25T09:09:22+00:00 phase=5 state=fixed resolves=p5-r2 -->
+### p5-r2-resolved · finding [fixed] · resolves p5-r2: dead per-kind shipped constants and a helper with no production caller (phase 5)
+
+ad4930512 and 0455c728a: the five dead constants and default_shipped_workflows_dir() removed, the lens message builds its path from _shipped.PACKAGED_DEFAULTS_DIRNAME.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r3-resolved created=2026-11-25T09:09:22+00:00 phase=5 state=fixed resolves=p5-r3 -->
+### p5-r3-resolved · finding [fixed] · resolves p5-r3: sync-defaults-data printed wrote for a deleted stale copy; the lens not-found error omitted FR_SHIPPED_LENSES_DIR (phase 5)
+
+23e62fc17 and 0455c728a: the sync prints removed <path>, the lens error names both $FR_SHIPPED_DEFAULTS_DIR/lenses and $FR_SHIPPED_LENSES_DIR, each asserted by a test.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r4-resolved created=2026-11-25T09:09:22+00:00 phase=5 state=open resolves=p5-r4 out_of_scope=true -->
+### p5-r4-resolved · finding [out-of-scope] · resolves p5-r4: about 20 test sites still set the old FR_SHIPPED_*_DIR variables (phase 5)
+
+The old variables are honoured until R14's release by design; those tests set them deliberately or incidentally and move when owed entry s1-refuse-old-paths ends the variables.
