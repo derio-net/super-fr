@@ -411,7 +411,8 @@ def test_gc_reap_preserves_into_the_workspaces_own_repo(tmp_path: Path) -> None:
     other = tmp_path / "other"
     other.mkdir()
     repo_b, runner, _, st = _upped(other)
-    _write_run(st.worktree, "r1")  # active, committed and landed
+    # active (pending, not running: gc keeps a running run, R9), committed and landed
+    _write_run(st.worktree, "r1", states={"brainstorm": "done", "plan": "pending"})
     _commit(st.worktree, "cursor")
     _git(st.worktree, "push", "-q", "origin", f"{BRANCH}:main")  # landed → reapable
     repo_a = make_repo(tmp_path)
