@@ -321,3 +321,9 @@ run_kind: candidate
 ### q-legacy-sync-after-pr · decision · After a reviewed configuration change merges, the old settings copy is brought in step only by fr settings sync --yes
 
 R6 and §B amended (plan decision p2-config-changes-by-pr, revised after a security review). Changes after creation go through a pull request from `fr-config-change/<slug>`, which writes no old copy, so after the merge the old file lags. Readers (fr and the hooks) still refuse then, since a push straight to an unprotected configuration branch looks the same; the refusal says the old file is an earlier first-parent version and names `fr settings sync` (preview of both refs and the commits between, each marked whether it merged a `fr-config-change/*` branch) and `fr settings sync --yes`, which writes the old file with the robust write (fetch first, retry a refused push). Any other difference names both refs and says neither matches.
+
+<!-- fr:journal kind=owed scope=spec id=s1-refuse-old-paths created=2026-11-25T06:36:00+00:00 -->
+### s1-refuse-old-paths · owed · Refuse the old configuration paths and drop the legacy settings copy
+
+S1 (R13, R6) reads old paths with a notice and writes the legacy settings file; the release after S1's minor turns both into a refusal (fr.config.space.legacy, write_settings).
+owed_key: issue:derio-net/super-fr#1653
