@@ -10443,6 +10443,14 @@ closeouts:
   - "D\tdocs/superpowers/runs/2026-11-19-feat-batch-consumer-followups.yaml"
   - "D\tdocs/superpowers/specs/2026-11-19-consumer-followups-design.md"
   - "D\tdocs/superpowers/usage/2026-11-19-feat-batch-consumer-followups.yaml"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-25-2
+  branch: chore/closeout-2026-11-25-2
+  at: '2026-11-25T20:25:09.440927Z'
+  runner: herdr
+  handle: w3N:p3
+  planned:
+  - consumer-delivery
 queues:
 - repo: derio-net/super-fr
   wave: 22
