@@ -51,6 +51,63 @@ def _operator_git_identity() -> dict[str, str]:
 OPERATOR_GIT_IDENTITY = _operator_git_identity()
 
 
+def _real_home() -> Path:
+    """The operator's home from the password database, never from `$HOME`, which a test (or
+    this suite) may have pointed elsewhere."""
+    import pwd
+
+    return Path(pwd.getpwuid(os.getuid()).pw_dir)
+
+
+REAL_TRIAGE_CACHE = _real_home() / ".cache" / "fr" / "triage"
+"""The operator's real triage cache (spec 2026-11-19 R17): no test may add an entry to it."""
+
+
+def _listing(path: Path) -> frozenset[str]:
+    try:
+        return frozenset(p.name for p in path.iterdir())
+    except OSError:
+        return frozenset()
+
+
+def new_cache_entries(before: frozenset[str], after: frozenset[str]) -> list[str]:
+    """What the suite added to a directory listed before and after it ran."""
+    return sorted(after - before)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _session_home_off_the_operators_machine(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[None]:
+    """`HOME` is a session sandbox for the whole run (review p6-r10), set in `os.environ`
+    before any test runs: an `fr` child a test starts inherits it, and a test's
+    `monkeypatch.undo()` restores this sandbox, never the operator's home. The per-test
+    `_home_off_the_operators_machine` still gives each test a fresh one, and a test that
+    needs a specific `HOME` still sets its own. At session end the operator's real triage
+    cache (`REAL_TRIAGE_CACHE`, read from the password database) must hold no entry it did
+    not hold at the start."""
+    before = _listing(REAL_TRIAGE_CACHE)
+    sandbox = home_sandbox(
+        tmp_path_factory.mktemp("session-home"), OPERATOR_GIT_IDENTITY, OPERATOR_HOME
+    )
+    saved = {k: os.environ.get(k) for k in sandbox}
+    os.environ.update(sandbox)
+    try:
+        yield
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+    added = new_cache_entries(before, _listing(REAL_TRIAGE_CACHE))
+    assert not added, (
+        f"the suite added {', '.join(added)} to the operator's {REAL_TRIAGE_CACHE}: a test "
+        "reached the real triage cache. Remove what it added only after checking it is the "
+        "suite's, not live triage state"
+    )
+
+
 @pytest.fixture
 def repo_root() -> Path:
     return REPO_ROOT
