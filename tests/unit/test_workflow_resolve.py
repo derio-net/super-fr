@@ -144,7 +144,7 @@ def test_default_shipped_workflows_dir_falls_back_to_the_marketplace_clone_path(
     # out here, not just via the constant, so a drift between this
     # constant's VALUE and that convention still fails loud.
     assert str(result).endswith(
-        ".claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/workflows"
+        ".claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/defaults/workflows"
     )
 
 

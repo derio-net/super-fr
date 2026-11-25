@@ -72,8 +72,8 @@ def _read_strategy(root: Path) -> object:
     return resolved_strategy_path("candidate", root, shipped_root=root / "no-shipped").name
 
 
-WORKFLOW = (REPO / "plugins/super-fr/workflows/fr-goal-light.yaml").read_text()
-STRATEGY = (REPO / "plugins/super-fr/verifications/candidate.yaml").read_text()
+WORKFLOW = (REPO / "plugins/super-fr/defaults/workflows/fr-goal-light.yaml").read_text()
+STRATEGY = (REPO / "plugins/super-fr/defaults/verifications/candidate.yaml").read_text()
 
 READERS = {
     "models": (

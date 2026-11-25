@@ -139,7 +139,7 @@ def test_check_workflow_refuses_a_verification_that_does_not_resolve(tmp_path: P
 
 def test_the_shipped_shapes_declare_candidate_and_it_resolves() -> None:
     for name in ("fr-goal", "fr-goal-light"):
-        path = REPO_ROOT / "plugins" / "super-fr" / "workflows" / f"{name}.yaml"
+        path = REPO_ROOT / "plugins" / "super-fr" / "defaults" / "workflows" / f"{name}.yaml"
         m = parse_manifest(path.read_text())
         assert m.verification == "candidate", name
         assert check_workflow(m, repo_root=REPO_ROOT) == [], name

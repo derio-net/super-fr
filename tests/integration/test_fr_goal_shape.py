@@ -4,7 +4,7 @@ Three things this phase's acceptance row (`workflow-shape-selection`) needs
 proven together, not in isolation:
 
 1. `resolve_workflow("fr-goal", repo_root)` actually finds the SHIPPED
-   manifest at `plugins/super-fr/workflows/fr-goal.yaml` — the real file on
+   manifest at `plugins/super-fr/defaults/workflows/fr-goal.yaml` — the real file on
    disk in this repo, not a fixture standing in for it.
 2. That manifest's step ids, in order, are exactly the step ids narrated by
    `plugins/super-fr/skills/fr-goal/SKILL.md`'s numbered headers — the skill
@@ -38,7 +38,7 @@ from tests.unit.requirements_support import seed_requirements, write_phase_split
 from tests.unit.spec_review_support import spec_review_evidence
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SHIPPED_WORKFLOWS_DIR = REPO_ROOT / "plugins" / "super-fr" / "workflows"
+SHIPPED_WORKFLOWS_DIR = REPO_ROOT / "plugins" / "super-fr" / "defaults" / "workflows"
 SKILL_MD = REPO_ROOT / "plugins" / "super-fr" / "skills" / "fr-goal" / "SKILL.md"
 
 # `\d+[a-z]?`: a step added between two numbered ones takes a letter (`7a.

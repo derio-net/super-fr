@@ -5371,7 +5371,12 @@ def test_check_reports_an_orchestrator_open_dispatch_without_counting_it_unclaim
 
 
 _SHIPPED_FR_GOAL = (
-    Path(__file__).resolve().parents[2] / "plugins" / "super-fr" / "workflows" / "fr-goal.yaml"
+    Path(__file__).resolve().parents[2]
+    / "plugins"
+    / "super-fr"
+    / "defaults"
+    / "workflows"
+    / "fr-goal.yaml"
 )
 
 

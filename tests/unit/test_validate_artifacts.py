@@ -220,7 +220,7 @@ GOOD_WORKFLOW = (
     "workflow: fine\nschema: 1\nunit: run\nsteps:\n  - id: a\n    kind: cli\n    run: 'true'\n"
 )
 GOOD_STRATEGY = (
-    Path(__file__).resolve().parents[2] / "plugins/super-fr/verifications/candidate.yaml"
+    Path(__file__).resolve().parents[2] / "plugins/super-fr/defaults/verifications/candidate.yaml"
 ).read_text()
 
 

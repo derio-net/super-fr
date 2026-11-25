@@ -28,8 +28,8 @@ from tests.unit.settings_repo import git
 from tests.unit.test_config_protection_executors import SLUG, _quiet_with_config, _Rules
 
 REPO = Path(__file__).resolve().parents[2]
-LIGHT = (REPO / "plugins/super-fr/workflows/fr-goal-light.yaml").read_text()
-CANDIDATE = (REPO / "plugins/super-fr/verifications/candidate.yaml").read_text()
+LIGHT = (REPO / "plugins/super-fr/defaults/workflows/fr-goal-light.yaml").read_text()
+CANDIDATE = (REPO / "plugins/super-fr/defaults/verifications/candidate.yaml").read_text()
 MINE_LIGHT = LIGHT.replace("description: TDD", "description: REPO-OVERRIDE TDD")
 MINE_CANDIDATE = CANDIDATE.replace("description: Install", "description: REPO-OVERRIDE Install")
 PROFILES = (

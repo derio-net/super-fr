@@ -93,7 +93,7 @@ def test_the_shipped_deliver_brief_carries_the_settle_line(
     from fr.workflow.model import parse_manifest
 
     shape = parse_manifest(
-        (REPO_ROOT / "plugins" / "super-fr" / "workflows" / manifest).read_text()
+        (REPO_ROOT / "plugins" / "super-fr" / "defaults" / "workflows" / manifest).read_text()
     )
     (deliver,) = [s for s in shape.steps if s.id == "deliver"]
     git = ["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@example.com"]

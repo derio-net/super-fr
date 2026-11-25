@@ -15,8 +15,8 @@ from tests.unit.lens_review_support import at_lens_review
 from tests.unit.test_run_cli import _invoke
 
 REPO = Path(__file__).parents[2]
-SHIPPED = REPO / "plugins" / "super-fr" / "workflows"
-WHEEL = REPO / "packages" / "fr" / "src" / "fr" / "workflows"
+SHIPPED = REPO / "plugins" / "super-fr" / "defaults" / "workflows"
+WHEEL = REPO / "packages" / "fr" / "src" / "fr" / "defaults" / "workflows"
 
 
 @pytest.mark.parametrize("name", ["fr-goal", "fr-goal-light"])

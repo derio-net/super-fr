@@ -22,8 +22,8 @@ from tests.unit.test_placement_quiet import QUIET, push_fr_branch
 
 REPO = Path(__file__).resolve().parents[2]
 
-WORKFLOW = (REPO / "plugins/super-fr/workflows/fr-goal-light.yaml").read_text()
-STRATEGY = (REPO / "plugins/super-fr/verifications/candidate.yaml").read_text()
+WORKFLOW = (REPO / "plugins/super-fr/defaults/workflows/fr-goal-light.yaml").read_text()
+STRATEGY = (REPO / "plugins/super-fr/defaults/verifications/candidate.yaml").read_text()
 PROFILES_V2 = (
     "schema_version: 2\nprofiles:\n  dev:\n    purpose: dev\n    secrets: []\ndefault: dev\n"
     "forge:\n  type: github\nci:\n  type: github-actions\ntracking:\n  type: github\n"

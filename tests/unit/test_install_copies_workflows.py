@@ -1,11 +1,11 @@
 """Drift guard: shipped workflow manifests must survive install.sh's rsync
 (spec §4.A, Phase 11) — the "sibling" to `test_install_copies_rules.py` for
-`plugins/super-fr/workflows/`.
+`plugins/super-fr/defaults/workflows/`.
 
 Mechanically different from rules and the OpenCode skill mirror on purpose:
 those two are copied to a destination OUTSIDE `plugins/super-fr/` (`~/.claude
 /rules/`, `~/.config/opencode/skills/`), so install.sh needs an explicit
-per-file `cp`/loop and a test that greps for it. `plugins/super-fr/workflows/`
+per-file `cp`/loop and a test that greps for it. `plugins/super-fr/defaults/workflows/`
 lives INSIDE `plugins/super-fr/`, so it already rides the wholesale
 `$PLUGIN_ROOT/` -> `$MARKETPLACE_DIR/` rsync every other shipped file takes —
 there is no per-file line to grep for. What this file pins instead is that
@@ -26,7 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def _marketplace_rsync_line(install_text: str) -> str:
     """The one rsync populating $MARKETPLACE_DIR from $PLUGIN_ROOT — the
-    wholesale copy `plugins/super-fr/workflows/` rides. Located by its
+    wholesale copy `plugins/super-fr/defaults/workflows/` rides. Located by its
     destination variable rather than line number, so this test doesn't
     silently stop checking anything if the block moves."""
     m = re.search(r'rsync[\s\S]{0,200}?"\$PLUGIN_ROOT/"\s+"\$MARKETPLACE_DIR/"', install_text)
@@ -35,7 +35,9 @@ def _marketplace_rsync_line(install_text: str) -> str:
 
 
 def test_at_least_one_shipped_workflow_manifest_exists() -> None:
-    manifests = sorted((REPO_ROOT / "plugins" / "super-fr" / "workflows").glob("*.yaml"))
+    manifests = sorted(
+        (REPO_ROOT / "plugins" / "super-fr" / "defaults" / "workflows").glob("*.yaml")
+    )
     assert manifests, "no shipped workflow manifests found — expected at least fr-goal.yaml"
 
 
@@ -51,11 +53,11 @@ def test_the_marketplace_rsync_does_not_exclude_workflows() -> None:
 
 def test_marketplace_rsync_source_is_the_plugin_root_not_a_narrower_path() -> None:
     """`$PLUGIN_ROOT` must be the repo root (parent of `plugins/`), not e.g.
-    a single plugin's subtree — otherwise `plugins/super-fr/workflows/`
+    a single plugin's subtree — otherwise `plugins/super-fr/defaults/workflows/`
     would depend on which plugin the rsync targets, which install.sh's
     marketplace-directory copy does not do anywhere else."""
     install = (REPO_ROOT / "scripts" / "install.sh").read_text()
     assert 'PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"' in install, (
         "PLUGIN_ROOT must resolve to the repo root (scripts/.. ) — "
-        "if this changes, plugins/super-fr/workflows/ delivery must be re-verified"
+        "if this changes, plugins/super-fr/defaults/workflows/ delivery must be re-verified"
     )

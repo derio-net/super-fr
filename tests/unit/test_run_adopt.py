@@ -72,7 +72,7 @@ def _repo(tmp_path: Path, repo_root: Path) -> tuple[Path, Path]:
     shipped = tmp_path / "_shipped"
     shipped.mkdir()
     shutil.copy(
-        repo_root / "plugins" / "super-fr" / "workflows" / "fr-goal.yaml",
+        repo_root / "plugins" / "super-fr" / "defaults" / "workflows" / "fr-goal.yaml",
         shipped / "fr-goal.yaml",
     )
     return tmp_path, shipped
