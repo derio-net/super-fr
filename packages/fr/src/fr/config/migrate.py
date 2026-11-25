@@ -347,7 +347,7 @@ class QuietWriter:
         from fr.placement import quiet
 
         quiet._check_config_refs(self.product)
-        quiet.ensure_config_worktree(self.product)
+        quiet.require_current_config_worktree(self.product)
 
     def legacy_settings(self) -> str | None:
         from fr.placement import quiet

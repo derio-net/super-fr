@@ -811,6 +811,38 @@ def ensure_config_worktree(root: Path) -> Path | None:
     return path
 
 
+def require_current_config_worktree(root: Path) -> Path | None:
+    """The `fr-config` worktree, fast-forwarded to `origin/fr-config` and refused unless it
+    then IS that tip with no uncommitted or untracked file (review p4-r7). Readers read this
+    worktree, so a migration that moves a file into the configuration space refuses here,
+    before any product file leaves, rather than skip a fast-forward silently. None while
+    there is no `fr-config` (nothing to check)."""
+    path = ensure_config_worktree(root)
+    if path is None:
+        return None
+    dirty = _git(path, "status", "--porcelain", "--untracked-files=all").stdout.splitlines()
+    if dirty:
+        raise SettingsError(
+            f"placement quiet: the `{CONFIG_BRANCH}` worktree {path} has uncommitted changes "
+            f"({len(dirty)} path(s), e.g. {dirty[0].strip()}): fr reads that worktree, so it "
+            f"will not move configuration into it. Propose them as a pull request to "
+            f"`{CONFIG_BRANCH}`, or set them aside (`git -C {path} stash -u`), then run "
+            "`fr migrate artifacts --yes` again (S1 R10)"
+        )
+    head = _git(path, "rev-parse", "--verify", "--quiet", "HEAD").stdout.strip()
+    tip = _git(path, "rev-parse", "--verify", "--quiet", paths.SWITCH_REF).stdout.strip()
+    if head != tip:
+        raise SettingsError(
+            f"placement quiet: the `{CONFIG_BRANCH}` worktree {path} has diverged from "
+            f"{paths.SWITCH_REF} (HEAD {head[:12] or 'none'}, tip {tip[:12] or 'none'}): its "
+            f"commits are not on origin, and fr will not move configuration into it. Propose "
+            f"them as a pull request to `{CONFIG_BRANCH}`, or drop them "
+            f"(`git -C {path} reset --keep {paths.SWITCH_REF}`), then run "
+            "`fr migrate artifacts --yes` again (S1 R10)"
+        )
+    return path
+
+
 def _ensure_linked(root: Path, path: Path, branch: str, tracking: str) -> Path:
     """A linked worktree of *root* at *path* on *branch*, created from *tracking* (or the
     local branch), never with a force flag. Refuses a path that is there but is not it."""
