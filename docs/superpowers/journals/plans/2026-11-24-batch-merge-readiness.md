@@ -153,3 +153,56 @@ other_readiness is new code beside batch_readiness and _other_ready now delegate
 ### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
 
 the board change is additive (Card.readiness and Card.others); the hint cleanup is P2.T3.S3
+
+<!-- fr:journal kind=review scope=plan id=p2-review created=2026-11-25T04:44:56+00:00 phase=2 -->
+### p2-review · review · Phase 2 code review: one verdict function for board and queue holds (R4); 6 in-scope findings (phase 2)
+
+Reviewer confirmed R4 (board and queue read plan.queues[*].readiness from batch_readiness/other_readiness; equality test over six cases; _other_ready admission unchanged from main), R6 facts and the collection-time line, R7 verdict-first cards, the wave_queue._readiness "merges next" change is label-only, the queue_reports move, and HTML escaping. Findings p2-r1..p2-r6 below. A low-confidence note (archive refusals under a non-repo placement) was not filed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-25T04:44:56+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · R6 pane focus command (non-https Next-action link) is dropped by _link/_safe_url, so session-owned cards never show it (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-25T04:44:56+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · Refused export PRs carry Action.batch=repo, so _others_of files them under a repo-name key and they render nowhere (R8 gap) (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-25T04:44:56+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · A repo with no queue block leads its card "Approved, merges next"; the unconfigured queue is not a queue-held verdict (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-25T04:44:56+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · refused_others keys pool/taken by bare PR number across repos, so same-numbered PRs in two repos collide (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-25T04:44:56+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · Stale docstring in triage_batch_cmd.py names batch_drive._queue_reports after the move (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-25T04:44:56+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · Test gaps: no end-to-end test for refused close-out/export, focus-command render, unconfigured verdict; the others' admits test is tautological (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-25T04:44:56+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: R6 pane focus command (non-https Next-action link) is dropped by _link/_safe_url, so session-owned cards never show it (phase 2)
+
+64dcdf56c: ReadinessFacts gained `command`; `link` is URL-only; the card renders a Command row as escaped code. Test test_triage_kanban_render_readiness.py::test_a_session_owned_verdicts_focus_command_shows_on_the_page_escaped.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-25T04:44:56+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: Refused export PRs carry Action.batch=repo, so _others_of files them under a repo-name key and they render nowhere (R8 gap) (phase 2)
+
+9da5c3309: refused_others files a refused entry under a batch only when Action.batch is a real batch id, else under "" (Board.others). Test test_triage_readiness_others.py::test_a_refused_export_pr_reaches_the_boards_others_with_its_reason (fails on the old code).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-25T04:44:56+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: A repo with no queue block leads its card "Approved, merges next"; the unconfigured queue is not a queue-held verdict (phase 2)
+
+9a701a15b, 76c139c0a: queue_snapshot defaults a repo with no queue block to QueueConfig(ci=None) and queue_held_reason names it, so the card reads 'Not ready: queue held: queue not configured …'. admits keeps the entry's own admission (as for a halt-held queue): the held queue is what merges nothing, and the driver's ready set and the unconfigured hint read admits. Test test_triage_board_readiness.py::test_a_repo_with_no_queue_block_still_leads_its_card_with_a_verdict.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-25T04:44:56+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: refused_others keys pool/taken by bare PR number across repos, so same-numbered PRs in two repos collide (phase 2)
+
+9da5c3309: pool/taken/out keyed by (repo, number). Test test_triage_readiness_others.py::test_same_numbered_prs_in_two_repos_do_not_share_a_refusal (fails on the old code).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-25T04:44:56+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: Stale docstring in triage_batch_cmd.py names batch_drive._queue_reports after the move (phase 2)
+
+3b4b923cd: the docstring names fr.triage.queue_reports.queue_reports.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-25T04:44:56+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: Test gaps: no end-to-end test for refused close-out/export, focus-command render, unconfigured verdict; the others' admits test is tautological (phase 2)
+
+9da5c3309: test_admits_follows_the_queues_conditions_written_out uses an independent oracle; test_a_refused_closeout_pr_reaches_its_batchs_card_with_its_reason and the export test go through drive_pass and kanban._others_of; focus-command and unconfigured tests above.

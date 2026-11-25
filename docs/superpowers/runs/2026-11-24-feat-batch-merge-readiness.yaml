@@ -103,12 +103,19 @@ steps:
         evidence:
           visual: none
       phase/2/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-25T03:08:31+00:00'
           harness: claude-code
           model: claude-opus-5-5
           session: 1fe5a340-bc55-41b6-a9a1-b81e47aa1f3c
+          returned: '2026-11-25T04:44:58+00:00'
+          outcome: done
+        evidence:
+          review: p2-review
+          reviewer: a9de054b43a02fed3
+          visual: none
+          findings: p2-r1,p2-r2,p2-r3,p2-r4,p2-r5,p2-r6
   journal-check:
     state: pending
   lens-review:
