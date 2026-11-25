@@ -966,3 +966,135 @@ ad4930512 and 0455c728a: the five dead constants and default_shipped_workflows_d
 ### p5-r4-resolved · finding [out-of-scope] · resolves p5-r4: about 20 test sites still set the old FR_SHIPPED_*_DIR variables (phase 5)
 
 The old variables are honoured until R14's release by design; those tests set them deliberately or incidentally and move when owed entry s1-refuse-old-paths ends the variables.
+
+<!-- fr:journal kind=decision scope=plan id=p6-move-staged-and-locked created=2026-11-25T10:29:35+00:00 phase=6 -->
+### p6-move-staged-and-locked · decision · The S1 move stages, verifies, installs and only then retires the clone copy, under a per-scope OS lock and the mover's own drive.lock (phase 6)
+
+`fr.triage.state_home.settle` runs from `state_dir` (prepare) whenever the working
+directory's (or `--workspace`'s) clone holds `.fr/triage-state/<scope>/`. Under
+`~/.cache/fr/triage-locks/move-<scope>.lock` (`fr.file_lock.exclusive_file_lock`, polled
+up to 60 s, so a second mover waits and then finds nothing to move) it takes
+`<cache>/drive.lock` itself (rule 1: a live holder, any pid, refuses "stop the driver
+first"; a stale one is replaced), so no driver of any fr version starts mid-move. The
+clone copy minus `merge/` is copied to `.<scope>.s1-stage-*` beside the cache, verified
+by a sha256 inventory, `git init`ed, renamed into place (an empty cache is set aside
+and deleted; an older one becomes `<scope>.pre-s1`, `-2`... when taken) and verified
+again; only then are the `merge/` worktrees removed (`git worktree remove --force` in
+the repo that registered each, then prune), the copy renamed to `.<scope>.s1-moved-*`
+and deleted, and the exclude line removed once no scope's copy is left. A crash leaves
+the clone copy whole or the cache whole; the rerun meets the installed cache as rule
+5 (identical durable files) and removes the copy. Leftover stage/aside dirs are cleared
+at the next move. Readers with no clone copy take no lock: a no-clone command racing the
+two renames of a first move can recreate an empty cache, which makes the install refuse
+("re-created while the triage state moved") with the clone copy unchanged.
+
+<!-- fr:journal kind=decision scope=plan id=p6-old-fr-after-move created=2026-11-25T10:29:35+00:00 phase=6 -->
+### p6-old-fr-after-move · decision · An fr below S1 after the move is loud, never silent; restart the driver after upgrading (phase 6)
+
+An old driver holds `drive.lock` in the cache dir (every fr version writes it there), so
+the move refuses while it runs. An old fr that runs after the move finds no clone copy,
+imports the cache's durable files into a new one (its `import_legacy`) and writes there;
+every S1 command from that clone then refuses: rule 1 while that driver runs, rule 5
+(differing durable files, naming both directories) after it stops. The move's notice
+says to restart any running `fr triage batch drive` with the new fr and run no older fr
+on the host. Tested in `test_an_old_fr_resurrecting_the_clone_copy_is_loud_never_silent`.
+
+<!-- fr:journal kind=decision scope=plan id=p6-schema-1-refuses-the-key created=2026-11-25T10:29:35+00:00 phase=6 -->
+### p6-schema-1-refuses-the-key · decision · Settings schema 1 refuses triage.state_repo set, not an empty triage section (phase 6)
+
+R20 says a file that sets the key declares `schema: 2`. `Settings` accepts schema 1 or
+2 and refuses `triage.state_repo` under 1; an empty `triage:` (what uncommenting the
+`fr settings init` file gives, `state_repo: null`) sets no key and stays valid at 1, so
+`test_the_commented_file_uncommented_still_parses_to_the_defaults` holds. Schema 3+ is
+refused with the existing "newer than this fr" message.
+
+<!-- fr:journal kind=decision scope=plan id=p6-declared-read-on-settle-only created=2026-11-25T10:29:35+00:00 phase=6 -->
+### p6-declared-read-on-settle-only · decision · triage.state_repo is read by an explicit collect only and carried by the loops (facts schema 17) (phase 6)
+
+`collect_into` reads the one-repo scope's `.fr/settings.yaml` through the forge
+(`collect.read_declared_state_repo`: `forge_ref` picks the default branch or `fr-config`;
+from `fr-config` the key counts only when `protection.branch_protection` is Enforced,
+else it is ignored with `ignored_line`; any read or parse failure is said once and reads
+as no declaration, never a failed collect) only with `settle=True`; the drive and watch
+loops carry the previous facts' value, so a paced pass spends no read on it. Facts
+schema 17 adds `state_repo_declared`; `fr triage check` compares it with
+`scope-durable.yaml` (`state repo mismatch` set, JSON `state_repo_mismatch`).
+
+<!-- fr:journal kind=decision scope=plan id=p6-stealth-local-tracking-stays-local created=2026-11-25T10:29:35+00:00 phase=6 -->
+### p6-stealth-local-tracking-stays-local · decision · A stealth workspace whose tracking repo is no forge repo leaves the state local (phase 6)
+
+R19's stealth rule takes the marker's tracking repo as `OWNER/REPO`
+(`state_home.stealth_tracking`). A local-path tracking repo cannot hold a state ref
+(`state_remote` names a forge URL), and falling through to the one-repo rule would push
+`fr-triage/<id>` to the product repo stealth keeps clean, so the collect warns and
+records no state repo (a declared one still wins). A stealth marker without its tracking
+ref refuses the collect.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-preview-reads-cache-only created=2026-11-25T10:29:35+00:00 phase=6 -->
+### p6-preview-reads-cache-only · discovery · A replacement preview on an unmoved host reads the cache only and reports no facts (phase 6)
+
+`batch replace` without `--yes` resolves with `prepare=False`, which moves nothing, so on
+a host whose state is still in a clone it says "no facts at ~/.cache/fr/triage/<scope>/";
+any preparing command (collect, batch list) moves it first. Returning the clone path from
+a pure resolution would break the act path, which keys its scope lock and sync on that
+path before preparing.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-docs-owed-p7 created=2026-11-25T10:29:35+00:00 phase=6 -->
+### p6-docs-owed-p7 · discovery · Pages and skill prose still place triage state in <workspace>/.fr/triage-state (phase 7) (phase 6)
+
+The fr-triage skill, `docs/explainers/fr-triage.md`, `docs/cloud-setup.md` and AGENTS.md's
+fr/triage paragraph describe the workspace state directory; the CLI help, module
+docstrings and `fr skills` line were updated here. Phase 7 owns the pages.
+
+<!-- fr:journal kind=finding scope=plan id=p6-product-push-tripwire-red created=2026-11-25T10:29:35+00:00 phase=6 state=open review_scope=in -->
+### p6-product-push-tripwire-red · finding [open] (reviewer: in scope) · test_tripwire_product_push fails on fr.placement.quiet.create_config_branch (from ddb60c607, phase 4) (phase 6)
+
+`tests/unit/test_tripwire_product_push.py::test_every_git_push_site_is_pinned` reports a
+new `git push` site `('fr.placement.quiet', 'create_config_branch')`, added by
+ddb60c607 (phase 4). Not touched by phase 6; it needs routing through
+`fr.git_policy.product.push_product_branch` or an argued allowlist entry.
+
+<!-- fr:journal kind=finding scope=plan id=p6-scenario-fakes-lacked-fr-config created=2026-11-25T10:29:35+00:00 phase=6 state=fixed review_scope=in -->
+### p6-scenario-fakes-lacked-fr-config · finding [fixed] (reviewer: in scope) · Two cloud-triage scenario fakes failed on phase 1's fr-config probe; fixed here (phase 6)
+
+`cloud-triage-driver-lease.sh` and `cloud-triage-version-drift.sh` failed (exit 2,
+"fake gh: no capture for ... contents/.fr/settings.yaml?ref=fr-config") before this
+phase: the scenario tier is not run locally. Their fake `gh` now answers that read with
+the captured contents 404 (`repo_contents_docs_no-such-path.error.json`, derived only in
+its path, said in each fake's header). All 11 triage scenarios were run against this
+worktree's fr and pass, with the three cloud-triage ones updated for the cache home
+(one HOME per simulated host).
+
+<!-- fr:journal kind=finding scope=plan id=p6-sec-symlinked-state-dirs created=2026-11-25T10:29:35+00:00 phase=6 state=fixed review_scope=in -->
+### p6-sec-symlinked-state-dirs · finding [fixed] (reviewer: in scope) · The move followed a symlinked .fr or .fr/triage-state into state outside the clone; fixed (phase 6)
+
+Automated security review of 27752be54: `settle` checked only `copy.is_symlink()`, so a
+symlinked `.fr` or `.fr/triage-state` (to the cache, or to another clone's state) let the
+rename and rmtree delete state outside the checkout. Fixed in 32bd81861: before any
+rename, delete, tidy or worktree removal, `.fr`, `.fr/triage-state` and the scope dir
+pass `fr.config.space.link_problem` (lstat at every step, resolved inside the clone), and
+`_overlap` refuses a copy that is, holds or sits in the cache, and a cache inside the
+clone (a dotfiles-repo home). Tests: symlinked `.fr` and `.fr/triage-state` (nothing
+deleted), a symlinked parent with no copy (no tidy), a copy resolving to the cache, a
+cache inside the clone, and `_overlap`'s rules.
+
+<!-- fr:journal kind=lens scope=plan id=lens-security-3 created=2026-11-25T10:29:35+00:00 phase=6 lens=security step=implement-phase -->
+### lens-security-3 · lens · a new trust input: a repo's triage.state_repo decides where private issue data is pushed, and a move that deletes state directories (phase 6)
+
+<!-- fr:journal kind=lens scope=plan id=lens-errors-3 created=2026-11-25T10:29:35+00:00 phase=6 lens=errors step=implement-phase -->
+### lens-errors-3 · lens · a multi-step filesystem move with crash windows, two locks and refusals that must leave a whole copy (phase 6)
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t1 created=2026-11-25T10:29:35+00:00 phase=6 -->
+### no-refactor-p6-t1 · discovery · no-refactor-because P6.T1 (phase 6)
+
+state_dir shrank to one resolution path (cache, or --dir); the legacy import and the clone exclude it replaced were deleted rather than kept beside it, and state_ref/_sync_with_ref needed no change because they already took the state directory's own toplevel as the object store
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t2 created=2026-11-25T10:29:35+00:00 phase=6 -->
+### no-refactor-p6-t2 · discovery · no-refactor-because P6.T2 (phase 6)
+
+the move was written as one new module (fr/triage/state_home.py) with each R18 rule a named step (_hold_driver_lock, _install, _retire, _tidy, _compare); git calls went into gitseam as three small helpers, so nothing duplicated was left to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t3 created=2026-11-25T10:29:35+00:00 phase=6 -->
+### no-refactor-p6-t3 · discovery · no-refactor-because P6.T3 (phase 6)
+
+the forge-side settings read mirrors read_config_lenient's ref choice and protection guard in one function beside it, sharing its say-once set; decide_state_repo gained two keyword rules ahead of the existing ones without restructuring them
