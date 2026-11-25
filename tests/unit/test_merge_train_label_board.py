@@ -50,6 +50,16 @@ class Labels:
             raise GhError("gh: Not Found (HTTP 404)", stderr="gh: Not Found (HTTP 404)")
         return self.files[path]
 
+    def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
+        """The contents API at *ref* (`GhClient.read_file_at_ref`): `files` at the default
+        branch (`HEAD`); any other ref, `fr-config` included, holds nothing, as a repo with
+        no configuration branch answers."""
+        if ref != "HEAD":
+            from fr.gh import GhError
+
+            raise GhError("gh: Not Found (HTTP 404)", stderr="gh: Not Found (HTTP 404)")
+        return self.read_file(repo, path)
+
     def label_exists(self, repo: str, name: str) -> bool:
         self.calls.append(f"exists {repo} {name}")
         if self.unsupported:
