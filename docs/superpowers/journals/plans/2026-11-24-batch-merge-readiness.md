@@ -211,3 +211,16 @@ Reviewer confirmed R4 (board and queue read plan.queues[*].readiness from batch_
 ### p3-running-in-preserve · decision · The running predicate lives in preserve.py; local.py gets a 3-line guard (phase 3) (phase 3)
 
 `BranchRun.running_step`/`.running` and `preserve.running_hold(runs)` read steps and units in state `running` (an unreadable file counts); `_reap_or_classify` calls it after the external check, so dry run and live, merged and merged-by-content, are all guarded. gc reports action `skipped`, detail `kept: run <id> step <step> is running`. `_reap_hazard`, `_down_worktree_tail` and `down` are unchanged (a test pins it).
+
+<!-- fr:journal kind=review scope=plan id=p3-review created=2026-11-25T05:44:53+00:00 phase=3 -->
+### p3-review · review · Phase 3 code review: R9 gc guard covers dry run and live, merged and merged-by-content; down untouched; 1 low test gap (phase 3)
+
+Reviewer traced every reap path (_reap_or_classify is the only caller for both merged verdicts; the guard sits before both the dry-run and live branches and after the external return), unreadable cursors (branch_runs marks YAML errors, non-mapping steps; never raises; no cursor still reaps), units in state running, the report vocabulary (action skipped, distinct unreadable detail), and that _reap_hazard/_down_worktree_tail/down are unchanged with down pinned by a test. One finding, p3-r1.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-25T05:44:53+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · gc-level tests leave gaps: unreadable cursor dry-run only with a loose assertion; no gc test for a running unit, non-mapping steps, or a merged workspace with no cursor (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-25T05:44:53+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: gc-level tests leave gaps: unreadable cursor dry-run only with a loose assertion; no gc test for a running unit, non-mapping steps, or a merged workspace with no cursor (phase 3)
+
+c17291c30: test_gc_keeps_merged_workspace_with_an_unreadable_cursor is parametrized over dry run/live and broken-YAML/steps-not-a-mapping, pushes the cursor so only the R9 guard keeps it, and asserts the 'is unreadable' detail; new test_gc_keeps_merged_workspace_with_a_running_unit (dry run and live) and test_gc_still_reaps_merged_workspace_with_no_cursor. test_isolation.py + test_isolation_preserve.py: 321 passed.
