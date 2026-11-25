@@ -376,6 +376,9 @@ def sync_cmd(
     yes: bool = typer.Option(
         False, "--yes", help="Write the old settings copy (otherwise only preview)."
     ),
+    expect: str | None = typer.Option(
+        None, "--expect", help="With --yes: the configuration branch tip the preview showed."
+    ),
 ) -> None:
     """Bring the old settings copy in step after a reviewed change (spec R6)."""
     root = resolve_repo_root()
@@ -384,7 +387,7 @@ def sync_cmd(
         if placement == "quiet":
             from fr.placement import quiet
 
-            plan = quiet.sync_legacy(root) if yes else quiet.sync_plan(root)
+            plan = quiet.sync_legacy(root, expect=expect) if yes else quiet.sync_plan(root)
         elif placement == "stealth":
             from fr.placement import stealth
 
@@ -392,7 +395,7 @@ def sync_cmd(
             assert found is not None
             ref, target = found
             plan = (
-                stealth.sync_legacy_target(root, ref, target)
+                stealth.sync_legacy_target(root, ref, target, expect=expect)
                 if yes
                 else stealth.sync_plan_target(root, ref, target)
             )
@@ -403,6 +406,8 @@ def sync_cmd(
         raise _refuse(e) from e
     typer.echo(f"configuration branch: {plan.new_at}")
     typer.echo(f"old copy:             {plan.old_at}")
+    if plan.tip:
+        typer.echo(f"tip:                  {plan.tip} (settings blob {plan.blob or 'none'})")
     if plan.state == "in-step":
         typer.echo("in step: nothing to do")
         return
@@ -416,15 +421,25 @@ def sync_cmd(
             err=True,
         )
         raise typer.Exit(2)
-    typer.echo("the configuration branch moved since the old copy's version:")
-    for sha, subject, merged in plan.commits:
-        how = "merge of a fr-config-change/* branch" if merged else "NOT a reviewed merge"
-        typer.echo(f"  {sha[:12]}  {how}  {subject}")
+    typer.echo(
+        "the configuration branch moved since the old copy's version (first parent, newest "
+        "first; the label is information, not a review: check the shas):"
+    )
+    for sha, second, subject, merged in plan.commits:
+        how = (
+            "merge of fr-config-change/ (its tip is the second parent)"
+            if merged
+            else "NOT a merge of a fr-config-change/* branch"
+            if second
+            else "NOT a merge (a direct commit or a fast-forward)"
+        )
+        typer.echo(f"  {sha}  second parent {second or 'none'}  {how}  {subject}")
     if yes:
         typer.echo("wrote the old copy: the two are in step")
     else:
         typer.echo(
-            "review the commits above, then run `fr settings sync --yes` to write the old copy"
+            "review the commits above, then run "
+            f"`fr settings sync --yes --expect {plan.tip}` to write the old copy"
         )
 
 

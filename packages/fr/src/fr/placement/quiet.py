@@ -276,9 +276,9 @@ def lag_refusal(what: str, new_at: str, old_at: str) -> SettingsError:
     return SettingsError(
         f"placement: {what} differ: {new_at} and {old_at}. The old one holds an earlier "
         f"version of the new one (the configuration branch moved on since), so fr will not "
-        f"act until they are in step (R6). Review the move with `{SYNC_COMMAND}` (both refs, "
-        f"the commits between, and whether each merged a `fr-config-change/*` pull "
-        f"request), then `{SYNC_COMMAND} --yes` writes the old copy"
+        f"act until they are in step (R6). Preview the move with `{SYNC_COMMAND}` (both refs, "
+        f"the tip, the commits between with their second parents), then "
+        f"`{SYNC_COMMAND} --yes --expect <tip>` writes the old copy"
     )
 
 
@@ -302,66 +302,101 @@ def _settle_differing(root: Path, new: tuple[str, str], old: tuple[str, str]) ->
     raise mismatch_refusal(what, new_at, old_at)
 
 
+CHANGE_REFSPEC: Final = "+refs/heads/fr-config-change/*:refs/remotes/origin/fr-config-change/*"
+"""The fetch of the configuration change branches, so `changes_since` can match a merge's
+second parent against their tips."""
+
+
 @dataclass(frozen=True)
 class SyncPlan:
-    """What `fr settings sync` would do: the two refs, the commits of the configuration
-    branch since the old copy's version (first-parent, newest first, each with whether it
-    merged a `fr-config-change/*` branch), and whether the old copy lags at all."""
+    """What `fr settings sync` would do: the two refs, the configuration branch's tip and
+    file blob, its first-parent commits since the old copy's version (newest first: sha,
+    second-parent sha or "", subject, whether that second parent is the tip of a fetched
+    `fr-config-change/*` branch), and the state. The label is information for the
+    operator, never an authorization: only the operator's `--yes --expect <tip>` is."""
 
     new_at: str
     old_at: str
     state: str  # "in-step" | "lags" | "mismatch" | "none"
-    commits: tuple[tuple[str, str, bool], ...] = ()
+    commits: tuple[tuple[str, str, str, bool], ...] = ()
     text: str | None = None
+    tip: str = ""
+    blob: str = ""
 
 
-def changes_since(cwd: Path, ref: str, rel: str, blob: str) -> tuple[tuple[str, str, bool], ...]:
+def changes_since(
+    cwd: Path, ref: str, rel: str, blob: str
+) -> tuple[tuple[str, str, str, bool], ...]:
     """The first-parent commits of *ref* after the last one where *rel* was *blob*,
-    newest first: (sha, subject, whether it is a merge of a `fr-config-change/*` branch,
-    read from its second parent's branch name in the merge subject or a fetched ref)."""
+    newest first: (sha, second parent, subject, merged). *merged* is true only when the
+    second parent IS the tip of a fetched `refs/remotes/origin/fr-config-change/*`; the
+    subject is never read for it (anyone can write a subject)."""
     listed = _git(cwd, "log", "--first-parent", "--format=%H%x09%P%x09%s",
                   "-n", str(_HISTORY_LIMIT), ref)  # fmt: skip
     changes = _git(cwd, "for-each-ref", "--format=%(objectname)",
                    "refs/remotes/origin/fr-config-change/")  # fmt: skip
     heads = set(changes.stdout.split())
-    out: list[tuple[str, str, bool]] = []
+    out: list[tuple[str, str, str, bool]] = []
     for line in listed.stdout.splitlines():
         sha, parents, subject = (line.split("\t", 2) + ["", ""])[:3]
         if _blob(cwd, f"{sha}:{rel}") == blob:
             break
-        second = parents.split()[1:2]
-        merged = bool(second) and ("fr-config-change/" in subject or second[0] in heads)
-        out.append((sha, subject, merged))
+        second = (parents.split()[1:2] or [""])[0]
+        out.append((sha, second, subject, bool(second) and second in heads))
     return tuple(out)
 
 
+def expect_refusal(plan: SyncPlan, expect: str | None) -> SettingsError | None:
+    """`--yes` writes only from the tip the operator previewed (no TOCTOU): None when
+    *expect* is that tip, else the refusal naming the preview to run again."""
+    if expect is not None and expect == plan.tip:
+        return None
+    why = (
+        "`--yes` needs `--expect <tip>`, the configuration branch tip its preview showed"
+        if expect is None
+        else f"the configuration branch tip is now {plan.tip}, not {expect}"
+    )
+    return SettingsError(
+        f"fr settings sync: {why}; nothing was written. Run `{SYNC_COMMAND}` to preview it "
+        f"again, then `{SYNC_COMMAND} --yes --expect <tip>`"
+    )
+
+
 def sync_plan(root: Path) -> SyncPlan:
-    """The quiet `fr settings sync` preview (reads only)."""
-    new, old = switch_texts(Path(root))
+    """The quiet `fr settings sync` preview: fetches the two switch branches and the change
+    branches, then reads (nothing is pushed)."""
+    root = Path(root)
+    net = _default_network(root)
+    _fetch_both(root, net, None)
+    net(["git", "fetch", "--quiet", "--no-tags", "--prune", "origin", CHANGE_REFSPEC])
+    _CACHE.clear()
+    new, old = switch_texts(root)
     new_at = f"{_SOURCE} ({new[0][:12]})" if new else f"{_SOURCE} (absent)"
     old_at = f"{_LEGACY_SOURCE} ({old[0][:12]})" if old else f"{_LEGACY_SOURCE} (absent)"
     if new is None or old is None:
         return SyncPlan(new_at, old_at, "none")
+    tip, blob = new[0], _blob(root, _SOURCE) or ""
     if new[1] == old[1]:
-        return SyncPlan(new_at, old_at, "in-step")
-    blob = _blob(root, _LEGACY_SOURCE)
-    if not legacy_lags(root, paths.SWITCH_REF, paths.SWITCH_SETTINGS, blob):
-        return SyncPlan(new_at, old_at, "mismatch")
-    assert blob is not None
-    commits = changes_since(root, paths.SWITCH_REF, paths.SWITCH_SETTINGS, blob)
-    return SyncPlan(new_at, old_at, "lags", commits, new[1])
+        return SyncPlan(new_at, old_at, "in-step", tip=tip, blob=blob)
+    old_blob = _blob(root, _LEGACY_SOURCE)
+    if not legacy_lags(root, paths.SWITCH_REF, paths.SWITCH_SETTINGS, old_blob):
+        return SyncPlan(new_at, old_at, "mismatch", tip=tip, blob=blob)
+    assert old_blob is not None
+    commits = changes_since(root, paths.SWITCH_REF, paths.SWITCH_SETTINGS, old_blob)
+    return SyncPlan(new_at, old_at, "lags", commits, new[1], tip, blob)
 
 
-def sync_legacy(root: Path) -> SyncPlan:
-    """`fr settings sync --yes` under quiet: in the lag case only, fetch first, then write
-    the old copy with `write_legacy`. Refuses a mismatch."""
+def sync_legacy(root: Path, *, expect: str | None) -> SyncPlan:
+    """`fr settings sync --yes --expect <tip>` under quiet: fetch, refuse unless the tip is
+    *expect* and the old copy lags, then write it with `write_legacy`."""
     root = Path(root)
-    _fetch_both(root, _default_network(root), None)
-    _CACHE.clear()
     plan = sync_plan(root)
     if plan.state == "mismatch":
         raise mismatch_refusal("the two quiet switches", plan.new_at, plan.old_at)
     if plan.state == "lags" and plan.text is not None:
+        refused = expect_refusal(plan, expect)
+        if refused is not None:
+            raise refused
         message = settled_message(
             root, plan.text, f"bring the old quiet switch in step with {CONFIG_BRANCH}"
         )

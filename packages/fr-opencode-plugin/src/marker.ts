@@ -226,8 +226,9 @@ const DIFFERING_SWITCHES = "placement: two switches that differ";
  * `FR_SWITCH_DIFFER_NOTE`, the same text. */
 export const SWITCH_DIFFER_NOTE =
   "The two quiet switches (origin/fr-config:.fr/settings.yaml and origin/fr:settings.yaml) differ, " +
-  "so this repo is gated: review the move with `fr settings sync` and bring the old copy in step " +
-  "with `fr settings sync --yes`, or, if neither matches, make the two identical by hand.";
+  "so this repo is gated: preview the move with `fr settings sync` (first), then bring the old copy " +
+  "in step with `fr settings sync --yes --expect <tip>`, or, if neither matches, make the two " +
+  "identical by hand.";
 
 /** `SWITCH_DIFFER_NOTE` (with a leading space) when *toplevel*'s two switches differ, else "". */
 export function switchDifferNote(toplevel: string): string {

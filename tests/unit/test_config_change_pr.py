@@ -109,6 +109,10 @@ def _sync(repo: Path, *argv: str):  # type: ignore[no-untyped-def]
     return CliRunner().invoke(app, ["settings", "sync", *argv], env=env)
 
 
+def _tip(tmp_path: Path) -> str:
+    return git(_origin(tmp_path), "rev-parse", "fr-config").strip()
+
+
 def test_fr_settings_sync_previews_then_writes_the_old_copy(
     repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]]
 ) -> None:
@@ -119,10 +123,11 @@ def test_fr_settings_sync_previews_then_writes_the_old_copy(
     assert preview.exit_code == 0, preview.output
     assert "origin/fr-config:.fr/settings.yaml" in preview.output
     assert "origin/fr:settings.yaml" in preview.output
-    assert "NOT a reviewed merge" in preview.output  # the test's merge is a fast-forward
-    assert "--yes" in preview.output
+    assert _tip(tmp_path) in preview.output  # the full tip sha the write must name
+    assert "NOT a merge" in preview.output  # the test's merge is a fast-forward
+    assert f"--yes --expect {_tip(tmp_path)}" in preview.output
     assert git(origin, "rev-parse", "fr").strip() == fr_before  # the preview writes nothing
-    done = _sync(repo, "--yes")
+    done = _sync(repo, "--yes", "--expect", _tip(tmp_path))
     assert done.exit_code == 0, done.output
     assert git(origin, "show", "fr:settings.yaml") == NEW
     quiet._CACHE.clear()
@@ -130,18 +135,57 @@ def test_fr_settings_sync_previews_then_writes_the_old_copy(
     assert "in step" in _sync(repo).output
 
 
-def test_sync_reports_a_merge_commit_of_a_change_branch(
+def test_sync_yes_needs_the_previewed_tip(
+    repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]]
+) -> None:
+    """Review: the tip the operator reviewed is the one written from (no TOCTOU)."""
+    _merged(repo, tmp_path, prs)
+    origin = _origin(tmp_path)
+    fr_before = git(origin, "rev-parse", "fr").strip()
+    bare = _sync(repo, "--yes")
+    assert bare.exit_code == 2 and "fr settings sync" in bare.output
+    stale = _sync(repo, "--yes", "--expect", "0" * 40)
+    assert stale.exit_code == 2
+    assert "fr settings sync" in stale.output and _tip(tmp_path) in stale.output
+    assert git(origin, "rev-parse", "fr").strip() == fr_before
+
+
+def _merge_commit(tmp_path: Path, second: str, subject: str) -> str:
+    """A merge commit on origin's fr-config whose second parent is *second*."""
+    other = _other_clone(tmp_path, f"m{len(subject)}")
+    git(other, "checkout", "-q", "fr-config")
+    git(other, "merge", "-q", "--no-ff", "-m", subject, second)
+    git(other, "push", "-q", "origin", "fr-config")
+    return git(other, "rev-parse", "HEAD").strip()
+
+
+def test_sync_marks_a_merge_by_its_second_parent_never_its_subject(
     repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]]
 ) -> None:
     write_settings(quiet_config_space(repo), NEW, message="chore(fr): labels off")
-    other = _other_clone(tmp_path)
-    git(other, "checkout", "-q", "fr-config")
-    git(other, "merge", "-q", "--no-ff", "-m", f"Merge {prs[0][1]}", f"origin/{prs[0][1]}")
-    git(other, "push", "-q", "origin", "fr-config")
+    change_tip = git(_origin(tmp_path), "rev-parse", prs[0][1]).strip()
+    real = _merge_commit(tmp_path, change_tip, "an innocent subject")
     git(repo, "fetch", "-q", "origin", "+refs/heads/fr-config:refs/remotes/origin/fr-config")
     quiet._CACHE.clear()
     out = _sync(repo).output
-    assert "merge of a fr-config-change/* branch" in out, out
+    assert f"{real}  second parent {change_tip}  merge of fr-config-change/" in out, out
+
+
+def test_a_subject_naming_a_change_branch_is_not_trusted(
+    repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]]
+) -> None:
+    """A direct push whose merge subject claims a change branch reads as NOT reviewed."""
+    other = _other_clone(tmp_path, "spoof")
+    git(other, "checkout", "-q", "-b", "side", "origin/fr-config")
+    (other / ".fr" / "settings.yaml").write_text(NEW)
+    git(other, "commit", "-qam", "side")
+    side = git(other, "rev-parse", "HEAD").strip()
+    git(other, "push", "-q", "origin", "side")
+    spoof = _merge_commit(tmp_path, side, "Merge pull request #1 from x/fr-config-change/a")
+    git(repo, "fetch", "-q", "origin", "+refs/heads/fr-config:refs/remotes/origin/fr-config")
+    quiet._CACHE.clear()
+    out = _sync(repo).output
+    assert f"{spoof}  second parent {side}  NOT a merge of a fr-config-change/* branch" in out, out
 
 
 def test_two_switches_edited_apart_name_both_refs_and_both_remedies(
@@ -161,7 +205,7 @@ def test_two_switches_edited_apart_name_both_refs_and_both_remedies(
     assert "origin/fr:settings.yaml" in message
     assert "neither matches" in message and "by hand" in message
     assert "one was edited by hand" not in message
-    assert _sync(repo, "--yes").exit_code == 2  # sync never picks a side
+    assert _sync(repo, "--yes", "--expect", _tip(tmp_path)).exit_code == 2  # never picks a side
 
 
 def test_the_legacy_write_rebases_onto_a_moved_fr_and_keeps_every_commit(
@@ -181,7 +225,7 @@ def test_the_legacy_write_rebases_onto_a_moved_fr_and_keeps_every_commit(
     git(wt, "add", "mine.md")
     git(wt, "commit", "-qm", "my artifact")
     _merged(repo, tmp_path, prs)
-    assert _sync(repo, "--yes").exit_code == 0
+    assert _sync(repo, "--yes", "--expect", _tip(tmp_path)).exit_code == 0
     origin = _origin(tmp_path)
     files = git(origin, "ls-tree", "-r", "--name-only", "fr").split()
     assert {"features/theirs.md", "mine.md", "settings.yaml"} <= set(files)
@@ -269,7 +313,10 @@ def test_a_stealth_change_opens_a_pull_request_on_the_tracking_repo_then_syncs(
         load_settings(state.worktree)
     env = {**os.environ, "FR_REPO_ROOT": str(state.worktree)}
     monkeypatch.chdir(state.worktree)
-    done = CliRunner().invoke(app, ["settings", "sync", "--yes"], env=env)
+    tip = git(track, "rev-parse", "main-config").strip()
+    preview = CliRunner().invoke(app, ["settings", "sync"], env=env)
+    assert preview.exit_code == 0 and tip in preview.output, preview.output
+    done = CliRunner().invoke(app, ["settings", "sync", "--yes", "--expect", tip], env=env)
     assert done.exit_code == 0, done.output
     assert git(track, "show", "main:local--origin/settings.yaml") == text
     assert load_settings(state.worktree).settings.artifacts.gates == "off"

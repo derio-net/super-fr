@@ -895,37 +895,46 @@ def settle_differing_target(
 
 
 def sync_plan_target(root: Path, ref: StealthRef, target: str) -> Any:
-    """The stealth `fr settings sync` preview (reads the last fetched clones only)."""
-    from fr.placement.quiet import SyncPlan, _blob, changes_since, legacy_lags
+    """The stealth `fr settings sync` preview: syncs both clones and fetches the tracking
+    repo's change branches into the configuration clone, then reads."""
+    from fr.placement.quiet import CHANGE_REFSPEC, SyncPlan, _blob, changes_since, legacy_lags
 
     cref = config_ref(ref)
-    clone, wt = worktree_path(root, cref), worktree_path(root, ref)
+    wt = ensure_worktree(root, ref)
+    clone = worktree_path(root, cref)
     new_rel, old_rel = f"{target}/{TARGET_SETTINGS}", f"{target}/{LEGACY_TARGET_SETTINGS}"
-    new_text, old_text = target_settings_texts(root, ref, target)
     new_at, old_at = f"{cref.text}:{new_rel}", f"{ref.text}:{old_rel}"
+    if not (clone / ".git").exists():
+        return SyncPlan(new_at, old_at, "none")
+    ensure_worktree(root, cref)
+    network(["git", "fetch", "--quiet", "--no-tags", "--prune", "origin", CHANGE_REFSPEC], clone)
+    new_text, old_text = target_settings_texts(root, ref, target)
     if new_text is None or old_text is None:
         return SyncPlan(new_at, old_at, "none")
+    tip = _git(clone, "rev-parse", _remote_ref(cref)).stdout.strip()
+    blob = _blob(clone, f"{_remote_ref(cref)}:{new_rel}") or ""
+    new_at, old_at = f"{new_at} ({tip[:12]})", f"{old_at}"
     if new_text == old_text:
-        return SyncPlan(new_at, old_at, "in-step")
-    blob = _blob(wt, f"{_remote_ref(ref)}:{old_rel}")
-    if blob is None or not legacy_lags(clone, _remote_ref(cref), new_rel, blob):
-        return SyncPlan(new_at, old_at, "mismatch")
-    commits = changes_since(clone, _remote_ref(cref), new_rel, blob)
-    return SyncPlan(new_at, old_at, "lags", commits, new_text)
+        return SyncPlan(new_at, old_at, "in-step", tip=tip, blob=blob)
+    old_blob = _blob(wt, f"{_remote_ref(ref)}:{old_rel}")
+    if old_blob is None or not legacy_lags(clone, _remote_ref(cref), new_rel, old_blob):
+        return SyncPlan(new_at, old_at, "mismatch", tip=tip, blob=blob)
+    commits = changes_since(clone, _remote_ref(cref), new_rel, old_blob)
+    return SyncPlan(new_at, old_at, "lags", commits, new_text, tip, blob)
 
 
-def sync_legacy_target(root: Path, ref: StealthRef, target: str) -> Any:
-    """`fr settings sync --yes` under stealth: both clones fetched first, then, in the lag
-    case only, `write_legacy_target`. Refuses a mismatch."""
-    from fr.placement.quiet import mismatch_refusal, settled_message
+def sync_legacy_target(root: Path, ref: StealthRef, target: str, *, expect: str | None) -> Any:
+    """`fr settings sync --yes --expect <tip>` under stealth: refuse unless the fetched
+    tip is *expect* and the old file lags, then `write_legacy_target`."""
+    from fr.placement.quiet import expect_refusal, mismatch_refusal, settled_message
 
-    ensure_worktree(root, ref)
-    if (worktree_path(root, config_ref(ref)) / ".git").exists():
-        ensure_worktree(root, config_ref(ref))
     plan = sync_plan_target(root, ref, target)
     if plan.state == "mismatch":
         raise mismatch_refusal("the target's two settings files", plan.new_at, plan.old_at)
     if plan.state == "lags" and plan.text is not None:
+        refused = expect_refusal(plan, expect)
+        if refused is not None:
+            raise refused
         message = settled_message(root, plan.text, f"bring {target}'s old settings in step")
         write_legacy_target(root, ref, target, plan.text, message)
     return plan
