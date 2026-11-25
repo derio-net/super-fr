@@ -35,9 +35,13 @@ rows:
     - spec:2026-11-24-batch-merge-readiness#R5
     - spec:2026-11-24-batch-merge-readiness#R6
     - spec:2026-11-24-batch-merge-readiness#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_board_readiness.py#test_the_board_and_the_queue_read_one_verdict_from_one_set_of_facts
+      - super-fr:tests/unit/test_triage_kanban_render_readiness.py#test_a_batch_pr_card_leads_with_its_verdict
+    status: ci
+    notes: 'phase 2: build_board leads each batch PR card with batch_readiness''s verdict
+      and facts; the board and the queue read one function'
     verify: none
   - id: batch-readiness-other-entries
     capability: Readiness verdict for close-out, archive and export PRs
