@@ -9367,6 +9367,9 @@ batches:
     runner: herdr
     handle: w3T:p2
     branch: feat/batch-merge-readiness
+  - kind: deferred
+    at: '2026-11-25T08:49:53.448918Z'
+    wave: 24
 - id: consumer-followups
   title: 'Consumer-delivery follow-ups: plugin-dir judgement, Gitea job token, tea login error'
   ids:
