@@ -1787,7 +1787,7 @@ def _evidence_target(step: Step, phase: int | None) -> _EvidenceTarget | None:
         return _EvidenceTarget("plan", phase)
     for scope in ("spec", "debug"):
         if f"journal:{scope}" in step.emits:
-            return _EvidenceTarget(scope, None)  # type: ignore[arg-type]
+            return _EvidenceTarget(scope, None)
     if "journal:plan" in step.emits and "lenses" in step.evidence:
         return _EvidenceTarget("plan", None, feature=True)
     return None
