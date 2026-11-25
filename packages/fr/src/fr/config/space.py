@@ -439,6 +439,10 @@ def located(root: Path, kind: str) -> Path:
         new, old = current.file(PROFILES), root / LEGACY_PROFILES
     else:
         new, old = config_kind_path(root, kind), root / LEGACY_CONFIG[kind]
+    if link_problem(root, old) is not None:
+        if old.exists() or old.is_symlink():
+            _old_ignored(old, f"{link_problem(root, old)}: fr never follows a link there")
+        return new
     if current.placement == _REPO or not (old.exists() or old.is_symlink()):
         return legacy(new, old)
     if branch_fetched(current):
@@ -454,6 +458,27 @@ def located(root: Path, kind: str) -> Path:
         )
         return new
     return legacy(new, old)
+
+
+def link_problem(root: Path, path: Path) -> str | None:
+    """Why fr must not read, write, move or delete *path* for the checkout *root*, or None
+    (review p4-sec-symlink, security review of p4-r9): a symlink at *path* or at any
+    directory between it and *root* (checked with `lstat`, so a linked parent is seen), or
+    a path that is, or resolves, outside *root*. Resolved paths are compared, never
+    literals. *path* need not exist."""
+    root = Path(root)
+    try:
+        rel_path = Path(path).relative_to(root)
+    except ValueError:
+        return f"{path} is outside the checkout {root}"
+    at = root
+    for part in rel_path.parts:
+        at = at / part
+        if at.is_symlink():
+            return f"{rel_path.as_posix()} is a symlink ({at} -> {at.readlink()})"
+    if not Path(path).resolve().is_relative_to(root.resolve()):
+        return f"{path} resolves outside the checkout {root}"
+    return None
 
 
 def branch_fetched(space: ConfigSpace) -> bool:

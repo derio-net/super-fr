@@ -69,10 +69,16 @@ def _sync_one(repo: str, root: Path, *, yes: bool, force: bool) -> None:
     configuration branch, which changes only by a pull request (`fr.config.change`,
     honouring `git.pr`): fr proposes it there, or refuses naming how to create the space,
     and never writes the configuration checkout directly."""
-    from fr.config.space import config_space, located
+    from fr.config.space import config_space, link_problem, located
 
     space = config_space(root)
     old = root / LEGACY_CONFIG["plan-config"]
+    target = config_kind_path(root, "plan-config")
+    for path in (old, target) if space.placement == REPO else (old,):
+        why = link_problem(root, path)
+        if why is not None:  # never read, write or delete through a link (security review)
+            console.print(f"REFUSED         {repo}  — {escape(why)}: replace the link first")
+            return
     cfg = located(root, "plan-config")
     if cfg.exists() and not force:
         console.print(f"SKIP (exists)   {repo}  — {cfg}")
@@ -80,13 +86,12 @@ def _sync_one(repo: str, root: Path, *, yes: bool, force: bool) -> None:
     if space.placement != REPO:
         _propose(repo, root, yes=yes)
         return
-    target = config_kind_path(root, "plan-config")
     if not yes:
         console.print(f"DRY-RUN (would write)  {repo}  — {target}")
         return
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(render_plan_config())
-    if old.exists() and old != target:
+    if old.is_file() and old.resolve() != target.resolve():
         old.unlink()
     console.print(f"WROTE           {repo}  — {target}")
 

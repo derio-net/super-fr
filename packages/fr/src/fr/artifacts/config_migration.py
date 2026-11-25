@@ -57,10 +57,13 @@ def _relocation(kind: str) -> SchemaMigration:
 
     def fn(path: Path) -> None:
         product = entry.product_of(path)
+        moves.refuse_link(product, path)
         if _across(entry, product):
             moves.move_across(product, path, entry.below(path, product))
         else:
-            relocate_file(path, destination(path))
+            dest = destination(path)
+            moves.refuse_link(product, dest)  # never move a file through a linked parent
+            relocate_file(path, dest)
 
     return SchemaMigration(
         kind=kind,
@@ -138,6 +141,7 @@ def _profiles_relocate(path: Path) -> None:
                 f"{path} is at version 2 on the configuration branch: propose its "
                 "`schema_version: 3` there in a pull request (S1 §B)"
             )
+        moves.refuse_link(path.parent.parent, path)
         write_text_atomic(path, _profiles_text(path))
         return
     product = _PROFILES.product_of(path)
@@ -149,6 +153,7 @@ def _profiles_relocate(path: Path) -> None:
         return
     text = _profiles_text(path)
     dest = _profiles_destination(path)
+    moves.refuse_link(product, dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     write_text_atomic(dest, text)
     path.unlink()

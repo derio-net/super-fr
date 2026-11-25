@@ -491,28 +491,20 @@ def _clean_tracked(product: Path) -> set[str]:
 
 def refuse_link(product: Path, source: Path) -> str:
     """*source*'s path relative to *product*, after refusing a symlink at it or at any
-    directory between (review p4-sec-symlink): a moved file is pushed onto the
-    configuration branch, and a link to `~/.ssh/...` must never be read for that. A path
-    outside the checkout refuses too."""
+    directory between, or a path outside the checkout (`fr.config.space.link_problem`,
+    review p4-sec-symlink): a moved file is pushed onto the configuration branch, and a
+    link to `~/.ssh/...` must never be read for that, nor a file outside deleted."""
+    from fr.config.space import link_problem
     from fr.settings import SettingsError
 
     product = Path(product)
-    try:
-        rel_path = Path(source).relative_to(product)
-    except ValueError:
-        raise SettingsError(f"{source} is outside the checkout {product}: fr will not move it")
-    at = product
-    for part in rel_path.parts:
-        at = at / part
-        if at.is_symlink():
-            raise SettingsError(
-                f"{rel_path.as_posix()} is a symlink ({at} -> {at.readlink()}): fr will not "
-                "read or push what it points at. Replace it with the file itself and run "
-                "`fr migrate artifacts --yes` again (S1 R10)"
-            )
-    if not Path(source).resolve().is_relative_to(product.resolve()):
-        raise SettingsError(f"{source} resolves outside the checkout {product}")
-    return rel_path.as_posix()
+    why = link_problem(product, Path(source))
+    if why is not None:
+        raise SettingsError(
+            f"{why}: fr will not read, move or delete it through a link. Replace it with "
+            "the file itself and run `fr migrate artifacts --yes` again (S1 R10)"
+        )
+    return Path(source).relative_to(product).as_posix()
 
 
 def source_text(product: Path, source: Path) -> str:
@@ -674,5 +666,6 @@ def move_across(
             "file) and run `fr migrate artifacts --yes` again (S1 R12)"
         )
     writer.refresh()
+    refuse_link(product, source)
     source.unlink()
     return space.file(below)
