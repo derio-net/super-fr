@@ -710,3 +710,8 @@ every moved kind is generated from the one MOVED table in fr.config.migrate (reg
 ### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
 
 legacy() is one function behind located(); the owed entry is a journal write, so there was no code to clean
+
+<!-- fr:journal kind=decision scope=plan id=p4-verify-before-unlink created=2026-11-25T07:20:16+00:00 phase=4 -->
+### p4-verify-before-unlink · decision · A cross-space move unlinks only after the fetched configuration tip holds the exact bytes (p4-r1) (phase 4)
+
+move_across re-fetches after create/ensure and reads the blob at the configuration branch's fetched tip: absent proposes (case 3), other bytes are R12, only the same bytes unlink. A stealth create-only push that loses its lease raises BranchRaceError (fr.settings); ensure_space and write_target_settings re-fetch and read what stands. A branch that still does not appear after creation refuses. Tests: tests/unit/test_config_move_verified.py (lost lease, exists() race, untracked old path).
