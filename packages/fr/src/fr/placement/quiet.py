@@ -1190,6 +1190,7 @@ def write_switch(
         _check_config_refs(root)
         url = open_change(
             root,
+            product=root,
             remote=_git(root, "config", "--get", "remote.origin.url").stdout.strip(),
             base_branch=CONFIG_BRANCH,
             base_ref=paths.SWITCH_REF,

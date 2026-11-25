@@ -856,8 +856,8 @@ def write_target_settings(
 
             check_privacy(ref, origin_url(root), target_root=root)
             url = open_change(
-                clone, remote=ref.repo, base_branch=cref.branch, base_ref=_remote_ref(cref),
-                rel=new_rel, text=text, message=message,
+                clone, product=root, remote=ref.repo, base_branch=cref.branch,
+                base_ref=_remote_ref(cref), rel=new_rel, text=text, message=message,
             )  # fmt: skip
             print(
                 f"fr: opened {url}: the change to {new_rel} waits for review on "

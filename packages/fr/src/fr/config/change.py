@@ -102,9 +102,48 @@ def _commit_on(cwd: Path, base_sha: str, rel: str, text: str, message: str) -> s
         return _run(cwd, "commit-tree", tree, "-p", base_sha, "-F", "-", stdin=message)
 
 
+def pr_policy(product: Path) -> str:
+    """`git.pr` of the product checkout's settings (`auto` | `ask`): the same setting `fr
+    pr create` honours, read where the run is (under stealth, the target's workspace)."""
+    from fr.settings import load_settings
+
+    return str(load_settings(product).settings.git.pr)
+
+
+def _approve(product: Path, head: str, request_head: str) -> Path | None:
+    """Under `git.pr: ask`, the operator's verified approval for the pull request from
+    *head*, exactly as `fr pr create` asks (`fr.git_policy.ask.require_approval`, recorded
+    in the run's own journal); the git dir whose request `consume` clears after the PR is
+    open. None under `auto`. A missing approval refuses BEFORE anything is pushed."""
+    if pr_policy(product) != "ask":
+        return None
+    from fr.commands.push_cmd import approval_journal
+    from fr.git_policy import ask
+
+    git_dir = Path(_run(product, "rev-parse", "--absolute-git-dir"))
+    try:
+        ask.require_approval(
+            product,
+            kind="pr",
+            branch=head,
+            head=request_head,
+            journal=approval_journal(product),
+            git_dir=git_dir,
+            still_current=True,
+        )
+    except ask.AskRefusedError as e:
+        raise SettingsError(
+            f"git.pr: ask: the configuration change's pull request from `{head}` waits for "
+            f"the operator ({e}). Nothing was pushed; run the same command again once it is "
+            "approved"
+        ) from e
+    return git_dir
+
+
 def open_change(
     cwd: Path,
     *,
+    product: Path,
     remote: str,
     base_branch: str,
     base_ref: str,
@@ -115,9 +154,13 @@ def open_change(
     """Propose *rel* = *text* on *base_branch* (its last fetched tip *base_ref* in the
     clone *cwd*): commit it on `change_branch(rel, text)`, push that branch to origin
     (plain, never forced; a branch already holding the same change is reused), and open
-    a pull request into *base_branch*. Returns the pull request's URL."""
+    a pull request into *base_branch*. Returns the pull request's URL. *product* is the
+    checkout whose `git.pr` applies (decision p2-config-pr-honours-git-pr): under `ask`
+    the operator's approval comes first, as for `fr pr create`, and nothing is pushed
+    without it."""
     base_sha = _run(cwd, "rev-parse", "--verify", f"{base_ref}^{{commit}}")
     head = change_branch(rel, text)
+    approved = _approve(product, head, f"{base_sha[:12]}+{head.rsplit('-', 1)[-1]}")
     commit = _commit_on(cwd, base_sha, rel, text, message)
     pushed = subprocess.run(
         ["git", "push", "--quiet", "origin", f"{commit}:refs/heads/{head}"],
@@ -141,7 +184,12 @@ def open_change(
         "its creation is reviewed). Once it merges, the next fr command brings the copy "
         "older fr reads in step."
     )
-    return open_pr(remote, head, base_branch, subject, body)
+    url = open_pr(remote, head, base_branch, subject, body)
+    if approved is not None:
+        from fr.git_policy import ask
+
+        ask.consume(approved, "pr", head)
+    return url
 
 
 def _already_proposed(cwd: Path, head: str, rel: str, text: str) -> bool:

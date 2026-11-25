@@ -320,3 +320,55 @@ def test_a_stealth_change_opens_a_pull_request_on_the_tracking_repo_then_syncs(
     assert done.exit_code == 0, done.output
     assert git(track, "show", "main:local--origin/settings.yaml") == text
     assert load_settings(state.worktree).settings.artifacts.gates == "off"
+
+
+# --- decision p2-config-pr-honours-git-pr: the PR asks as `fr pr create` asks ----------
+
+
+def test_the_configuration_pr_reads_git_pr_from_the_settings(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.settings.model import Settings
+
+    assert change.pr_policy(repo) == "auto"
+    asked = Settings.model_validate({"git": {"pr": "ask"}})
+    monkeypatch.setattr(
+        "fr.settings.load_settings", lambda root: type("E", (), {"settings": asked})()
+    )
+    assert change.pr_policy(repo) == "ask"
+
+
+def test_under_git_pr_ask_nothing_is_pushed_or_opened_without_approval(
+    repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.git_policy import ask
+
+    monkeypatch.setattr(change, "pr_policy", lambda root: "ask")
+    seen: list[str] = []
+
+    def refuse(repo_root: Path, **kw: object) -> None:
+        seen.append(str(kw["branch"]))
+        raise ask.AskRefusedError("request pr-123: approve it first")
+
+    monkeypatch.setattr(ask, "require_approval", refuse)
+    with pytest.raises(SettingsError) as caught:
+        write_settings(quiet_config_space(repo), NEW, message="chore(fr): labels off")
+    assert "git.pr: ask" in str(caught.value) and "pr-123" in str(caught.value)
+    assert prs == [] and seen and seen[0].startswith("fr-config-change/")
+    heads = git(_origin(tmp_path), "for-each-ref", "--format=%(refname)", "refs/heads")
+    assert "fr-config-change/" not in heads
+
+
+def test_under_git_pr_ask_an_approved_request_opens_and_is_consumed(
+    repo: Path, tmp_path: Path, prs: list[tuple[str, str, str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.git_policy import ask
+
+    monkeypatch.setattr(change, "pr_policy", lambda root: "ask")
+    monkeypatch.setattr(ask, "require_approval", lambda repo_root, **kw: None)
+    consumed: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        ask, "consume", lambda git_dir, kind, branch: consumed.append((kind, branch))
+    )
+    url = write_settings(quiet_config_space(repo), NEW, message="chore(fr): labels off")
+    assert url and prs and consumed == [("pr", prs[0][1])]
