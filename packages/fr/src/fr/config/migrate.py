@@ -527,9 +527,22 @@ def is_executable(product: Path, source: Path) -> bool:
 
 
 def _default_commit(product: Path) -> tuple[str, str] | None:
+    """The default ref a cross-space move compares against, or None (every move refuses,
+    nothing rides along in a creation). Never the settings read's CI fallback to HEAD
+    (verification v-r3): comparing HEAD with HEAD would accept a branch's own bytes, and a
+    CI migration does reach the push (`move_across` has no CI exemption), so with no
+    resolvable default ref the move refuses in CI too.
+
+    It trusts the last fetch of the default ref, the same trust `fr.config.space.located`
+    places in it; no fetch is added here. A shell that can move
+    `refs/remotes/origin/<default>` locally can also rewrite the remote and its fetch
+    refspec, so a fetch would close nothing, and a stale default ref only refuses more."""
     from fr.settings.load import default_commit
 
-    return default_commit(product)
+    found = default_commit(product)
+    if found is None or found[0] == "HEAD":
+        return None
+    return found
 
 
 def _landed(product: Path, clean: set[str]) -> set[str]:
@@ -642,7 +655,7 @@ def _as_default_has_it(product: Path, rel_path: str, committed: str) -> str:
     """*committed* (HEAD's blob of *rel_path*) when the product's default branch has
     exactly those bytes; otherwise `SettingsError` (lens review l-security-r2)."""
     from fr.settings import SettingsError
-    from fr.settings.load import read_at_default
+    from fr.settings.load import show_at_commit
 
     found = _default_commit(product)
     if found is None:
@@ -652,7 +665,7 @@ def _as_default_has_it(product: Path, rel_path: str, committed: str) -> str:
             "(S1 R10)"
         )
     ref = found[0].removeprefix("refs/remotes/").removeprefix("refs/heads/")
-    at_default = read_at_default(product, rel_path)
+    at_default = show_at_commit(product, found[1], rel_path)
     if at_default is None:
         raise SettingsError(
             f"{rel_path} is not on the default branch ({ref}): fr moves only what the "

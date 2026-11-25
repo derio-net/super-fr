@@ -664,3 +664,35 @@ def test_an_untracked_profiles_file_is_refused_across(tmp_path: Path) -> None:
     src.write_text("schema_version: 2\nprofiles: {}\n")
     with pytest.raises(SettingsError, match="land the change on the default branch first"):
         profiles_body(root, src)
+
+
+def test_in_ci_with_no_default_ref_a_cross_space_move_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verification v-r3: in CI with no default ref, the settings read falls back to HEAD,
+    but the migration's default-branch comparison must not: HEAD compared with HEAD would
+    accept the branch's own bytes. The move refuses and the creation carries nothing."""
+    from fr.config.migrate import ensure_space, move_across
+    from fr.settings import SettingsError
+    from fr.settings.load import default_commit
+
+    root = _quiet(tmp_path)
+    src = _put(root, "docs/superpowers/models.yaml", "opencode:\n  hard: m\n", land=False)
+    for ref in ("refs/remotes/origin/main", "refs/remotes/origin/HEAD"):
+        subprocess.run(["git", "-C", str(root), "update-ref", "-d", ref], check=False)
+    monkeypatch.setenv("CI", "true")
+    found = default_commit(root)
+    assert found is not None and found[0] == "HEAD"  # the settings read's R2 fallback
+    with pytest.raises(SettingsError, match="cannot name the default branch"):
+        move_across(root, src, "models.yaml")
+    assert src.exists()
+    listed = subprocess.run(
+        ["git", "-C", str(_origin(tmp_path)), "ls-tree", "-r", "--name-only", "fr-config"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert ".fr/models.yaml" not in listed.stdout.split()
+    if ensure_space(root):
+        tree = git(_origin(tmp_path), "ls-tree", "-r", "--name-only", "fr-config").split()
+        assert tree == [".fr/settings.yaml"]
