@@ -341,6 +341,7 @@ class Card:
     model: Setting
     events: tuple[EventRow, ...]
     claim_expiry: ClaimExpiry | None = None
+    overlaps: tuple[str, ...] = ()  # plan file overlap sentences (spec 2026-11-25)
 
     @property
     def front(self) -> Literal["batch", "closeout"]:
@@ -812,6 +813,7 @@ def build_board(
     notes: Mapping[str, str] | None = None,
     ci_none: Collection[str] = (),
     scope_args: Sequence[str] | None = None,
+    overlaps: Mapping[str, tuple[str, ...]] | None = None,
 ) -> Board:
     """One card per batch in eleven columns, sorted by wave (none last) then id (R2).
     *stops* are the driver's recorded merge stops (gh#987); one counts only while the
@@ -854,6 +856,8 @@ def build_board(
         )
         for b in batches
     ]
+    if overlaps:
+        cards = [replace(c, overlaps=overlaps.get(c.batch.id, ())) for c in cards]
     cards.sort(key=lambda c: (c.batch.wave is None, c.batch.wave or 0, c.batch.id))
     gated: dict[str, list[GatedCard]] = {}
     for g in unlisted_gated_prs(batches, facts, live):

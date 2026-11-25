@@ -760,3 +760,19 @@ def test_the_cutoff_choice_reads_an_id_and_a_scope_the_markup_carries() -> None:
     assert re.search(r'"fr-triage:" \+ scope \+ ":cutoff"', SCRIPT)
     key = f"fr-triage:{scope.group(1)}:cutoff"
     assert key.startswith("fr-triage:") and key.endswith(":cutoff") and "::" not in key
+
+
+# ------------------------------------------------------ plan overlap (spec 2026-11-25 R7)
+
+
+def test_a_card_with_overlaps_renders_one_escaped_paragraph_and_others_none() -> None:
+    board, notes = _board()
+    first, other = _cards()[0], _cards()[1]
+    sentence = "Plans overlap with <b>x</b> on a.py & b.py: fix."
+    with_overlap = replace(first, overlaps=(sentence, "second"))
+    page = _page_of([with_overlap, other])
+    body = _card(page, first.batch.id)
+    assert body.count('<p class="overlap">') == 1
+    assert "Plans overlap with &lt;b&gt;x&lt;/b&gt; on a.py &amp; b.py: fix." in body
+    assert "second" in body
+    assert 'class="overlap"' not in _card(page, other.batch.id)

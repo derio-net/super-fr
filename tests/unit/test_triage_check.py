@@ -703,3 +703,137 @@ def test_ignored_claim_markers_print_in_their_own_block_with_the_fix(tmp_path: P
     ) in flat
     data = json.loads(_check(tmp_path, "--json").output)
     assert data["ignored_claims"] == [{"key": "super-fr#2", "repo": REPO, "authors": ["peer-host"]}]
+
+
+# ------------------------------------------------------ plan overlap (spec 2026-11-25 R6, R8)
+
+
+def _overlap_state(tmp_path: Path) -> Path:
+    from tests.unit.test_triage_batch_drive_cmd import World, _batch, _dispatch_event, _state
+
+    world = World()
+    for n in (1, 2, 3):
+        world.issues[n] = "open"
+    return _state(
+        tmp_path,
+        world,
+        _batch("b1", 1, wave=1, events=_dispatch_event("b1")),
+        _batch("b2", 2, wave=2, events=_dispatch_event("b2")),
+        _batch("b3", 3, wave=2, events=_dispatch_event("b3")),
+    )
+
+
+def _with_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.unit.test_triage_plan_overlap import both_plans
+
+    source = both_plans(["pkg/a.py", "shared.py"], ["shared.py"])
+    monkeypatch.setattr(
+        "fr.commands.triage_cmd.source_for_clones",
+        lambda cwd, checkouts: lambda repo: source,
+    )
+
+
+def test_check_reports_overlapping_plans_and_the_batches_it_could_not_compare(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _overlap_state(tmp_path)
+    _with_source(monkeypatch)
+
+    out = CliRunner().invoke(app, ["triage", "check", "--repo", REPO, "--dir", str(tmp_path)])
+
+    assert out.exit_code == 0, out.output
+    assert "plan overlap (1)" in out.output
+    flat = " ".join(out.output.split())
+    assert "b1 b2" in flat and "shared.py" in flat
+    assert "fr triage batch edit b2 --after b1" in flat
+    assert (
+        "not compared b3 no ref origin/feat/batch-b3 (not fetched in this clone? git fetch origin)"
+        in flat
+    )
+
+
+def test_check_json_carries_the_plan_overlap_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _overlap_state(tmp_path)
+    _with_source(monkeypatch)
+
+    out = CliRunner().invoke(
+        app, ["triage", "check", "--repo", REPO, "--dir", str(tmp_path), "--json"]
+    )
+
+    assert out.exit_code == 0, out.output
+    data = json.loads(out.output)["plan_overlap"]
+    assert [(o["a"], o["b"], o["waves"], o["paths"]) for o in data["overlaps"]] == [
+        ("b1", "b2", [1, 2], ["shared.py"])
+    ]
+    assert "fr triage batch edit b2 --after b1" in data["overlaps"][0]["fix"]
+    assert data["unread"] == [
+        {
+            "batch": "b3",
+            "reason": "no ref origin/feat/batch-b3 (not fetched in this clone? git fetch origin)",
+        }
+    ]
+
+
+def test_check_exits_zero_when_every_batch_is_unread(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _overlap_state(tmp_path)
+    monkeypatch.setattr(
+        "fr.commands.triage_cmd.source_for_clones",
+        lambda cwd, checkouts: lambda repo: "no clone here",
+    )
+    for extra in ([], ["--json"]):
+        out = CliRunner().invoke(
+            app, ["triage", "check", "--repo", REPO, "--dir", str(tmp_path), *extra]
+        )
+        assert out.exit_code == 0, out.output
+        assert "no clone here" in out.output
+
+
+def test_check_exits_zero_when_the_overlap_read_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `check` always exits 0 (R6): an unexpected failure in the plan overlap read is one
+    # line saying so, never a traceback (p1-r1's backstop).
+    _overlap_state(tmp_path)
+
+    def broken(repo: str) -> str:
+        raise RuntimeError("source exploded")
+
+    monkeypatch.setattr("fr.commands.triage_cmd.source_for_clones", lambda cwd, checkouts: broken)
+    for extra in ([], ["--json"]):
+        out = CliRunner().invoke(
+            app, ["triage", "check", "--repo", REPO, "--dir", str(tmp_path), *extra]
+        )
+        assert out.exit_code == 0, out.output
+        assert "source exploded" in out.output
+
+
+def test_check_reads_plans_through_the_clone_it_runs_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No monkeypatched source: `check` itself resolves Path.cwd()'s clone and its origin
+    # (l-tests-r4).
+    from tests.unit.test_triage_plan_overlap import _commit_tree, clone, world
+
+    state = tmp_path / "state"
+    state.mkdir()
+    _overlap_state(state)
+    root = clone(tmp_path / "c", origin=f"https://github.com/{REPO}.git")
+    for bid, paths in (("b1", ["pkg/a.py", "shared.py"]), ("b2", ["shared.py"])):
+        branch = f"feat/batch-{bid}"
+        _commit_tree(
+            root, branch, world(branch, {"1": paths}).refs[f"refs/remotes/origin/{branch}"]
+        )
+    monkeypatch.chdir(root)
+
+    out = CliRunner().invoke(
+        app, ["triage", "check", "--repo", REPO, "--dir", str(state), "--json"]
+    )
+
+    assert out.exit_code == 0, out.output
+    data = json.loads(out.output)["plan_overlap"]
+    assert [(o["a"], o["b"], o["paths"]) for o in data["overlaps"]] == [("b1", "b2", ["shared.py"])]
+    assert [u["batch"] for u in data["unread"]] == ["b3"]
