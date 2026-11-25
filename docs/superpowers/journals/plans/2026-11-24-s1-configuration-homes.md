@@ -1123,3 +1123,94 @@ The installed pre-S1 state_dir (read from its source): the target is the clone's
 ### p6-move-lock-shared · decision · State-dir writers hold the move lock shared for the process; worktrees are never force-removed (phase 6)
 
 state_dir(prepare=True) takes the scope's move lock (triage-locks/move-<scope>.lock) shared after settling and holds it until exit (state_home.hold_shared; the suite drops it per test); a mover takes it exclusive, dropping its own shared hold first, and _install re-reads the cache's kind and inventory right before its rename. Rule 3: every worktree registered under the copy (any depth) is checked with gitseam.worktree_unsafe (local changes, or HEAD commits no branch, tag or remote holds) and refuses the move by name; a clean one is removed with a plain git worktree remove. Reviews p6-r4, p6-r7.
+
+<!-- fr:journal kind=review scope=plan id=review-p6 created=2026-11-25T11:19:00+00:00 phase=6 -->
+### review-p6 · review · Phase 6 adversarial review (triage state in the cache repo, the R18 move, the state repo setting) (phase 6)
+
+Independent adversarial reviewer read 69b62bf..HEAD against R18-R20 with HOME in a scratch dir and the
+operator's real cache listed before and after (unchanged). Reproduced three losses on the operator's
+real host shape (pre-S1 cache with a live drive.lock, live state in the clone): rule 5 deleting non-ref
+files, a pre-S1 cache git-initialised from outside a clone, and the shared exclude line removed while a
+linked worktree held private state. Ten in-scope findings, all fixed in bec21cf4f..4b371b158 with spec
+amendments to R18 and R20; the open finding p6-product-push-tripwire-red resolved. Selection 4156
+passed / 8 skipped, triage scenarios 19/19, product-push tripwire green, ruff and mypy clean.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1 created=2026-11-25T11:19:00+00:00 phase=6 state=open review_scope=in -->
+### p6-r1 · finding [open] (reviewer: in scope) · rule 5 deleted the clone copy after comparing REF_FILES only, losing scope.yaml, driver files, pacing, .state-ref, closeout-wait/ (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2 created=2026-11-25T11:19:00+00:00 phase=6 state=open review_scope=in -->
+### p6-r2 · finding [open] (reviewer: in scope) · state_dir git-initialised a pre-S1 cache from any cwd with no clone copy, defeating .pre-s1 and serving stale state (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r3 created=2026-11-25T11:19:00+00:00 phase=6 state=open review_scope=in -->
+### p6-r3 · finding [open] (reviewer: in scope) · _tidy removed the shared info/exclude line while linked worktrees still held private triage state (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r4 created=2026-11-25T11:19:00+00:00 phase=6 state=open review_scope=in -->
+### p6-r4 · finding [open] (reviewer: in scope) · _retire force-removed or rmtree'd kept merge worktrees and copied other worktree scratch dirs into the cache broken (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r5 created=2026-11-25T11:19:00+00:00 phase=6 state=open review_scope=in -->
+### p6-r5 · finding [open] (reviewer: in scope) · under stealth triage.state_repo was read from the product default branch and won over the tracking repo (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r6 created=2026-11-25T11:19:00+00:00 phase=6 state=open review_scope=in -->
+### p6-r6 · finding [open] (reviewer: in scope) · the stale drive.lock takeover lacked drive_lock's put-theirs-back check (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r7 created=2026-11-25T11:19:00+00:00 phase=6 state=open review_scope=in -->
+### p6-r7 · finding [open] (reviewer: in scope) · non-mover cache writers took no lock and could be trashed by _install mid-move (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r8 created=2026-11-25T11:19:00+00:00 phase=6 state=open review_scope=in -->
+### p6-r8 · finding [open] (reviewer: in scope) · an fr below S1 silently resurrected the clone copy after the move (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r9 created=2026-11-25T11:19:00+00:00 phase=6 state=open review_scope=in -->
+### p6-r9 · finding [open] (reviewer: in scope) · test_tripwire_product_push red on quiet.create_config_branch (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r10 created=2026-11-25T11:19:00+00:00 phase=6 state=open review_scope=in -->
+### p6-r10 · finding [open] (reviewer: in scope) · the PROTECTED_SOURCES guard was in-process only, reset by monkeypatch.undo() and blind to the HOME-leak class (phase 6)
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1-resolved created=2026-11-25T11:19:00+00:00 phase=6 state=fixed resolves=p6-r1 -->
+### p6-r1-resolved · finding [fixed] · resolves p6-r1: rule 5 deleted the clone copy after comparing REF_FILES only, losing scope.yaml, driver files, pacing, .state-ref, closeout-wait/ (phase 6)
+
+9f9477cb3: rule 5 compares the full inventory except worktree scratch dirs, locks, facts.json and top-level pages; clone-only files are carried into the cache, never over an existing one; any difference refuses naming the files.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2-resolved created=2026-11-25T11:19:00+00:00 phase=6 state=fixed resolves=p6-r2 -->
+### p6-r2-resolved · finding [fixed] · resolves p6-r2: state_dir git-initialised a pre-S1 cache from any cwd with no clone copy, defeating .pre-s1 and serving stale state (phase 6)
+
+9f9477cb3 and 4b371b158: a pre-S1 cache is never git-initialised in place; state_dir refuses from outside a clone naming the remedies; only the move sets it aside as .pre-s1; a test reproduces the operator's host shape (decision p6-older-cache-from-outside).
+
+<!-- fr:journal kind=finding scope=plan id=p6-r3-resolved created=2026-11-25T11:19:00+00:00 phase=6 state=fixed resolves=p6-r3 -->
+### p6-r3-resolved · finding [fixed] · resolves p6-r3: _tidy removed the shared info/exclude line while linked worktrees still held private triage state (phase 6)
+
+9f9477cb3: _tidy keeps the shared exclude line, and says so, while any worktree of the common dir still has .fr/triage-state/.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r4-resolved created=2026-11-25T11:19:00+00:00 phase=6 state=fixed resolves=p6-r4 -->
+### p6-r4-resolved · finding [fixed] · resolves p6-r4: _retire force-removed or rmtree'd kept merge worktrees and copied other worktree scratch dirs into the cache broken (phase 6)
+
+9f9477cb3: every registered worktree under the copy is found at any depth; one with local changes or unreachable HEAD commits refuses the move by name; clean ones get a plain git worktree remove; scratch dirs are never copied; prune after.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r5-resolved created=2026-11-25T11:19:00+00:00 phase=6 state=fixed resolves=p6-r5 -->
+### p6-r5-resolved · finding [fixed] · resolves p6-r5: under stealth triage.state_repo was read from the product default branch and won over the tracking repo (phase 6)
+
+3e9407e59: under stealth the product repo never names the state repo; the tracking repo wins; a declaration counts only from the operator's stealth configuration space behind require_protected; spec R20 amended (decision p6-stealth-ignores-declared).
+
+<!-- fr:journal kind=finding scope=plan id=p6-r6-resolved created=2026-11-25T11:19:00+00:00 phase=6 state=fixed resolves=p6-r6 -->
+### p6-r6-resolved · finding [fixed] · resolves p6-r6: the stale drive.lock takeover lacked drive_lock's put-theirs-back check (phase 6)
+
+9f9477cb3: the mover re-reads a moved-aside stale drive.lock and puts it back if another starter took it over.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r7-resolved created=2026-11-25T11:19:00+00:00 phase=6 state=fixed resolves=p6-r7 -->
+### p6-r7-resolved · finding [fixed] · resolves p6-r7: non-mover cache writers took no lock and could be trashed by _install mid-move (phase 6)
+
+9f9477cb3: state_dir(prepare=True) holds the move lock shared, movers exclusive; _install re-reads the cache's kind and inventory before its rename and refuses on change (decision p6-move-lock-shared).
+
+<!-- fr:journal kind=finding scope=plan id=p6-r8-resolved created=2026-11-25T11:19:00+00:00 phase=6 state=fixed resolves=p6-r8 -->
+### p6-r8-resolved · finding [fixed] · resolves p6-r8: an fr below S1 silently resurrected the clone copy after the move (phase 6)
+
+9f9477cb3: the move leaves a marked tombstone file at the clone path, so an fr below S1 imports nothing and fails loudly on its first read; S1 passes the tombstone by; the notice says to upgrade every fr and restart any driver first (decision p6-rc6-tombstone, spec R18 amended).
+
+<!-- fr:journal kind=finding scope=plan id=p6-r9-resolved created=2026-11-25T11:19:00+00:00 phase=6 state=fixed resolves=p6-r9 -->
+### p6-r9-resolved · finding [fixed] · resolves p6-r9: test_tripwire_product_push red on quiet.create_config_branch (phase 6)
+
+bec21cf4f: create_config_branch is in FR_BRANCH_PUSHERS with its reason (fr-config creation, R10, plain orphan push that refuses when the branch exists); the tripwire passes.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r10-resolved created=2026-11-25T11:19:00+00:00 phase=6 state=fixed resolves=p6-r10 -->
+### p6-r10-resolved · finding [fixed] · resolves p6-r10: the PROTECTED_SOURCES guard was in-process only, reset by monkeypatch.undo() and blind to the HOME-leak class (phase 6)
+
+c75054f8f: a session-scoped autouse fixture sets HOME and GIT_CONFIG_GLOBAL in os.environ before any test, so subprocesses inherit it and undo() cannot restore the real home, and fails the session naming any new entry in the real ~/.cache/fr/triage/.
