@@ -1,0 +1,33 @@
+schema_version: 12
+run: 2026-11-19-feat-event-driven-a-la-carte
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: review
+    id: review-p1
+    phase: 1
+    title: Phase 1 review (the configuration space, the moved readers, the ast tripwire)
+    body: |
+      Independent reviewer read d3eec17..HEAD against R1-R4 and decisions p1-repo-semantics and
+      p1-tripwire-scope. The resolver is sound and under repo the readers keep their own git reads
+      and error handling. Seven in-scope findings: one (p1-r1) moved to phase 3 beside sec-1, five
+      fixed in 4b2b60c17..8e38ce78a, one refuted. Targeted tests 51/51; after the fixes 83/83 on
+      config_space, tripwire and triage drift, 948/948 on the quiet/lens/ci/queue/stealth/pr_body set.
+  - {kind: finding, id: p1-r1, phase: 3, review_scope: in, title: "triage collect's read_config_lenient takes post_merge, version commands and pr_authors from a self-declared unprotected fr-config; phase 3's guard must cover trust keys and the forge-side reader, and flip test_forge_side_triage_config_follows_the_quiet_switch"}
+  - {kind: finding, id: p1-r2, phase: 1, review_scope: in, title: "forge_ref's catch-all read every forge error (5xx, rate limit, auth, bug) as no switch"}
+  - {kind: finding, id: p1-r3, phase: 1, review_scope: in, title: "under quiet/stealth a config space not yet created read as no configuration: lens rules, docs.yaml and gate_checks vanished"}
+  - {kind: finding, id: p1-r4, phase: 1, review_scope: in, title: "config_space() under repo can raise SettingsError into docs/debt/ops/lenses/verification readers whose callers never expected it"}
+  - {kind: finding, id: p1-r5, phase: 1, review_scope: in, title: "the config-space tripwire skipped every f-string, so Path(f'{root}/.fr/x') and f'{rev}:.fr/x' passed"}
+  - {kind: finding, id: p1-r6, phase: 1, review_scope: in, title: "forge_ref tests covered only a 404 and a repo switch; no non-404 error, no forge without read_file_at_ref, no _lens_config_changed test"}
+  - {kind: finding, id: p1-r7, phase: 1, review_scope: in, title: "under repo every triage collect and remote policy read makes one extra fr-config probe per repo"}
+resolves:
+  - {id: p1-r2, state: fixed, body: "4b2b60c17: only a not-found, an UnsupportedForgeOperation (direct or as a ForgeError's cause) or a forge with no read_file_at_ref is no switch; any other error propagates. The probed text is validated by fr.placement.quiet.parse_switch_text, the same check the local switch reader uses; read_config_lenient turns a SettingsError into a TriageError naming the repo, which collect already skips or refuses."}
+  - {id: p1-r3, state: fixed, body: "2f4df4f0c: at_default/at_pair raise SettingsError naming the missing space (stealth config clone, origin/fr-config, origin/<branch>-config) and the remedy; lens rules refuse with LensError, declared_gates with CiEvidenceRefused, the queue's required_names with TriageError reported once per repo by the drive loop. repo is unchanged."}
+  - {id: p1-r4, state: fixed, body: "b71a8b047: docs/load, debt/engine, ops/load and lenses/resolve translate SettingsError into DocsEnvError, DebtConfigError, OpsLoadError and LensError; verification/rows.load_remap stays lenient and returns the reason. One test per reader family with a malformed origin/fr switch."}
+  - {id: p1-r5, state: fixed, body: "a14c733eb: an f-string whose literal parts name .fr as a path segment is a construction, exempt only inside a message call; fixture cases pin both shapes. It found ops_gate_cmd.HostCheckout.queue_configured, now read through config_space with a quiet behaviour test."}
+  - {id: p1-r6, state: fixed, body: "4b2b60c17 and 980f04111 add the non-404, glab/tea/no-reader, wrapped-unsupported and malformed-switch cases, and _lens_config_changed under repo (same text, changed, absent, no merge-base) and quiet."}
+  - {id: p1-r7, state: refuted, body: "Spec R3/§A places forge readers on the default branch or fr-config by the remote switch, which fr cannot know without reading it; one 404 per repo per collect is the cost of that design, recorded in p1-forge-ref-lenient, and nothing a user sees in output changes."}
+evidence:
+  review: review-p1
+  reviewer: adebc828eefcdbd14
