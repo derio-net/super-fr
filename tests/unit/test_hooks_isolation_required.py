@@ -284,3 +284,35 @@ def test_a_repo_with_only_legacy_archived_plans_blocks_a_base_edit(tmp_path: Pat
     (d / "_meta.yaml").write_text("plan: x\n")
     assert not (repo / "docs" / "superpowers" / "plans").exists()
     assert decision(run_hook(payload(repo / "a.py"), env={"PATH": "/usr/bin:/bin"})) == "deny"
+
+
+# --- S1 (spec 2026-11-19-event-driven-a-la-carte R5, R8, R13) through the hook --------
+
+
+def test_the_deny_names_the_new_allowlist(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    result = run_hook(payload(repo / "src.py"))
+    reason = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "`.fr/isolation-allow`" in reason
+    assert ".fr-isolation-allow" not in reason
+
+
+def test_the_new_allowlist_in_the_working_tree_allows(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    (repo / ".fr").mkdir()
+    (repo / ".fr" / "isolation-allow").write_text("notes/**\n")
+    assert allowed(run_hook(payload(repo / "notes" / "a.md")))
+    assert decision(run_hook(payload(repo / "src.py"))) == "deny"
+
+
+def test_the_fr_config_worktree_is_a_write_target_and_its_switch_is_read(
+    tmp_path: Path,
+) -> None:
+    from tests.unit.test_isolation_decision_core import quiet_config_worktree
+
+    home = tmp_path / "home"
+    wt = quiet_config_worktree(tmp_path, home)
+    env = {"HOME": str(home), "PATH": "/usr/bin:/bin"}
+    assert allowed(run_hook(payload(wt / ".fr" / "ci.yaml"), env))
+    # the product checkout, quiet through fr-config alone, stays blocked
+    assert decision(run_hook(payload(tmp_path / "q" / "prod" / "src.py"), env)) == "deny"

@@ -666,3 +666,243 @@ def test_a_relative_path_entry_holding_a_git_is_never_run(tmp_path: Path, relati
     assert result.stdout.startswith("/"), result.stdout
     assert Path(result.stdout).name == "git"
     assert not ran.exists()
+
+
+# --- S1 (spec 2026-11-19-event-driven-a-la-carte R5, R6, R8, R13) ------------------------
+#
+# The switch moved to `refs/remotes/origin/fr-config:.fr/settings.yaml`; the old
+# `refs/remotes/origin/fr:settings.yaml` is the fallback, and two that differ fail
+# closed. The `fr-config` worktree and the stealth configuration clone are placement
+# write targets. The allowlist is `.fr/isolation-allow` in the working tree, with
+# `.fr-isolation-allow` as its fallback.
+
+
+def push_config_switch(repo: Path, settings: str) -> None:
+    """`refs/remotes/origin/fr-config` whose tree is `.fr/settings.yaml` = *settings*."""
+    _git(repo, "checkout", "-q", "--orphan", "fr-config")
+    _git(repo, "rm", "-rqf", ".")
+    (repo / ".fr").mkdir()
+    (repo / ".fr" / "settings.yaml").write_text(settings)
+    _git(repo, "add", ".fr/settings.yaml")
+    _git(repo, "commit", "-qm", "config switch")
+    _git(repo, "update-ref", "refs/remotes/origin/fr-config", "fr-config")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "branch", "-qD", "fr-config")
+
+
+@pytest.mark.parametrize("env", [None, NO_FR], ids=["fr-resolves", "fr-absent"])
+def test_a_switch_only_on_fr_config_is_fr_enabled(
+    tmp_path: Path, env: dict[str, str] | None
+) -> None:
+    repo = quiet_repo(tmp_path, settings=None)
+    push_config_switch(repo, "placement: quiet\n")
+    assert enabled(repo, env) == 0
+    assert decide(repo / "src.py", env=env) == 1
+
+
+def test_an_fr_config_saying_repo_is_not_fr_enabled(tmp_path: Path) -> None:
+    repo = quiet_repo(tmp_path, settings=None)
+    push_config_switch(repo, "placement: repo\n")
+    assert enabled(repo, NO_FR) == 1
+
+
+@pytest.mark.parametrize(
+    ("new", "old"),
+    [("placement: repo\n", "placement: quiet\n"), ("placement: quiet\n", "placement: repo\n")],
+    ids=["new-repo", "old-repo"],
+)
+def test_two_switches_that_differ_fail_closed(tmp_path: Path, new: str, old: str) -> None:
+    repo = quiet_repo(tmp_path, settings=old)
+    push_config_switch(repo, new)
+    assert enabled(repo, NO_FR) == 0
+    assert decide(repo / "src.py", env=NO_FR) == 1
+
+
+def quiet_config_worktree(
+    tmp_path: Path, home: Path, new: str = "placement: quiet\n", old: str | None = None
+) -> Path:
+    """A quiet repo named `prod` (switch on fr-config, optionally the old one too) and
+    its `fr-config` worktree where fr puts it under *home*."""
+    (tmp_path / "q").mkdir(exist_ok=True)
+    repo = quiet_repo(tmp_path / "q", settings=old)
+    push_config_switch(repo, new)
+    repo = repo.rename(repo.parent / "prod")
+    wt = home / ".cache" / "fr" / "worktrees" / "prod" / "fr-config"
+    wt.parent.mkdir(parents=True)
+    _git(repo, "worktree", "add", "-q", "-b", "fr-config", str(wt), "refs/remotes/origin/fr-config")
+    return wt
+
+
+@pytest.mark.parametrize("env", [None, NO_FR], ids=["fr-resolves", "fr-absent"])
+def test_the_repos_own_fr_config_worktree_is_editable(
+    tmp_path: Path, env: dict[str, str] | None
+) -> None:
+    home = tmp_path / "home"
+    wt = quiet_config_worktree(tmp_path, home)
+    assert decide(wt / ".fr" / "ci.yaml", env={**(env or {}), "HOME": str(home)}) == 0
+
+
+def test_the_fr_config_worktree_with_the_same_old_switch_is_editable(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    wt = quiet_config_worktree(tmp_path, home, old="placement: quiet\n")
+    assert decide(wt / ".fr" / "ci.yaml", env={**NO_FR, "HOME": str(home)}) == 0
+
+
+def test_the_fr_config_worktree_is_refused_when_the_switches_differ(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    wt = quiet_config_worktree(tmp_path, home, old="placement: quiet\nforge:\n  labels: off\n")
+    assert decide(wt / ".fr" / "ci.yaml", env={**NO_FR, "HOME": str(home)}) == 1
+
+
+def test_the_fr_worktree_is_refused_when_the_switches_differ(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    wt = quiet_fr_worktree(tmp_path, home)
+    prod = tmp_path / "q" / "prod"
+    push_config_switch(prod, "placement: quiet\n# edited\n")
+    assert decide(spec_in(wt), env={**NO_FR, "HOME": str(home)}) == 1
+
+
+def test_the_fr_worktree_reads_the_switch_on_fr_config(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    wt = quiet_fr_worktree(tmp_path, home)
+    prod = tmp_path / "q" / "prod"
+    push_config_switch(prod, "placement: quiet\n")
+    assert decide(spec_in(wt), env={**NO_FR, "HOME": str(home)}) == 0
+
+
+def test_an_fr_config_worktree_on_another_branch_is_refused(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    wt = quiet_config_worktree(tmp_path, home)
+    _git(wt, "checkout", "-q", "-b", "not-fr-config")
+    assert decide(wt / ".fr" / "ci.yaml", env={**NO_FR, "HOME": str(home)}) == 1
+
+
+def test_an_fr_config_worktree_somewhere_else_is_refused(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    (tmp_path / "q").mkdir()
+    repo = quiet_repo(tmp_path / "q", settings=None)
+    push_config_switch(repo, "placement: quiet\n")
+    wt = tmp_path / "elsewhere" / "fr-config"
+    _git(repo, "worktree", "add", "-q", "-b", "fr-config", str(wt), "refs/remotes/origin/fr-config")
+    assert decide(wt / ".fr" / "ci.yaml", env={**NO_FR, "HOME": str(home)}) == 1
+
+
+def test_an_fr_branch_worktree_at_the_fr_config_path_is_refused(tmp_path: Path) -> None:
+    """The structure is the path AND its branch: `fr` checked out at `fr-config`'s path."""
+    home = tmp_path / "home"
+    (tmp_path / "q").mkdir()
+    repo = quiet_repo(tmp_path / "q")
+    push_config_switch(repo, "placement: quiet\n")
+    repo = repo.rename(repo.parent / "prod")
+    wt = home / ".cache" / "fr" / "worktrees" / "prod" / "fr-config"
+    wt.parent.mkdir(parents=True)
+    _git(repo, "worktree", "add", "-q", "-b", "fr", str(wt), "refs/remotes/origin/fr")
+    assert decide(spec_in(wt), env={**NO_FR, "HOME": str(home)}) == 1
+
+
+def stealth_config_setup(tmp_path: Path, home: Path) -> Path:
+    """`stealth_setup`, plus the configuration clone of `main-config` beside it. Its tree
+    carries a devcontainer profile so the clone is fr-enabled on its own (a clone that is
+    not fr-enabled is allowed whatever it is, which would make these tests vacuous)."""
+    _ws, clone, bare = stealth_setup(tmp_path, home)
+    _git(clone, "checkout", "-q", "--orphan", "main-config")
+    _git(clone, "rm", "-rqf", ".")
+    profile = clone / ".devcontainer" / "dev"
+    profile.mkdir(parents=True)
+    (profile / "devcontainer.json").write_text('{"image": "x"}\n')
+    _git(clone, "add", "-A")
+    _git(clone, "commit", "-q", "-m", "config")
+    _git(clone, "push", "-q", "origin", "main-config")
+    _git(clone, "checkout", "-q", "main")
+    config = clone.parent / f"{clone.name}-config"
+    subprocess.run(
+        ["git", "clone", "-q", "--branch", "main-config", str(bare), str(config)], check=True
+    )
+    return config
+
+
+@pytest.mark.parametrize("env", [None, NO_FR], ids=["fr-resolves", "fr-absent"])
+def test_the_stealth_configuration_clone_is_editable(
+    tmp_path: Path, env: dict[str, str] | None
+) -> None:
+    home = tmp_path / "home"
+    config = stealth_config_setup(tmp_path, home)
+    target = config / "target" / ".fr" / "ci.yaml"
+    assert decide(target, env={**(env or {}), "HOME": str(home)}) == 0
+
+
+def test_a_configuration_clone_on_another_branch_is_refused(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    config = stealth_config_setup(tmp_path, home)
+    _git(config, "checkout", "-q", "-b", "other-config")
+    assert decide(config / "target" / ".fr" / "ci.yaml", env={**NO_FR, "HOME": str(home)}) == 1
+
+
+def test_a_configuration_clone_without_a_valid_stealth_workspace_is_refused(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    config = stealth_config_setup(tmp_path, home)
+    ws = home / ".cache" / "fr" / "worktrees" / "target" / "feat__x"
+    marker = (ws / ".fr-isolation").read_text()
+    (ws / ".fr-isolation").write_text(marker.replace(str(ws.resolve()), "/elsewhere.invalid"))
+    assert decide(config / "target" / ".fr" / "ci.yaml", env={**NO_FR, "HOME": str(home)}) == 1
+
+
+def test_the_allowlist_in_dot_fr_is_read(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    (repo / ".fr").mkdir()
+    (repo / ".fr" / "isolation-allow").write_text("# operator data\nprojects/**\n")
+    assert decide(repo / "projects" / "deep" / "x.md") == 0
+    assert decide(repo / "src.py") == 1
+
+
+def test_the_old_allowlist_is_the_fallback_only(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    (repo / ".fr-isolation-allow").write_text("projects/**\n")
+    assert decide(repo / "projects" / "x.md") == 0
+    (repo / ".fr").mkdir()
+    (repo / ".fr" / "isolation-allow").write_text("data/**\n")
+    assert decide(repo / "data" / "x.md") == 0
+    assert decide(repo / "projects" / "x.md") == 1  # the new file is there: it alone counts
+
+
+def test_the_allowlist_is_never_read_from_a_ref(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    (repo / ".fr").mkdir()
+    (repo / ".fr" / "isolation-allow").write_text("projects/**\n")
+    _git(repo, "add", ".fr/isolation-allow")
+    _git(repo, "commit", "-qm", "allow")
+    (repo / ".fr" / "isolation-allow").unlink()
+    assert decide(repo / "projects" / "x.md") == 1
+
+
+def test_the_shell_library_and_the_plugin_name_the_same_switch_locations() -> None:
+    """One list of switch locations on both edit gates (S1 R5, R13): each line marked
+    `fr-switch-location` names one, and the two sources name the same, in the same order,
+    the same as fr itself reads them (`fr.artifacts.paths`)."""
+    import re
+
+    from fr.artifacts import paths
+
+    plugin = REPO_ROOT / "packages" / "fr-opencode-plugin" / "src" / "marker.ts"
+    quoted = re.compile(r"""["']([^"']+)["']""")
+
+    def located(path: Path) -> list[str]:
+        return [
+            m.group(1)
+            for line in path.read_text().splitlines()
+            if "fr-switch-location" in line and (m := quoted.search(line))
+        ]
+
+    fr_reads = [
+        f"{paths.SWITCH_REF}:{paths.SWITCH_SETTINGS}",
+        f"{paths.LEGACY_SWITCH_REF}:{paths.LEGACY_SWITCH_SETTINGS}",
+    ]
+    assert located(LIB) == fr_reads
+    assert located(plugin) == fr_reads
+    # and neither engine reads a switch anywhere else
+    for source in (LIB, plugin):
+        text = source.read_text()
+        assert "cat-file -p refs/remotes/origin/fr" not in text
+        assert '"cat-file", "-p", "refs/remotes/origin/fr' not in text
