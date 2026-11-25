@@ -352,3 +352,13 @@ Under stealth the stealth tracking repo (R19) wins over any declaration; triage.
 ### p6-r18-amended · decision · R18 amended: older caches, the tombstone, rule 3 and rule 5
 
 Rule 2: an older cache becomes an S1 repository only through the move; from elsewhere fr refuses (p6-older-cache-from-outside). Rule 3: worktrees under the copy at any depth are never force-removed; one with work in it refuses the move. Rule 4: the exclude line stays while a tombstone or another worktree's .fr/triage-state/ remains. Rule 5: every file but the scratch, locks, facts.json and pages is compared; files only the copy holds are carried into the cache. A retired copy leaves a tombstone an fr below S1 fails on (p6-rc6-tombstone).
+
+<!-- fr:journal kind=finding scope=spec id=s1-refuse-old-paths-resolved created=2026-11-25T18:45:44+00:00 state=open resolves=s1-refuse-old-paths filed_as=derio-net/super-fr#1698 -->
+### s1-refuse-old-paths-resolved · finding [filed → derio-net/super-fr#1698] · resolves s1-refuse-old-paths: Refuse the old configuration paths and drop the legacy settings copy
+
+Filed at deliver as derio-net/super-fr#1698; still owed until discharged.
+
+<!-- fr:journal kind=finding scope=spec id=sr-oos-1-resolved-2 created=2026-11-25T18:45:44+00:00 state=open resolves=sr-oos-1 tracked_by=https://github.com/derio-net/super-fr/issues/1697 -->
+### sr-oos-1-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1697] · resolves sr-oos-1: Under repo placement, executable configuration on the default branch is equally unprotected on a GitHub free-plan private repo
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1697.
