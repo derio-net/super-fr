@@ -181,3 +181,27 @@ amendments:
       main push of 3e0df5b48 (#1669, no queue run; CI run 45594577626) ran full CI (7
       shards, coverage, split-check); release run 45594577583 kept its staged suite
       (collect, 6 shards, split-check, publish)'
+  - row: ci-superseded-runs
+    op: set-status
+    base: 1
+    status: walked
+    notes: 'walked live 2026-11-25 on PR #1686: two pushes about a minute apart; CI
+      run 45598124780 (306b4a2ca) ended cancelled, run 45598191102 (3ce75318b) passed,
+      and the head reports one ci-ok, the newer run''s. The same on throwaway PR #1687
+      (run 45598345916 cancelled by the next push). No main or fr-queue/** CI run of
+      waves 22-24 (2026-11-24/25) was cancelled; merge groups not exercised (this repo
+      uses no forge merge queue).'
+    walk:
+      strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-25T00:00:00Z'
+      evidence: 'CI runs 45598124780 (cancelled) and 45598191102 (success, ci-ok) on
+        PR #1686; 45598345916 (cancelled) on PR #1687'
+    why: 'walked live 2026-11-25 on PR #1686: two pushes about a minute apart; CI run
+      45598124780 (306b4a2ca) ended cancelled, run 45598191102 (3ce75318b) passed, and
+      the head reports one ci-ok, the newer run''s. The same on throwaway PR #1687 (run
+      45598345916 cancelled by the next push). No main or fr-queue/** CI run of waves
+      22-24 (2026-11-24/25) was cancelled; merge groups not exercised (this repo uses
+      no forge merge queue).'
