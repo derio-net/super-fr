@@ -70,8 +70,10 @@ steps:
           returned: '2026-11-25T13:20:50+00:00'
           outcome: abandoned
         - dispatched: '2026-11-25T13:20:50+00:00'
+          agent: a544349fa2238ab03
           agent_type: super-fr:fr-phase-executor
           harness: claude-code
+          model: claude-sonnet-5
           tier: standard
           bound: claude-sonnet-5
           session: 0b0df376-70ba-43e5-92da-54c79b85d954
