@@ -1,0 +1,10 @@
+schema_version: 12
+run: 2026-11-24-feat-batch-merge-readiness
+step: deliver
+outcome: done
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/1679
+evidence:
+  tests: ci
+  walk: /Users/idermitzakis/.cache/fr/walks/2026-11-24-feat-batch-merge-readiness/20261125T150131Z.log
