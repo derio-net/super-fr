@@ -1,0 +1,15 @@
+schema_version: 12
+run: 2026-11-24-feat-batch-merge-readiness
+step: implement-phase
+item: phase/3
+outcome: done
+ticks: [P3.T1.S1, P3.T1.S2, P3.T1.S3]
+refactor: {}
+journal:
+  - kind: decision
+    id: p3-running-in-preserve
+    title: The running predicate lives in preserve.py; local.py gets a 3-line guard (phase 3)
+    body: "`BranchRun.running_step`/`.running` and `preserve.running_hold(runs)` read steps and units in state `running` (an unreadable file counts); `_reap_or_classify` calls it after the external check, so dry run and live, merged and merged-by-content, are all guarded. gc reports action `skipped`, detail `kept: run <id> step <step> is running`. `_reap_hazard`, `_down_worktree_tail` and `down` are unchanged (a test pins it)."
+    phase: 3
+resolves: []
+evidence: {}

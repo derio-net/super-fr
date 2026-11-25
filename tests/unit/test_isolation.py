@@ -4344,3 +4344,96 @@ def test_branch_changes_present_second_landing_does_not_hide_a_reverted_first(
     res = branch_changes_present(subprocess_runner, repo, "feature", "main")
     assert not res.changes_present
     assert res.missing == ["a.txt"]
+
+
+# ---------- gc keeps a workspace whose run is still running (R9) ----------
+
+
+def _commit_cursor(wt: Path, branch: str, states: dict[str, str]) -> None:
+    import yaml
+
+    doc = {
+        "schema_version": 5,
+        "run": "r9",
+        "workflow": "fr-goal@1",
+        "branch": branch,
+        "started": "2026-09-23T00:00:00+00:00",
+        "cursor": next(iter(states)),
+        "steps": {k: {"state": v} for k, v in states.items()},
+    }
+    runs = wt / "docs" / "superpowers" / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    _commit_in_worktree(wt, "docs/superpowers/runs/r9.yaml", yaml.safe_dump(doc, sort_keys=False))
+    # Pushed, so the hazard guard (changes not on origin) has nothing to refuse.
+    subprocess.run(["git", "-C", str(wt), "push", "-q", "origin", "HEAD:main"], check=True)
+
+
+_MERGED = '{"state": "MERGED", "url": "u"}'
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_gc_keeps_merged_workspace_with_a_running_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dry_run: bool
+) -> None:
+    repo, _runner, target, up = _gc_env(tmp_path, monkeypatch, pr_by_branch={"feat/run": _MERGED})
+    wt = up("feat/run")
+    _commit_cursor(wt, "feat/run", {"deliver": "running"})
+
+    (action,) = [a for a in target.gc(dry_run=dry_run) if a.branch == "feat/run"]
+    assert action.verdict == "merged" and action.action == "skipped"
+    assert action.detail == "kept: run r9 step deliver is running"
+    assert wt.is_dir() and load_state(repo, "feat/run") is not None
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_gc_keeps_merged_by_content_workspace_with_a_running_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dry_run: bool
+) -> None:
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/work")
+    _commit_cursor(wt, "feat/work", {"deliver": "running"})
+    # _commit_cursor pushed the cursor commit itself to origin/main: its content is
+    # landed, with no PR for gc to find.
+
+    (action,) = [a for a in target.gc(dry_run=dry_run) if a.branch == "feat/work"]
+    assert action.verdict == "merged-by-content" and action.action == "skipped"
+    assert action.detail == "kept: run r9 step deliver is running"
+    assert wt.is_dir()
+
+
+def test_gc_keeps_merged_workspace_with_an_unreadable_cursor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, _runner, target, up = _gc_env(tmp_path, monkeypatch, pr_by_branch={"feat/bad": _MERGED})
+    wt = up("feat/bad")
+    runs = wt / "docs" / "superpowers" / "runs"
+    runs.mkdir(parents=True)
+    _commit_in_worktree(wt, "docs/superpowers/runs/bad.yaml", "run: [unclosed\n  : : :\n")
+
+    (action,) = [a for a in target.gc(dry_run=True) if a.branch == "feat/bad"]
+    assert action.action == "skipped" and action.detail.startswith("kept: run bad")
+    assert wt.is_dir()
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_gc_still_reaps_merged_workspace_with_no_running_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dry_run: bool
+) -> None:
+    repo, _runner, target, up = _gc_env(tmp_path, monkeypatch, pr_by_branch={"feat/idle": _MERGED})
+    wt = up("feat/idle")
+    _commit_cursor(wt, "feat/idle", {"a": "done", "b": "pending", "c": "blocked"})
+
+    (action,) = [a for a in target.gc(dry_run=dry_run) if a.branch == "feat/idle"]
+    assert action.action == ("would-reap" if dry_run else "reaped")
+
+
+def test_down_still_tears_down_a_merged_workspace_with_a_running_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, _runner, target, up = _gc_env(tmp_path, monkeypatch, pr_by_branch={"feat/down": _MERGED})
+    wt = up("feat/down")
+    _commit_cursor(wt, "feat/down", {"deliver": "running"})
+    state = load_state(repo, "feat/down")
+    assert state is not None
+    target.down(state, force=False)
+    assert not wt.exists()

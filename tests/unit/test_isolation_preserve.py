@@ -146,6 +146,40 @@ def test_branch_runs_finished_run_is_not_active(tmp_path: Path) -> None:
     assert run.active is False
 
 
+def test_branch_runs_running_predicate_over_steps(tmp_path: Path) -> None:
+    _write_run(tmp_path, "r1", cursor="plan", states={"brainstorm": "done", "plan": "running"})
+    (run,) = preserve.branch_runs(tmp_path, BRANCH)
+    assert run.running and run.running_step == "plan"
+    assert preserve.running_hold([run]) == "run r1 step plan is running"
+
+
+def test_branch_runs_running_predicate_over_units(tmp_path: Path) -> None:
+    path = _write_run(tmp_path, "r1", states={"a": "done", "impl": "pending"})
+    doc = yaml.safe_load(path.read_text())
+    doc["steps"]["impl"]["units"] = {"phase/1": {"state": "done"}, "phase/2": {"state": "running"}}
+    path.write_text(yaml.safe_dump(doc))
+    (run,) = preserve.branch_runs(tmp_path, BRANCH)
+    assert run.running and run.running_step == "impl"
+
+
+@pytest.mark.parametrize("state", ["pending", "blocked", "done"])
+def test_branch_runs_not_running_for_other_states(tmp_path: Path, state: str) -> None:
+    _write_run(tmp_path, "r1", states={"a": "done", "b": state})
+    (run,) = preserve.branch_runs(tmp_path, BRANCH)
+    assert not run.running
+    assert preserve.running_hold([run]) is None
+
+
+def test_branch_runs_unreadable_file_counts_as_running(tmp_path: Path) -> None:
+    runs = tmp_path / "docs" / "superpowers" / "runs"
+    runs.mkdir(parents=True)
+    (runs / "bad.yaml").write_text("run: [unclosed\n  : : :\n")
+    (run,) = preserve.branch_runs(tmp_path, BRANCH)
+    assert run.running
+    hold = preserve.running_hold([run])
+    assert hold is not None and "bad" in hold and "unreadable" in hold
+
+
 def test_branch_runs_ignores_a_foreign_branchs_run(tmp_path: Path) -> None:
     _write_run(tmp_path, "other", branch="feat/other")
     assert preserve.branch_runs(tmp_path, BRANCH) == []

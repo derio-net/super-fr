@@ -91,6 +91,14 @@ class BranchRun:
     active: bool
     file: str  # repo-relative
     unreadable: bool = False
+    # The first step with state `running`, itself or through a unit (`None`: none).
+    running_step: str | None = None
+
+    @property
+    def running(self) -> bool:
+        """Work may be in flight: a step or unit `running`, or a file fr cannot
+        read (unknown is not finished). `pending` and `blocked` are not running."""
+        return self.unreadable or self.running_step is not None
 
     def to_json(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -199,6 +207,28 @@ def _rel(path: Path, worktree: Path) -> str:
         return str(path)
 
 
+def _running_step(steps: dict[Any, dict[str, Any]]) -> str | None:
+    for name, step in steps.items():
+        units = step.get("units")
+        in_units = isinstance(units, dict) and any(
+            isinstance(u, dict) and u.get("state") == "running" for u in units.values()
+        )
+        if step.get("state") == "running" or in_units:
+            return str(name)
+    return None
+
+
+def running_hold(runs: list[BranchRun]) -> str | None:
+    """Why gc must keep a workspace: `run <id> step <step> is running`, or the
+    unreadable file's own line (R9). `None` when no run is running."""
+    for r in runs:
+        if r.unreadable:
+            return f"run {r.id} is unreadable ({r.file})"
+        if r.running_step is not None:
+            return f"run {r.id} step {r.running_step} is running"
+    return None
+
+
 def branch_runs(worktree: Path, branch: str) -> list[BranchRun]:
     """This branch's run files under `docs/superpowers/runs/`, read with plain
     `yaml.safe_load` — never the live `extra="forbid"` model, so an old stamp or
@@ -237,6 +267,7 @@ def branch_runs(worktree: Path, branch: str) -> list[BranchRun]:
                 cursor=cursor if isinstance(cursor, str) and cursor else "?",
                 active=any(s.get("state") != "done" for s in steps.values()),
                 file=_rel(path, worktree),
+                running_step=_running_step(steps),
             )
         )
     return runs
