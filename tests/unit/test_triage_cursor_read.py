@@ -152,3 +152,42 @@ def test_the_drivers_reader_says_no_clone_and_caches_by_head(tmp_path: Path) -> 
     assert driver.cursor_at(_pr()) == (DONE, "read")
     assert driver.cursor_at(_pr()) == (DONE, "read")
     assert calls == [REPO]
+
+
+def test_a_cursor_with_no_read_status_is_never_delivered() -> None:
+    """p1-r6: a cursor at the PR's head whose read status is None (never asked) reads as not
+    read, whatever its position."""
+    from fr.triage.readiness import _LINES, batch_readiness
+
+    from tests.unit.test_triage_readiness import DONE as R_DONE
+    from tests.unit.test_triage_readiness import HEAD as R_HEAD
+    from tests.unit.test_triage_readiness import B, _qs
+
+    got = batch_readiness(B, _qs(B, approved=None, cursor=(R_HEAD, R_DONE, None)))
+    assert got.verdict == _LINES["not-delivered"].format(r="the run cursor was not read")
+    assert got.verdict == "Not ready: not delivered: the run cursor was not read"
+    assert not got.admits
+
+
+def test_a_schema_16_facts_files_delivered_cursor_is_not_admitted(tmp_path: Path) -> None:
+    """p1-r6, R1: a schema-16 facts file carries a batch PR's `cursor` but no `cursor_read`;
+    its deliver-done cursor was never asked at this head, so the queue does not admit it."""
+    from fr.triage.batch import QueueEntry
+    from fr.triage.readiness import batch_readiness, fact_cursors
+
+    from tests.unit.test_triage_readiness import HEAD as R_HEAD
+    from tests.unit.test_triage_readiness import B, _qs
+
+    pr = {"repo": REPO, "number": 101, "title": "b1", "state": "OPEN", "is_draft": True,
+          "url": f"https://github.com/{REPO}/pull/101", "head_ref": BRANCH, "head_oid": R_HEAD,
+          "cursor": {"run": "r1", "step": "deliver", "kind": "deliver-done"}}  # fmt: skip
+    old = {"schema": 16, "scope": REPO, "kind": "repo", "collected_at": "2026-09-25T06:00:00Z",
+           "repos": [REPO], "issues": [], "batch_prs": [pr]}  # fmt: skip
+    (tmp_path / "facts.json").write_text(json.dumps(old))
+    facts = load_facts(tmp_path / "facts.json")
+    (loaded,) = facts.batch_prs
+    assert loaded.cursor == DONE and loaded.cursor_read is None
+    cursors = fact_cursors([QueueEntry(batch=B, pr=loaded)])
+    got = batch_readiness(B, _qs(B, cursor=cursors["b1"]))
+    assert not got.admits
+    assert got.kind == "approved-not-delivered" and got.reason == "the run cursor was not read"

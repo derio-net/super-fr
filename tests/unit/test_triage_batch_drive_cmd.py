@@ -5856,3 +5856,30 @@ def test_a_probe_git_error_is_said_once_and_retried_uncached(
     lines = [x for x in result.output.splitlines() if "the conflict probe could not run" in x]
     assert len(lines) == 1 and len(attempts) >= 2, result.output  # said once, tried each pass
     assert _conflicts(tmp_path) == [] and messenger.messages == []
+
+
+def test_a_pr_whose_head_moved_since_the_cursor_was_read_is_held_with_both_heads(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """p1-r5, batch-merge-readiness R1: the forge reads the PR at a head other than the one
+    its run cursor was read at, so it is not delivered: no queue opens, the draft is not
+    readied, and the hold names both heads."""
+    from fr.triage import batch_drive
+    from fr.triage.wave_queue import QueueConfig
+
+    real = batch_drive.drive_pass
+    monkeypatch.setattr(
+        triage_batch_cmd, "drive_pass",
+        lambda snap: real(replace(snap, wave_queues={REPO: QueueConfig()})),
+    )  # fmt: skip
+    _pr_open(world, tmp_path, draft=True)
+    view = world.pr_view
+    monkeypatch.setattr(
+        world, "pr_view", lambda repo, n: {**view(repo, n), "head_oid": "sha-moved"}
+    )
+    code, out = _drive(tmp_path, "--once")
+    assert code in (0, 3), out
+    assert _lines(out, "queue-open") == [] and world.merged == []
+    assert not any(c.startswith("pr_ready") for c in world.calls)
+    assert "the run cursor was read at sha-101, the PR is at sha-moved" in out
