@@ -454,11 +454,15 @@ def pending_files(product: Path, space: ConfigSpace) -> dict[str, str]:
             refuse_link(product, source)
             if not source.is_file() or source.relative_to(product).as_posix() not in clean:
                 continue
-            text = source_text(product, source)
             if entry.kind == "profiles":
-                if _profiles_version(text) != 2:
-                    continue
-                text = with_stamp(text, 3)
+                from fr.settings import SettingsError
+
+                try:
+                    text = profiles_body(product, source)
+                except SettingsError:
+                    continue  # its own hop refuses it, naming why
+            else:
+                text = source_text(product, source)
             out[space.tree_path(entry.below(source, product))] = text
     if space.placement == QUIET:
         for name in QUIET_FILES:
@@ -538,17 +542,45 @@ def source_text(product: Path, source: Path) -> str:
     return shown.stdout.decode("utf-8")
 
 
-def _profiles_version(text: str) -> int:
-    import yaml
+_STAMP_LINES = re.compile(r"^schema_version\s*:[^\r\n]*(\r?\n)?", re.MULTILINE)
 
-    try:
-        data = yaml.safe_load(text)
-    except yaml.YAMLError:
-        return 0
-    if not isinstance(data, dict):
-        return 0
-    version = data.get("schema_version", 1)
-    return version if isinstance(version, int) and not isinstance(version, bool) else 0
+
+def profiles_body(product: Path, source: Path) -> str:
+    """The version-3 bytes a cross-space profiles move pushes for *source* (review p4-r4):
+    the COMMITTED file (an untracked one as it is), taken 1 -> 2 in memory when it is at
+    version 1 (`fr.artifacts.profiles_services.services_text`) and stamped 3, so the
+    configuration branch receives the final bytes in one move. The working tree may differ
+    from the commit only by fr's own in-flight 1 -> 2 rewrite of it (the same text, stamped
+    2 by the runner); any other difference is an operator's edit and refuses."""
+    from fr.artifacts.profiles_services import services_text
+    from fr.settings import SettingsError
+
+    rel_path = refuse_link(product, source)
+
+    def git(*args: str) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.run(["git", "-C", str(product), *args], capture_output=True, check=False)
+
+    disk = Path(source).read_text()
+    tracked = git("ls-files", "--error-unmatch", "--", rel_path).returncode == 0
+    if tracked:
+        shown = git("show", f"HEAD:{rel_path}")
+        if shown.returncode != 0:
+            raise SettingsError(f"cannot read {rel_path} at HEAD: {shown.stderr.decode().strip()}")
+        committed = shown.stdout.decode("utf-8")
+    else:
+        committed = disk
+    bom = "\ufeff" if committed.startswith("\ufeff") else ""
+    plain = committed.removeprefix(bom)
+    v2 = services_text(Path(source), plain)
+    v2 = plain if v2 is None else v2
+    if disk != committed and _STAMP_LINES.sub("", disk.removeprefix(bom)) != _STAMP_LINES.sub(
+        "", v2
+    ):
+        raise SettingsError(
+            f"{rel_path} has uncommitted changes: commit or stash them, then run "
+            "`fr migrate artifacts --yes` again (fr pushes the committed file, S1 R10)"
+        )
+    return bom + with_stamp(v2, 3)
 
 
 def ensure_space(product: Path, *, include: dict[str, str] | None = None) -> bool:
@@ -594,6 +626,8 @@ def move_across(
     source: Path,
     below: str,
     transform: Callable[[str], str] | None = None,
+    *,
+    body: str | None = None,
 ) -> Path:
     """Move *source* to *below* (a path below `.fr/`) in *product*'s configuration space
     (R10): the destination is committed and pushed there first, and the product file is
@@ -607,9 +641,10 @@ def move_across(
 
     product = Path(product)
     space = config_space(product)
-    body = source_text(product, source)
-    if transform is not None:
-        body = transform(body)
+    if body is None:
+        body = source_text(product, source)
+        if transform is not None:
+            body = transform(body)
     tree_path = space.tree_path(below)
     writer = writer_for(product)
     writer.fetch()

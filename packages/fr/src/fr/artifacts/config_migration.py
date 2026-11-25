@@ -90,11 +90,6 @@ def _profiles_text(path: Path) -> str:
     return bom + moves.with_stamp(text, 3)
 
 
-def _stamped(text: str) -> str:
-    bom = "\ufeff" if text.startswith("\ufeff") else ""
-    return bom + moves.with_stamp(text.removeprefix(bom), 3)
-
-
 def _config_checkout(top: Path) -> bool:
     """Whether *top* is a configuration checkout, decided by structure, never by a name
     (review p4-r5): quiet's `fr-config` worktree (HEAD on `refs/heads/fr-config` at the path
@@ -148,7 +143,9 @@ def _profiles_relocate(path: Path) -> None:
     product = _PROFILES.product_of(path)
     moves.refuse_link(product, path)
     if _across(_PROFILES, product):
-        moves.move_across(product, path, _PROFILES.new, _stamped)
+        # One move with the final bytes (review p4-r4): a version-1 file's 1 -> 2 rewrite
+        # is redone in memory on the committed bytes, never refused as uncommitted.
+        moves.move_across(product, path, _PROFILES.new, body=moves.profiles_body(product, path))
         return
     text = _profiles_text(path)
     dest = _profiles_destination(path)
