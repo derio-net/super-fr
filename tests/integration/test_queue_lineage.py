@@ -7,6 +7,7 @@ not; `Checkout.leads(onto, target)` is whether `onto` is an ancestor of `target`
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -79,3 +80,55 @@ def test_an_unknown_object_raises(tmp_path: Path) -> None:
         w.checkout.carried(ghost, w.main(), {one})
     with pytest.raises(GitError):
         w.checkout.leads(ghost, w.main())
+
+
+# ------------------------------------------------- the carry brief, run (review p1-r1, p1-r3)
+
+
+def _run_brief_steps(w: World, tmp_path: Path, brief: str) -> tuple[Path, list[str]]:
+    """Run the carry brief's steps 2-4 as a session would, in a fresh clone of PR 3."""
+    import re
+
+    work = tmp_path / "session"
+    git(tmp_path, "clone", "--quiet", str(w.origin), str(work))
+    git(work, "config", "user.email", "s@example.com")
+    git(work, "config", "user.name", "session")
+    git(work, "checkout", "--quiet", w.prs[3])
+    steps = {ln[:2]: re.findall(r"`([^`]+)`", ln) for ln in brief.splitlines() if ln[:2] in
+             ("2.", "3.")}  # fmt: skip
+    fetch, rev_list = steps["2."][:2]
+    git(work, *fetch.split()[1:])
+    listed = git(work, *rev_list.split()[1:]).split()
+    git(work, *steps["3."][0].split()[1:])
+    for sha in listed:
+        git(work, "cherry-pick", sha)
+    return work, listed
+
+
+@pytest.mark.parametrize("slotted", [True, False])
+def test_the_carry_brief_drops_the_dead_slot_commit(tmp_path: Path, slotted: bool) -> None:
+    from fr.triage.model import Batch
+    from fr.triage.queue_handback import carry_brief
+
+    w = world(tmp_path)
+    w.pr(1, {"b.txt": "bravo\n"})
+    w.pr(3, {"d.txt": "delta\n"})
+    w.fetch()
+    reset = w.head(3)
+    (one,) = build(w.checkout, w.main(), [w.entry(1)], "squash", None, scope=SCOPE,
+                   slots=(1,), scratch=w.scratch)  # fmt: skip
+    _merge_into(w, 3, one.sha)
+    w.push_to(3, {"d.txt": "delta, edited after the merge\n"})
+    batch = Batch.model_validate({"id": "b3", "title": "change 3", "ids": ["super-fr#3"]})
+    onto_ref = slot_ref(SCOPE, 1).removeprefix("refs/heads/") if slotted else "origin/main"
+    brief = carry_brief(batch, pr=3, head=w.head(3), reset=reset, carried=(one.sha,),
+                        onto=one.sha if slotted else w.main(), onto_ref=onto_ref,
+                        branch=w.prs[3])  # fmt: skip
+
+    work, listed = _run_brief_steps(w, tmp_path, brief)
+
+    assert one.sha not in listed and len(listed) == 1
+    gone = subprocess.run(["git", "merge-base", "--is-ancestor", one.sha, "HEAD"], cwd=work)
+    assert gone.returncode == 1
+    assert (work / "d.txt").read_text() == "delta, edited after the merge\n"
+    assert not (work / "b.txt").exists()

@@ -51,9 +51,11 @@ def latest_conflict(events: Sequence[object], head: str) -> ConflictEvent | None
 def reissue_due(events: Sequence[object], head: str, leads: bool | None) -> bool:
     """R2, R3: the latest `conflict` event at *head* named a commit (`onto`) and git reads
     that commit as no longer leading to `main` (*leads* False). One that still leads, one
-    that names none, and one git could not read (*leads* None, R5) are not briefed again."""
+    that names none, one git could not read (*leads* None, R5) and one the budget held
+    (`delivered: held`, the operator's) are not briefed again."""
     met = latest_conflict(events, head)
-    return met is not None and met.onto is not None and leads is False
+    return (met is not None and met.onto is not None and met.delivered != "held"
+            and leads is False)  # fmt: skip
 
 
 def conflict_brief(
@@ -132,8 +134,14 @@ def slot_name(scope: str, slot: int) -> str:
 
 
 def target_ref(qs: QueueSnapshot, slots: Sequence[int]) -> str:
-    """The ref a brief fetches for a target in *slots* (one slot, or none: the base)."""
-    return slot_name(qs.scope, slots[0]) if slots else f"origin/{qs.default or 'main'}"
+    """The ref a brief fetches for a target in *slots* (one slot, or none: the default
+    branch by its bare name, which `git fetch origin <name>` takes)."""
+    return slot_name(qs.scope, slots[0]) if slots else qs.default or "main"
+
+
+def fetch_name(ref: str) -> str:
+    """*ref* as `git fetch origin` names it: `origin/<branch>` without its remote."""
+    return ref.removeprefix("origin/")
 
 
 def _lineage_key(qs: QueueSnapshot, key: str) -> str:
@@ -227,8 +235,8 @@ def reissue_actions(
         if batch is None or pr is None or _ejected_head(key, rep, by_id) != pr.head:
             continue
         met = latest_conflict(batch.events, pr.head)
-        if met is None or met.onto is None or key not in qs.leads:
-            continue
+        if met is None or met.onto is None or met.delivered == "held" or key not in qs.leads:
+            continue  # a held hand-back is the operator's: never re-issued (p1-r2)
         if qs.leads[key] is None:
             if (k := _lineage_key(qs, key)) not in qs.warned:
                 out.append(QueueAction(
@@ -291,8 +299,10 @@ def carry_brief(
             f"Rebuild {branch} without it, in these six steps:",
             f"1. Enter the batch's workspace first: `fr isolation up --branch {branch}`. "
             "Every later step runs in the workspace.",
-            f"2. `git fetch origin {branch} {onto_ref}`, then list the branch's own commits "
-            f"since {reset}: `git rev-list --no-merges --reverse {reset}..origin/{branch}`.",
+            f"2. `git fetch origin {branch} {fetch_name(onto_ref)}`, then list the branch's own "
+            f"commits since {reset}: `git rev-list --first-parent --no-merges --reverse "
+            f"{reset}..origin/{branch}` (first parent only: a commit a merge brought in is not "
+            "the branch's own).",
             f"3. `git reset --hard {reset}`: the newest head the queue handed back that holds "
             "no such commit.",
             "4. Re-apply each commit step 2 listed, oldest first, with `git cherry-pick`.",

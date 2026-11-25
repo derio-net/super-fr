@@ -91,13 +91,15 @@ def lineage_reads(
     bases: Mapping[str, str],
     skip: Iterable[str],
 ) -> dict[str, Any]:
-    """Spec 2026-11-24-wave-queue-gaps §A: the Snapshot's `queue_methods`, `queue_leads` and
-    `queue_carries`. For each repo whose queue lands by push with merge or squash (R1), the
-    stack target as the records stand (the last standing combination, or `main` now), then,
-    per batch with a PR: whether the commit its latest hand-back at that head named still
-    leads to it, and which of every `queue_built` sha of this scope's records for the repo
-    its head carries. Each answer is cached on the driver per (head or onto, target); a
-    `GitError` is None (R5), never an answer."""
+    """Spec 2026-11-24-wave-queue-gaps §A: the Snapshot's `queue_methods`, `queue_leads`,
+    `queue_carries` and `queue_head_carries`. For each repo whose queue lands by push with
+    merge or squash (R1), the stack target as the records stand (the last standing
+    combination, or `main` now), then, per batch with a PR: whether the commit its latest
+    hand-back at that head named still leads to it, and which of every `queue_built` sha of
+    this scope's records for the repo its head carries; and the same carry per open head of
+    the repo's non-batch PRs, which the pass admits as entries later (review p1-r4). Each
+    answer is cached on the driver per (head or onto, target); a `GitError` is None (R5),
+    never an answer."""
     from fr.triage.gitseam import GitError
     from fr.triage.queue_exec import queue_config
     from fr.triage.queue_handback import brief_mode, latest_conflict, stack_target
@@ -107,6 +109,7 @@ def lineage_reads(
     methods: dict[str, str] = {}
     leads: dict[str, dict[str, bool | None]] = {}
     carries: dict[str, dict[str, tuple[str, ...] | None]] = {}
+    heads: dict[str, dict[str, tuple[str, ...] | None]] = {}
     by_id = {b.id: b for b in judgements.batches}
     for repo in sorted(set(repos.values()) - set(skip)):
         config = queue_config(driver._queue_block(facts, repo))
@@ -152,7 +155,18 @@ def lineage_reads(
                 onto = met.onto
                 mine_l[bid] = ask("leads", onto, lambda o=onto: checkout.leads(o, target))
         leads[repo], carries[repo] = mine_l, mine_c
-    return {"queue_methods": methods, "queue_leads": leads, "queue_carries": carries}
+        # p1-r4: a non-batch entry (close-out, archive, export, housekeeping) is admitted
+        # only in the pure pass, so its carry is read per open head of the repo's other PRs
+        batch_prs = {pr.number for bid, pr in live.items() if repos.get(bid) == repo}
+        heads[repo] = {
+            p.head_oid: ask("carried", p.head_oid,
+                            lambda h=p.head_oid: checkout.carried(h, target, built))
+            for p in facts.prs
+            if p.repo == repo and p.state == "OPEN" and p.head_oid
+            and p.number not in batch_prs
+        }  # fmt: skip
+    return {"queue_methods": methods, "queue_leads": leads, "queue_carries": carries,
+            "queue_head_carries": heads}  # fmt: skip
 
 
 def carry_hand_back(
@@ -181,14 +195,17 @@ def carry_hand_back(
     built = frozenset(e.sha for q in records for e in q.events if isinstance(e, QueueBuiltEvent))
     met = [e for e in reversed(batch.events) if isinstance(e, ConflictEvent)]
     checkout = driver._fetched_reader(repo)
-    reset = None
+    reset, unread = None, ""
     for head in dict.fromkeys(e.head for e in met if e.head != action.head):
         try:
             if not checkout.carried(head, onto, built):
                 reset = head
                 break
         except GitError:
-            continue  # unreadable: not a head to reset to
+            unread = unread or head  # unreadable: not a head to reset to, nor a verdict
+    if reset is None and unread:  # R5: held for the pass, never a durable Need (p1-r6)
+        return (f"{action.detail}; held this pass: git could not read whether {unread[:12]}, "
+                "a head the queue handed back, is free of that commit")  # fmt: skip
     paths = tuple(met[0].paths) if met else ("(carry)",)
     exc = MergeConflictError(action.detail, batch=batch.id, head=action.head, paths=paths,
                              onto=onto, onto_ref=ref, reissue=True)  # fmt: skip

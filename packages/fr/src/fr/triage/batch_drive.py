@@ -453,6 +453,10 @@ class Snapshot:
     queue_methods: Mapping[str, str] = field(default_factory=dict)
     queue_leads: Mapping[str, Mapping[str, bool | None]] = field(default_factory=dict)
     queue_carries: Mapping[str, Mapping[str, tuple[str, ...] | None]] = field(default_factory=dict)
+    # repo -> open head of a non-batch PR -> what it carries (an `OtherEntry`'s, by its head)
+    queue_head_carries: Mapping[str, Mapping[str, tuple[str, ...] | None]] = field(
+        default_factory=dict
+    )
     head_changed: Mapping[str, datetime] = field(default_factory=dict)
     session_status: Mapping[str, str] = field(default_factory=dict)
 
@@ -1695,8 +1699,19 @@ def queue_snapshot(
         warned=snap.warned, scope_args=snap.scope_args,
         released=snap.queue_released, runs=snap.queue_runs,
         method=snap.queue_methods.get(repo, ""), leads=snap.queue_leads.get(repo, {}),
-        carries=snap.queue_carries.get(repo, {}),
+        carries=_carries(snap, repo, mine),
     )  # fmt: skip
+
+
+def _carries(
+    snap: Snapshot, repo: str, admitted: Sequence[Admitted]
+) -> dict[str, tuple[str, ...] | None]:
+    """*repo*'s carries by entry key: its batches', and each admitted non-batch entry's by
+    the head it is built at (wave-queue-gaps R4, R6; review p1-r4). A head not read is left
+    out: nothing is known of it, as before R4."""
+    heads = snap.queue_head_carries.get(repo, {})
+    return {**snap.queue_carries.get(repo, {}),
+            **{a.key: heads[a.pr.head] for a in admitted if a.pr.head in heads}}  # fmt: skip
 
 
 def _queue_plans(

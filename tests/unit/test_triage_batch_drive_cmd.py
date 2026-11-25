@@ -322,15 +322,28 @@ class DriveCheckout:
         self.removed: list[Path] = []  # scratch worktrees removed
         self.fetches = 0  # `git fetch` calls
         self.carries: dict[str, tuple[str, ...]] = {}  # head -> the dead combinations it carries
+        self.unreadable: set[str] = set()  # shas whose lineage read raises GitError
+        self.lead: dict[str, bool] = {}  # onto -> whether it leads (default True)
+        self.lineage_reads: list[tuple[str, str, str]] = []  # (kind, sha, target) asked
 
     def origin_repo(self) -> str | None:
         return REPO
 
     def carried(self, head: str, target: str, built: Any) -> tuple[str, ...]:
+        from fr.triage.gitseam import GitError
+
+        self.lineage_reads.append(("carried", head, target))
+        if head in self.unreadable:
+            raise GitError(f"bad object {head}")
         return self.carries.get(head, ())
 
     def leads(self, onto: str, target: str) -> bool:
-        return True
+        from fr.triage.gitseam import GitError
+
+        self.lineage_reads.append(("leads", onto, target))
+        if onto in self.unreadable:
+            raise GitError(f"bad object {onto}")
+        return self.lead.get(onto, True)
 
     def main_worktree(self) -> Path:
         return self.path
@@ -5943,3 +5956,112 @@ def test_a_carrying_head_with_no_clean_hand_back_head_is_held(
     assert "held" in line and "needs you" in line
     _, held = _conflicts(tmp_path)
     assert (held.head, held.delivered) == ("sha-101", "held")
+
+
+def test_an_unreadable_reset_candidate_holds_the_carry_this_pass_only(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: type[RecordingQueue],
+) -> None:  # fmt: skip
+    """Review p1-r6 (R5): a reset head git could not read is no reason for a durable Need."""
+    _one_conflicted(world, tmp_path, events=(
+        "      - {kind: conflict, at: '2026-10-01T11:00:00Z', head: sha-100, paths: [src/a.py], "
+        f"delivered: session, handle: h, onto: '{SLOT_SHA}'}}\n"))  # fmt: skip
+    _at_14(tmp_path)
+    checkout.unreadable.add("sha-100")
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    train.script[101] = _queue_action("queue-carry", base=NEW_SHA, carried=(SLOT_SHA,))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == []
+    (line,) = _lines(out, "queue-carry")
+    assert "held this pass" in line and "could not read" in line, out
+    assert "needs you" not in line
+    (only,) = _conflicts(tmp_path)  # no held event written
+    assert only.head == "sha-100"
+
+
+# ------------- the planner, not a script, plans the re-issue and the carry (review p1-r7)
+
+DEAD_SHA = "d" * 40
+FETCHED_MAIN = "origin/main@fetched"  # DriveCheckout.rev_parse: the pass's `main`
+
+
+def _queued_b1(tmp_path: Path, world: World, *events: Any, conflict: str = "") -> None:
+    """b1's PR #101 open in a push/squash queue whose open wave-1 record holds *events*."""
+    from fr.triage.model import QueueOpenEvent, Scope
+    from fr.triage.scope_config import scope_id
+
+    world.config = {"queue": {"ci": "push", "land": "push"}}
+    _one_conflicted(world, tmp_path, events=conflict)
+    _at_14(tmp_path)
+    write = triage_batch_cmd.queue_writer(tmp_path, REPO, scope_id(Scope(kind="repo",
+                                                                        target=REPO)))  # fmt: skip
+    write(QueueOpenEvent(kind="queue_open", at=NOW), wave=1, base=FETCHED_MAIN)
+    for event in events:
+        write(event)
+
+
+def _built_other(slot: int = 1, sha: str = DEAD_SHA) -> Any:
+    from fr.triage.model import QueueBuiltEvent, QueueEntryRef
+
+    return QueueBuiltEvent(kind="queue_built", at=NOW, slot=slot, sha=sha,
+                           entry=QueueEntryRef(batch="b9"), head="sha-909", patch_id="p",
+                           base=FETCHED_MAIN, parent=FETCHED_MAIN)  # fmt: skip
+
+
+def test_the_planner_holds_a_carrying_head_with_one_queue_carry(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+) -> None:  # fmt: skip
+    from fr.triage.model import QueueEjectEvent, QueueEntryRef
+
+    _queued_b1(tmp_path, world, _built_other(),
+               QueueEjectEvent(kind="queue_eject", at=NOW, entry=QueueEntryRef(batch="b9"),
+                               reason="red", head="sha-909"))  # fmt: skip
+    checkout.carries["sha-101"] = (DEAD_SHA,)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    (carry,) = [a for a in world.queue_plans if a.kind == "queue-carry"]
+    assert (carry.batch, carry.head, carry.carried) == ("b1", "sha-101", (DEAD_SHA,)), out
+    assert ("carried", "sha-101", FETCHED_MAIN) in checkout.lineage_reads  # nothing stands
+    assert not any(a.kind == "queue-build" and "b1" in a.entries for a in world.queue_plans)
+
+
+def test_the_planner_reissues_a_handback_whose_onto_stopped_leading(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+) -> None:  # fmt: skip
+    from fr.triage.model import QueueEjectEvent, QueueEntryRef
+
+    _queued_b1(tmp_path, world, _built_other(),
+               QueueEjectEvent(kind="queue_eject", at=NOW, entry=QueueEntryRef(batch="b1"),
+                               reason="conflict", head="sha-101"),
+               conflict=("      - {kind: conflict, at: '2026-10-01T11:00:00Z', head: sha-101, "
+                         "paths: [src/a.py], delivered: session, handle: h, "
+                         f"onto: '{SLOT_SHA}'}}\n"))  # fmt: skip
+    checkout.lead[SLOT_SHA] = False
+    code, out = _drive(tmp_path, "--once", "--yes")
+    (again,) = [a for a in world.queue_plans if a.kind == "queue-reissue"]
+    assert (again.batch, again.head, again.paths) == ("b1", "sha-101", ("src/a.py",)), out
+    assert ("leads", SLOT_SHA, DEAD_SHA) in checkout.lineage_reads  # slot 1 still stands
+
+
+def test_a_non_batch_entrys_head_has_its_carry_read(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+) -> None:  # fmt: skip
+    """Review p1-r4: an open PR no batch owns (a housekeeping, close-out, archive or export
+    PR the pass may admit) has its head's carry read too, into `queue_head_carries`."""
+    captured: list[Any] = []
+    real = triage_batch_cmd.drive_pass
+
+    def _capture(snap: Any) -> Any:
+        captured.append(snap)
+        return real(snap)
+
+    _queued_b1(tmp_path, world, _built_other())
+    world.pr(202, "chore/ops-x", [])
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    checkout.carries["sha-202"] = (DEAD_SHA,)
+    import pytest as _pytest
+
+    with _pytest.MonkeyPatch.context() as mp:
+        mp.setattr(triage_batch_cmd, "drive_pass", _capture)
+        _drive(tmp_path, "--once")
+    assert captured and captured[-1].queue_head_carries[REPO]["sha-202"] == (DEAD_SHA,)
+    assert "sha-101" not in captured[-1].queue_head_carries[REPO]  # b1's is by batch id

@@ -890,6 +890,7 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
     depth = qs.config.depth
     actions: list[QueueAction] = []
     wave = record.wave
+    held = hold_lineage(qs, entries)  # wave-queue-gaps R4, R5: never built, nor rebuilt
     if qs.base and qs.base != rep.base:  # R14: a move of `main` the queue did not make
         key = f"queue-base\0{qs.repo}\0{qs.base}"
         if key not in qs.warned:
@@ -903,12 +904,13 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
                 "queue-rebuild", qs.repo, f"rebuild {', '.join(window)} on {qs.base[:12]}",
                 wave=wave, entries=window, slots=tuple(range(1, len(window) + 1)),
                 base=qs.base))  # fmt: skip
+            moved = replace(rep, base=qs.base, combos={})  # nothing stands on the moved base
+            actions += lineage_actions(qs, moved, held, aimed(qs, moved, ()), wave)
             return _tail(record, rep, qs, actions, entries, waiting)
         # Nothing to rebuild: the queue's base is the moved `main`, and it drains or stalls
         # there like any other pass (an empty window must not hold the hold open forever).
         rep = replace(rep, base=qs.base)
     by_id = {b.id: b for b in qs.batches}
-    held = hold_lineage(qs, entries)  # wave-queue-gaps R4, R5: never built
     earlier: list[tuple[str, Sequence[str]]] = []
     ejects = len(actions)
     for key in list(entries):  # R6: a conflict met at build, at the head it still has

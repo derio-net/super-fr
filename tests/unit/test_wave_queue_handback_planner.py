@@ -181,3 +181,24 @@ def test_an_ejected_non_batch_entry_need_names_the_commit_to_merge() -> None:
     plan = plan_queue(_with_other(_abc(*events, **PUSH_SQUASH)))
     need = next(a for a in plan.actions if a.kind == "queue-need" and "PR #7" in a.detail)
     assert "merge `s1`" in need.detail and "fr-queue/" in need.detail
+
+
+# ------------------------------------------------------------- review findings of phase 1
+
+
+def test_a_budget_held_handback_is_not_reissued_when_its_onto_stops_leading() -> None:  # p1-r2
+    events = (_built(1, "s1", "a"), _eject("b", "conflict", head="head-b"))
+    snap = _with_conflict(_abc(*events, leads={"b": False}, **PUSH_SQUASH), "b", onto="s0",
+                          delivered="held", handle=None)  # fmt: skip
+    assert "queue-reissue" not in _kinds(plan_queue(snap))
+
+
+def test_a_carrying_entry_is_not_rebuilt_when_main_moved() -> None:  # p1-r5
+    snap = _abc(_built(1, "s1", "a"), carries={"a": ("dead" * 10,)}, base="moved" * 8,
+                **PUSH_SQUASH)  # fmt: skip
+    plan = plan_queue(snap)
+    rebuild = _one(plan, "queue-rebuild")
+    assert "a" not in rebuild.entries and rebuild.entries == ("b", "c")
+    assert rebuild.slots == (1, 2)
+    assert "a" not in plan.entries
+    assert _one(plan, "queue-carry").batch == "a"

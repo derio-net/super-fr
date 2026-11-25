@@ -189,3 +189,53 @@ def test_conflict_brief_is_still_importable_from_batch_dispatch() -> None:
     from fr.triage import batch_dispatch, queue_handback
 
     assert batch_dispatch.conflict_brief is queue_handback.conflict_brief
+
+
+# ------------------------------------------------- review findings of phase 1
+
+
+def test_a_held_handback_is_never_reissued_free(  # p1-r2
+) -> None:
+    events = [_dispatch(), _conflict(H, onto=S1, delivered="held")]
+
+    assert not reissue_due(events, H, False)
+    assert conflict_decision(events, H, ["a.py"], [], leads=False).kind != "reissue"
+
+
+def _carry(**over: object) -> str:
+    from fr.triage.queue_handback import carry_brief
+
+    kw: dict[str, object] = {
+        "pr": 101, "head": H, "reset": "r" * 40, "carried": (S1,), "onto": BASE,
+        "onto_ref": "origin/main", "branch": "feat/batch-b1", **over,
+    }  # fmt: skip
+    return carry_brief(_batch(), **kw)  # type: ignore[arg-type]
+
+
+def test_the_carry_brief_with_no_slot_fetches_the_bare_default_branch() -> None:  # p1-r3
+    text = _carry()
+
+    assert "git fetch origin feat/batch-b1 main`" in text
+    assert "origin/main`" not in text.split("then list")[0]
+
+
+def test_the_carry_brief_lists_first_parent_commits_only() -> None:  # p1-r1
+    text = _carry(onto=S2, onto_ref="fr-queue/derio-net/slot-2")
+
+    assert "git fetch origin feat/batch-b1 fr-queue/derio-net/slot-2`" in text
+    assert (
+        f"git rev-list --first-parent --no-merges --reverse {'r' * 40}..origin/feat/batch-b1"
+        in text
+    )
+
+
+def test_the_merge_clause_with_no_slot_fetches_the_bare_default_branch() -> None:  # p1-r3
+    from fr.triage.queue_handback import merge_clause
+
+    from tests.unit.test_wave_queue_planner import _abc
+
+    qs = _abc(default="main")
+    assert (
+        merge_clause(qs, (BASE, ())) == f"merge `{BASE}` (`git fetch origin main`) into its branch"
+    )
+    assert "fetch origin fr-queue/" in merge_clause(qs, (S1, (1,)))
