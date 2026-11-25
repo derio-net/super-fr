@@ -1,0 +1,28 @@
+schema_version: 12
+run: 2026-11-25-feat-wave-plan-file-overlap
+step: lens-review
+outcome: done
+journal:
+  - {kind: finding, id: l-docs-accuracy-r1, global: true, review_scope: in, title: "fr-triage.md said the Batches page reads every driver clone; a standalone fr triage batches reads only the cwd clone", body: "Reviewer tagged out; reclassified in: the sentence is this change's own (fr-triage.md plan overlap bullet; triage_kanban_cmd.py write_board called without checkouts at :632 and :701)."}
+  - {kind: finding, id: l-errors-r1, global: true, review_scope: in, title: "source_for_clones turned every GitError/OSError into a bare 'no clone here'", body: "The cause (a stale --checkout path, not a git clone, no origin) was dropped, so an operator could not act on it."}
+  - {kind: finding, id: l-errors-r2, global: true, review_scope: in, title: "A plan naming no files read as compared with zero paths: a silent false 'no overlap'", body: "No NN.yaml, empty phase docs or non-list files: returned an empty PlanPaths that joined the compared set."}
+  - {kind: finding, id: l-errors-r3, global: true, review_scope: in, title: "'no ref origin/<branch>' gave no hint that the clone may not have fetched the branch", body: "The read never fetches; the usual cause and its fix were unstated."}
+  - {kind: finding, id: l-errors-r4, global: true, review_scope: in, title: "One unreadable run cursor aborted the batch even when a later readable cursor named the branch", body: "read_plan_paths returned the first Unread in the cursor loop."}
+  - {kind: finding, id: l-tests-r1, global: true, review_scope: in, title: "The reader was never tested on a real git clone's happy path", body: "Only FakeSource, which restates git semantics; the one real-git test covered the missing ref."}
+  - {kind: finding, id: l-tests-r2, global: true, review_scope: in, title: "The driver's checkouts=self.checkout_paths wiring had no test", body: "Dropping it would silently fall back to the cwd clone."}
+  - {kind: finding, id: l-tests-r3, global: true, review_scope: in, title: "Zero-directory globs unpinned, and fnmatch misses them: tests/**/*.py did not match tests/x.py", body: "Verified: fnmatchcase('tests/x.py','tests/**/*.py') is False. A real false negative in the rule, not only a test gap."}
+  - {kind: finding, id: l-tests-r4, global: true, review_scope: in, title: "check command tests always monkeypatched source_for_clones", body: "The real Path.cwd() and origin resolution through the command was never exercised."}
+  - {kind: finding, id: l-tests-r5, global: true, review_scope: in, title: "No test for a cycle or an unknown id in the after closure", body: "Reviewer tagged out; reclassified in: _before is this change's code."}
+  - {kind: review, id: lens-review-1, global: true, title: "lens review: docs-accuracy 1, errors 4, tests 5 findings", body: "Three dispatched reviewers, one per lens (docs-accuracy, errors, tests), each over the diff from merge base 238e6c66 to HEAD with the shape file. All 10 findings fixed in one commit with tests; two reclassified out -> in because the code is this change's own."}
+resolves:
+  - {id: l-docs-accuracy-r1, state: fixed, body: "The bullet now says the Batches page reads the cwd clone when you run fr triage batches yourself, and every clone the driver was given when the driver writes it."}
+  - {id: l-errors-r1, state: fixed, body: "source_for_clones keeps the cause: 'no clone here: <cause>' (and '<cwd> is not inside a git clone'). Tests: test_checkouts_pointing_at_no_clone_say_no_clone_here, test_a_cwd_outside_a_clone_or_a_clone_with_no_origin_never_raises."}
+  - {id: l-errors-r2, state: fixed, body: "A plan whose phases name no files is Unread 'plan names no files (<plan>)'. Test: test_a_plan_that_names_no_files_is_not_compared."}
+  - {id: l-errors-r3, state: fixed, body: "The reason reads 'no ref origin/<branch> (not fetched in this clone? git fetch origin)'."}
+  - {id: l-errors-r4, state: fixed, body: "Unreadable cursors are skipped; the first is reported only if no cursor names the branch. Tests: test_an_unreadable_cursor_does_not_hide_the_readable_one_naming_the_branch, test_invalid_yaml_in_a_cursor_is_unreadable_when_no_cursor_names_the_branch."}
+  - {id: l-tests-r1, state: fixed, body: "test_a_real_clone_reads_the_cursor_plan_and_phase_files commits a cursor and plan on a real ref and reads them through Checkout."}
+  - {id: l-tests-r2, state: fixed, body: "test_the_drivers_board_reads_through_the_drivers_own_clones calls _Driver._write_board and asserts the checkouts map is passed."}
+  - {id: l-tests-r3, state: fixed, body: "_matches lets a `**/` segment match no directory too; test_a_double_star_segment_also_matches_no_directory pins it and a non-match."}
+  - {id: l-tests-r4, state: fixed, body: "test_check_reads_plans_through_the_clone_it_runs_in runs fr triage check from a real clone with real branch refs, unpatched."}
+  - {id: l-tests-r5, state: fixed, body: "test_an_after_cycle_or_an_unknown_id_neither_loops_nor_raises."}
+evidence: {review: lens-review-1, reviewer: "docs-accuracy=a114591898f6ce8ff,errors=ab6371a1cf5b028ca,tests=afe174f49dbe4d96c"}
