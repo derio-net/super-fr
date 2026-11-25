@@ -325,7 +325,7 @@ R6 and §B amended (plan decision p2-config-changes-by-pr, revised after a secur
 <!-- fr:journal kind=owed scope=spec id=s1-refuse-old-paths created=2026-11-25T06:36:00+00:00 -->
 ### s1-refuse-old-paths · owed · Refuse the old configuration paths and drop the legacy settings copy
 
-S1 (R13, R6) reads old paths with a notice and writes the legacy settings file; the release after S1's minor turns both into a refusal (fr.config.space.legacy, write_settings).
+S1 (R13, R6, R16) reads old paths with a notice, writes the legacy settings copy, and honours the per-kind `FR_SHIPPED_WORKFLOWS_DIR`, `FR_SHIPPED_VERIFICATIONS_DIR` and `FR_SHIPPED_LENSES_DIR`. All of that ends in the first minor release after the one that ships S1: an old configuration path is refused (fr.config.space.legacy/located), the legacy settings copy is no longer written (write_settings), and the three old FR_SHIPPED_* variables are refused naming FR_SHIPPED_DEFAULTS_DIR. fr detects that release by its own version: the release that ships S1 is the one whose notes carry this feature's change fragment (main assigns the number); the refusal is code gated on `fr.__version__` at or above the next minor after it, and the issue filed at deliver records both numbers.
 owed_key: issue:derio-net/super-fr#1653
 
 <!-- fr:journal kind=decision scope=spec id=spec-r7-degraded-not-lockout created=2026-11-25T07:38:14+00:00 -->
