@@ -1,2 +1,0 @@
-bump: patch
-summary: "Collected close-outs: a handed-back head can be re-recorded, approved-fr releases a close-out PR held for review, the close-out session closes when its batches finish, and a release-pending migration waits instead of holding"
