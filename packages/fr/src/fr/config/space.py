@@ -430,7 +430,7 @@ def located(root: Path, kind: str) -> Path:
     branch exists the product's old path is ignored, with one notice naming it (R4), so a
     feature branch cannot shadow the space; only while it does not may an old file be
     read, and only when its bytes are the product default branch's committed ones (an
-    old directory's members are read at that branch by `read_checked_bytes`)."""
+    old directory's executable members are degraded by `fr.config.degraded`)."""
     from fr.artifacts.paths import LEGACY_CONFIG, config_kind_path
 
     root = Path(root)
@@ -494,44 +494,3 @@ def _in_space_checkout(space: ConfigSpace, path: Path) -> bool:
     except ValueError:
         return False
     return True
-
-
-def read_checked_bytes(root: Path, path: Path, what: str) -> bytes:
-    """The bytes of executable or trust configuration *path* (a repo workflow manifest, a
-    verification strategy, the profile declarations) for the product checkout *root*.
-
-    Under `repo`, the file as it is. Under quiet and stealth a product-checkout path (R13's
-    old location) refuses: no configuration branch's protection covers it (review p4-r2).
-    In a quiet or stealth configuration space the WHOLE file is
-    executable configuration (a workflow's `kind: cli` argv, a strategy's commands, the
-    profiles' secrets and mounts), so it is read only from the fetched, reviewed tip of a
-    protected configuration branch (`fr.config.protection.read_checked`, R7), never from
-    the configuration checkout's working tree (review p4-sec-manifest-tip, finding
-    p5-exec-manifests-guard). Not protected, or absent at the tip, refuses."""
-    space = config_space(Path(root))
-    if space.placement == _REPO:
-        return Path(path).read_bytes()
-    from fr.config import protection
-
-    if not _in_space_checkout(space, path):
-        # R13's old path in the product (review p4-r2): no configuration branch's
-        # protection covers it, so its executable content never runs here.
-        raise protection.ProtectionError(
-            f"fr will not {what}: {path} is at its old path in the product checkout, and "
-            f"under {space.placement} executable configuration runs only from the protected "
-            f"configuration branch; run `fr migrate artifacts --yes`"
-        )
-
-    below = Path(path).resolve().relative_to(space.dir.resolve()).as_posix()
-    text = protection.read_checked(space, None, below, what)
-    if text is None:
-        raise protection.UncheckedTipError(
-            f"fr will not {what}: {below} is not on the reviewed tip of {space.ref}; the "
-            f"configuration checkout's copy ({path}) is not reviewed"
-        )
-    return text.encode()
-
-
-def read_manifest(root: Path, path: Path, what: str) -> str:
-    """`read_checked_bytes` as text."""
-    return read_checked_bytes(root, path, what).decode("utf-8")

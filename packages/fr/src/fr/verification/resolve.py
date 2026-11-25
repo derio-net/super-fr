@@ -59,8 +59,8 @@ def resolve_strategy(
     `repo_root=None` searches only the shipped sources. Raises `StrategyError`
     naming EVERY searched path when none exists.
     """
-    path = resolved_strategy_path(name, repo_root, shipped_root=shipped_root)
-    manifest = parse_strategy(_strategy_bytes(name, path, repo_root).decode(), source=str(path))
+    path, data = _resolved(name, repo_root, shipped_root=shipped_root)
+    manifest = parse_strategy(data.decode(), source=str(path))
     if manifest.verification != name:
         raise StrategyError(
             f"{path}: manifest names itself {manifest.verification!r}, but its file is {name!r}"
@@ -84,7 +84,7 @@ def resolved_strategy_path(
         else [d / f"{name}.yaml" for d in shipped]
     )
     for path in candidates:
-        if path.is_file():
+        if path.is_file() and _strategy_bytes(name, path, repo_root) is not None:
             return path
 
     searched = " and ".join(str(p) for p in candidates)
@@ -100,20 +100,29 @@ def strategy_identity(
     AND unbinds the log). `StrategyError` when it does not resolve."""
     import hashlib
 
-    path = resolved_strategy_path(name, repo_root, shipped_root=shipped_root)
-    data = _strategy_bytes(name, path, repo_root)
+    path, data = _resolved(name, repo_root, shipped_root=shipped_root)
     return _label(path.parent, repo_root), hashlib.sha256(data).hexdigest()
 
 
-def _strategy_bytes(name: str, path: Path, repo_root: Path | None) -> bytes:
-    """*path*'s bytes; a repo strategy through `fr.config.space.read_checked_bytes`: its
+def _resolved(
+    name: str, repo_root: Path | None, *, shipped_root: Path | None
+) -> tuple[Path, bytes]:
+    path = resolved_strategy_path(name, repo_root, shipped_root=shipped_root)
+    data = _strategy_bytes(name, path, repo_root)
+    assert data is not None  # resolved_strategy_path took only a usable candidate
+    return path, data
+
+
+def _strategy_bytes(name: str, path: Path, repo_root: Path | None) -> bytes | None:
+    """*path*'s bytes; a repo strategy through `fr.config.degraded.usable_bytes`: its
     install and scenario argv are executable configuration (R7), so under quiet and stealth
-    they come from the protected branch's reviewed tip."""
+    they come from the protected branch's reviewed tip, or None (the shipped strategy is
+    used) while that branch is not protected (review p4-r3)."""
     if repo_root is None or path.parent != repo_verifications_dir(repo_root):
         return path.read_bytes()
-    from fr.config.space import read_checked_bytes
+    from fr.config.degraded import usable_bytes
 
-    return read_checked_bytes(repo_root, path, f"use verification strategy {name!r} from {path}")
+    return usable_bytes(repo_root, path, f"use verification strategy {name!r}")
 
 
 def _label(directory: Path, repo_root: Path) -> str:

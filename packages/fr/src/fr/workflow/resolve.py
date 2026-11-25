@@ -147,13 +147,15 @@ def resolve_workflow(
     for path in candidates:
         if path.is_file():
             if path.parent == repo_dir:
-                from fr.config.space import read_manifest
+                from fr.config.degraded import usable_bytes
 
                 # The whole manifest is executable configuration (its `kind: cli` argv,
-                # R7): under quiet and stealth, the protected branch's reviewed tip.
-                return parse_manifest(
-                    read_manifest(repo_root, path, f"run workflow shape {name!r} from {path}")
-                )
+                # R7): under quiet and stealth, the protected branch's reviewed tip, or
+                # ignored for the shipped shape while that branch is not protected.
+                data = usable_bytes(repo_root, path, f"run workflow shape {name!r}")
+                if data is None:
+                    continue
+                return parse_manifest(data.decode("utf-8"))
             return parse_manifest(path.read_text())
 
     searched = " and ".join(str(p) for p in candidates)

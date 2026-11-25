@@ -69,7 +69,9 @@ def _read_config(repo_root: Path, *, lenient: bool) -> dict[str, Any] | None:
     if not profiles_path(repo_root).is_file():
         return None
     try:
-        config = profiles_config(repo_root)
+        # Read-only: under quiet and stealth an unreadable protection answer takes the
+        # degraded view ("protection unknown"), never refuses (review p4-r3).
+        config = profiles_config(repo_root, unknown_ok=True)
     except Exception as exc:  # noqa: BLE001 — lenient never raises; strict refuses by name
         if lenient:
             return None

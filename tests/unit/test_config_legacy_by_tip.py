@@ -87,5 +87,6 @@ def test_an_old_path_executable_under_quiet_never_runs_from_the_worktree(
 ) -> None:
     root = _quiet(tmp_path)
     path = _put(root, "docs/superpowers/workflows/mine.yaml", "workflow: mine\n")
-    with pytest.raises(protection.ProtectionError, match="old path"):
-        space.read_checked_bytes(root, path, "run workflow shape 'mine'")
+    from fr.config.degraded import usable_bytes
+
+    assert usable_bytes(root, path, "run workflow shape 'mine'") is None

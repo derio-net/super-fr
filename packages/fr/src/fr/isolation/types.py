@@ -11,7 +11,7 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError
@@ -582,22 +582,21 @@ def profiles_path(repo_root: Path) -> Path:
     return located(Path(repo_root), "profiles")
 
 
-def profiles_config(repo_root: Path) -> dict[str, Any]:
-    """The profile declarations as a mapping. In a quiet or stealth configuration space
-    they decide secrets env-files, mounts and the services fr trusts, and no subset of
-    them is safe to take from an unreviewed branch, so the whole file is read from the
-    protected branch's reviewed tip or refused (review p4-sec-profiles, R7)."""
-    from fr.config.space import PROFILES, _in_space_checkout, config_space
+def profiles_config(repo_root: Path, *, unknown_ok: bool = False) -> dict[str, Any]:
+    """The profile declarations as a mapping. Under quiet and stealth they decide secrets
+    env-files, the ops profile and the services fr trusts, so they are read from the
+    configuration branch's fetched tip and, unless that branch is protected, without
+    their security-relevant keys (`fr.config.degraded.read_profiles`, review p4-r3): the
+    repo degrades, it is never locked out. *unknown_ok* is for read-only callers, which
+    take that degraded view when protection cannot be read."""
+    from fr.config.space import config_space
 
     cfg = profiles_path(repo_root)
     space = config_space(Path(repo_root))
-    if space.placement != "repo" and _in_space_checkout(space, cfg):
-        from fr.config import protection
+    if space.placement != "repo":
+        from fr.config.degraded import read_profiles
 
-        text = protection.read_checked(
-            space, None, PROFILES, "read the profile declarations (secrets, mounts, services)"
-        )
-        return (yaml.safe_load(text) or {}) if text else {}
+        return cast(dict[str, Any], read_profiles(space, cfg, unknown_ok=unknown_ok))
     if cfg.is_file():
         return yaml.safe_load(cfg.read_text()) or {}
     return {}
