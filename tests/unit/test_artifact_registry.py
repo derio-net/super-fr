@@ -669,7 +669,7 @@ def _seed_one(root: Path, kind: str, *, version: int) -> Path | None:
         "spec": next((root / "docs" / "superpowers" / "specs").glob("*.md")),
         "usage": next((root / "docs" / "superpowers" / "usage").glob("*.yaml")),
         "record": next((root / "docs" / "superpowers" / "runs").glob("*.records/*.yaml")),
-        "profiles": root / ".devcontainer" / "fr-profiles.yaml",
+        "profiles": root / ".fr" / "profiles.yaml",  # moved by S1 R9
         "ops": root / "docs" / "superpowers" / "plans" / PLAN_SLUG / "ops.yaml",
         "agents": root / ".claude" / "agents" / "fr-spec-reviewer.md",
     }[kind]

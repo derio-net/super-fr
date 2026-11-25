@@ -20,7 +20,14 @@ from pathlib import Path
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.runner import MIGRATING_ROOT, MIGRATIONS, SchemaMigration, relocate_file
 from fr.config import migrate as moves
-from fr.settings import SettingsError
+
+
+def _refusal(message: str) -> Exception:
+    """A `SettingsError` (exit 2), imported late: `fr.settings` imports the services layer,
+    which imports `fr.isolation.types`, which imports this package."""
+    from fr.settings import SettingsError
+
+    return SettingsError(message)
 
 
 def _in_new_place(entry: moves.Moved, path: Path) -> bool:
@@ -100,7 +107,7 @@ def _profiles_destination(path: Path) -> Path:
     if _in_new_place(_PROFILES, path):
         product = path.parent.parent
         if (product / moves.LEGACY_PROFILES).exists():
-            raise SettingsError(
+            raise _refusal(
                 f"both {product / moves.LEGACY_PROFILES} and {path} exist: fr will not "
                 "choose between them. Keep the one you want, delete the other, and run "
                 "`fr migrate artifacts --yes` again (S1 R12)"
@@ -114,7 +121,7 @@ def _profiles_relocate(path: Path) -> None:
         # The crash window: the file moved and its stamp did not land. Finished in place
         # in a product checkout only; on a configuration branch a change is reviewed.
         if _config_checkout(path.parent.parent):
-            raise SettingsError(
+            raise _refusal(
                 f"{path} is at version 2 on the configuration branch: propose its "
                 "`schema_version: 3` there in a pull request (S1 §B)"
             )
@@ -179,10 +186,10 @@ MIGRATIONS.register(
 def _create_space(path: Path) -> None:
     product = MIGRATING_ROOT.get()
     if product is None:
-        raise SettingsError("the settings move runs only inside `fr migrate artifacts`")
+        raise _refusal("the settings move runs only inside `fr migrate artifacts`")
     moves.ensure_space(product)
     if moves.settings_stamp(path) != 2:
-        raise SettingsError(
+        raise _refusal(
             f"the configuration branch's {moves.rel(moves.SETTINGS)} differs from {path}: "
             "fr will not choose between them (S1 R6, R12). `fr settings sync` shows both"
         )
