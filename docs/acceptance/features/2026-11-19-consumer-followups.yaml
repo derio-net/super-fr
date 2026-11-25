@@ -1,0 +1,64 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-19-consumer-followups
+repo: derio-net/super-fr
+rows:
+  - id: opencode-gates-session-directory
+    capability: OpenCode isolation gates follow the session's checkout
+    acceptance: For an OpenCode session whose directory differs from the plugin's, the
+      shell gate, the edit gate's relative targets and the pipeline sentinel judge the
+      session's repo; with no usable session directory they judge the plugin's, as before.
+    origin:
+    - spec:2026-11-19-consumer-followups#R1
+    - spec:2026-11-19-consumer-followups#R2
+    - spec:2026-11-19-consumer-followups#R3
+    - spec:2026-11-19-consumer-followups#R4
+    levels:
+      unit:
+      - super-fr:packages/fr-opencode-plugin/test/session.test.ts
+      - super-fr:packages/fr-opencode-plugin/test/session-gates.test.ts
+    status: ci
+    notes: 'bun tests (opencode-plugin-test CI job): the resolver''s cache, fallback
+      on a failed, foreign, empty and hanging lookup; the shell gate, push guard, relative
+      edit targets, unresolvable-patch probe and sentinel judged in a session directory
+      unlike the plugin''s'
+    verify: none
+  - id: gitea-matrix-no-persisted-token
+    capability: Scaffolded Gitea acceptance workflow keeps no credential for PR code
+    acceptance: The scaffolded Gitea acceptance workflow's matrix job checks out without
+      persisting gitea.token, so the PR's own code never runs with it in .git/config.
+    origin:
+    - spec:2026-11-19-consumer-followups#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_acceptance_scaffold_publish.py#test_no_gitea_job_keeps_a_credential_in_git_config
+    status: ci
+    notes: 'every actions/checkout step of every rendered Gitea workflow sets persist-credentials:
+      false'
+    verify: none
+  - id: tea-fail-soft-login-page
+    capability: Gitea reads name an SSO login page instead of reading it as absent
+    acceptance: When a Gitea API behind an SSO or forward-auth proxy answers with a
+      login page or a redirect to one, fr's fail-soft Gitea reads (linked PRs, PR status,
+      default branch, PR for branch, file exists, list dir) raise the named cause, which
+      the DevOps gate and fr isolation report as a refusal; any other Gitea error keeps
+      their empty answer.
+    origin:
+    - spec:2026-11-19-consumer-followups#R6
+    - spec:2026-11-19-consumer-followups#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_forge_sso_html.py#test_a_tea_fail_soft_site_re_raises_a_login_page
+      - super-fr:tests/unit/test_forge_sso_html.py#test_a_tea_fail_soft_site_keeps_its_answer_for_any_other_error
+      - super-fr:tests/unit/test_forge_sso_html.py#test_names_login_page_knows_both_forms_and_nothing_else
+      - super-fr:tests/unit/test_ops_gate.py#test_a_forge_error_on_the_default_branch_read_is_a_refusal_naming_it
+      - super-fr:tests/unit/test_isolation_forge_refusal.py#test_a_gitea_login_page_is_refused_by_name_not_read_as_main_or_no_pr
+    status: ci
+    notes: the six RealTeaClient fail-soft sites re-raise both login-page forms and
+      keep their answer otherwise; the DevOps gate and the isolation lifecycle refuse
+      naming it
+    verify: none
