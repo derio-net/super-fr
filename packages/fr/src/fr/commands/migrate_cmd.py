@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shlex
 from pathlib import Path
 
@@ -154,6 +155,14 @@ def artifacts_cmd(
             "not per file."
         ),
     ),
+    repropose: bool = typer.Option(
+        False,
+        "--repropose",
+        help=(
+            "Propose a configuration change again even though its pull request was closed "
+            "unmerged (quiet and stealth)."
+        ),
+    ),
 ) -> None:
     """Bring every live artifact up to the version this fr writes.
 
@@ -180,6 +189,10 @@ def artifacts_cmd(
     migration retires its kind (a retiring step rewrites the whole repository), is refused
     before anything is written; `--adopt` is not offered.
     """
+    if repropose:
+        from fr.config.change import REPROPOSE_ENV
+
+        os.environ[REPROPOSE_ENV] = "1"
     from fr.artifacts.atomic import migration_lock
     from fr.artifacts.commit import lock_path
     from fr.artifacts.runner import MigrationChainError, run_migrations

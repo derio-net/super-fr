@@ -9,8 +9,11 @@ configuration branch through the forge client. Under stealth the pull request go
 TRACKING repo, never the target. The legacy copy (R6) is not written then: once the pull
 request merges, the next fr read brings it in step (`fr.placement.quiet._read`).
 
-The slug is the content's hash, so a retry of the same change reuses its branch and its
-open pull request instead of opening a second one.
+The branch names the change's kind and the content's hash (`fr-config-change/<kind>-<hash>`),
+so a retry of the same change reuses its branch. A change whose pull request is already
+open is not proposed again (its URL is the answer), and one whose pull request was closed
+unmerged refuses once, naming it, until the operator asks for it again with
+`fr migrate artifacts --yes --repropose` (`FR_CONFIG_REPROPOSE=1`; review p4-r12).
 """
 
 from __future__ import annotations
@@ -34,10 +37,25 @@ OpenPr = Callable[[str, str, str, str, str], str]
 """(remote URL, head branch, base branch, title, body) -> the pull request's URL."""
 
 
+REPROPOSE_ENV: Final = "FR_CONFIG_REPROPOSE"
+"""Set (by `fr migrate artifacts --repropose`): propose a change again although its pull
+request was closed unmerged."""
+
+
+def change_kind(rel: str) -> str:
+    """The kind a change to *rel* names: its path below `.fr/`, `/` as `-`, without the
+    suffix (`settings`, `models`, `workflows-mine`)."""
+    below = rel.rsplit(".fr/", 1)[-1]
+    stem = below.rsplit(".", 1)[0] if "." in below.rsplit("/", 1)[-1] else below
+    kind = "".join(c if c.isalnum() or c in "-_" else "-" for c in stem.replace("/", "-"))
+    return kind.strip("-") or "config"
+
+
 def change_branch(rel: str, text: str) -> str:
-    """`fr-config-change/<slug>`: the slug is a hash of the path and the bytes."""
+    """`fr-config-change/<kind>-<hash>`: the kind of *rel* and a hash of the path and the
+    bytes (review p4-r12)."""
     digest = hashlib.sha256(f"{rel}\0{text}".encode()).hexdigest()[:10]
-    return f"{CHANGE_PREFIX}settings-{digest}"
+    return f"{CHANGE_PREFIX}{change_kind(rel)}-{digest}"
 
 
 def _forge_open_pr(remote: str, head: str, base: str, title: str, body: str) -> str:
@@ -68,6 +86,49 @@ def _forge_open_pr(remote: str, head: str, base: str, title: str, body: str) -> 
 
 open_pr: OpenPr = _forge_open_pr
 """The forge seam (tests replace it; nothing here calls a forge in a test)."""
+
+PrsForHead = Callable[[str, str], list[dict[str, object]]]
+"""(remote URL, head branch) -> every pull request from that head, any state, as
+`{state: OPEN | CLOSED | MERGED, url}` records."""
+
+
+def _forge_prs_for_head(remote: str, head: str) -> list[dict[str, object]]:
+    """The default `PrsForHead`; a forge fr cannot ask answers none (the change is then
+    proposed as before, and `open_pr` still reuses an open pull request)."""
+    from fr._hosts import slug_from_url
+    from fr.hostclient import FORGE_ERRORS, client_for_url
+
+    slug = slug_from_url(remote) if "://" in remote or "@" in remote else None
+    if not slug:
+        return []
+    try:
+        return list(client_for_url(remote).list_prs_by_head(slug, head))
+    except FORGE_ERRORS:
+        return []
+
+
+prs_for_head: PrsForHead = _forge_prs_for_head
+"""The forge seam for earlier proposals (tests replace it)."""
+
+
+def _earlier_proposal(remote: str, head: str, rel: str) -> str | None:
+    """The URL of an OPEN pull request from *head* (reuse it), or None (propose). A pull
+    request closed unmerged refuses, naming it and how to propose it again."""
+    if os.environ.get(REPROPOSE_ENV):
+        return None
+    found = prs_for_head(remote, head)
+    for pr in found:
+        if str(pr.get("state", "")).upper() == "OPEN":
+            return str(pr.get("url", ""))
+    for pr in found:
+        if str(pr.get("state", "")).upper() == "CLOSED":
+            raise SettingsError(
+                f"the change to {rel} was proposed in {pr.get('url', '')} and that pull "
+                "request was closed unmerged, so fr does not propose it again on every "
+                "command. Reopen it, or propose it again with `fr migrate artifacts --yes "
+                f"--repropose` ({REPROPOSE_ENV}=1 for any other command)"
+            )
+    return None
 
 
 def _run(cwd: Path, *args: str, env: dict[str, str] | None = None, stdin: str | None = None) -> str:
@@ -160,6 +221,9 @@ def open_change(
     without it."""
     base_sha = _run(cwd, "rev-parse", "--verify", f"{base_ref}^{{commit}}")
     head = change_branch(rel, text)
+    earlier = _earlier_proposal(remote, head, rel)
+    if earlier:
+        return earlier
     approved = _approve(product, head, f"{base_sha[:12]}+{head.rsplit('-', 1)[-1]}")
     commit = _commit_on(cwd, base_sha, rel, text, message)
     pushed = subprocess.run(
