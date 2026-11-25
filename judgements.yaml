@@ -10614,3 +10614,9 @@ queues:
     patch_id: f298fc95486de80b93aa48c2eabbf6d747b1154d
     base: dd2d3e863e222c2760fb54a187695ab473795866
     parent: dd2d3e863e222c2760fb54a187695ab473795866
+  - kind: queue_land
+    at: '2026-11-25T10:05:26.047145Z'
+    main: 0e389e2efc43e10a1f343b907ef0c638cccc0b2e
+    entries:
+    - pr: 1666
+      kind: export
