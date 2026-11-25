@@ -9395,6 +9395,17 @@ batches:
     checks:
     - 3 failing check(s)
     delivered: none
+  - kind: conflict
+    at: '2026-11-25T20:35:47.561957Z'
+    head: d846000ebece53fe0c04eec5b5fd10486ba31de4
+    paths:
+    - docs/explainers/fr-triage.md
+    - docs/explainers/fr-wave-driver.md
+    - docs/herdr-control-sessions.md
+    - docs/reference/cli.md
+    - packages/fr/src/fr/triage/kanban.py
+    delivered: session
+    handle: derio-net/super-fr/run/batch-merge-readiness
 - id: consumer-followups
   title: 'Consumer-delivery follow-ups: plugin-dir judgement, Gitea job token, tea login error'
   ids:
@@ -10719,3 +10730,9 @@ queues:
   - kind: queue_cleared
     at: '2026-11-25T10:55:29.864610Z'
     detail: the release cleared the hold
+- repo: derio-net/super-fr
+  scope: s-f7ea4061
+  base: 0cffe53140c2c399392030209c57903d32d4b070
+  events:
+  - kind: queue_open
+    at: '2026-11-25T20:35:40.376524Z'
