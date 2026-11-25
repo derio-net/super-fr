@@ -9370,6 +9370,18 @@ batches:
   - kind: deferred
     at: '2026-11-25T08:49:53.448918Z'
     wave: 24
+  - kind: conflict
+    at: '2026-11-25T08:59:34.472259Z'
+    head: 5a48b117acd425e6794d5230ef9fe21bbe64ad13
+    paths:
+    - docs/explainers/fr-triage.md
+    - docs/explainers/fr-wave-driver.md
+    - docs/explainers/index.md
+    - docs/herdr-control-sessions.md
+    - packages/fr/src/fr/triage/kanban.py
+    - packages/fr/src/fr/triage/kanban_render.py
+    - packages/fr/src/fr/triage/model.py
+    delivered: held
 - id: consumer-followups
   title: 'Consumer-delivery follow-ups: plugin-dir judgement, Gitea job token, tea login error'
   ids:
@@ -10366,6 +10378,14 @@ closeouts:
   - "D\tdocs/superpowers/runs/2026-11-22-feat-batch-triage-hardening.yaml"
   - "D\tdocs/superpowers/specs/2026-11-22-triage-hardening-design.md"
   - "D\tdocs/superpowers/usage/2026-11-22-feat-batch-triage-hardening.yaml"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-25-1
+  branch: chore/closeout-2026-11-25-1
+  at: '2026-11-25T08:59:24.634599Z'
+  runner: herdr
+  handle: w3T:p3
+  planned:
+  - consumer-followups
 queues:
 - repo: derio-net/super-fr
   wave: 22
