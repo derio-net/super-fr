@@ -84,8 +84,9 @@ def test_a_merged_pr_is_cut_from_the_default_branch_tip(ops_root: Path) -> None:
     up = next(a for a, _ in host.calls if a[:2] == ["isolation", "up"])
     assert up[up.index("--base") + 1] == TIP
     assert _host(ops_root).cut() == TIP and _host(ops_root).head() == HEAD
-    assert ["diff-tip", "origin/main", TIP, ".devcontainer/ops",
-            ".devcontainer/fr-profiles.yaml", ".fr/profiles.yaml"] in [a for a, _ in host.calls]  # fmt: skip
+    diff_tip = ["diff-tip", "origin/main", TIP, ".devcontainer/ops",
+                ".devcontainer/fr-profiles.yaml", ".fr/profiles.yaml"]  # fmt: skip
+    assert diff_tip in [a for a, _ in host.calls]
     assert ("rebase", ("origin/main", TIP)) in tree.calls
 
 
