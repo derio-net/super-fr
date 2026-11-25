@@ -592,3 +592,8 @@ SKILL.md Schema 14 note names the `queue_requests:` list (`queue_add`, `queue_re
 ### l-docs-accuracy-r5-resolved · finding [fixed] · resolves l-docs-accuracy-r5: 'any open PR' for queue add omits that collect must have read it
 
 fr-wave-driver.md and SKILL.md: queue add takes an open PR that collect has read since it opened (`fr triage collect` first). Both pages also describe the new Needs, the preapproval base re-check and the leased push.
+
+<!-- fr:journal kind=finding scope=plan id=p1-acceptance-check-foreign-rows-resolved-2 created=2026-11-25T11:46:16+00:00 state=fixed resolves=p1-acceptance-check-foreign-rows -->
+### p1-acceptance-check-foreign-rows-resolved-2 · finding [fixed] · resolves p1-acceptance-check-foreign-rows: fr acceptance check --no-fetch reports 43 errors on other features' rows
+
+Cleared by merging origin/main (9849e561a): fr acceptance check now reports 772 rows OK and no errors; the foreign rows' specs and tests are on the branch.
