@@ -254,3 +254,10 @@ amendments:
     ref: super-fr:tests/unit/test_triage_state_home.py#test_the_state_dir_is_the_cache_and_its_first_use_makes_it_a_git_repo
     why: S1 R17 moved the state out of the workspace into the cache repository; the
       two workspace tests were replaced by test_triage_state_home.py's
+  - row: cloud-triage-state-ref
+    op: add-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_triage_state_home.py#test_a_clone_copy_moves_into_the_cache
+    why: S1 R17 moved the state out of the workspace into the cache repository; the
+      two workspace tests were replaced by test_triage_state_home.py's
