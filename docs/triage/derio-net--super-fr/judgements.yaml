@@ -9171,6 +9171,38 @@ batches:
     - packages/fr/src/fr/triage/batch_closeout.py
     - packages/fr/src/fr/triage/batch_drive.py
     delivered: held
+  - kind: approval
+    at: '2026-11-24T21:55:41.561316Z'
+    pr: 1628
+    head: 2ddb8ead0bdeeb61ffa0a5241a0dc658a38ad19b
+    patch_id: 053b4b8efd81e07e220c55c712e9491e3d52d2d8
+  - kind: post_merge
+    at: '2026-11-24T22:07:33.761195Z'
+  - kind: claims_released
+    at: '2026-11-24T22:13:13.285743Z'
+    keys:
+    - super-fr#1494
+    - super-fr#1496
+    - super-fr#1497
+    - super-fr#1569
+  - kind: closeout
+    at: '2026-11-24T23:15:40.652825Z'
+    runner: herdr
+    handle: w3V:p3
+    archive: chore/closeout-2026-11-24-2
+  - kind: closeout
+    at: '2026-11-24T23:34:33.009175Z'
+    runner: herdr
+    handle: w3V:p3
+    archive: chore/closeout-2026-11-24-2
+    archived: 1681
+  - kind: claims_released
+    at: '2026-11-24T23:38:15.352082Z'
+    keys:
+    - super-fr#1496
+    - super-fr#1497
+    - super-fr#1494
+    - super-fr#1569
 - id: hook-hardening
   title: 'Hook and install hardening: deny without jq, no cwd imports in the parser, pinned spawns, locked
     installs'
@@ -9265,6 +9297,59 @@ batches:
     - docs/herdr-control-sessions.md
     - docs/reference/cli.md
     delivered: held
+  - kind: approval
+    at: '2026-11-24T22:11:35.625206Z'
+    pr: 1630
+    head: 50f44efea052a19d34d0232006abb5c17cea3bee
+    patch_id: fc09585b20cbe49c10b22add1bdea70351301255
+  - kind: approval
+    at: '2026-11-24T22:50:57.429438Z'
+    pr: 1630
+    head: 50f44efea052a19d34d0232006abb5c17cea3bee
+    voided_at: ea6ad2ff8f0ca2f9e833614643740f0787f7d095
+    patch_id: fc09585b20cbe49c10b22add1bdea70351301255
+  - kind: approval
+    at: '2026-11-24T22:58:13.710743Z'
+    pr: 1630
+    head: ea6ad2ff8f0ca2f9e833614643740f0787f7d095
+    patch_id: 5b177e09f58a2d01f6c397f293b569292afd2884
+  - kind: post_merge
+    at: '2026-11-24T23:09:04.356046Z'
+  - kind: claims_released
+    at: '2026-11-24T23:14:49.115699Z'
+    keys:
+    - super-fr#1075
+    - super-fr#1539
+    - super-fr#1542
+    - super-fr#1545
+    - super-fr#1556
+    - super-fr#1557
+    - super-fr#1561
+    - super-fr#1572
+  - kind: closeout
+    at: '2026-11-24T23:39:38.017724Z'
+    runner: herdr
+    handle: w3V:p4
+    run: 2026-11-22-feat-batch-triage-hardening
+    archive: chore/closeout-2026-11-24-3
+  - kind: closeout
+    at: '2026-11-24T23:59:25.439682Z'
+    runner: herdr
+    handle: w3V:p4
+    run: 2026-11-22-feat-batch-triage-hardening
+    archive: chore/closeout-2026-11-24-3
+    archived: 1683
+  - kind: claims_released
+    at: '2026-11-25T00:02:52.401466Z'
+    keys:
+    - super-fr#1539
+    - super-fr#1542
+    - super-fr#1545
+    - super-fr#1075
+    - super-fr#1561
+    - super-fr#1572
+    - super-fr#1556
+    - super-fr#1557
 - id: merge-readiness
   title: 'Merge only what delivered: the driver reads deliver from the cursor, and the Batches page shows
     one readiness verdict per PR'
@@ -9276,6 +9361,27 @@ batches:
   wave: 24
   after:
   - closeout-truth
+  events:
+  - kind: dispatch
+    at: '2026-11-24T22:12:39.965051Z'
+    runner: herdr
+    handle: w3T:p2
+    branch: feat/batch-merge-readiness
+  - kind: deferred
+    at: '2026-11-25T08:49:53.448918Z'
+    wave: 24
+  - kind: conflict
+    at: '2026-11-25T08:59:34.472259Z'
+    head: 5a48b117acd425e6794d5230ef9fe21bbe64ad13
+    paths:
+    - docs/explainers/fr-triage.md
+    - docs/explainers/fr-wave-driver.md
+    - docs/explainers/index.md
+    - docs/herdr-control-sessions.md
+    - packages/fr/src/fr/triage/kanban.py
+    - packages/fr/src/fr/triage/kanban_render.py
+    - packages/fr/src/fr/triage/model.py
+    delivered: held
 - id: consumer-followups
   title: 'Consumer-delivery follow-ups: plugin-dir judgement, Gitea job token, tea login error'
   ids:
@@ -9319,6 +9425,38 @@ batches:
     - docs/explainers/fr-devops-gate.md
     - docs/ops.md
     delivered: held
+  - kind: approval
+    at: '2026-11-24T21:24:13.416877Z'
+    pr: 1583
+    head: 32ea57d588e97e43b2e577f5013f7c2419b18654
+    patch_id: ca06ca377d637c384f203c352f625b65bec57862
+  - kind: post_merge
+    at: '2026-11-25T00:44:58.395949Z'
+  - kind: claims_released
+    at: '2026-11-25T00:49:49.957785Z'
+    keys:
+    - super-fr#1552
+    - super-fr#1553
+    - super-fr#1554
+  - kind: closeout
+    at: '2026-11-25T09:00:51.195034Z'
+    runner: herdr
+    handle: w3T:p3
+    run: 2026-11-19-feat-batch-consumer-followups
+    archive: chore/closeout-2026-11-25-1
+  - kind: closeout
+    at: '2026-11-25T09:19:57.046918Z'
+    runner: herdr
+    handle: w3T:p3
+    run: 2026-11-19-feat-batch-consumer-followups
+    archive: chore/closeout-2026-11-25-1
+    archived: 1684
+  - kind: claims_released
+    at: '2026-11-25T09:22:33.895454Z'
+    keys:
+    - super-fr#1552
+    - super-fr#1553
+    - super-fr#1554
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
@@ -9705,10 +9843,10 @@ exports:
   merged: true
 - wave: '22'
   repo: derio-net/super-fr
-  at: '2026-11-24T20:42:38.308343Z'
-  pr: 1664
-  head: 78f09224beb524a76329590cf0105e6f880aa3f3
-  closed: true
+  at: '2026-11-24T21:10:39.572325Z'
+  pr: 1666
+  head: cb0f3e4f38d6e2d21d1cc2cc94c64477ae71d686
+  merged: true
 closeouts:
 - repo: derio-net/super-fr
   item: derio-net/super-fr/run/closeout-2026-11-15-1
@@ -10210,6 +10348,88 @@ closeouts:
   files:
   - "A\tdocs/superpowers/implemented/journals/debug/2026-11-19-run-durability.md"
   - "D\tdocs/superpowers/journals/debug/2026-11-19-run-durability.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-24-2
+  branch: chore/closeout-2026-11-24-2
+  at: '2026-11-24T23:14:37.073754Z'
+  runner: herdr
+  handle: w3V:p3
+  planned:
+  - closeout-truth
+  pr: 1681
+  merged: true
+  head: 6340021d281107bf1928237dc714263ae1c9565c
+  members:
+  - closeout-truth
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-22-batch-closeout-truth.md"
+  - "D\tdocs/superpowers/journals/debug/2026-11-22-batch-closeout-truth.md"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-24-3
+  branch: chore/closeout-2026-11-24-3
+  at: '2026-11-24T23:38:00.978173Z'
+  runner: herdr
+  handle: w3V:p4
+  planned:
+  - triage-hardening
+  pr: 1683
+  merged: true
+  head: b253b095062f3e4a23ea1e897098ce10359045c1
+  members:
+  - triage-hardening
+  files:
+  - "A\tdocs/superpowers/implemented/journals/plans/2026-11-22-triage-hardening.md"
+  - "A\tdocs/superpowers/implemented/journals/specs/2026-11-22-triage-hardening.md"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-22-triage-hardening/01.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-22-triage-hardening/02.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-22-triage-hardening/03.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-22-triage-hardening/_meta.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-22-triage-hardening/_prose.md"
+  - "A\tdocs/superpowers/implemented/runs/2026-11-22-feat-batch-triage-hardening.yaml"
+  - "A\tdocs/superpowers/implemented/specs/2026-11-22-triage-hardening-design.md"
+  - "A\tdocs/superpowers/implemented/usage/2026-11-22-feat-batch-triage-hardening.yaml"
+  - "D\tdocs/superpowers/journals/plans/2026-11-22-triage-hardening.md"
+  - "D\tdocs/superpowers/journals/specs/2026-11-22-triage-hardening.md"
+  - "D\tdocs/superpowers/plans/2026-11-22-triage-hardening/01.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-22-triage-hardening/02.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-22-triage-hardening/03.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-22-triage-hardening/_meta.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-22-triage-hardening/_prose.md"
+  - "D\tdocs/superpowers/runs/2026-11-22-feat-batch-triage-hardening.yaml"
+  - "D\tdocs/superpowers/specs/2026-11-22-triage-hardening-design.md"
+  - "D\tdocs/superpowers/usage/2026-11-22-feat-batch-triage-hardening.yaml"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-25-1
+  branch: chore/closeout-2026-11-25-1
+  at: '2026-11-25T08:59:24.634599Z'
+  runner: herdr
+  handle: w3T:p3
+  planned:
+  - consumer-followups
+  pr: 1684
+  merged: true
+  head: d5328379d9e905cd1754da8271f40200fcd26fc5
+  members:
+  - consumer-followups
+  files:
+  - "A\tdocs/superpowers/implemented/journals/debug/2026-11-24-consumer-followups-plan-ceiling.md"
+  - "A\tdocs/superpowers/implemented/journals/plans/2026-11-19-consumer-followups.md"
+  - "A\tdocs/superpowers/implemented/journals/specs/2026-11-19-consumer-followups.md"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-19-consumer-followups/01.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-19-consumer-followups/_meta.yaml"
+  - "A\tdocs/superpowers/implemented/plans/2026-11-19-consumer-followups/_prose.md"
+  - "A\tdocs/superpowers/implemented/runs/2026-11-19-feat-batch-consumer-followups.yaml"
+  - "A\tdocs/superpowers/implemented/specs/2026-11-19-consumer-followups-design.md"
+  - "A\tdocs/superpowers/implemented/usage/2026-11-19-feat-batch-consumer-followups.yaml"
+  - "D\tdocs/superpowers/journals/debug/2026-11-24-consumer-followups-plan-ceiling.md"
+  - "D\tdocs/superpowers/journals/plans/2026-11-19-consumer-followups.md"
+  - "D\tdocs/superpowers/journals/specs/2026-11-19-consumer-followups.md"
+  - "D\tdocs/superpowers/plans/2026-11-19-consumer-followups/01.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-19-consumer-followups/_meta.yaml"
+  - "D\tdocs/superpowers/plans/2026-11-19-consumer-followups/_prose.md"
+  - "D\tdocs/superpowers/runs/2026-11-19-feat-batch-consumer-followups.yaml"
+  - "D\tdocs/superpowers/specs/2026-11-19-consumer-followups-design.md"
+  - "D\tdocs/superpowers/usage/2026-11-19-feat-batch-consumer-followups.yaml"
 queues:
 - repo: derio-net/super-fr
   wave: 22
@@ -10255,4 +10475,155 @@ queues:
     main: 34023f157224e7157b03e72ee3d43ead94ba53ea
   - kind: queue_cleared
     at: '2026-11-24T20:46:34.209505Z'
+    detail: the release cleared the hold
+- repo: derio-net/super-fr
+  wave: 23
+  scope: s-f7ea4061
+  base: b0ea33e38dee4429bf0fa765d16034c65c8899e8
+  events:
+  - kind: queue_open
+    at: '2026-11-24T21:56:03.048608Z'
+  - kind: queue_built
+    at: '2026-11-24T21:59:34.003765Z'
+    slot: 1
+    sha: 24130aa17578d13a79db3023676819dcdb9c6930
+    entry:
+      batch: closeout-truth
+    head: 2ddb8ead0bdeeb61ffa0a5241a0dc658a38ad19b
+    patch_id: 053b4b8efd81e07e220c55c712e9491e3d52d2d8
+    base: b0ea33e38dee4429bf0fa765d16034c65c8899e8
+    parent: b0ea33e38dee4429bf0fa765d16034c65c8899e8
+  - kind: queue_land
+    at: '2026-11-24T22:06:55.887590Z'
+    main: 24130aa17578d13a79db3023676819dcdb9c6930
+    entries:
+    - batch: closeout-truth
+  - kind: queue_built
+    at: '2026-11-24T22:58:49.135740Z'
+    slot: 1
+    sha: 36d8ffa46f425f7087b22ab21032fa689db0e3a5
+    entry:
+      batch: triage-hardening
+    head: ea6ad2ff8f0ca2f9e833614643740f0787f7d095
+    patch_id: 5b177e09f58a2d01f6c397f293b569292afd2884
+    base: 0160e4677f456c77fe157f3401444d3a2aee9440
+    parent: 0160e4677f456c77fe157f3401444d3a2aee9440
+  - kind: queue_land
+    at: '2026-11-24T23:08:42.999951Z'
+    main: 36d8ffa46f425f7087b22ab21032fa689db0e3a5
+    entries:
+    - batch: triage-hardening
+  - kind: queue_built
+    at: '2026-11-24T23:22:21.717959Z'
+    slot: 1
+    sha: b24df489646f55d774cb3d470fea328f1c0be701
+    entry:
+      pr: 1681
+      kind: closeout
+    head: 6340021d281107bf1928237dc714263ae1c9565c
+    patch_id: 8b13139d47c0bafcee24b574855d2ad0a5268efa
+    base: 36d8ffa46f425f7087b22ab21032fa689db0e3a5
+    parent: 36d8ffa46f425f7087b22ab21032fa689db0e3a5
+  - kind: queue_land
+    at: '2026-11-24T23:29:55.903778Z'
+    main: b24df489646f55d774cb3d470fea328f1c0be701
+    entries:
+    - pr: 1681
+      kind: closeout
+  - kind: queue_built
+    at: '2026-11-24T23:46:39.495391Z'
+    slot: 1
+    sha: 4b1f8bf3081ccea7c2fbeddf9bdff72d777ce80a
+    entry:
+      pr: 1683
+      kind: closeout
+    head: b253b095062f3e4a23ea1e897098ce10359045c1
+    patch_id: c9fc8e1e3be06f02c1b5eb3726f39db539f323f9
+    base: b24df489646f55d774cb3d470fea328f1c0be701
+    parent: b24df489646f55d774cb3d470fea328f1c0be701
+  - kind: queue_land
+    at: '2026-11-24T23:54:56.370415Z'
+    main: 4b1f8bf3081ccea7c2fbeddf9bdff72d777ce80a
+    entries:
+    - pr: 1683
+      kind: closeout
+  - kind: queue_drain
+    at: '2026-11-24T23:59:18.688376Z'
+    main: 4b1f8bf3081ccea7c2fbeddf9bdff72d777ce80a
+  - kind: queue_cleared
+    at: '2026-11-25T00:17:55.362106Z'
+    detail: the release cleared the hold
+- repo: derio-net/super-fr
+  wave: 24
+  scope: s-f7ea4061
+  base: e3e25316b6975853a9fe325adac08728c31c395d
+  events:
+  - kind: queue_open
+    at: '2026-11-25T00:17:58.104472Z'
+  - kind: queue_built
+    at: '2026-11-25T00:21:17.296307Z'
+    slot: 1
+    sha: 555f38f71caf0d6cf2d06cd5a2512841b35cc933
+    entry:
+      batch: consumer-followups
+    head: 32ea57d588e97e43b2e577f5013f7c2419b18654
+    patch_id: ca06ca377d637c384f203c352f625b65bec57862
+    base: e3e25316b6975853a9fe325adac08728c31c395d
+    parent: e3e25316b6975853a9fe325adac08728c31c395d
+  - kind: queue_land
+    at: '2026-11-25T00:44:23.135153Z'
+    main: 555f38f71caf0d6cf2d06cd5a2512841b35cc933
+    entries:
+    - batch: consumer-followups
+  - kind: queue_built
+    at: '2026-11-25T09:07:09.292312Z'
+    slot: 1
+    sha: 2e310c24c0a58a6c1a2958b4bf33c5bb3f130baf
+    entry:
+      pr: 1684
+      kind: closeout
+    head: d5328379d9e905cd1754da8271f40200fcd26fc5
+    patch_id: 124766fe9135e3fbf373709add0780e5462bda34
+    base: 555f38f71caf0d6cf2d06cd5a2512841b35cc933
+    parent: 555f38f71caf0d6cf2d06cd5a2512841b35cc933
+  - kind: queue_land
+    at: '2026-11-25T09:15:18.953679Z'
+    main: 2e310c24c0a58a6c1a2958b4bf33c5bb3f130baf
+    entries:
+    - pr: 1684
+      kind: closeout
+  - kind: queue_drain
+    at: '2026-11-25T09:19:48.996388Z'
+    main: 2e310c24c0a58a6c1a2958b4bf33c5bb3f130baf
+  - kind: queue_cleared
+    at: '2026-11-25T09:35:26.854794Z'
+    detail: the release cleared the hold
+- repo: derio-net/super-fr
+  scope: s-f7ea4061
+  base: dd2d3e863e222c2760fb54a187695ab473795866
+  events:
+  - kind: queue_open
+    at: '2026-11-25T09:35:30.553993Z'
+  - kind: queue_built
+    at: '2026-11-25T09:48:52.783234Z'
+    slot: 1
+    sha: 0e389e2efc43e10a1f343b907ef0c638cccc0b2e
+    entry:
+      pr: 1666
+      kind: export
+    head: cb0f3e4f38d6e2d21d1cc2cc94c64477ae71d686
+    patch_id: f298fc95486de80b93aa48c2eabbf6d747b1154d
+    base: dd2d3e863e222c2760fb54a187695ab473795866
+    parent: dd2d3e863e222c2760fb54a187695ab473795866
+  - kind: queue_land
+    at: '2026-11-25T10:05:26.047145Z'
+    main: 0e389e2efc43e10a1f343b907ef0c638cccc0b2e
+    entries:
+    - pr: 1666
+      kind: export
+  - kind: queue_drain
+    at: '2026-11-25T10:09:49.048336Z'
+    main: 0e389e2efc43e10a1f343b907ef0c638cccc0b2e
+  - kind: queue_cleared
+    at: '2026-11-25T10:16:03.904358Z'
     detail: the release cleared the hold
