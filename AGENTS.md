@@ -335,7 +335,8 @@ uv workspace monorepo, version lockstepped across every manifest (see
     old-path fallback, decided under quiet/stealth by the configuration branch's fetched
     tip); `tests/unit/test_tripwire_config_space.py` fails any other `.fr` path
     construction. `protection.py` answers whether the forge enforces a pull-request rule
-    (one approving review, no force-push, no deletion) on the configuration branch, read
+    (one approving review that a later push cannot keep, no force-push, no deletion) on the
+    configuration branch, read
     from `rules/branches/<b>`, cached per command; it cannot see bypass actors. `tip.py`
     exports the fetched, reviewed tip to a private directory for a guarded program to run;
     `degraded.py` is what an unprotected branch's workflows, strategies and `profiles.yaml`

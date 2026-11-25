@@ -165,8 +165,9 @@ A repo without it cannot use `candidate`, `client-live` or `prerelease`, and
 
 Under `quiet` and `stealth`, the contract is on the configuration branch. The walk
 runs it only when the forge protects that branch. The ruleset must require a pull
-request with at least one approving review. It must also block force-pushes and
-deletion. fr reads the rules of the branch, but it cannot see the bypass actors of a
+request with at least one approving review. A push after the approval must not keep
+it: set the rule to dismiss stale approvals on push, or to require approval of the most
+recent push. It must also block force-pushes and deletion. fr reads the rules of the branch, but it cannot see the bypass actors of a
 ruleset. Thus a ruleset with bypass actors passes this check, so keep its bypass list
 empty.
 

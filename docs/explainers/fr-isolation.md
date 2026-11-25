@@ -232,8 +232,11 @@ candidate install, the command keys of `.fr/triage.yaml`, `.fr/ops.yaml`, and th
 `.fr/ci.yaml`. Under quiet and stealth anyone who can push to the configuration branch
 could change them. So fr uses them only when the forge enforces a rule on that branch. The
 rule is a ruleset that requires a pull request with at least one approving review and
-blocks force-pushes and deletion. fr reads the rules of the branch, but it cannot see who
-may bypass them. Keep the bypass list of that ruleset empty.
+blocks force-pushes and deletion. A push after the approval must not keep it. So set the
+rule to dismiss stale approvals on push, or to require approval of the most recent push.
+fr reads the rules of the branch, but it cannot see who may bypass them. Keep the bypass
+list of that ruleset empty. fr also trusts what the branch held before you added the rule,
+so check that content once when you add it.
 
 When the forge does not enforce such a rule, fr refuses to run the command and says how to
 fix it. GitHub does not enforce rulesets on a private repo on the free plan, so there fr

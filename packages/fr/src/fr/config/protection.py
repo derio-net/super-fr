@@ -7,11 +7,16 @@ and the keys of `.fr/triage.yaml` that run a command or decide whose PRs are tru
 merged, `GUARDED_TRIAGE_KEYS`) is read under `quiet` and `stealth`
 from a configuration branch anyone able to push to the repository could write. fr runs or
 gates on it only when the forge enforces, on that exact branch, a rule requiring a pull
-request with at least one approving review, and blocks force-pushes and deletion.
+request with at least one approving review that a later push cannot keep (the rule dismisses
+stale approvals on push, or requires the most recent push to be approved), and blocks
+force-pushes and deletion.
 
 The limit, said wherever fr claims protection: fr reads the branch's effective rules, which
 do not name a ruleset's bypass actors, so a ruleset that lets someone bypass it still reads
-as enforced. The operator keeps the configuration branch's bypass lists empty.
+as enforced. The operator keeps the configuration branch's bypass lists empty. And fr
+trusts what the branch already held when the rule was added: a commit pushed before the
+ruleset existed (the configuration branch's first commit is a direct push) was never
+reviewed.
 
 `branch_protection` asks the forge once per command (`GET repos/<repo>/rules/branches/<b>`,
 the effective rules) and answers `Enforced` or `NotEnforced(reason)`. The free-plan 403
@@ -72,16 +77,29 @@ BYPASS_LIMIT: Final = (
     "fr reads the branch's rules and cannot see bypass actors, so keep the ruleset's bypass "
     "list empty"
 )
-"""What fr cannot check (review p3-r3), said with every fix and every claim of protection."""
+"""What fr cannot check (review p3-r3), said with every fix and every claim of protection.
+
+A second limit sits beside it (lens review l-security-r1): fr reads the rules in force now,
+not the history of the tip. Content that reached the branch before the ruleset was added
+(the first commit is a direct push) is trusted as if it had been reviewed. The operator
+reviews the branch's content once, when adding the ruleset."""
 
 APPROVAL_MISSING: Final = "the pull-request rule requires no approving review"
+
+STALE_APPROVAL: Final = (
+    "the pull-request rule keeps an approval after a later push (it neither dismisses stale "
+    "approvals on push nor requires the most recent push to be approved)"
+)
+"""Lens review l-security-r1: an approval a later push keeps lets an author merge what no
+one reviewed."""
 
 
 def fix_text(branch: str) -> str:
     """What to change (spec §C), with the limit of what fr checks."""
     return (
         f"protect {branch} with a ruleset requiring pull requests with at least one approving "
-        f"review (and blocking force-pushes and deletion); {BYPASS_LIMIT}; GitHub needs a "
+        "review, set to dismiss stale approvals on push or to require approval of the most "
+        f"recent push (and blocking force-pushes and deletion); {BYPASS_LIMIT}; GitHub needs a "
         "public repo or a paid plan for a private one"
     )
 
@@ -197,19 +215,33 @@ def _judge(reply: object) -> str | None:
     types = {r.get("type") for r in reply}
     missing = [said for kind, said in REQUIRED_RULES.items() if kind not in types]
     if "pull_request" in types and not any(_approving(r) for r in reply):
-        missing.append(APPROVAL_MISSING)
+        counted = any(_counts_an_approval(r) for r in reply)
+        missing.append(STALE_APPROVAL if counted else APPROVAL_MISSING)
     return "; ".join(missing) if missing else None
 
 
-def _approving(rule: dict[str, Any]) -> bool:
-    """A `pull_request` rule that needs at least one approving review (review p3-r3). Every
-    rule the forge returns applies, so one such rule is enough; a count that is not a
-    positive integer is none."""
+def _counts_an_approval(rule: dict[str, Any]) -> bool:
+    """A `pull_request` rule that needs at least one approving review (review p3-r3); a count
+    that is not a positive integer is none."""
     if rule.get("type") != "pull_request":
         return False
     params = rule.get("parameters")
     count = params.get("required_approving_review_count") if isinstance(params, dict) else None
     return isinstance(count, int) and not isinstance(count, bool) and count >= 1
+
+
+def _approving(rule: dict[str, Any]) -> bool:
+    """A `pull_request` rule that needs at least one approving review which a later push
+    cannot keep: `dismiss_stale_reviews_on_push` or `require_last_push_approval` is exactly
+    `true` (lens review l-security-r1). Every rule the forge returns applies, so one such rule
+    is enough."""
+    if not _counts_an_approval(rule):
+        return False
+    params = rule["parameters"]
+    return (
+        params.get("dismiss_stale_reviews_on_push") is True
+        or params.get("require_last_push_approval") is True
+    )
 
 
 def branch_protection(client: object, repo: str, branch: str) -> Answer:

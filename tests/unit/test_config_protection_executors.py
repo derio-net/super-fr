@@ -4,7 +4,8 @@ sec-1-self-attesting-config-branch and p1-r1).
 
 The repos are real git repos with local bare origins. A local origin is no forge repository,
 so under quiet it is NOT enforced by itself (the real path); an enforced answer comes from a
-fake forge client serving the captured `pull-request-approved.json` reply.
+fake forge client serving `pull-request-approved-dismiss-stale.json` (the captured approved
+reply with `dismiss_stale_reviews_on_push` flipped, see the fixtures README).
 """
 
 from __future__ import annotations
@@ -37,7 +38,7 @@ def _home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 class _Rules:
     """A forge client answering `branch_rules` with a captured reply, counting asks."""
 
-    def __init__(self, name: str = "pull-request-approved.json") -> None:
+    def __init__(self, name: str = "pull-request-approved-dismiss-stale.json") -> None:
         import json
 
         self.reply = json.loads((RULES / name).read_text())

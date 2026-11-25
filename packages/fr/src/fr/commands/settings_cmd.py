@@ -389,7 +389,8 @@ def _sync_placement(root: Path) -> str | None:
 def _protected_tip(root: Path, placement: str) -> str:
     """`--yes` without `--expect` (plan discovery p2-phase3-sync-needs-protection): the
     configuration branch's tip, when the forge's rules for it require a pull request with an
-    approving review and block force-pushes and deletion (what fr checked; it cannot see
+    approving review a later push cannot keep and block force-pushes and deletion (what fr
+    checked; it cannot see
     bypass actors, `protection.BYPASS_LIMIT`); otherwise the refusal naming the preview (spec
     R6, R7)."""
     from fr.config.protection import BYPASS_LIMIT, ProtectionReadError, require_protected
