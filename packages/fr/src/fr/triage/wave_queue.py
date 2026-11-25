@@ -1161,7 +1161,7 @@ def _base_needs(qs: QueueSnapshot) -> tuple[QueueAction, ...]:
     and nothing else would say so."""
     out = []
     for key, pr in sorted(qs.live.items()):
-        why = base_refusal(pr, qs) if pr.state == "OPEN" else ""
+        why = base_refusal(pr, qs) if pr.state == "OPEN" and key not in qs.refused else ""
         if why:
             out.append(QueueAction("queue-need", qs.repo,
                                    f"PR #{pr.number} ({key}) {why}; the queue never merges it",

@@ -48,6 +48,7 @@ from fr.triage.batch_drive import (
     drive_pass,
     held_archive_conflict,
     idle_session,
+    queue_snapshot,
 )
 from fr.triage.claims import expired, from_issue_claim, held_line, held_map
 from fr.triage.components import stamp_text
@@ -64,6 +65,7 @@ from fr.triage.model import (
     Launch,
     RedHandbackEvent,
 )
+from fr.triage.readiness import Readiness, Refused, other_readiness
 from fr.triage.stage import Stage
 from fr.triage.views import drive_snapshot, queue_unconfigured
 from fr.triage.wave_queue import queue_line
@@ -204,7 +206,7 @@ def _archive_prs(batch_repo_: str, facts: Facts, ci_none: Collection[str] = ()) 
             number=p.number, state=p.state, draft=p.is_draft, head=p.head_oid,
             checks=verdict, failing=failing, head_ref=p.head_ref, files=tuple(p.files),
             trusted=distrust(p.author, p.cross_repo, allowed) is None,
-            mergeable=p.mergeable or "",
+            mergeable=p.mergeable or "", url=p.url,
         )  # fmt: skip
     return list(out.values())
 
@@ -336,6 +338,10 @@ class Card:
     model: Setting
     events: tuple[EventRow, ...]
     claim_expiry: ClaimExpiry | None = None
+    # batch-merge-readiness R4-R8: the batch PR's verdict, and the verdicts of the
+    # close-out, archive and export PRs about it, from the one plan the board builds
+    readiness: Readiness | None = None
+    others: tuple[Readiness, ...] = ()
 
     @property
     def front(self) -> Literal["batch", "closeout"]:
@@ -406,6 +412,7 @@ class Board:
     # R25, R28: each queue repo's line, and the report of every wave its queue ran
     queue_lines: tuple[str, ...] = ()
     wave_reports: tuple[WaveReport, ...] = ()
+    others: tuple[Readiness, ...] = ()  # entries about no batch (export, housekeeping), R8
 
     def column(self, key: Column) -> ColumnView:
         return next(c for c in self.columns if c.key == key)
@@ -464,6 +471,35 @@ def _default_plan(
     snapshot = drive_snapshot(facts, judgements, ci_none=ci_none, scope_args=scope_args)
     chosen = replace(snapshot, selected=default_selection(judgements.batches))
     return chosen, drive_pass(chosen)
+
+
+def _others_of(plan: Pass) -> dict[str, tuple[Readiness, ...]]:
+    """The plan's verdicts for non-batch entries (R8), by the batch each is about ("" for
+    one about no batch: an export or housekeeping PR)."""
+    grouped: dict[str, list[Readiness]] = {}
+    for q in plan.queues:
+        for r in q.readiness.values():
+            if r.entry is not None:
+                grouped.setdefault(r.entry.batch, []).append(r)
+    return {k: tuple(v) for k, v in grouped.items()}
+
+
+def _archive_view(
+    batch: Batch, repo: str, p: LivePr, snapshot: Snapshot, known: Collection[str]
+) -> Readiness | None:
+    """R8 for the batch's attributed open archive PR on a board that names no default branch
+    or PR base: the plan has no entry for it, so the verdict says what the facts cannot
+    judge (checks, a conflict, or that the driver reads the base live)."""
+    if f"archive#{p.number}" in known:
+        return None
+    if p.mergeable == CONFLICTING:
+        why = "conflicts with the default branch"
+    elif p.checks != "green":
+        why = f"checks {p.checks}"
+    else:
+        why = "its base branch is not in the collected facts: the driver reads it live"
+    refused = Refused("archive", repo, p, why, batch.id)
+    return other_readiness(refused.key, queue_snapshot(snapshot, repo, refused=[refused]))
 
 
 def _first_actions(plan: Pass) -> dict[str, Action]:
@@ -633,6 +669,9 @@ def _card(
     ready: frozenset[str] = frozenset(),
     queue_held: Mapping[str, tuple[str, str]] | None = None,
     ci_none: Collection[str] = (),
+    verdicts: Mapping[str, Readiness] | None = None,
+    others: Mapping[str, tuple[Readiness, ...]] | None = None,
+    snapshot: Snapshot | None = None,
 ) -> Card:
     stop = stops.get(batch.id)
     lane = lane_of(batch, facts, stop)
@@ -653,6 +692,12 @@ def _card(
     archives = _archive_prs(repo, facts, ci_none) if repo else []
     idle = _idle_of(batch, facts, repo, status, closeout_status, now, archives)
     held_archive = _held_archive(batch, archives)
+    more = list((others or {}).get(batch.id, ()))
+    open_archive = _open_archive(batch, archives)
+    if open_archive is not None and snapshot is not None:
+        known = {r.entry.key for r in more if r.entry is not None}
+        if (view := _archive_view(batch, repo or "", open_archive, snapshot, known)) is not None:
+            more.append(view)
     first = actions.get(batch.id)
     red = (
         (_red_phrase(batch, first) or action_phrase(first))
@@ -740,6 +785,8 @@ def _card(
         model=_setting(launch.model, default.model),
         events=tuple(sorted((_event_row(e) for e in batch.events), key=lambda e: e.at)),
         claim_expiry=claim_expiry,
+        readiness=(verdicts or {}).get(batch.id),
+        others=tuple(more),
     )
 
 
@@ -821,6 +868,8 @@ def build_board(
     actions, awaiting = _first_actions(plan), _awaiting(snapshot, plan)
     queued = _in_merge_queue(plan)
     queue_held = queue_unconfigured(snapshot, facts)
+    verdicts = {k: r for q in plan.queues for k, r in q.readiness.items() if r.entry is None}
+    others = _others_of(plan)
     selected = default_selection(batches)
     live = _board_stops(batches, facts, stops or {}, ci_none)
     cards = [
@@ -840,6 +889,9 @@ def build_board(
             ready=plan.ready,
             queue_held=queue_held,
             ci_none=ci_none,
+            verdicts=verdicts,
+            others=others,
+            snapshot=snapshot,
         )
         for b in batches
     ]
@@ -864,5 +916,5 @@ def build_board(
     return Board(
         scope=facts.scope, collected_at=facts.collected_at, columns=columns, held=held,
         queue_lines=tuple(queue_line(q) for q in plan.queues),
-        wave_reports=wave_report(mine, batches),
+        wave_reports=wave_report(mine, batches), others=others.get("", ()),
     )  # fmt: skip

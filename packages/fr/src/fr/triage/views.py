@@ -161,6 +161,8 @@ def drive_snapshot(
             trusted=True,  # the queue holds `batch_pr`s only (gh#936)
             labels=tuple(entry.pr.labels) if entry.pr.labels is not None else None,
             url=entry.pr.url,
+            mergeable=entry.pr.mergeable or "",  # batch-merge-readiness R4, R6: the merge fact
+            merge_state=entry.pr.merge_state or "",
         )
     merged_at: dict[str, datetime] = {}
     for b in batches:
