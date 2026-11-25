@@ -108,80 +108,81 @@ def init_cmd(
     if path.exists() and not force:
         typer.echo(f"{SETTINGS_PATH} already exists; pass --force to overwrite it", err=True)
         raise typer.Exit(2)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_init())
+    from fr.config.space import repo_config_space, write_settings
+
+    write_settings(repo_config_space(resolve_repo_root()), render_init(), message="")
     typer.echo(f"wrote {path}")
 
 
 def init_quiet(root: Path) -> str:
-    """Create the orphan `fr` branch (one commit, root `settings.yaml` from
-    `render_init("quiet")`) with git plumbing, so the checkout is never touched, and push
-    it with a plain push. Refuses with no origin, or when origin already has `fr`."""
+    """Create the quiet switch (`render_init("quiet")`): the orphan `fr-config` branch
+    holding `.fr/settings.yaml`, then the orphan `fr` branch holding the same bytes as its
+    root `settings.yaml` (spec 2026-11-19-event-driven-a-la-carte R5, R6), each made with
+    plumbing, so the checkout is never touched, and pushed with a plain push. Refuses with
+    no origin, or when origin or this clone already has either branch."""
+    from fr.config.space import quiet_config_space, write_settings
     from fr.git import GitUnavailableError, git_answer
-    from fr.placement.quiet import FETCH_REFSPEC, QUIET_REF, unreachable
+    from fr.git_policy.templates import fr_message
+    from fr.placement.quiet import (
+        CONFIG_BRANCH,
+        CONFIG_REF,
+        QUIET_BRANCH,
+        QUIET_REF,
+        unreachable,
+    )
     from fr.settings.render import QUIET_LIMITATION, render_init
 
-    def git(*args: str, stdin: str | None = None) -> str:
-        try:
-            if stdin is None:
-                done = git_answer(root, *args)
-            else:
-                import subprocess
-
-                from fr.git import git_argv
-
-                done = subprocess.run(
-                    git_argv(root, *args), input=stdin, capture_output=True, text=True
-                )
-        except GitUnavailableError as e:
-            raise SettingsError(f"fr settings init --quiet: {e}") from e
-        if done.returncode != 0:
+    try:
+        if git_answer(root, "config", "--get", "remote.origin.url").returncode != 0:
             raise SettingsError(
-                f"fr settings init --quiet: `git {' '.join(args)}` failed: {done.stderr.strip()}"
+                "fr settings init --quiet: this repository has no `origin`; quiet keeps the "
+                "`fr` and `fr-config` branches on origin, so add one first"
             )
-        return done.stdout
-
-    if git_answer(root, "config", "--get", "remote.origin.url").returncode != 0:
-        raise SettingsError(
-            "fr settings init --quiet: this repository has no `origin`; quiet keeps the `fr` "
-            "branch on origin, so add one first"
-        )
-    if git_answer(root, "rev-parse", "--verify", "--quiet", QUIET_REF).returncode == 0:
-        # p3-r9: the root commit made here is unrelated to any existing local `fr`, which
-        # the fr worktree would otherwise adopt and push as a second root.
-        raise SettingsError(
-            "fr settings init --quiet: this clone already has a local `fr` branch, which "
-            "would not be an ancestor or a descendant of the switch fr is about to create. "
-            "Rename or delete it (`git branch -m fr fr-old`) and retry"
-        )
-    probe = git_answer(root, "ls-remote", "--exit-code", "origin", QUIET_REF)
+        for ref, name in ((QUIET_REF, QUIET_BRANCH), (CONFIG_REF, CONFIG_BRANCH)):
+            if git_answer(root, "rev-parse", "--verify", "--quiet", ref).returncode == 0:
+                # p3-r9: the root commit made here is unrelated to any existing local
+                # branch, which a worktree would otherwise adopt and push as a second root.
+                raise SettingsError(
+                    f"fr settings init --quiet: this clone already has a local `{name}` "
+                    "branch, which would not be an ancestor or a descendant of the one fr "
+                    f"is about to create. Rename or delete it (`git branch -m {name} "
+                    f"{name}-old`) and retry"
+                )
+        probe = git_answer(root, "ls-remote", "--exit-code", "origin", QUIET_REF, CONFIG_REF)
+    except GitUnavailableError as e:
+        raise SettingsError(f"fr settings init --quiet: {e}") from e
     if probe.returncode == 0:
+        found = " and ".join(
+            f"`{line.split(chr(9), 1)[1].removeprefix('refs/heads/')}`"
+            for line in probe.stdout.splitlines()
+            if chr(9) in line
+        )
         raise SettingsError(
-            "fr settings init --quiet: origin already has an `fr` branch; fr never overwrites "
-            "it (edit its settings.yaml there instead)"
+            f"fr settings init --quiet: origin already has {found}; fr never overwrites "
+            f"the switch (edit `.fr/settings.yaml` on `{CONFIG_BRANCH}` instead)"
         )
     if probe.returncode != 2:
         raise unreachable(probe.stderr.strip() or "git ls-remote failed", None)
-    blob = git("hash-object", "-w", "--stdin", stdin=render_init("quiet")).strip()
-    tree = git("mktree", stdin=f"100644 blob {blob}\tsettings.yaml\n").strip()
-    from fr.git_policy.templates import fr_message
-
     # fr's own subject goes through the commit templates (R14), like every fr commit.
     message = fr_message(root, "chore(fr): switch this repo to the quiet placement")
-    commit = git("commit-tree", tree, "-F", "-", stdin=message).strip()
-    git("push", "origin", f"{commit}:{QUIET_REF}")
-    git("fetch", "--no-tags", "origin", FETCH_REFSPEC)
+    write_settings(quiet_config_space(root), render_init("quiet"), message=message)
+    commit = git_answer(root, "rev-parse", "--short=12", CONFIG_REF).stdout.strip()
     return (
-        f"pushed the `fr` branch ({commit[:12]}) to origin: this repo is now quiet.\n"
+        f"pushed the `{CONFIG_BRANCH}` branch ({commit}) and the `{QUIET_BRANCH}` branch to "
+        "origin: this repo is now quiet.\n"
         f"{QUIET_LIMITATION}\n"
-        "The policy keys are read from `fr`: protect it as you protect the default branch."
+        f"The policy keys are read from `{CONFIG_BRANCH}`: protect it as you protect the "
+        "default branch."
     )
 
 
 def init_stealth(root: Path, text: str) -> str:
-    """Write `<target-dir>/settings.yaml` (from `render_init("stealth")`) on the tracking
-    branch and push it compare-and-swap (R3, R24). Refuses an unreachable tracking repo
-    or a missing branch before writing, and a file that is already there."""
+    """Write the target's settings (from `render_init("stealth")`): `<target-dir>/.fr/
+    settings.yaml` on the tracking repo's `<branch>-config`, then the same bytes as
+    `<target-dir>/settings.yaml` on `<branch>` (R5, R6, R24), each pushed
+    compare-and-swap. Refuses an unreachable tracking repo or a missing branch before
+    writing, and a file that is already at either path."""
+    from fr.config.space import stealth_config_space, write_settings
     from fr.git_policy.templates import fr_message
     from fr.placement import stealth
     from fr.settings.render import render_init
@@ -193,28 +194,27 @@ def init_stealth(root: Path, text: str) -> str:
     target_remote = stealth.origin_url(root)
     stealth.check_privacy(ref, target_remote, target_root=root)
     target = stealth.target_dir(root)
-    wt = stealth.ensure_worktree(root, ref)
-    path = wt / target / stealth.TARGET_SETTINGS
-    if path.exists():
-        raise SettingsError(
-            f"fr settings init --stealth: {ref.text} already holds {target}/"
-            f"{stealth.TARGET_SETTINGS}; fr never overwrites it (edit it there instead)"
-        )
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_init("stealth"))
+    stealth.ensure_worktree(root, ref)
+    cref = stealth.config_ref(ref)
+    if stealth._remote_has(cref, root):
+        stealth.ensure_worktree(root, cref)
+    new, old = stealth.target_settings_texts(root, ref, target)
+    for found, where, rel in (
+        (new, cref.text, stealth.TARGET_SETTINGS),
+        (old, ref.text, stealth.LEGACY_TARGET_SETTINGS),
+    ):
+        if found is not None:
+            raise SettingsError(
+                f"fr settings init --stealth: {where} already holds {target}/{rel}; fr never "
+                "overwrites it (edit it there instead)"
+            )
     message = fr_message(root, f"chore(fr): stealth settings for {target}")
-    try:
-        outcome = stealth.commit_and_push(
-            ref, wt, [path], message, stealth.plain_commit, target_remote=target_remote
-        )
-    except SettingsError:
-        path.unlink(missing_ok=True)
-        raise
-    if not outcome.committed:
-        path.unlink(missing_ok=True)
-        raise SettingsError(f"fr settings init --stealth: {outcome.reason}")
+    write_settings(
+        stealth_config_space(root, ref.text, target), render_init("stealth"), message=message
+    )
     return (
-        f"pushed {target}/{stealth.TARGET_SETTINGS} to {ref.text}: start a run with "
+        f"pushed {target}/{stealth.TARGET_SETTINGS} to {cref.text} and "
+        f"{target}/{stealth.LEGACY_TARGET_SETTINGS} to {ref.text}: start a run with "
         f"`fr isolation up --stealth {ref.text}` (stealth is chosen per run)"
     )
 

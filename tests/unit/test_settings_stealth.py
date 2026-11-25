@@ -134,3 +134,84 @@ def test_init_stealth_refuses_a_missing_branch_before_writing(
     assert result.exit_code == 2
     assert "no branch 'nope'" in " ".join(result.output.split())
     assert not (Path(os.environ["HOME"]) / ".cache").exists()
+
+
+# --- S1 (spec 2026-11-19-event-driven-a-la-carte R5, R6, R13): `<branch>-config` ---------
+
+
+def _push_config_settings(track: Path, tmp_path: Path, text: str) -> None:
+    """`local--origin/.fr/settings.yaml` on the tracking repo's `main-config`."""
+    clone = tmp_path / "push-config-clone"
+    git(tmp_path, "clone", "-q", str(track), str(clone))
+    git(clone, "config", "user.name", "t")
+    git(clone, "config", "user.email", "t@example.invalid")
+    git(clone, "checkout", "-q", "--orphan", "main-config")
+    git(clone, "rm", "-rqf", ".")
+    (clone / "local--origin/.fr").mkdir(parents=True)
+    (clone / "local--origin/.fr/settings.yaml").write_text(text)
+    git(clone, "add", "-A")
+    git(clone, "commit", "-qm", "config")
+    git(clone, "push", "-q", "origin", "main-config")
+
+
+def test_up_creates_the_config_branch_carrying_the_old_file(tmp_path: Path) -> None:
+    from fr.config.space import config_space
+
+    target, track = stealth_pair(tmp_path)
+    text = "placement: stealth\nartifacts:\n  test_plan: off\n"
+    _push_target_settings(track, tmp_path, text)
+    state = _up(target, track)
+    assert git(track, "show", "main-config:local--origin/.fr/settings.yaml") == text
+    effective = load_settings(state.worktree)
+    assert effective.settings.artifacts.test_plan == "off"
+    assert effective.ref == "refs/remotes/origin/main-config"
+    space = config_space(state.worktree)
+    assert space.at_default("settings") == text  # the space exists: no refusal
+
+
+def test_up_with_no_target_file_still_creates_the_config_branch(tmp_path: Path) -> None:
+    from fr.config.space import config_space
+
+    target, track = stealth_pair(tmp_path)
+    state = _up(target, track)
+    assert git(track, "rev-parse", "--verify", "main-config").strip()
+    assert tracked_files(track, "main-config") == []
+    assert config_space(state.worktree).at_default("settings") is None
+
+
+def test_the_config_branch_file_is_read_first(tmp_path: Path) -> None:
+    target, track = stealth_pair(tmp_path)
+    _push_config_settings(track, tmp_path, "placement: stealth\nartifacts:\n  gates: off\n")
+    state = _up(target, track)
+    effective = load_settings(state.worktree)
+    assert effective.settings.artifacts.gates == "off"
+    assert "main-config:local--origin/.fr/settings.yaml" in effective.ref_note
+
+
+def test_two_stealth_settings_files_that_differ_refuse_naming_both(tmp_path: Path) -> None:
+    from fr.settings import SettingsError
+
+    target, track = stealth_pair(tmp_path)
+    _push_target_settings(track, tmp_path, "artifacts:\n  gates: off\n")
+    _push_config_settings(track, tmp_path, "artifacts:\n  gates: on\n")
+    state = _up(target, track)
+    with pytest.raises(SettingsError) as caught:
+        load_settings(state.worktree)
+    message = str(caught.value)
+    assert "main-config:local--origin/.fr/settings.yaml" in message
+    assert "main:local--origin/settings.yaml" in message
+
+
+def test_init_stealth_writes_both_files_identically(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.cli import app
+
+    target, track = stealth_pair(tmp_path)
+    monkeypatch.chdir(target)
+    env = {**os.environ, "FR_REPO_ROOT": str(target)}
+    result = CliRunner().invoke(app, ["settings", "init", "--stealth", f"{track}@main"], env=env)
+    assert result.exit_code == 0, result.output
+    new = git(track, "show", "main-config:local--origin/.fr/settings.yaml")
+    old = git(track, "show", "main:local--origin/settings.yaml")
+    assert new == old and "placement: stealth" in new.splitlines()

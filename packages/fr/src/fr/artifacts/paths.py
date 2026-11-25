@@ -52,9 +52,17 @@ FEATURE_HEADS: Final = "HEADS"
 one sha a line, append-only: owned evidence that outlives the branch's refs (R17)."""
 RECORDS_SUFFIX: Final = ".records"
 """A run's step records sit at `<runs dir>/<run-id>.records/`, beside its cursor."""
-SWITCH_REF: Final = "refs/remotes/origin/fr"
-"""The quiet switch: the remote `fr` branch, as last fetched."""
-SWITCH_SETTINGS: Final = "settings.yaml"
+MEMORY_REF: Final = "refs/remotes/origin/fr"
+"""Quiet's memory branch, `fr`, as last fetched: the artifacts live there."""
+SWITCH_REF: Final = "refs/remotes/origin/fr-config"
+"""The quiet switch (spec 2026-11-19-event-driven-a-la-carte R5): the remote configuration
+branch `fr-config`, as last fetched, holding `SWITCH_SETTINGS`."""
+SWITCH_SETTINGS: Final = ".fr/settings.yaml"
+LEGACY_SWITCH_REF: Final = MEMORY_REF
+"""Where an fr below S1 reads the switch: the root `settings.yaml` of `fr` (R6, R13). fr
+reads it when `SWITCH_REF` holds no settings, and writes it in step with the new one until
+the release R14's owed entry names."""
+LEGACY_SWITCH_SETTINGS: Final = "settings.yaml"
 
 _SP = "docs/superpowers"
 _ACC = "docs/acceptance"

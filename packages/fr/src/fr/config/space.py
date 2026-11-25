@@ -107,6 +107,9 @@ class ConfigSpace:
     product: Path
     ref: str | None = None
     prefix: str = SPACE_DIR
+    tracking: str | None = None
+    """Under stealth, the tracking ref (`<repo>@<branch>`) whose `<branch>-config` holds
+    the space; None otherwise."""
 
     @property
     def default_ref(self) -> str | None:
@@ -222,6 +225,65 @@ def stealth_checkout(root: Path, tracking: Path) -> Path:
     return tracking.with_name(f"{tracking.name}{CONFIG_SUFFIX}")
 
 
+def repo_config_space(root: Path) -> ConfigSpace:
+    """The `repo` configuration space of *root*: its own `.fr/`."""
+    return ConfigSpace(_REPO, Path(root) / SPACE_DIR, Path(root), Path(root))
+
+
+def quiet_config_space(root: Path) -> ConfigSpace:
+    """The quiet configuration space of *root*, whatever the switch says now (a writer
+    creating it, `fr settings init --quiet`, asks before the switch exists)."""
+    checkout = quiet_checkout(root)
+    return ConfigSpace(
+        _QUIET, checkout / SPACE_DIR, checkout, Path(root), f"origin/{CONFIG_BRANCH}"
+    )
+
+
+def stealth_config_space(root: Path, tracking: str, target: str) -> ConfigSpace:
+    """The stealth configuration space of *root* for the tracking ref *tracking*
+    (`<repo>@<branch>`) and the target directory *target*."""
+    from fr.placement.stealth import parse_ref, worktree_path
+
+    ref = parse_ref(tracking)
+    checkout = stealth_checkout(Path(root), worktree_path(Path(root), ref))
+    return ConfigSpace(
+        _STEALTH,
+        checkout / target / SPACE_DIR,
+        checkout,
+        Path(root),
+        f"origin/{ref.branch}{CONFIG_SUFFIX}",
+        f"{target}/{SPACE_DIR}",
+        ref.text,
+    )
+
+
+def write_settings(space: ConfigSpace, text: str, *, message: str) -> None:
+    """The one writer of the settings file (spec 2026-11-19-event-driven-a-la-carte R6).
+
+    Under `repo` it writes `.fr/settings.yaml` in the product working tree (committing is
+    the operator's). Under `quiet` and `stealth` it commits and pushes the configuration
+    branch's file first (`.fr/settings.yaml` on `fr-config`, `<target-dir>/.fr/settings.yaml`
+    on `<branch>-config`), then the same bytes at the old path (the root `settings.yaml`
+    on `fr`, `<target-dir>/settings.yaml` on `<branch>`), so an fr below S1 and older hooks
+    still read the placement. The legacy copy ends at the release R14's owed entry
+    `s1-refuse-old-paths` names."""
+    if space.placement == _QUIET:
+        from fr.placement.quiet import write_switch
+
+        write_switch(space.product, text, message)
+        return
+    if space.placement == _STEALTH:
+        from fr.placement.stealth import parse_ref, write_target_settings
+
+        assert space.tracking is not None
+        target = space.prefix.removesuffix(f"/{SPACE_DIR}")
+        write_target_settings(space.product, parse_ref(space.tracking), target, text, message)
+        return
+    path = space.file("settings")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
 def config_space(root: Path) -> ConfigSpace:
     """The configuration space of the checkout at *root* (R1, R2).
 
@@ -233,25 +295,16 @@ def config_space(root: Path) -> ConfigSpace:
     root = Path(root)
     placement = outside_repo(root) or _REPO
     if placement == _QUIET:
-        checkout = quiet_checkout(root)
-        space = ConfigSpace(_QUIET, checkout / SPACE_DIR, checkout, root, f"origin/{CONFIG_BRANCH}")
+        space = quiet_config_space(root)
     elif placement == _STEALTH:
-        from fr.placement.stealth import marker_tracking, worktree_path
+        from fr.placement.stealth import marker_tracking
 
         found = marker_tracking(root)
         assert found is not None
         ref, target = found
-        checkout = stealth_checkout(root, worktree_path(root, ref))
-        space = ConfigSpace(
-            _STEALTH,
-            checkout / target / SPACE_DIR,
-            checkout,
-            root,
-            f"origin/{ref.branch}{CONFIG_SUFFIX}",
-            f"{target}/{SPACE_DIR}",
-        )
+        space = stealth_config_space(root, ref.text, target)
     else:
-        return ConfigSpace(_REPO, root / SPACE_DIR, root, root)
+        return repo_config_space(root)
     _notice_ignored(root, placement)
     return space
 

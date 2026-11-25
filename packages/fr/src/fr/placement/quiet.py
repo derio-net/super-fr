@@ -39,11 +39,18 @@ from fr.settings import SettingsError
 QUIET_BRANCH: Final = "fr"
 """The orphan branch, local and on origin, that holds a quiet repo's artifacts."""
 QUIET_REF: Final = f"refs/heads/{QUIET_BRANCH}"
-FETCH_REFSPEC: Final = f"+{QUIET_REF}:{paths.SWITCH_REF}"
-"""The one fetch `up` and `run start` make: it moves only the remote-tracking ref."""
+FETCH_REFSPEC: Final = f"+{QUIET_REF}:{paths.MEMORY_REF}"
+"""The fetch of the memory branch: it moves only the remote-tracking ref."""
+CONFIG_BRANCH: Final = "fr-config"
+"""The configuration branch (spec 2026-11-19-event-driven-a-la-carte R1, R5): an orphan
+branch beside `fr` whose tree is `.fr/`, holding the switch (`fr.config.space.CONFIG_BRANCH`)."""
+CONFIG_REF: Final = f"refs/heads/{CONFIG_BRANCH}"
+CONFIG_FETCH_REFSPEC: Final = f"+{CONFIG_REF}:{paths.SWITCH_REF}"
+"""The fetch of the configuration branch, beside `FETCH_REFSPEC`."""
 
 _NETWORK_TIMEOUT_S: Final = 60
-_SOURCE: Final = f"{paths.SWITCH_REF}:{paths.SWITCH_SETTINGS}"
+_SOURCE: Final = "origin/fr-config:" + paths.SWITCH_SETTINGS
+_LEGACY_SOURCE: Final = "origin/fr:" + paths.LEGACY_SWITCH_SETTINGS
 
 Network = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
 """Runs one git argv against origin (bounded, never prompting)."""
@@ -57,11 +64,16 @@ class Switch:
     settings: Any  # fr.settings.model.Settings (kept loose: no import cycle at load)
     data: object
     sha: str
+    ref: str = paths.SWITCH_REF
+    """The remote-tracking ref the switch was read at: `SWITCH_REF`, or under R13's
+    fallback `LEGACY_SWITCH_REF`."""
+    source: str = _SOURCE
 
 
-_CACHE: dict[tuple[str, str], Switch | None] = {}
-"""(common dir, switch sha) -> the parsed switch. The sha is read from the filesystem
-on every call, so a moved ref is a new key: the cache can never serve stale settings."""
+_CACHE: dict[tuple[str, str, str], Switch | None] = {}
+"""(common dir, fr-config sha, fr sha) -> the parsed switch. The shas are read from the
+filesystem on every call, so a moved ref is a new key: the cache can never serve stale
+settings."""
 
 
 def _git_dir(root: Path) -> Path | None:
@@ -144,25 +156,68 @@ def _has_origin(root: Path) -> bool:
         return False
 
 
+def switch_texts(root: Path) -> tuple[tuple[str, str] | None, tuple[str, str] | None]:
+    """The raw switch files: ((sha, text) at `origin/fr-config:.fr/settings.yaml`, (sha,
+    text) at `origin/fr:settings.yaml`), each None when its ref or its file is absent.
+    No origin is no switch at all (R23)."""
+    common = paths._common_dir(root)
+    if common is None or not _has_origin(root):
+        return None, None
+    from fr.settings.load import show_at_commit
+
+    out: list[tuple[str, str] | None] = []
+    for ref, rel in (
+        (paths.SWITCH_REF, paths.SWITCH_SETTINGS),
+        (paths.LEGACY_SWITCH_REF, paths.LEGACY_SWITCH_SETTINGS),
+    ):
+        sha = _ref_sha(common, ref)
+        text = None if sha is None else show_at_commit(root, sha, rel)
+        out.append(None if sha is None or text is None else (sha, text))
+    return out[0], out[1]
+
+
+def _read_legacy(root: Path) -> Switch | None:
+    """The switch as an fr below S1 reads it: `origin/fr:settings.yaml` alone (R6). The
+    test of the legacy copy: what `write_settings` leaves there must read the same."""
+    _, old = switch_texts(Path(root))
+    if old is None:
+        return None
+    parsed = parse_switch_text(old[1], source=_LEGACY_SOURCE)
+    return (
+        None if parsed is None else Switch(*parsed, old[0], paths.LEGACY_SWITCH_REF, _LEGACY_SOURCE)
+    )
+
+
 def _read(root: Path) -> Switch | None:
+    """The switch: `origin/fr-config:.fr/settings.yaml` (R5), else the old
+    `origin/fr:settings.yaml` (R13). Both there and different refuses, naming both (R6)."""
     common = paths._common_dir(root)
     if common is None:
         return None
-    sha = _ref_sha(common, paths.SWITCH_REF)
-    if sha is None:
+    new_sha = _ref_sha(common, paths.SWITCH_REF)
+    old_sha = _ref_sha(common, paths.LEGACY_SWITCH_REF)
+    if new_sha is None and old_sha is None:
         return None
-    key = (str(common), sha)
+    key = (str(common), new_sha or "", old_sha or "")
     if key in _CACHE:
         return _CACHE[key]
-    if not _has_origin(root):
-        return None  # R23: no origin is `repo`; a stale tracking ref speaks for nobody
-    from fr.settings.load import show_at_commit
-
-    text = show_at_commit(root, sha, paths.SWITCH_SETTINGS)
+    new, old = switch_texts(root)
     result: Switch | None = None
-    parsed = None if text is None else parse_switch_text(text)
-    if parsed is not None:
-        result = Switch(parsed[0], parsed[1], sha)
+    if new is not None and old is not None and new[1] != old[1]:
+        raise SettingsError(
+            f"placement: the two quiet switches differ: {_SOURCE} ({new[0][:12]}) and "
+            f"{_LEGACY_SOURCE} ({old[0][:12]}). fr writes both with the same bytes until "
+            "the old one is retired (R6), so one was edited by hand: make them identical "
+            f"(the `{CONFIG_BRANCH}` file is the one fr reads) and push both"
+        )
+    if new is not None:
+        parsed = parse_switch_text(new[1], source=_SOURCE, branch=CONFIG_BRANCH)
+        if parsed is not None:
+            result = Switch(parsed[0], parsed[1], new[0], paths.SWITCH_REF, _SOURCE)
+    elif old is not None:
+        parsed = parse_switch_text(old[1], source=_LEGACY_SOURCE)
+        if parsed is not None:
+            result = Switch(parsed[0], parsed[1], old[0], paths.LEGACY_SWITCH_REF, _LEGACY_SOURCE)
     _CACHE[key] = result
     return result
 
@@ -216,15 +271,16 @@ def names_placement(text: str) -> bool:
 
 
 def is_switch_branch(root: Path) -> bool:
-    """`origin/fr` (as last fetched) is fr's switch branch: its root `settings.yaml`
-    names a placement. False when it is absent or is some other branch named `fr`."""
+    """`origin/fr` (as last fetched) is fr's memory branch: its root `settings.yaml`
+    (the legacy switch, R6) names a placement. False when it is absent or is some other
+    branch named `fr`."""
     from fr.settings.load import show_at_commit
 
     common = paths._common_dir(Path(root))
-    sha = _ref_sha(common, paths.SWITCH_REF) if common is not None else None
+    sha = _ref_sha(common, paths.MEMORY_REF) if common is not None else None
     if sha is None:
         return False
-    text = show_at_commit(Path(root), sha, paths.SWITCH_SETTINGS)
+    text = show_at_commit(Path(root), sha, paths.LEGACY_SWITCH_SETTINGS)
     return text is not None and names_placement(text)
 
 
@@ -322,7 +378,7 @@ def _branch_names(common: Path) -> set[str]:
                 if name.startswith(prefix):
                     names.add(name.removeprefix(prefix))
         names.discard("HEAD")
-        names.discard(QUIET_BRANCH)
+        names.difference_update((QUIET_BRANCH, CONFIG_BRANCH))
         return names
     for prefix in prefixes:
         base = common / prefix
@@ -339,7 +395,7 @@ def _branch_names(common: Path) -> set[str]:
             if name.startswith(prefix):
                 names.add(name.removeprefix(prefix))
     names.discard("HEAD")
-    names.discard(QUIET_BRANCH)
+    names.difference_update((QUIET_BRANCH, CONFIG_BRANCH))
     return names
 
 
@@ -352,10 +408,10 @@ def _where(placement: str) -> tuple[str, str]:
 
 def check_feature_id(root: Path, branch: str, placement: str = "quiet") -> str:
     """*branch*'s feature id, refusing one another branch already holds (gh#1419)."""
-    if branch == QUIET_BRANCH:
+    if branch in (QUIET_BRANCH, CONFIG_BRANCH):
         raise SettingsError(
-            f"placement quiet: a feature branch cannot be named `{QUIET_BRANCH}`, the branch "
-            "that holds the artifacts"
+            f"placement quiet: a feature branch cannot be named `{branch}`, the branch "
+            "that holds the " + ("artifacts" if branch == QUIET_BRANCH else "configuration")
         )
     fid = paths.checked_feature_id(branch)
     common = paths._common_dir(Path(root))
@@ -386,7 +442,7 @@ _OWNED: set[tuple[str, str]] = set()
 """(common dir, worktree path) pairs already verified this process."""
 
 
-def _check_owner(root: Path, path: Path) -> None:
+def _check_owner(root: Path, path: Path, branch: str = QUIET_BRANCH) -> None:
     """The worktree at *path* must be THIS repo's, on `fr`. The path is keyed by the
     repo's directory name only, so two repos of the same name share it: reusing another
     repo's worktree would commit this repo's artifacts to that repo's `fr` branch and
@@ -399,36 +455,39 @@ def _check_owner(root: Path, path: Path) -> None:
     if mine is None or owner is None or owner != mine.resolve():
         owner_repo = owner.parent if owner is not None and owner.name == ".git" else owner
         raise SettingsError(
-            f"placement quiet: {path} is the `{QUIET_BRANCH}` worktree of another repository "
+            f"placement quiet: {path} is the `{branch}` worktree of another repository "
             f"({owner_repo or 'unknown'}), not of {Path(root).resolve()}: two repos with the "
             "same directory name share that path. Move one of them (or that worktree) "
             "away and retry"
         )
     head = _git(path, "symbolic-ref", "--quiet", "HEAD")
-    if head.returncode != 0 or head.stdout.strip() != QUIET_REF:
+    if head.returncode != 0 or head.stdout.strip() != f"refs/heads/{branch}":
         raise SettingsError(
             f"placement quiet: {path} is a worktree of {Path(root).resolve()} but its HEAD is "
-            f"{head.stdout.strip() or 'detached'}, not {QUIET_REF}; fr writes artifacts only "
-            f"on `{QUIET_BRANCH}`. Switch it back (`git -C {path} switch {QUIET_BRANCH}`)"
+            f"{head.stdout.strip() or 'detached'}, not refs/heads/{branch}; fr writes there "
+            f"only on `{branch}`. Switch it back (`git -C {path} switch {branch}`)"
         )
     _OWNED.add((str(mine), str(path)))
 
 
-def _refuse_unrelated_local(root: Path) -> None:
-    """A local `fr` branch is adopted only when it is an ancestor or a descendant of
-    `origin/fr` (review p3-r9): any other one is somebody else's history, and committing
-    on it would push a second, unrelated root to origin's append-only `fr`."""
-    remote = _git(root, "rev-parse", "--verify", "--quiet", f"{paths.SWITCH_REF}^{{commit}}")
+def _refuse_unrelated_local(
+    root: Path, branch: str = QUIET_BRANCH, tracking: str = paths.MEMORY_REF
+) -> None:
+    """A local `fr` (or `fr-config`) branch is adopted only when it is an ancestor or a
+    descendant of its `origin/` ref (review p3-r9): any other one is somebody else's
+    history, and committing on it would push a second, unrelated root to origin."""
+    remote = _git(root, "rev-parse", "--verify", "--quiet", f"{tracking}^{{commit}}")
     if remote.returncode != 0:
         return
-    for older, newer in ((QUIET_REF, paths.SWITCH_REF), (paths.SWITCH_REF, QUIET_REF)):
+    local = f"refs/heads/{branch}"
+    for older, newer in ((local, tracking), (tracking, local)):
         if _git(root, "merge-base", "--is-ancestor", older, newer).returncode == 0:
             return
     raise SettingsError(
-        f"placement quiet: the local `{QUIET_BRANCH}` branch is neither an ancestor nor a "
-        f"descendant of origin/{QUIET_BRANCH}, so it is not this repo's artifact history; "
-        f"fr will not adopt it. Rename or delete it (`git branch -m {QUIET_BRANCH} "
-        f"{QUIET_BRANCH}-old`) and retry"
+        f"placement quiet: the local `{branch}` branch is neither an ancestor nor a "
+        f"descendant of origin/{branch}, so it is not this repo's history there; "
+        f"fr will not adopt it. Rename or delete it (`git branch -m {branch} "
+        f"{branch}-old`) and retry"
     )
 
 
@@ -457,32 +516,56 @@ def _forget_own_stale_entry(root: Path, path: Path) -> None:
 def ensure_worktree(root: Path) -> Path:
     """The fr worktree, created on demand from `origin/fr` (a local `fr` branch tracking
     it), never with a force flag. Refuses a path that is there but is not it."""
-    path = worktree_path(root)
+    return _ensure_linked(root, worktree_path(root), QUIET_BRANCH, paths.MEMORY_REF)
+
+
+def config_worktree_path(root: Path) -> Path:
+    """`~/.cache/fr/worktrees/<repo>/fr-config`, beside the `fr` worktree
+    (`fr.config.space.quiet_checkout` answers the same path)."""
+    return worktree_path(root).parent / CONFIG_BRANCH
+
+
+def ensure_config_worktree(root: Path) -> Path | None:
+    """The `fr-config` worktree (R5), created on demand from `origin/fr-config` like the
+    `fr` one; None while neither that ref nor a local `fr-config` exists."""
+    common = paths._common_dir(Path(root))
+    if common is None:
+        return None
+    if _ref_sha(common, paths.SWITCH_REF) is None and _ref_sha(common, CONFIG_REF) is None:
+        return None
+    path = _ensure_linked(root, config_worktree_path(root), CONFIG_BRANCH, paths.SWITCH_REF)
+    _fast_forward_linked(root, path, CONFIG_BRANCH, paths.SWITCH_REF)
+    return path
+
+
+def _ensure_linked(root: Path, path: Path, branch: str, tracking: str) -> Path:
+    """A linked worktree of *root* at *path* on *branch*, created from *tracking* (or the
+    local branch), never with a force flag. Refuses a path that is there but is not it."""
     if (path / ".git").exists():
-        _check_owner(root, path)
+        _check_owner(root, path, branch)
         return path
     if path.exists() and any(path.iterdir()):
         raise SettingsError(
-            f"placement quiet: {path} exists and is not the `{QUIET_BRANCH}` worktree; "
+            f"placement quiet: {path} exists and is not the `{branch}` worktree; "
             "move it away and retry"
         )
     path.parent.mkdir(parents=True, exist_ok=True)
     _forget_own_stale_entry(root, path)
-    local = _git(root, "rev-parse", "--verify", "--quiet", f"{QUIET_REF}^{{commit}}")
+    local = _git(root, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}^{{commit}}")
     if local.returncode == 0:
-        _refuse_unrelated_local(root)
-        argv = ["worktree", "add", str(path), QUIET_BRANCH]
+        _refuse_unrelated_local(root, branch, tracking)
+        argv = ["worktree", "add", str(path), branch]
     else:
-        argv = ["worktree", "add", "--no-track", "-b", QUIET_BRANCH, str(path), paths.SWITCH_REF]
+        argv = ["worktree", "add", "--no-track", "-b", branch, str(path), tracking]
     done = _git(root, *argv)
     if done.returncode != 0 and not (path / ".git").exists():
         raise SettingsError(
-            f"placement quiet: cannot create the `{QUIET_BRANCH}` worktree at {path}: "
+            f"placement quiet: cannot create the `{branch}` worktree at {path}: "
             f"{done.stderr.strip()}"
         )
     if local.returncode != 0:
-        _git(root, "config", f"branch.{QUIET_BRANCH}.remote", "origin")
-        _git(root, "config", f"branch.{QUIET_BRANCH}.merge", QUIET_REF)
+        _git(root, "config", f"branch.{branch}.remote", "origin")
+        _git(root, "config", f"branch.{branch}.merge", f"refs/heads/{branch}")
     return path
 
 
@@ -502,13 +585,18 @@ def preview_problem(root: Path) -> str | None:
 def fast_forward(root: Path) -> None:
     """Move the fr worktree up to `origin/fr` when it is strictly behind (never a reset:
     a local `fr` that diverged keeps its commits, and `fr push` replays them)."""
-    path = worktree_path(root)
+    _fast_forward_linked(root, worktree_path(root), QUIET_BRANCH, paths.MEMORY_REF)
+
+
+def _fast_forward_linked(root: Path, path: Path, branch: str, tracking: str) -> None:
     if not (path / ".git").exists():
         return
-    _check_owner(root, path)
-    behind = _git(path, "merge-base", "--is-ancestor", "HEAD", paths.SWITCH_REF)
+    _check_owner(root, path, branch)
+    if _git(path, "rev-parse", "--verify", "--quiet", tracking).returncode != 0:
+        return
+    behind = _git(path, "merge-base", "--is-ancestor", "HEAD", tracking)
     if behind.returncode == 0:
-        _git(path, "merge", "--ff-only", "--quiet", paths.SWITCH_REF)
+        _git(path, "merge", "--ff-only", "--quiet", tracking)
 
 
 def owner_of(fr_root: Path, fid: str) -> str | None:
@@ -696,37 +784,218 @@ def fetch_switch(
     network: Network | None = None,
     command: str = "fr isolation up",
 ) -> str:
-    """Fetch `origin/fr` and return the placement it names (`quiet` or `repo`).
+    """Fetch `origin/fr` and `origin/fr-config` and return the placement the switch names
+    (`quiet` or `repo`).
 
-    No `origin` is `repo`, with nothing fetched. `--no-fetch` reads the last fetched ref
+    No `origin` is `repo`, with nothing fetched. `--no-fetch` reads the last fetched refs
     and says so (it is not a reachability check). Otherwise an origin that cannot be
-    reached refuses; an `fr` branch origin does not have deletes the stale tracking ref,
-    so a deleted switch is noticed (the sticky check then refuses in a quiet workspace).
-    """
+    reached refuses; a branch origin does not have deletes its stale tracking ref, so a
+    deleted switch is noticed (the sticky check then refuses in a quiet workspace).
+
+    Under quiet a fetch also makes sure the configuration space exists (S1 R5): a repo
+    whose switch is still only the old root settings.yaml on `fr` gets an `fr-config`
+    branch holding the same bytes (`ensure_config_branch`), so no quiet repo is left with
+    a configuration space `fr.config.space` refuses to read. Then both worktrees are
+    brought up to their refs."""
     root = Path(root)
     if not _has_origin(root):
         return paths.REPO
+    net = network or _default_network(root)
     if no_fetch:
         print(
-            f"fr: --no-fetch: reading the last fetched origin/{QUIET_BRANCH} for the placement "
-            "(not a reachability check)",
+            f"fr: --no-fetch: reading the last fetched origin/{CONFIG_BRANCH} and "
+            f"origin/{QUIET_BRANCH} for the placement (not a reachability check)",
             file=sys.stderr,
         )
     else:
-        net = network or _default_network(root)
-        probe = net(["git", "ls-remote", "--exit-code", "origin", QUIET_REF])
-        if probe.returncode == 2:
-            if _git(root, "rev-parse", "--verify", "--quiet", paths.SWITCH_REF).returncode == 0:
-                _git(root, "update-ref", "-d", paths.SWITCH_REF)
-        elif probe.returncode != 0:
-            raise unreachable(
-                (probe.stderr or probe.stdout or "git ls-remote failed").strip(), command
-            )
-        else:
-            fetched = net(["git", "fetch", "--no-tags", "origin", FETCH_REFSPEC])
-            if fetched.returncode != 0:
-                raise unreachable((fetched.stderr or "git fetch failed").strip(), command)
+        _fetch_both(root, net, command)
     placement = paths.QUIET if read_switch(root) is not None else paths.REPO
     if placement == paths.QUIET:
+        if not no_fetch:
+            ensure_config_branch(root, network=net)
         fast_forward(root)
+        ensure_config_worktree(root)
     return placement
+
+
+_BRANCHES: Final = (
+    (QUIET_REF, FETCH_REFSPEC, paths.MEMORY_REF),
+    (CONFIG_REF, CONFIG_FETCH_REFSPEC, paths.SWITCH_REF),
+)
+
+
+def _fetch_both(root: Path, net: Network, command: str | None) -> None:
+    """One probe, one fetch: the branches origin has are fetched, the tracking ref of a
+    branch it does not have is deleted."""
+    probe = net(["git", "ls-remote", "--exit-code", "origin", QUIET_REF, CONFIG_REF])
+    if probe.returncode not in (0, 2):
+        raise unreachable((probe.stderr or probe.stdout or "git ls-remote failed").strip(), command)
+    present = {
+        line.split("\t", 1)[1].strip()
+        for line in (probe.stdout if probe.returncode == 0 else "").splitlines()
+        if "\t" in line
+    }
+    specs = []
+    for head, spec, tracking in _BRANCHES:
+        if head in present:
+            specs.append(spec)
+        elif _git(root, "rev-parse", "--verify", "--quiet", tracking).returncode == 0:
+            _git(root, "update-ref", "-d", tracking)
+    if specs:
+        fetched = net(["git", "fetch", "--no-tags", "origin", *specs])
+        if fetched.returncode != 0:
+            raise unreachable((fetched.stderr or "git fetch failed").strip(), command)
+
+
+def ensure_config_branch(root: Path, *, network: Network | None = None) -> bool:
+    """Create `origin/fr-config` from the old switch when the old one is the only switch
+    (S1 R5, R6): one orphan commit whose tree is `.fr/settings.yaml`, holding the old
+    root settings.yaml's bytes, pushed with a plain push (never forced). Whether it
+    pushed. Nothing to do when `origin/fr-config` already holds settings or there is no
+    old switch. The rest of `.fr/` (the product's `ci.yaml` and the like) moves with
+    `fr migrate artifacts --yes` (R11)."""
+    root = Path(root)
+    new, old = switch_texts(root)
+    if new is not None or old is None:
+        return False
+    from fr.git_policy.templates import fr_message
+
+    message = fr_message(root, "chore(fr): move the quiet switch to fr-config")
+    try:
+        write_branch_file(
+            root, CONFIG_BRANCH, paths.SWITCH_REF, paths.SWITCH_SETTINGS, old[1], message,
+            network=network,
+        )  # fmt: skip
+    except SettingsError:
+        # Another clone may have created it meanwhile: that one stands, if it holds settings.
+        _fetch_both(root, network or _default_network(root), None)
+        if switch_texts(root)[0] is None:
+            raise
+        return False
+    print(
+        f"fr: created origin/{CONFIG_BRANCH} holding {paths.SWITCH_SETTINGS} (the quiet switch, "
+        f"copied from origin/{QUIET_BRANCH}:{paths.LEGACY_SWITCH_SETTINGS}; S1 R5)",
+        file=sys.stderr,
+    )
+    return True
+
+
+Push = Callable[[Path, str], None]
+"""Pushes one branch (`fr` or `fr-config`) to origin and fetches its tracking ref."""
+
+
+def write_switch(
+    root: Path,
+    text: str,
+    message: str,
+    *,
+    network: Network | None = None,
+    push: Push | None = None,
+) -> None:
+    """Write the quiet switch: `.fr/settings.yaml` on `fr-config`, then the same bytes as
+    the root `settings.yaml` on `fr` (R6), each committed and pushed (plain, never forced),
+    each only when it differs. A branch origin does not have yet is created as an orphan.
+
+    The legacy copy on `fr` is written until the release R14's owed entry names
+    (`s1-refuse-old-paths`); that release drops it."""
+    root = Path(root)
+    for branch, tracking, rel in (
+        (CONFIG_BRANCH, paths.SWITCH_REF, paths.SWITCH_SETTINGS),
+        (QUIET_BRANCH, paths.MEMORY_REF, paths.LEGACY_SWITCH_SETTINGS),
+    ):
+        write_branch_file(root, branch, tracking, rel, text, message, network=network, push=push)
+    _CACHE.clear()
+
+
+def write_branch_file(
+    root: Path,
+    branch: str,
+    tracking: str,
+    rel: str,
+    text: str,
+    message: str,
+    *,
+    network: Network | None = None,
+    push: Push | None = None,
+) -> None:
+    """Make *rel* on origin's *branch* hold *text*: an orphan commit when neither origin
+    nor this clone has the branch, else a commit in its worktree; then a plain push and
+    a fetch of *tracking*. A push origin refuses raises `SettingsError`, naming it."""
+    net = network or _default_network(root)
+    common = paths._common_dir(root)
+    local = _git(root, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}^{{commit}}")
+    remote = _ref_sha(common, tracking) if common is not None else None
+    created = None
+    if remote is None and local.returncode != 0:
+        created = _orphan_commit(root, {rel: text}, message)
+        _git(root, "update-ref", f"refs/heads/{branch}", created, "0" * 40)
+    else:
+        path = worktree_path(root).parent / branch
+        wt = _ensure_linked(root, path, branch, tracking)
+        _fast_forward_linked(root, wt, branch, tracking)
+        with fr_worktree_lock(wt):
+            target = wt / rel
+            try:
+                current = target.read_text()
+            except OSError:
+                current = None
+            if current != text:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(text)
+                _git(wt, "add", "--", rel)
+                done = _git(wt, "commit", "--quiet", "--no-verify", "-m", message, "--", rel)
+                if done.returncode != 0:
+                    raise SettingsError(
+                        f"placement quiet: cannot commit {rel} on `{branch}`: "
+                        f"{(done.stderr or done.stdout).strip()}"
+                    )
+    head = _git(root, "rev-parse", f"refs/heads/{branch}").stdout.strip()
+    if remote == head:
+        return
+    if push is not None:
+        push(root, branch)
+        return
+    pushed = net(["git", "push", "--quiet", "origin", f"refs/heads/{branch}:refs/heads/{branch}"])
+    if pushed.returncode != 0:
+        if created is not None:  # never leave an unrelated root behind to be adopted
+            _git(root, "update-ref", "-d", f"refs/heads/{branch}", created)
+        raise SettingsError(
+            f"placement quiet: origin refused the push of `{branch}` ({rel}): "
+            f"{(pushed.stderr or pushed.stdout or 'git push failed').strip()}. Nothing was "
+            "forced; fix the remote (or pull its changes) and retry"
+        )
+    net(["git", "fetch", "--quiet", "--no-tags", "origin", f"+refs/heads/{branch}:{tracking}"])
+
+
+def _orphan_commit(root: Path, files: dict[str, str], message: str) -> str:
+    """A parentless commit holding exactly *files* (path -> text), made with plumbing in
+    a private index, so no working tree is touched."""
+    import tempfile
+
+    from fr.git import git_argv
+
+    with tempfile.TemporaryDirectory() as tmp:
+        env = {**os.environ, "GIT_INDEX_FILE": str(Path(tmp) / "index")}
+
+        def run(*args: str, stdin: str | None = None) -> str:
+            done = subprocess.run(
+                git_argv(root, *args),
+                cwd=root,
+                env=env,
+                input=stdin,
+                capture_output=True,
+                text=True,
+                timeout=_NETWORK_TIMEOUT_S,
+                check=False,
+            )
+            if done.returncode != 0:
+                raise SettingsError(
+                    f"placement: `git {' '.join(args)}` failed: {done.stderr.strip()}"
+                )
+            return done.stdout.strip()
+
+        for rel, text in files.items():
+            blob = run("hash-object", "-w", "--stdin", stdin=text)
+            run("update-index", "--add", "--cacheinfo", f"100644,{blob},{rel}")
+        tree = run("write-tree")
+        return run("commit-tree", tree, "-F", "-", stdin=message)

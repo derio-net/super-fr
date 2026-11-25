@@ -122,3 +122,55 @@ def test_check_applies_r5_across_every_quiet_feature(repo: Path) -> None:
     problems = check_settings(repo)
     assert [p.id for p in problems] == ["gates-off-with-ops"]
     assert "deploy" in problems[0].message
+
+
+# --- S1 (spec 2026-11-19-event-driven-a-la-carte R5, R6): both switches, in step -----------
+
+
+def test_init_quiet_writes_fr_config_and_the_identical_legacy_switch(
+    repo: Path, tmp_path: Path
+) -> None:
+    from fr.placement.quiet import _read_legacy
+
+    result = _fr(repo, "settings", "init", "--quiet")
+    assert result.exit_code == 0, result.output
+    origin = tmp_path / "origin.git"
+    sha = git(origin, "rev-parse", "refs/heads/fr-config").strip()
+    assert git(origin, "rev-list", "--parents", "-n1", sha).split() == [sha]  # orphan
+    assert git(origin, "ls-tree", "-r", "--name-only", sha).split() == [".fr/settings.yaml"]
+    new = git(origin, "show", f"{sha}:.fr/settings.yaml")
+    old = git(origin, "show", "refs/heads/fr:settings.yaml")
+    assert new == old and "\nplacement: quiet\n" in new
+    assert load_settings(repo).ref == "refs/remotes/origin/fr-config"
+    # an fr below S1 reads only the old file, and reads quiet from it
+    legacy = _read_legacy(repo)
+    assert legacy is not None and legacy.settings.placement == "quiet"
+
+
+def test_init_quiet_refuses_when_origin_already_has_fr_config(repo: Path, tmp_path: Path) -> None:
+    from tests.unit.test_placement_quiet import push_config_branch
+
+    push_config_branch(repo, None)
+    result = _fr(repo, "settings", "init", "--quiet")
+    assert result.exit_code == 2
+    assert "fr-config" in result.output and "already" in result.output
+    assert git(tmp_path / "origin.git", "branch", "--list", "fr").strip() == ""
+
+
+def test_write_settings_rewrites_both_switches_and_they_never_differ(
+    repo: Path, tmp_path: Path
+) -> None:
+    from fr.config.space import quiet_config_space, write_settings
+
+    assert _fr(repo, "settings", "init", "--quiet").exit_code == 0
+    text = "schema: 1\nplacement: quiet\nforge:\n  labels: off\n"
+    write_settings(quiet_config_space(repo), text, message="chore(fr): settings")
+    origin = tmp_path / "origin.git"
+    assert git(origin, "show", "refs/heads/fr-config:.fr/settings.yaml") == text
+    assert git(origin, "show", "refs/heads/fr:settings.yaml") == text
+    eff = load_settings(repo)
+    assert eff.settings.forge.labels == "off" and eff.ref == "refs/remotes/origin/fr-config"
+    # the second write is a no-op: no new commit on either branch
+    heads = [git(origin, "rev-parse", b).strip() for b in ("fr-config", "fr")]
+    write_settings(quiet_config_space(repo), text, message="chore(fr): settings")
+    assert [git(origin, "rev-parse", b).strip() for b in ("fr-config", "fr")] == heads
