@@ -1098,3 +1098,8 @@ the move was written as one new module (fr/triage/state_home.py) with each R18 r
 ### no-refactor-p6-t3 · discovery · no-refactor-because P6.T3 (phase 6)
 
 the forge-side settings read mirrors read_config_lenient's ref choice and protection guard in one function beside it, sharing its say-once set; decide_state_repo gained two keyword rules ahead of the existing ones without restructuring them
+
+<!-- fr:journal kind=finding scope=plan id=p6-product-push-tripwire-red-resolved created=2026-11-25T11:06:01+00:00 phase=6 state=fixed resolves=p6-product-push-tripwire-red -->
+### p6-product-push-tripwire-red-resolved · finding [fixed] · resolves p6-product-push-tripwire-red: test_tripwire_product_push fails on fr.placement.quiet.create_config_branch (from ddb60c607, phase 4) (phase 6)
+
+Pinned (fr.placement.quiet, create_config_branch) in FR_BRANCH_PUSHERS with its reason: the creation of fr-config (S1 R10), one orphan commit, a plain never-forced push, refused when the branch exists. test_tripwire_product_push.py green (bec21cf4f).
