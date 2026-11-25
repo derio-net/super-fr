@@ -16,8 +16,9 @@ repo toplevel, checked by the marker's `mode`:
   `fr`, the switch quiet), its `fr-config` worktree (the sibling on branch
   `fr-config`, a tree of only `.fr/`: the repo's configuration), a stealth tracking
   clone a valid stealth workspace's marker names, and that workspace's configuration
-  clone (`stealth--*-config`, a tree of only `<target-dir>/.fr/`). A change there
-  reaches the configuration branch as a pull request. `fr settings paths --shell`
+  clone (`stealth--*-config`, a tree of only `<target-dir>/.fr/`). fr's own changes
+  there reach the configuration branch as a pull request that fr opens; only the
+  forge's rule on that branch stops a direct push. `fr settings paths --shell`
   gives the directories.
 - `external` (preparer-adopted container) → toplevel match **plus** container
   evidence (`/.dockerenv`, `/run/.containerenv`, or `$KUBERNETES_SERVICE_HOST`),

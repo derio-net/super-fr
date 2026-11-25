@@ -104,10 +104,11 @@ pipeline skill ran this session.
    - that workspace's stealth configuration clone — `stealth--*-config`, on the
      tracking branch plus `-config`, its tree only `<target-dir>/.fr/`.
    An `fr` or `fr-config` worktree of another repo, one anywhere else, and a
-   primary checkout are not targets. A change written there still reaches the
-   configuration branch only as a pull request, which fr opens; under quiet and
-   stealth fr runs that branch's executable configuration only while the forge
-   enforces a pull-request rule on it. Ask `fr settings paths --shell` for the directories
+   primary checkout are not targets. fr's own changes written there reach the
+   configuration branch as a pull request that fr opens; only the forge's rule on
+   that branch stops a direct push, so under quiet and stealth fr runs the
+   branch's executable configuration only while the forge enforces a
+   pull-request rule on it. Ask `fr settings paths --shell` for the directories
    (`FR_SPECS_DIR`, `FR_PLANS_DIR`, …).
 5. Path matches a glob in `.fr/isolation-allow` (`.fr-isolation-allow` while it is
    absent; below) → allow. Neither allowlist file nor the `.fr-isolation` marker is
