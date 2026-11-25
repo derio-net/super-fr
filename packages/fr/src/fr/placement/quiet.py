@@ -49,8 +49,8 @@ CONFIG_FETCH_REFSPEC: Final = f"+{CONFIG_REF}:{paths.SWITCH_REF}"
 """The fetch of the configuration branch, beside `FETCH_REFSPEC`."""
 
 _NETWORK_TIMEOUT_S: Final = 60
-_SOURCE: Final = "origin/fr-config:" + paths.SWITCH_SETTINGS
-_LEGACY_SOURCE: Final = "origin/fr:" + paths.LEGACY_SWITCH_SETTINGS
+_SOURCE: Final = f"{paths.SWITCH_REF}:{paths.SWITCH_SETTINGS}"
+_LEGACY_SOURCE: Final = f"{paths.LEGACY_SWITCH_REF}:{paths.LEGACY_SWITCH_SETTINGS}"
 
 Network = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
 """Runs one git argv against origin (bounded, never prompting)."""
