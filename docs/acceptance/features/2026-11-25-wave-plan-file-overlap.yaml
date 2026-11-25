@@ -22,9 +22,12 @@ rows:
     - spec:2026-11-25-wave-plan-file-overlap#R6
     - spec:2026-11-25-wave-plan-file-overlap#R8
     - spec:2026-11-25-wave-plan-file-overlap#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_plan_overlap.py#test_dispatched_batches_whose_plans_share_a_file_are_reported
+      - super-fr:tests/unit/test_triage_check.py#test_check_json_carries_the_plan_overlap_key
+    status: ci
+    notes: unit tests in this PR's CI
     verify: none
   - id: plan-overlap-board
     capability: triage Batches page
