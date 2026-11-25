@@ -550,7 +550,7 @@ function isQuietFrWorktree(toplevel: string): boolean {
 
 /** The switch says canonically `placement: quiet` and nothing else (`switchEnabled`'s
  * scan, strict: a spelling it fails closed on is not quiet here). */
-function switchIsQuiet(text: string): boolean {
+export function switchIsQuiet(text: string): boolean {
   const live = text
     .split("\n")
     .map((raw) => raw.replace(/\r$/, ""))
@@ -583,6 +583,15 @@ function sameRepo(a: string, b: string): boolean {
  * valid, records `placement: stealth`, and names this clone's origin and HEAD branch as
  * its `tracking.ref` (`fr.placement.stealth.ensure_worktree`'s own check); or the
  * configuration clone, named `stealth--*-config`, on that branch plus `-config`. */
+/** The tracking clone (`stealth--*` on the marker's *branch*) or the configuration clone
+ * (`stealth--*-config` on `<branch>-config`, S1 R5, `fr.placement.stealth.config_ref`).
+ * Bash: `_fr_stealth_head_ok`; tests/fixtures/isolation-decision-cases.json. */
+export function stealthHeadMatches(name: string, branch: string, head: string): boolean {
+  if (!/^stealth--./.test(name)) return false;
+  if (branch === head) return true;
+  return head === `${branch}-config` && /^stealth--.+-config$/.test(name);
+}
+
 function isStealthClone(toplevel: string): boolean {
   if (!isDir(join(toplevel, ".git"))) return false; // a clone, never a worktree
   if (!/^stealth--./.test(basename(toplevel))) return false;
@@ -607,10 +616,7 @@ function isStealthClone(toplevel: string): boolean {
     if (at <= 0 || at === ref.length - 1) continue;
     const branch = ref.slice(at + 1);
     if (branch.includes(":") || branch.startsWith("-")) continue;
-    // the tracking clone on `<branch>`, or the configuration clone `stealth--*-config` on
-    // `<branch>-config` (S1 R5, `fr.placement.stealth.config_ref`)
-    const configClone = head === `${branch}-config` && /^stealth--.+-config$/.test(basename(toplevel));
-    if (branch !== head && !configClone) continue;
+    if (!stealthHeadMatches(basename(toplevel), branch, head)) continue;
     if (branch !== head && !configCheckoutOk(toplevel, 1)) continue;
     if (!sameRepo(ref.slice(0, at), url)) continue;
     const wsTop = resolvedDir(ws);

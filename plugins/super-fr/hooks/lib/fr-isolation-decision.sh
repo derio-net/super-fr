@@ -672,6 +672,18 @@ _fr_same_repo() {
   fi
 }
 
+# _fr_stealth_head_ok <clone name> <marker branch> <clone HEAD branch> — 0 for the
+# tracking clone (`stealth--*` on the marker's branch) or the configuration clone
+# (`stealth--*-config` on that branch plus `-config`, S1 R5, `fr.placement.stealth.
+# config_ref`). marker.ts `stealthHeadMatches`; tests/fixtures/isolation-decision-cases.json.
+_fr_stealth_head_ok() {
+  case "$1" in stealth--?*) ;; *) return 1 ;; esac
+  [ "$2" = "$3" ] && return 0
+  [ "$2-config" = "$3" ] || return 1
+  case "$1" in stealth--?*-config) return 0 ;; esac
+  return 1
+}
+
 # _fr_is_stealth_clone <resolved toplevel>
 _fr_is_stealth_clone() {
   [ -d "$1/.git" ] || return 1 # the tracking clone is a clone, never a worktree
@@ -687,10 +699,8 @@ _fr_is_stealth_clone() {
     case "$_fr_sref" in __HOOK_PARSE_ERROR__ | "" | *@ | @*) continue ;; *@*) ;; *) continue ;; esac
     _fr_sbranch=${_fr_sref##*@}
     case "$_fr_sbranch" in *:* | -*) continue ;; esac
+    _fr_stealth_head_ok "${1##*/}" "$_fr_sbranch" "$_fr_shead" || continue
     if [ "$_fr_sbranch" != "$_fr_shead" ]; then
-      # the configuration clone: `stealth--*-config` on `<branch>-config` (S1 R5)
-      [ "$_fr_sbranch-config" = "$_fr_shead" ] || continue
-      case "${1##*/}" in stealth--?*-config) ;; *) continue ;; esac
       _fr_config_checkout_ok "$1" 1 || continue
     fi
     _fr_same_repo "${_fr_sref%@*}" "$_fr_surl" || continue
