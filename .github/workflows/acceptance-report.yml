@@ -43,7 +43,7 @@ jobs:
         with:
           fetch-depth: 0 # check judges merged rows against origin/main's history
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - name: Install fr (from this checkout — super-fr self-hosts)
         # Deviation from the scaffolded template on purpose: installing from
         # @main would gate every PR that changes `fr acceptance` behavior
@@ -81,7 +81,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.FR_DEBT_TOKEN || github.token }}
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
       - name: Install fr (from this checkout — super-fr self-hosts)
         run: uv tool install ./packages/fr
       - name: Technical debt issue (weekly)
