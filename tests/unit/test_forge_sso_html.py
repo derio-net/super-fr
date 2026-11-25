@@ -237,3 +237,76 @@ def _wrapped_sites() -> set[str]:
 def test_every_wrapped_json_read_is_in_the_list() -> None:
     raw_sites = {"tea:api_result", "real_glabclient:pr_for_branch"}  # raw reads, in RAW_ALLOWED
     assert _wrapped_sites() == SITES - raw_sites
+
+
+# R6 (spec 2026-11-19-consumer-followups, gh#1554): RealTeaClient's six fail-soft
+# sites re-raise a TeaError that names a login page, in either form api_result
+# produces, and keep their empty answer for every other TeaError.
+SSO_302 = "HTTP/2 302\nlocation: https://sso.example.com/login\ncontent-type: text/html\n"
+
+# site -> (call, the site's fail-soft answer)
+TEA_FAIL_SOFT: dict[str, tuple[Callable[[], Any], Any]] = {
+    "list_linked_prs": (lambda: RealTeaClient().list_linked_prs("o/r", 1), []),
+    "pr_status_by_url": (
+        lambda: RealTeaClient().pr_status_by_url("https://git.example.com/o/r/pulls/1"),
+        None,
+    ),
+    "default_branch": (lambda: RealTeaClient().default_branch(cwd=Path.cwd()), None),
+    "pr_for_branch": (lambda: RealTeaClient().pr_for_branch("b", cwd=Path.cwd()), None),
+    "file_exists": (lambda: RealTeaClient().file_exists("o/r", "a.md"), False),
+    "list_dir": (lambda: RealTeaClient().list_dir("o/r", "docs"), []),
+}
+
+
+def _tea_api_answers(
+    monkeypatch: pytest.MonkeyPatch, *, returncode: int = 0, stdout: str = "", stderr: str = ""
+) -> None:
+    done = subprocess.CompletedProcess([], returncode, stdout=stdout, stderr=stderr)
+    monkeypatch.setattr(_tea, "run_cli", lambda *_a, **_k: done)
+
+
+LOGIN_ANSWERS = {
+    "html-200": {"stdout": HTML, "stderr": "HTTP/2 200 OK\ncontent-type: text/html\n"},
+    "redirect-302": {"stdout": "", "stderr": SSO_302},
+}
+OTHER_ANSWERS = {
+    "json-404": {"stdout": '{"message":"not found"}', "stderr": "HTTP/2 404 Not Found\n"},
+    "tea-exit-1": {"returncode": 1, "stderr": "tea: no login configured\n"},
+}
+
+
+@pytest.mark.parametrize("answer", sorted(LOGIN_ANSWERS))
+@pytest.mark.parametrize("site", sorted(TEA_FAIL_SOFT))
+def test_a_tea_fail_soft_site_re_raises_a_login_page(
+    monkeypatch: pytest.MonkeyPatch, site: str, answer: str
+) -> None:
+    _tea_api_answers(monkeypatch, **LOGIN_ANSWERS[answer])  # type: ignore[arg-type]
+    call, _ = TEA_FAIL_SOFT[site]
+    with pytest.raises(_tea.TeaError) as info:
+        call()
+    assert _tea.names_login_page(info.value)
+    assert ("forward-auth" in str(info.value)) and ("SSO" in str(info.value))
+
+
+@pytest.mark.parametrize("answer", sorted(OTHER_ANSWERS))
+@pytest.mark.parametrize("site", sorted(TEA_FAIL_SOFT))
+def test_a_tea_fail_soft_site_keeps_its_answer_for_any_other_error(
+    monkeypatch: pytest.MonkeyPatch, site: str, answer: str
+) -> None:
+    _tea_api_answers(monkeypatch, **OTHER_ANSWERS[answer])  # type: ignore[arg-type]
+    call, expected = TEA_FAIL_SOFT[site]
+    assert call() == expected
+
+
+def _api_error(**answer: Any) -> _tea.TeaError:
+    with pytest.raises(_tea.TeaError) as info:
+        _tea.api_result(subprocess.CompletedProcess([], 0, **answer))
+    return info.value
+
+
+def test_names_login_page_knows_both_forms_and_nothing_else() -> None:
+    assert _tea.names_login_page(_api_error(**LOGIN_ANSWERS["html-200"]))
+    assert _tea.names_login_page(_api_error(**LOGIN_ANSWERS["redirect-302"]))
+    assert _tea.names_login_page(_api_error(stdout="", stderr=REDIRECT))
+    assert not _tea.names_login_page(_api_error(**OTHER_ANSWERS["json-404"]))
+    assert not _tea.names_login_page(_tea.TeaError("tea exited with code 1"))
