@@ -1,0 +1,42 @@
+schema_version: 12
+run: 2026-11-19-feat-event-driven-a-la-carte
+step: review-phase
+item: phase/6
+outcome: done
+journal:
+  - kind: review
+    id: review-p6
+    phase: 6
+    title: Phase 6 adversarial review (triage state in the cache repo, the R18 move, the state repo setting)
+    body: |
+      Independent adversarial reviewer read 69b62bf..HEAD against R18-R20 with HOME in a scratch dir and the
+      operator's real cache listed before and after (unchanged). Reproduced three losses on the operator's
+      real host shape (pre-S1 cache with a live drive.lock, live state in the clone): rule 5 deleting non-ref
+      files, a pre-S1 cache git-initialised from outside a clone, and the shared exclude line removed while a
+      linked worktree held private state. Ten in-scope findings, all fixed in bec21cf4f..4b371b158 with spec
+      amendments to R18 and R20; the open finding p6-product-push-tripwire-red resolved. Selection 4156
+      passed / 8 skipped, triage scenarios 19/19, product-push tripwire green, ruff and mypy clean.
+  - {kind: finding, id: p6-r1, phase: 6, review_scope: in, title: "rule 5 deleted the clone copy after comparing REF_FILES only, losing scope.yaml, driver files, pacing, .state-ref, closeout-wait/"}
+  - {kind: finding, id: p6-r2, phase: 6, review_scope: in, title: "state_dir git-initialised a pre-S1 cache from any cwd with no clone copy, defeating .pre-s1 and serving stale state"}
+  - {kind: finding, id: p6-r3, phase: 6, review_scope: in, title: "_tidy removed the shared info/exclude line while linked worktrees still held private triage state"}
+  - {kind: finding, id: p6-r4, phase: 6, review_scope: in, title: "_retire force-removed or rmtree'd kept merge worktrees and copied other worktree scratch dirs into the cache broken"}
+  - {kind: finding, id: p6-r5, phase: 6, review_scope: in, title: "under stealth triage.state_repo was read from the product default branch and won over the tracking repo"}
+  - {kind: finding, id: p6-r6, phase: 6, review_scope: in, title: "the stale drive.lock takeover lacked drive_lock's put-theirs-back check"}
+  - {kind: finding, id: p6-r7, phase: 6, review_scope: in, title: "non-mover cache writers took no lock and could be trashed by _install mid-move"}
+  - {kind: finding, id: p6-r8, phase: 6, review_scope: in, title: "an fr below S1 silently resurrected the clone copy after the move"}
+  - {kind: finding, id: p6-r9, phase: 6, review_scope: in, title: "test_tripwire_product_push red on quiet.create_config_branch"}
+  - {kind: finding, id: p6-r10, phase: 6, review_scope: in, title: "the PROTECTED_SOURCES guard was in-process only, reset by monkeypatch.undo() and blind to the HOME-leak class"}
+resolves:
+  - {id: p6-r1, state: fixed, body: "9f9477cb3: rule 5 compares the full inventory except worktree scratch dirs, locks, facts.json and top-level pages; clone-only files are carried into the cache, never over an existing one; any difference refuses naming the files."}
+  - {id: p6-r2, state: fixed, body: "9f9477cb3 and 4b371b158: a pre-S1 cache is never git-initialised in place; state_dir refuses from outside a clone naming the remedies; only the move sets it aside as .pre-s1; a test reproduces the operator's host shape (decision p6-older-cache-from-outside)."}
+  - {id: p6-r3, state: fixed, body: "9f9477cb3: _tidy keeps the shared exclude line, and says so, while any worktree of the common dir still has .fr/triage-state/."}
+  - {id: p6-r4, state: fixed, body: "9f9477cb3: every registered worktree under the copy is found at any depth; one with local changes or unreachable HEAD commits refuses the move by name; clean ones get a plain git worktree remove; scratch dirs are never copied; prune after."}
+  - {id: p6-r5, state: fixed, body: "3e9407e59: under stealth the product repo never names the state repo; the tracking repo wins; a declaration counts only from the operator's stealth configuration space behind require_protected; spec R20 amended (decision p6-stealth-ignores-declared)."}
+  - {id: p6-r6, state: fixed, body: "9f9477cb3: the mover re-reads a moved-aside stale drive.lock and puts it back if another starter took it over."}
+  - {id: p6-r7, state: fixed, body: "9f9477cb3: state_dir(prepare=True) holds the move lock shared, movers exclusive; _install re-reads the cache's kind and inventory before its rename and refuses on change (decision p6-move-lock-shared)."}
+  - {id: p6-r8, state: fixed, body: "9f9477cb3: the move leaves a marked tombstone file at the clone path, so an fr below S1 imports nothing and fails loudly on its first read; S1 passes the tombstone by; the notice says to upgrade every fr and restart any driver first (decision p6-rc6-tombstone, spec R18 amended)."}
+  - {id: p6-r9, state: fixed, body: "bec21cf4f: create_config_branch is in FR_BRANCH_PUSHERS with its reason (fr-config creation, R10, plain orphan push that refuses when the branch exists); the tripwire passes."}
+  - {id: p6-r10, state: fixed, body: "c75054f8f: a session-scoped autouse fixture sets HOME and GIT_CONFIG_GLOBAL in os.environ before any test, so subprocesses inherit it and undo() cannot restore the real home, and fails the session naming any new entry in the real ~/.cache/fr/triage/."}
+evidence:
+  review: review-p6
+  reviewer: afc51ba0b3f14ef1d
