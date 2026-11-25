@@ -67,12 +67,20 @@ pipeline skill ran this session.
    artifacts outside the workspace). Recognised by structure, never by name:
    - the repo's quiet `fr` worktree — a linked worktree at exactly
      `~/.cache/fr/worktrees/<main checkout>/fr`, HEAD on `refs/heads/fr`, the
-     `origin/fr` switch reading `placement: quiet`;
+     quiet switch reading `placement: quiet`;
+   - its quiet `fr-config` worktree (the repo's configuration, `.fr/` on the
+     orphan `fr-config` branch) — the sibling `.../fr-config`, HEAD on
+     `refs/heads/fr-config`, the same switch, and a tree that holds only `.fr/`;
    - a stealth tracking clone — a clone named `stealth--*` beside a workspace
      whose marker is valid, records `placement: stealth`, and names this clone's
-     origin and branch as its tracking ref.
-   An `fr` worktree of another repo, one anywhere else, and a primary checkout
-   are not targets. Ask `fr settings paths --shell` for the directories
+     origin and branch as its tracking ref;
+   - that workspace's stealth configuration clone — `stealth--*-config`, on the
+     tracking branch plus `-config`, its tree only `<target-dir>/.fr/`.
+   An `fr` or `fr-config` worktree of another repo, one anywhere else, and a
+   primary checkout are not targets. A change written there still reaches the
+   configuration branch only as a pull request, which fr opens; under quiet and
+   stealth fr runs that branch's executable configuration only while the forge
+   enforces a pull-request rule on it. Ask `fr settings paths --shell` for the directories
    (`FR_SPECS_DIR`, `FR_PLANS_DIR`, …).
 5. Path matches a glob in `.fr/isolation-allow` (`.fr-isolation-allow` while it is
    absent; below) → allow. Neither allowlist file nor the `.fr-isolation` marker is

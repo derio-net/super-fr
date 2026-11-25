@@ -155,11 +155,15 @@ uv workspace monorepo, version lockstepped across every manifest (see
     discipline. The split is forced: the OpenCode/Hermes mirrors copy only
     `SKILL.md`, so a script bundled beside a skill never reaches them — only
     the `fr` wheel reaches every harness. State lives in the scope's state
-    directory, the workspace's `.fr/triage-state/<scope>/` or
-    `$HOME/.cache/fr/triage/<scope>/` outside a clone (`owner--repo` or `owner`,
-    lowercased; `--dir` overrides; a scope with a state repo is synced with
-    `refs/heads/fr-triage/<scope-id>` by `triage_cmd.resolve_state_dir`, 2026-10-07
-    cloud-triage spec): `facts.json` (collect), `judgements.yaml` (the
+    directory, `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` or `owner`,
+    lowercased; `--dir` overrides), which is its own git repository, so it syncs
+    `refs/heads/fr-triage/<scope-id>` with no product clone (`triage_cmd.resolve_state_dir`,
+    2026-10-07 cloud-triage spec; 2026-11-19 S1 R17). `fr/triage/state_home.py` moves an
+    older clone's `.fr/triage-state/<scope>/` there on first use (R18: refused while a live
+    `drive.lock` names a driver, an older cache set aside as `<scope>.pre-s1`, a tombstone
+    file left for an fr below S1 to fail on; restart the driver after upgrading), and a
+    one-repo scope may name its state repo as `triage.state_repo` in `.fr/settings.yaml`
+    (`schema: 2`, R20): `facts.json` (collect), `judgements.yaml` (the
     agent's, shape in spec §3.D), the pages (`fr triage backlog` writes Backlog
     and Issues, `batches` the Batches page; one name each, read from
     `components.PAGES`, spec 2026-11-18-triage-pages-ux). It is never
@@ -323,6 +327,23 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`{kind: lens, lens: <id>, title: <why>}`; `apply.py` checks the lens is
     effective, assigns the id and stamps `step`/`phase`), migration
     `fr.artifacts.record_lens`, stamp only.
+  - **`fr/config`** (2026-11-19 spec, `event-driven-a-la-carte` S1) — where repo
+    configuration lives. `space.py`'s `config_space` is the ONE resolver of the
+    configuration space (`.fr/` in the product under `repo`, the orphan `fr-config` branch
+    under quiet, `<target-dir>/.fr/` on the tracking repo's `<branch>-config` under
+    stealth): a working directory, a ref for reads at a commit, and `located` (R13's
+    old-path fallback, decided under quiet/stealth by the configuration branch's fetched
+    tip); `tests/unit/test_tripwire_config_space.py` fails any other `.fr` path
+    construction. `protection.py` answers whether the forge enforces a pull-request rule
+    (one approving review, no force-push, no deletion) on the configuration branch, read
+    from `rules/branches/<b>`, cached per command; it cannot see bypass actors. `tip.py`
+    exports the fetched, reviewed tip to a private directory for a guarded program to run;
+    `degraded.py` is what an unprotected branch's workflows, strategies and `profiles.yaml`
+    degrade to; `change.py` opens the pull request for every change after creation
+    (`fr-config-change/<kind>-<hash>`); `migrate.py` is the moved-kinds table and the
+    cross-space move (configuration branch first, then the product). The old settings copy
+    is brought in step only by `fr settings sync` (preview, `--yes --expect <tip>`).
+    Operator-facing: `docs/explainers/fr-isolation.md`.
   - **`fr/docs`** (2026-11-11 spec, `docs-currency`) — pages must keep up with the code
     they cover. `.fr/docs.yaml` names the page globs (`pages:`, incl. `docs/explainers/*.md`,
     `docs/*.md`, `docs/reference/*.md`) and `must_cover:` (every skill needs a page);
@@ -643,7 +664,7 @@ the OpenCode 2 plugin (`.opencode/plugins/fr-isolation-required.ts`, thin
 re-export of `packages/fr-opencode-plugin`) block file-writing tools
 outside a valid `.fr-isolation` workspace — editing this repo's own source is
 not exempt. Escapes, in preference order: enter isolation (`fr isolation up`),
-add an operator-managed path to `.fr-isolation-allow`, or set `FR_BASE_OK=1`
+add an operator-managed path to `.fr/isolation-allow`, or set `FR_BASE_OK=1`
 for one deliberate base-clone edit. Two docker-less modes now exist alongside
 the default devcontainer mode: **host-worktree** (`FR_ISOLATION_TARGET=worktree`
 — fr worktree in the host env, no profile) and **external** (a preparer-written
