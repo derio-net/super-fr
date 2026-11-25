@@ -1108,3 +1108,8 @@ Pinned (fr.placement.quiet, create_config_branch) in FR_BRANCH_PUSHERS with its 
 ### p6-older-cache-from-outside · decision · An older (pre-S1) cache is made an S1 repository only by the R18 move (phase 6)
 
 A cache holding files and no .git (an fr below S1's) is never git-init'd in place (state_home.refuse_older, called by state_dir and ensure_repo). From a working directory with no clone copy, fr refuses and names the remedies: run from the clone whose .fr/triage-state/<scope>/ holds the live state (the move keeps the cache as <scope>.pre-s1); if no clone holds one, move the cache into a clone's .fr/triage-state/ and run from there; or --dir <cache> to use it unsynced. Review p6-r2.
+
+<!-- fr:journal kind=decision scope=plan id=p6-stealth-ignores-declared created=2026-11-25T11:07:03+00:00 phase=6 -->
+### p6-stealth-ignores-declared · decision · Under stealth the product repo's triage.state_repo is never read; the tracking repo wins (phase 6)
+
+A settle collect from a stealth workspace does not read the product repo's .fr/settings.yaml for triage.state_repo (triage_cmd._declared_state_repo). decide_state_repo now puts the stealth tracking repo before any declaration; a declaration is only read from the operator's stealth configuration space (state_home.stealth_declared_state_repo), at its configuration branch tip and behind R7's require_protected guard, and matters only when the tracking repo is no forge repo. leak_risk still judges every push. Spec R20 amended (spec journal). Review p6-r5.
