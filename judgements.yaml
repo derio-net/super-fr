@@ -4114,13 +4114,13 @@ issues:
     detail: '`installable_tags` in `scripts/bootstrap.sh:126` drops any tag whose `git show` fails (`|| continue`, stderr discarded), so a transient failure silently removes a version from the list and can pick an older release as newest; it is the suspected cause of the flaky `test_the_refusal_lists_installable_tags_in_version_order`.'
     note: 'Batches with #1682 (silent failure swallowed by shell).'
   super-fr#1667:
-    tier: 1
+    tier: 2
     theme: triage-closeout
     cx: M
     severity: high
     kind: defect
-    verified: false
-    detail: The per-wave export copies live state over `docs/triage/<scope>/` and silently reverts a direct repo-side edit (wave 22 dropped `decomposition.html`); only one pinning test noticed. Needs drift refusal, a targeted `fr triage state import`, and docs.
+    verified: true
+    detail: 'Verified at origin/main: `fr.triage.state_sync.export_state` copies every durable file and dir (`DURABLE_FILES`/`DURABLE_DIRS`, state_sync.py:53-62) over `docs/triage/<scope>/` with no record of what the last export wrote, so a direct repo-side edit is reverted silently. Seen live on the wave 22 export (#1664). The reverted file stays in git history, so it is a silent revert, not lost work.'
     note: batches with triage export work; no overlap in this list
   super-fr#1663:
     tier: 4
