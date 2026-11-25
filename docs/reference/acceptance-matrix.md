@@ -220,6 +220,6 @@ prints one warning. It also clears an `extraheader` that checkout kept in
   folder, and the last step logs out.
 - GitLab: the job installs a pinned `glab`. It stops with one line when the masked CI/CD
   variable `FR_DEBT_TOKEN` (scope `api`) is not set. Before the first `fr` command, the job
-  logs `glab` in to its own server with `FR_DEBT_TOKEN`, in a temporary config folder. fr
-  sends `glab` only to a host that `glab` is logged in to. A `GITLAB_TOKEN` alone is not a
-  login.
+  logs `glab` in to its own server with `FR_DEBT_TOKEN`, in a temporary config folder. The
+  `fr` command sends `glab` only to a host that `glab` is logged in to. A `GITLAB_TOKEN`
+  alone is not a login.
