@@ -16,6 +16,8 @@ from tests.unit.requirements_support import DESIGN_SHAPE_SECTION
 from tests.unit.test_deliver_pr_body import PR, _at_deliver, _body, _deliver
 from tests.unit.test_record_apply import _at_spec_review, _resolve, _spec_review_record
 
+pytestmark = pytest.mark.own_artifacts
+
 
 class _Sync:
     def __init__(self) -> None:

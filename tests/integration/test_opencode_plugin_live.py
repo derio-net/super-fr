@@ -50,6 +50,8 @@ import pytest
 
 from tests.conftest import subprocess_timeout
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "deliver-opencode-plugin.sh"
 REQUIRED = os.environ.get("FR_REQUIRE_OPENCODE") == "1"

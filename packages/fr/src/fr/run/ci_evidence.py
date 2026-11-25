@@ -22,6 +22,7 @@ from typing import Any, Literal
 
 import yaml
 
+from fr.checkstate import is_superseded
 from fr.git import GitUnavailableError, git_answer
 
 CI_PENDING_EXIT = 75
@@ -347,6 +348,25 @@ def _finished(check: dict[str, Any]) -> bool:
     return check.get("status") == "completed"
 
 
+def _superseded(check: dict[str, Any]) -> bool:
+    """A finished check that was cancelled: superseded, so still owed a run, never a
+    failure (spec 2026-11-24-ci-economy R3, `fr.checkstate`)."""
+    return _finished(check) and is_superseded(str(check.get("conclusion") or ""))
+
+
+def _unreplaced(checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """*checks* judged by the latest per (workflow, name): a cancelled check another
+    check of its workflow and name replaces is dropped (review #1647), as
+    `fr.triage.queue_exec._unreplaced` reads a combination. A same-named check of
+    another workflow replaces nothing."""
+
+    def key(c: dict[str, Any]) -> tuple[str, str]:
+        return str(c.get("workflow") or ""), str(c.get("name"))
+
+    live = {key(c) for c in checks if not _superseded(c)}
+    return [c for c in checks if not (_superseded(c) and key(c) in live)]
+
+
 def _where(unfinished: list[dict[str, Any]], checks_page: str) -> str:
     """§I step 5 (p2-r6): each unfinished check's URL, or the PR's checks page
     when none has reported, so the orchestrator can say where to look."""
@@ -406,6 +426,7 @@ def verify_ci(repo_root: Path, client: Any = None, *, now: Callable[[], float] =
             f"{', '.join(gates)} absent on {head[:12]}: CI finished without "
             f"reporting {'it' if len(gates) == 1 else 'them'}."
         )
+    checks = _unreplaced(checks)
     by_gate = {g: [c for c in checks if c.get("name") == g] for g in gates}
     unfinished = [c for c in checks if not _finished(c)]
     # A failed gate whose own workflow is still running is a re-run in flight:
@@ -415,7 +436,7 @@ def verify_ci(repo_root: Path, client: Any = None, *, now: Callable[[], float] =
     rerunning: list[str] = []
     for g, cs in by_gate.items():
         for c in cs:
-            if _finished(c) and c.get("conclusion") != "success":
+            if _finished(c) and not _superseded(c) and c.get("conclusion") != "success":
                 if c.get("workflow") and c.get("workflow") in busy:
                     rerunning.append(g)
                 else:
@@ -426,13 +447,35 @@ def verify_ci(repo_root: Path, client: Any = None, *, now: Callable[[], float] =
         raise CiEvidenceRefused(
             f"tests: ci — on {ci_sha[:12]}, gate check(s) did not succeed: {'; '.join(failed)}"
         )
-    running = [g for g, cs in by_gate.items() if any(not _finished(c) for c in cs)]
+    # A cancelled gate is owed a run, not failed (spec 2026-11-24-ci-economy R3). While
+    # anything on the sha still runs, a replacement may be on its way: wait. Once nothing
+    # runs, nothing will replace it: refuse, naming it, rather than wait forever (p1-r1).
+    # A gate holding any unreplaced cancelled check is stranded, not only an all-cancelled
+    # one: beside a green check of another workflow it would otherwise wait on nothing.
+    stranded = [g for g, cs in by_gate.items() if any(_superseded(c) for c in cs)]
+    if stranded and not unfinished and not rerunning:
+        urls = sorted(
+            {
+                str(c.get("url"))
+                for g in stranded
+                for c in by_gate[g]
+                if _superseded(c) and c.get("url")
+            }
+        )
+        raise CiEvidenceRefused(
+            f"tests: ci — gate check(s) {', '.join(stranded)} on {ci_sha[:12]} were cancelled "
+            "and no run replaced them: re-run the workflow"
+            f"{' (' + ', '.join(urls) + ')' if urls else ''}, then resolve again."
+        )
+    waiting = unfinished + [c for c in checks if c.get("name") in gates and _superseded(c)]
+    running = [
+        g for g, cs in by_gate.items() if any(not _finished(c) or _superseded(c) for c in cs)
+    ]
     absent = [g for g, cs in by_gate.items() if not cs]
     if running or rerunning or (absent and unfinished):
         raise CiPending(
             ci_sha,
-            f"waiting on {', '.join(running + rerunning + absent)}; "
-            f"{_where(unfinished, checks_page)}",
+            f"waiting on {', '.join(running + rerunning + absent)}; {_where(waiting, checks_page)}",
         )
     if absent:
         raise CiEvidenceRefused(

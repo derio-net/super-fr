@@ -25,6 +25,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.own_artifacts
+
 BASELINE = 926
 CEILING = 604
 """The measured 593 plus under 2% headroom; spec §3.A's 500 is out of R1's reach."""

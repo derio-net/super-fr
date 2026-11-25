@@ -1,0 +1,103 @@
+schema_version: 2
+phase:
+  number: 2
+  title: ci.yml lanes, concurrency and the landed skip (R1, R2, R5-R7, R15-R18)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - ci-superseded-runs
+  - ci-landed-skip
+  - ci-light-lane
+  tier: hard
+  files:
+  - .github/workflows/ci.yml
+  - scripts/ci_lane.py
+  - tests/**/*.py
+  - AGENTS.md
+  - docs/**/*.md
+  - docs/acceptance/features/2026-11-24-ci-economy.yaml
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: ci_lane.py classify (R15)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: `tests/unit/test_ci_lane.py` (load the script the way the other `scripts/` tests do): `lane_for(paths)` is `light` for `docs/x.md`, `.changes/a.yaml`, `README.md`, `.test_durations`, and `full` when any path is installable (`packages/...`, `scripts/x.py`, `plugins/...`), under `tests/` or `.github/`, or the list is empty; `classify` against a real temporary git repo (a base branch, a PR branch and a merge commit as HEAD, as a `pull_request` checkout has) appends `lane=light`/`lane=full` to a `GITHUB_OUTPUT` file, and `lane=full` when git fails (no base ref).
+  - id: P2.T1.S2
+    text: |-
+      GREEN: create `scripts/ci_lane.py` (stdlib only, imports `installable.is_installable` from its own directory) with `lane_for` and a `classify --base <ref>` subcommand: diff `--no-renames --name-only -z` from `git merge-base origin/<base> HEAD^2` to `HEAD^2` (HEAD when it has one parent), append `lane=<lane>` to `$GITHUB_OUTPUT`. Tests pass.
+- number: 2
+  title: ci_lane.py landed (R5)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: `landed_run(runs_json, this_run)` over recorded `actions/runs` payloads returns the run id for a run with `path: .github/workflows/ci.yml`, `head_branch: fr-queue/s/slot-1`, `event: push`, `conclusion: success` and another id, and None for a PR run, a `main` run, another workflow's path, a failure, or this run's own id. The `landed --sha --run --repo` subcommand appends `lane=landed` and `trusted_run=<id>` when found, and `lane=full` when `gh` fails or returns non-JSON (the runner injected).
+  - id: P2.T2.S2
+    text: |-
+      GREEN: implement `landed_run` and the `landed` subcommand calling `gh api "repos/<repo>/actions/runs?head_sha=<sha>&event=push&per_page=100"`. Tests pass.
+- number: 3
+  title: ci_lane.py verdict (R17)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: `verdict(lane, needs)`, where `needs` is the `toJSON(needs)` shape (`{job: {"result": ...}}`): any `failure`/`cancelled` fails in every lane; `full` requires success of collect, test, split-check and coverage (scoped-tests may be skipped); `light` requires scoped-tests success and allows only plan, collect, test, split-check and coverage to be skipped (a skipped lint fails); `landed` requires validate-artifacts success and allows the rest skipped; a missing or unknown lane fails. The `verdict` subcommand reads `LANE` and `NEEDS` from env and exits 0/1 with a one-line reason.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: implement `verdict` and the subcommand. In `full`, a job that skips by its own condition (change-fragment off a PR) stays allowed; in `light` the allowed-skip set is exactly the five jobs. Tests pass.
+- number: 4
+  title: The workflow (R1, R2, R5-R7, R15-R17)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: `tests/unit/test_ci_lanes_workflow.py` loads `.github/workflows/ci.yml` and asserts: the top-level `concurrency` of spec Design §A; `ci-ok` has `if: always()`, needs every other job including `classify` and `scoped-tests`, and runs `scripts/ci_lane.py verdict` with `LANE` and `NEEDS: ${{ toJSON(needs) }}`; a `classify` job with `fetch-depth: 0`, permissions `contents: read` and `actions: read`, an `outputs.lane`, running `landed` on a push to main and `classify` on a pull request (`full` for other events); `plan`, `collect`, `test`, `split-check`, `coverage` have an `if:` requiring lane `full`; `scoped-tests` has `fetch-depth: 0` and runs `pytest --fr-scope "origin/$BASE_REF"` only in lane `light`; every other job needs `classify` and skips in `landed` except `validate-artifacts`; `split-check`'s save steps are unchanged. Update existing workflow-shape tests (`test_ci_split_workflow.py`, `test_ci_python_floor.py`, `test_ci_budget.py`, any that pin `ci-ok`) only where this change moves what they pin.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: edit `.github/workflows/ci.yml` to that shape, keeping each job's existing conditions (combined with `&&`). The classify step chooses by `github.event_name` and `github.ref`. Tests pass.
+  - id: P2.T4.S3
+    text: |-
+      REFACTOR: update AGENTS.md's CI job list and its "Tiers" paragraph (the light and landed lanes, one sentence each), and every docs page `uv run fr docs check --base origin/main` names for `.github/workflows/ci.yml` or `scripts/` (edit what changed, or move its `reviewed` stamp with a note). The fast tier is green.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-24T18:08:41+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-24T18:08:41+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-24T18:08:41+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-24T18:08:41+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-24T18:08:41+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-24T18:08:41+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-11-24T18:08:41+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-11-24T18:08:41+00:00'
+      note: null
+    P2.T4.S3:
+      state: x
+      ticked_at: '2026-11-24T18:08:41+00:00'
+      note: null
+  completion:
+    at: '2026-11-24T18:08:41+00:00'
+    note: null
+    observed_prs: []

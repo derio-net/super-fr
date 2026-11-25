@@ -317,6 +317,65 @@ def test_with_no_post_merge_the_queue_lands_on_without_a_pause(
     assert not log.exists()
 
 
+def test_the_drive_regenerates_a_generated_file_both_entries_changed(
+    tmp_path: Path, queue: tuple[Origin, QueueWorld, Path]
+) -> None:
+    """2026-11-24-ci-economy R8-R12: the repo's `mirrors:` and `generated:` reach the
+    builder, so two entries whose generated file conflicts land together, regenerated."""
+    origin, qw, log = queue
+    mirror = [
+        sys.executable,
+        "-c",
+        "import pathlib; pathlib.Path('gen.txt').write_text("
+        "' '.join(sorted(p.name for p in pathlib.Path('.').glob('b*.txt'))) + '\\n')",
+    ]
+    qw.config = {"queue": {"ci": "none", "depth": 2}, "mirrors": [mirror], "generated": ["gen.txt"]}
+    origin.configure(qw.config)
+    for n, bid in ((1, "b1"), (2, "b2")):
+        head = origin.branch(
+            f"feat/batch-{bid}", {f"{bid}.txt": f"{bid}\n", "gen.txt": f"{bid}.txt\n"}
+        )
+        qw.prs[100 + n]["head_oid"] = head
+    _passes(tmp_path, 4)
+    lands = [e for e in _queue(tmp_path).events if isinstance(e, QueueLandEvent)]
+    assert [[e.batch for e in x.entries] for x in lands] == [["b1", "b2"]]
+    assert _git(origin.bare, "show", "refs/heads/main:gen.txt") == "b1.txt b2.txt"
+
+
+def test_the_mirrors_are_the_bases_never_a_queued_prs(
+    tmp_path: Path, queue: tuple[Origin, QueueWorld, Path]
+) -> None:
+    """Security review: a PR that rewrites `.fr/triage.yaml`'s `mirrors:` does not choose what
+    the queue runs; the mirrors come from the config collected from the default branch."""
+    origin, qw, log = queue
+    mirror = [
+        sys.executable,
+        "-c",
+        "import pathlib; pathlib.Path('gen.txt').write_text("
+        "' '.join(sorted(p.name for p in pathlib.Path('.').glob('b*.txt'))) + '\\n')",
+    ]
+    evil = [sys.executable, "-c", "import pathlib; pathlib.Path('pwned.txt').write_text('x')"]
+    qw.config = {"queue": {"ci": "none", "depth": 2}, "mirrors": [mirror], "generated": ["gen.txt"]}
+    origin.configure(qw.config)
+    swapped = yaml.safe_dump({**qw.config, "mirrors": [evil]})
+    for n, bid in ((1, "b1"), (2, "b2")):
+        files = {f"{bid}.txt": f"{bid}\n", "gen.txt": f"{bid}.txt\n"}
+        if bid == "b2":
+            files[".fr/triage.yaml"] = swapped
+        qw.prs[100 + n]["head_oid"] = origin.branch(f"feat/batch-{bid}", files)
+    for _ in range(4):  # once b2 lands, main's config is its own and the drive refuses (2)
+        code, out = _drive(tmp_path, "--once", "--yes")
+        assert code in (0, 2, 3), out
+        if code == 2:
+            assert "re-collect" in out, out
+            break
+    lands = [e for e in _queue(tmp_path).events if isinstance(e, QueueLandEvent)]
+    assert [[e.batch for e in x.entries] for x in lands] == [["b1", "b2"]]
+    assert _git(origin.bare, "show", "refs/heads/main:gen.txt") == "b1.txt b2.txt"
+    tree = _git(origin.bare, "ls-tree", "-r", "--name-only", "refs/heads/main").split()
+    assert "pwned.txt" not in tree
+
+
 def _closed_out_by_hand(tmp_path: Path) -> None:
     """Both batches carry a finished close-out (`archived`), so their wave owes none (R15)."""
     path = tmp_path / "judgements.yaml"

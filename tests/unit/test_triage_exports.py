@@ -26,6 +26,8 @@ from fr.triage.model import (
 )
 from pydantic import ValidationError
 
+pytestmark = pytest.mark.own_artifacts
+
 AT = datetime(2026, 10, 5, 12, 0, tzinfo=UTC)
 EXPORT = {"wave": "3", "repo": "example-org/widgets", "at": "2026-10-05T12:00:00Z", "pr": 41}
 

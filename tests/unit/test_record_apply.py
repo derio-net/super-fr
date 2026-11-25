@@ -31,6 +31,8 @@ from tests.unit.record_support import (
 )
 from tests.unit.requirements_support import DESIGN_SHAPE_SECTION, seed_requirements
 
+pytestmark = pytest.mark.own_artifacts
+
 
 def _resolve(
     root: Path,

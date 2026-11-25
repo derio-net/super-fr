@@ -30,6 +30,8 @@ from fr.run.code_tree import code_tree
 from tests.unit.fakes import FakeGhClient
 from tests.unit.test_commit_checks import BASE, MomentGh, _sha
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = "derio-net/super-fr"
 BRANCH = "feat/x"
 
@@ -185,7 +187,7 @@ def test_a_head_with_no_checks_yet_is_pending(tmp_path: Path) -> None:
 # --- refused (exit 2) -----------------------------------------------------
 
 
-@pytest.mark.parametrize("conclusion", ["failure", "cancelled", "skipped"])
+@pytest.mark.parametrize("conclusion", ["failure", "timed_out", "skipped"])
 def test_a_gate_that_did_not_succeed_is_refused_with_its_url(
     tmp_path: Path, conclusion: str
 ) -> None:
@@ -199,6 +201,73 @@ def test_a_gate_that_did_not_succeed_is_refused_with_its_url(
         verify_ci(repo, client)
 
     assert "ci-ok" in str(exc.value) and conclusion in str(exc.value) and url in str(exc.value)
+
+
+def test_a_cancelled_gate_waits_while_a_run_is_still_going(tmp_path: Path) -> None:
+    """Spec 2026-11-24-ci-economy R3: a cancelled gate run was superseded, so `deliver`
+    waits (exit 75) while anything on the sha still runs. DERIVED from the captured
+    green head: `ci-ok` cancelled, another check still in progress."""
+    repo, client, head = _world(tmp_path)
+    records = _with("green-head", "ci-ok", conclusion="cancelled")
+    other = next(r for r in records if r["name"] != "ci-ok")
+    other.update(status="in_progress", conclusion=None)
+    client.commit_checks_by_sha[(REPO, head)] = records
+
+    with pytest.raises(CiPending) as exc:
+        verify_ci(repo, client)
+
+    assert "ci-ok" in str(exc.value)
+
+
+def test_a_cancelled_gate_nothing_replaces_is_refused_naming_a_rerun(tmp_path: Path) -> None:
+    """Review p1-r1: once nothing on the sha runs, no run will replace the cancelled gate,
+    so `deliver` refuses, naming it and the re-run, rather than wait forever. DERIVED
+    from the captured green head with `ci-ok` cancelled."""
+    repo, client, head = _world(tmp_path)
+    records = _with("green-head", "ci-ok", conclusion="cancelled")
+    client.commit_checks_by_sha[(REPO, head)] = records
+    url = next(r["url"] for r in records if r["name"] == "ci-ok")
+
+    with pytest.raises(CiEvidenceRefused) as exc:
+        verify_ci(repo, client)
+
+    words = str(exc.value)
+    assert "ci-ok" in words and "cancelled" in words and "re-run" in words and url in words
+
+
+def test_a_cancelled_gate_replaced_by_a_green_one_of_its_workflow_passes(
+    tmp_path: Path,
+) -> None:
+    """Review #1647: a cancelled `ci-ok` beside a successful `ci-ok` of the same workflow
+    on the sha (a client that does not keep only the latest run per workflow and name) is
+    replaced, so the gate passes rather than waiting on nothing. DERIVED from the
+    captured green head with a cancelled copy of `ci-ok` added."""
+    repo, client, head = _world(tmp_path)
+    records = _captured("green-head")
+    gate = next(r for r in records if r["name"] == "ci-ok")
+    records.insert(0, {**gate, "conclusion": "cancelled"})
+    client.commit_checks_by_sha[(REPO, head)] = records
+
+    assert verify_ci(repo, client).startswith(f"ci:{head}+")
+
+
+def test_a_cancelled_gate_of_another_workflow_beside_a_green_one_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Review #1647: a same-named check of another workflow replaces nothing (as
+    `queue_exec._unreplaced` reads it), and once nothing on the sha runs nothing will:
+    the wait is bounded by a refusal naming the re-run, never pending forever. DERIVED
+    from the captured green head with a cancelled `ci-ok` of another workflow added."""
+    repo, client, head = _world(tmp_path)
+    records = _captured("green-head")
+    gate = next(r for r in records if r["name"] == "ci-ok")
+    records.append({**gate, "workflow": "Other", "conclusion": "cancelled"})
+    client.commit_checks_by_sha[(REPO, head)] = records
+
+    with pytest.raises(CiEvidenceRefused) as exc:
+        verify_ci(repo, client)
+
+    assert "ci-ok" in str(exc.value) and "re-run" in str(exc.value)
 
 
 def test_an_absent_gate_on_a_finished_head_is_refused(tmp_path: Path) -> None:

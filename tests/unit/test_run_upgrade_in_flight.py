@@ -31,6 +31,8 @@ from fr.version_floor import CEILING_VERSION
 
 from tests.unit.test_run_cli import _SHIPPED_FR_GOAL, _invoke, _repo, _squash
 
+pytestmark = pytest.mark.own_artifacts
+
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "run_cursors"
 HELD = "v4/2026-09-20-unit-record-unification-r2.yaml"
 HOLDER = "v4/2026-09-20-feat-phase-holder-identity.yaml"

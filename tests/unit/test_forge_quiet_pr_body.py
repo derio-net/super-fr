@@ -17,6 +17,8 @@ from fr.run.model import load_run_state
 from tests.unit.test_deliver_pr_body import RUN, _at_deliver, _body, _deliver, live
 from tests.unit.test_placement_merged import _home, quiet, stealthy
 
+pytestmark = pytest.mark.own_artifacts
+
 # the fixtures, re-exported so pytest finds them here
 __all__ = ["_home", "live", "quiet", "stealthy"]
 

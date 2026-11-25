@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+pytestmark = pytest.mark.own_artifacts
+
 PLUGINS_DIR = Path(__file__).parent.parent.parent / "plugins"
 # Every skill across both plugins; a glob miss collapses the matrix
 # silently, so a floor assertion guards collection (2026-06-06).

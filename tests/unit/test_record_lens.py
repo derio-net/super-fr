@@ -33,6 +33,8 @@ from tests.unit.record_support import (
     write_record,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 LENS_ITEM = {"kind": "lens", "lens": "security", "title": "the retry path builds a shell command"}
 
 

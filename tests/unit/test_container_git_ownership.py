@@ -19,6 +19,8 @@ from fr.git import safe_directory_args
 from fr.isolation.scaffold import POST_CREATE
 from fr.record import apply as record_apply
 
+pytestmark = pytest.mark.own_artifacts
+
 
 def _git_version() -> tuple[int, ...]:
     out = subprocess.run(["git", "--version"], capture_output=True, text=True).stdout

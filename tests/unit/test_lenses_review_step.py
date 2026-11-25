@@ -14,6 +14,8 @@ from fr.workflow.model import parse_manifest
 from tests.unit.lens_review_support import at_lens_review
 from tests.unit.test_run_cli import _invoke
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).parents[2]
 SHIPPED = REPO / "plugins" / "super-fr" / "workflows"
 WHEEL = REPO / "packages" / "fr" / "src" / "fr" / "workflows"

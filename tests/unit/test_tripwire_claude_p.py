@@ -16,6 +16,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _CLAUDE_P = re.compile(r"""['"]claude['"]?\s*(?:,\s*)?['"]?(?:-p|--print)\b""")

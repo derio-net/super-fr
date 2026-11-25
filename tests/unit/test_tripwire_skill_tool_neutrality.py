@@ -23,6 +23,8 @@ from pathlib import Path
 import pytest
 from fr.harness.prose import scan_prose
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _SKILL_TREES = {

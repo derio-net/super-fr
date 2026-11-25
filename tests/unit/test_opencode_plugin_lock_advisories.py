@@ -12,6 +12,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.own_artifacts
+
 LOCK = Path(__file__).resolve().parents[2] / "packages" / "fr-opencode-plugin" / "bun.lock"
 
 # package -> (advisory, first patched version); every version below it is affected

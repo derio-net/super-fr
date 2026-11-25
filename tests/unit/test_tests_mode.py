@@ -28,6 +28,8 @@ from tests.unit.test_run_cli import (
     _write_shape,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 FAST_TIER = "uv run pytest --fr-scope origin/main -n 2 -q --no-cov"
 FAST_TIER_DECL = 'fast_tier: "uv run pytest --fr-scope {base} -n 2 -q --no-cov"\n'
 

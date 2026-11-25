@@ -33,6 +33,8 @@ from fr.cli import app
 from fr.version_floor import CEILING_VERSION
 from typer.testing import CliRunner
 
+pytestmark = pytest.mark.own_artifacts
+
 runner_cli = CliRunner()
 
 

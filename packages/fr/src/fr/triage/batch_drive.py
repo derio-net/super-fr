@@ -24,6 +24,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Literal
 
 from fr.artifacts.paths import KIND_DIRS
+from fr.checkstate import bucket_verdict
 from fr.labels import awaiting_devops, held_gates, pre_merge_held
 from fr.settle.managed import MANAGED_SENTENCE
 from fr.triage.approval import ApprovalVerdict, Approved, is_approved
@@ -150,8 +151,6 @@ CONFLICTING = "CONFLICTING"
 ARCHIVED_BY_UNKNOWN_PR = 0
 """`CloseoutEvent.archived` for a close-out found archived on the default branch with
 no PR to name: every reader only asks whether `archived` is set (gh#900)."""
-
-_FAILING_BUCKETS = frozenset({"fail", "cancel"})
 
 
 @dataclass(frozen=True)
@@ -658,21 +657,19 @@ def checks_verdict(
 
     *required* is `GhClient.pr_required_checks`; *all_checks* is the collected
     `PullRequest.checks` counts (`pass`, `fail`, `pending`). `SKIPPED` and
-    `NEUTRAL` read as passed. No check reported at all is `pending`, never green: a
+    `NEUTRAL` read as passed, a cancelled check as pending (`fr.checkstate`, spec
+    2026-11-24-ci-economy R3). No check reported at all is `pending`, never green: a
     head the driver just pushed, or a PR just readied, has no check registered yet
     (review rg-4); only a `ci none` repo merges without one.
     """
     if ci_none:
         return "green", ()
     if required:
-        failing = tuple(
-            sorted(str(c.get("name")) for c in required if c.get("bucket") in _FAILING_BUCKETS)
-        )
+        verdicts = [(bucket_verdict(c.get("bucket")), str(c.get("name"))) for c in required]
+        failing = tuple(sorted(name for v, name in verdicts if v == "fail"))
         if failing:
             return "failing", failing
-        pending = tuple(
-            sorted(str(c.get("name")) for c in required if c.get("bucket") == "pending")
-        )
+        pending = tuple(sorted(name for v, name in verdicts if v == "pending"))
         return ("pending", pending) if pending else ("green", ())
     if all_checks.get("fail", 0):
         return "failing", (f"{all_checks['fail']} failing check(s)",)

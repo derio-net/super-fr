@@ -24,9 +24,12 @@ from tests.fr_scope import (
     resolve_base,
     select,
     session_reasons,
+    touches_own_artifacts,
     unparseable_line,
     unreached,
 )
+
+pytestmark = pytest.mark.own_artifacts
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -157,6 +160,32 @@ def test_smoke_always_runs_and_scenario_never_does() -> None:
     assert not keep_item("tests/unit/test_x.py", ["scenario", "smoke"], set())
     assert keep_item("tests/unit/test_x.py", [], {"tests/unit/test_x.py"})
     assert not keep_item("tests/unit/test_x.py", [], set())
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["docs/explainers/x.md", ".fr/ci.yaml", ".changes/feat-x.yaml", "AGENTS.md", ".test_durations"],
+)
+def test_a_change_to_the_checkouts_own_files_keeps_own_artifacts_tests(path: str) -> None:
+    """R19: a changed path under docs/, .fr/ or .changes/, a root *.md or
+    .test_durations keeps every own_artifacts test, whatever its imports reach."""
+    assert touches_own_artifacts({"packages/fr/src/fr/a.py", path})
+    assert keep_item("tests/unit/test_x.py", ["own_artifacts"], set(), own_artifacts=True)
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["packages/fr/src/fr/a.py", "packages/fr/README.md", "tests/unit/test_y.py", "docsx/a.md"],
+)
+def test_other_changes_do_not_keep_own_artifacts_tests(path: str) -> None:
+    assert not touches_own_artifacts({path})
+    assert not keep_item("tests/unit/test_x.py", ["own_artifacts"], set(), own_artifacts=False)
+
+
+def test_the_own_artifacts_rule_keeps_only_marked_tests_and_never_a_scenario() -> None:
+    assert not keep_item("tests/unit/test_x.py", [], set(), own_artifacts=True)
+    marks = ["own_artifacts", "scenario"]
+    assert not keep_item("tests/unit/test_x.py", marks, set(), own_artifacts=True)
 
 
 def _repo_with_origin(tmp_path: Path) -> Path:
@@ -405,6 +434,9 @@ SESSION_TESTS = {
     "tests/unit/test_scen.py": "import pytest\n\n@pytest.mark.scenario\n"
     "def test_scen():\n    if False:\n        import demo_mod  # noqa: F401\n\n"
     "def test_plain():\n    if False:\n        import demo_mod  # noqa: F401\n",
+    "tests/unit/test_own_files.py": "import pytest\n\npytestmark = pytest.mark.own_artifacts\n\n"
+    "def test_reads_docs():\n    pass\n",
+    "docs/page.md": "a page\n",
 }
 
 COPIED = ("tests/__init__.py", "tests/unit/__init__.py", "tests/conftest.py", "tests/fr_scope.py")
@@ -466,7 +498,30 @@ def test_the_fast_tier_collects_exactly_the_dependents_and_the_smoke_set(
         "tests/unit/test_scen.py::test_plain",
         "tests/unit/test_smoke_set.py::test_smoke",
     }, done.stdout
-    assert "4/7 tests collected (3 deselected)" in done.stdout, done.stdout
+    assert "4/8 tests collected (4 deselected)" in done.stdout, done.stdout
+
+
+@pytest.mark.parametrize("path", ["docs/page.md", "AGENTS.md"])
+def test_a_change_to_the_checkouts_own_files_collects_the_own_artifacts_tests(
+    session_repo: Path, path: str
+) -> None:
+    """R19 end to end: a docs-only (or root *.md) change collects every own_artifacts
+    test, which its imports never reach, beside the smoke set."""
+    page = session_repo / path
+    before = page.read_text() if page.exists() else None
+    page.write_text("changed\n")
+    try:
+        done = _session(session_repo, "-m", "", "--collect-only", "--fr-scope", "HEAD")
+    finally:
+        if before is None:
+            page.unlink()
+        else:
+            page.write_text(before)
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert _collected(done.stdout) == {
+        "tests/unit/test_own_files.py::test_reads_docs",
+        "tests/unit/test_smoke_set.py::test_smoke",
+    }, done.stdout
 
 
 def _summary_lines(stdout: str) -> list[str]:

@@ -35,7 +35,10 @@ import pytest
 from fr.isolation import sessions
 from fr.isolation.types import IsolationState, save_state
 
-pytestmark = pytest.mark.skipif(shutil.which("jq") is None, reason="segment script requires jq")
+pytestmark = [
+    pytest.mark.skipif(shutil.which("jq") is None, reason="segment script requires jq"),
+    pytest.mark.own_artifacts,
+]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "plugins" / "super-fr" / "scripts" / "fr-statusline-segment.sh"

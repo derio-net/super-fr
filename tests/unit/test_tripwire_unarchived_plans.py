@@ -37,6 +37,8 @@ import pytest
 import yaml as _yaml
 from fr.archive import completed_unarchived_plans, merge_evidence
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 

@@ -4,6 +4,10 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.own_artifacts
+
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "check-change-fragment.py"
 spec = importlib.util.spec_from_file_location("check_change_fragment", SCRIPT)
 assert spec and spec.loader

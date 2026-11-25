@@ -27,6 +27,8 @@ from tests.unit.record_support import (
 )
 from tests.unit.test_deliver_pr_body import PR, account_seeded_row
 
+pytestmark = pytest.mark.own_artifacts
+
 ROW = "loc-1"
 TEST = "tests/test_x.py"
 LEVEL = f"unit=t:{TEST}#test_y"

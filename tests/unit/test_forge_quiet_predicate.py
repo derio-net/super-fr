@@ -20,6 +20,8 @@ from fr.settings import (
 
 from tests.unit.settings_repo import git, land_on_main, make_repo
 
+pytestmark = pytest.mark.own_artifacts
+
 SRC = Path(__file__).resolve().parents[2] / "packages" / "fr" / "src" / "fr"
 NONE = "schema_version: 2\ntracking: {type: none}\n"
 

@@ -16,6 +16,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FR_EXECUTE = REPO_ROOT / "plugins/super-fr/skills/fr-execute/SKILL.md"
 FR_GOAL = REPO_ROOT / "plugins/super-fr/skills/fr-goal/SKILL.md"

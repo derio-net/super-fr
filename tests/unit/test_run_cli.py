@@ -37,6 +37,8 @@ from tests.unit.requirements_support import (
 SHAPED_SPEC = "# spec\n" + DESIGN_SHAPE_SECTION
 """A fixture spec the `brainstorm` resolve accepts (spec 2026-11-24-show-me-visuals R8)."""
 
+pytestmark = pytest.mark.own_artifacts
+
 # --- reading a cursor by MEANING, never by storage ---------------------------
 #
 # These tests were written against three maps (`StepRecord.items`,

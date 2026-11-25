@@ -178,3 +178,84 @@ def test_pausing_strips_the_landing_and_says_why_with_a_need() -> None:
     assert [a.kind for a in paused.actions] == ["queue-build", "queue-need"]
     assert "post_merge failed: boom" in paused.actions[-1].detail
     assert pause_landings(plan, None) is plan
+
+
+@pytest.mark.parametrize(
+    ("conclusion", "state"),
+    [("cancelled", "pending"), ("CANCELLED", "pending"), ("stale", "fail"),
+     ("timed_out", "fail"), ("success", "pass"), ("skipped", "pass")],
+)  # fmt: skip
+def test_a_combinations_check_state_reads_cancelled_as_pending(conclusion: str, state: str) -> None:
+    """Spec 2026-11-24-ci-economy R3."""
+    from fr.triage.queue_exec import _state
+
+    assert _state(_check("test", conclusion=conclusion)) == state
+
+
+def test_a_cancelled_required_check_is_pending_and_late_after_the_wait() -> None:
+    """Spec 2026-11-24-ci-economy R4: a cancelled required check no newer run replaces is
+    reported like one that never reported."""
+    checks = [_check("test"), _check("acceptance", conclusion="cancelled")]
+    early = slot_check(checks, ["test", "acceptance"], built_at=NOW,
+                       now=NOW + timedelta(minutes=59), wait_minutes=60)  # fmt: skip
+    assert early[0].verdict == "pending" and early[1] == ()
+    late = slot_check(checks, ["test", "acceptance"], built_at=NOW,
+                      now=NOW + timedelta(minutes=60), wait_minutes=60)  # fmt: skip
+    assert late[0].verdict == "pending" and late[1] == ("acceptance",)
+
+
+def test_a_cancelled_check_replaced_by_a_newer_run_reads_as_the_newer_run() -> None:
+    """R4: only a cancelled run that no newer run replaces stays pending."""
+    checks = [_check("test", conclusion="cancelled"), _check("test")]
+    for required in (["test"], []):
+        verdict, late = slot_check(checks, required, built_at=NOW,
+                                   now=NOW + timedelta(minutes=61), wait_minutes=60)  # fmt: skip
+        assert verdict.verdict == "green" and late == ()
+    failed = [_check("test", conclusion="cancelled"), _check("test", conclusion="failure")]
+    assert slot_check(failed, ["test"], built_at=NOW, now=NOW, wait_minutes=60)[0].failing == (
+        "test",
+    )
+
+
+def test_a_same_named_check_of_another_workflow_replaces_no_cancel() -> None:
+    """Review p1-r4: `commit_checks` keeps the latest run per (workflow, name), so a
+    cancelled run is replaced only by a run of its own workflow."""
+    other = {"name": "test", "workflow": "other", "status": "completed", "conclusion": "success"}
+    checks = [_check("test", conclusion="cancelled"), other]
+    verdict, late = slot_check(checks, ["test"], built_at=NOW,
+                               now=NOW + timedelta(minutes=61), wait_minutes=60)  # fmt: skip
+    assert verdict.verdict == "pending" and late == ("test",)
+
+
+def test_with_no_required_checks_a_cancelled_check_is_late_after_the_wait() -> None:
+    checks = [_check("x"), _check("y", conclusion="cancelled")]
+    early = slot_check(checks, [], built_at=NOW, now=NOW, wait_minutes=60)
+    assert early[0].verdict == "pending" and early[1] == ()
+    late = slot_check(checks, [], built_at=NOW, now=NOW + timedelta(minutes=61), wait_minutes=60)
+    assert late[0].verdict == "pending" and late[1] == ("y",)
+
+
+def test_the_need_for_a_cancelled_check_says_it_was_cancelled() -> None:
+    """R4: a cancelled check is reported late, worded as cancelled rather than as a
+    workflow that does not run on the queue's pushes."""
+    from fr.triage.queue_exec import read_slots
+
+    built = {"kind": "queue_built", "at": "2026-11-20T10:00:00Z", "slot": 1,
+             "sha": "c" * 40, "entry": {"batch": "a"}, "head": "h" * 40, "patch_id": "p",
+             "base": "m" * 40}  # fmt: skip
+    record = _record({"kind": "queue_open", "at": "2026-11-20T09:00:00Z"}, built)
+
+    class Forge:
+        def commit_checks(self, repo: str, sha: str) -> list[dict[str, Any]]:
+            return [_check("test", conclusion="cancelled")]
+
+        def required_check_names(self, repo: str, base: str) -> list[str]:
+            return []
+
+    out, needs = read_slots(Forge(), REPO, record, ["test", "docs"], now=NOW, wait_minutes=60)
+    assert out["c" * 40].verdict == "pending"
+    assert len(needs) == 2
+    cancelled = next(n for n in needs if "test" in n)
+    assert "cancelled" in cancelled and "fr-queue/**" not in cancelled
+    missing = next(n for n in needs if "docs" in n)
+    assert "did not report" in missing and "fr-queue/**" in missing

@@ -10,6 +10,8 @@ import pytest
 import yaml
 from typer.testing import CliRunner
 
+pytestmark = pytest.mark.own_artifacts
+
 
 def test_init_has_no_migrate_command() -> None:
     from fr.commands.init_cmd import init_app

@@ -26,6 +26,8 @@ import pytest
 from fr.isolation.local import IsolationError, LocalWorktreeDevcontainerTarget
 from fr.plan_validator_wrapper import REPAIR_COMMAND
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO = Path(__file__).resolve().parents[2]
 RETIRED = "marketplaces/derio-net/"
 ALLOWED = {("packages/fr/src/fr/plan_validator_wrapper.py", "_DELEGATE_PATHS")}

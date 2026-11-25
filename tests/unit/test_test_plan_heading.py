@@ -18,6 +18,8 @@ from fr.spec import (
     test_plan_steps,
 )
 
+pytestmark = pytest.mark.own_artifacts
+
 BODY = "\n1. Run it.\n2. Watch it.\n"
 
 

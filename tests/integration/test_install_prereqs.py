@@ -19,6 +19,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
 BOOTSTRAP_SH = REPO_ROOT / "scripts" / "bootstrap.sh"

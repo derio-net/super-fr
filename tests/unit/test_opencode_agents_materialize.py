@@ -16,6 +16,8 @@ from pathlib import Path
 import pytest
 from fr.opencode_agents import materialize_agents
 
+pytestmark = pytest.mark.own_artifacts
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIRROR_DIR = REPO_ROOT / ".opencode" / "agent"
 

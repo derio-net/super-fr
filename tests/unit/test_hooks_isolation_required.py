@@ -20,10 +20,13 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("jq") is None or shutil.which("git") is None,
-    reason="hook needs jq + git",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        shutil.which("jq") is None or shutil.which("git") is None,
+        reason="hook needs jq + git",
+    ),
+    pytest.mark.own_artifacts,
+]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "plugins" / "super-fr" / "hooks" / "fr-isolation-required.sh"

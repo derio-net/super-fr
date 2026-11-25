@@ -26,7 +26,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "ensure-phase-executor-allowlist.sh"
 QUALIFIED = "super-fr:fr-phase-executor"
 
-pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
+pytestmark = [
+    pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash"),
+    pytest.mark.own_artifacts,
+]
 
 
 STOCK_HOOK = """#!/bin/bash
