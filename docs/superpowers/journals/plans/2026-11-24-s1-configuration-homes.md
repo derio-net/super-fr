@@ -760,3 +760,8 @@ located() decides the file (old path counts as existing); --force under repo wri
 ### p4-owed-names-release · decision · s1-refuse-old-paths names the release, its detection and R16's env vars (p4-r10) (phase 4)
 
 The owed entry's body now says: the first minor release after the one that ships S1, detected by fr's own version against the release carrying S1's fragment, ends old paths, the legacy settings copy and FR_SHIPPED_WORKFLOWS_DIR/VERIFICATIONS_DIR/LENSES_DIR. owed_key unchanged (the orchestrator repoints it at deliver).
+
+<!-- fr:journal kind=decision scope=plan id=p4-change-pr-dedup created=2026-11-25T08:03:54+00:00 phase=4 -->
+### p4-change-pr-dedup · decision · Configuration changes are named by kind and never re-proposed every command (p4-r12) (phase 4)
+
+change_branch -> fr-config-change/<kind>-<hash> (kind: the path below .fr/). Before pushing, open_change reads earlier PRs from that head (fr.config.change.prs_for_head): an OPEN one is reused (URL returned, nothing pushed), one CLOSED unmerged refuses with its URL and 'fr migrate artifacts --yes --repropose' (FR_CONFIG_REPROPOSE=1). Security follow-up: an earlier PR counts only when its head is in the target repo (isCrossRepository False, then pr_view), it merges into the configuration branch, and, when open, origin's head holds the path with exactly the bytes; a fork PR with the same head name is ignored. Tests: test_config_change_pr_dedup.py.
