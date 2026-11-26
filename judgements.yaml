@@ -10102,6 +10102,13 @@ batches:
   - super-fr#1632
   - super-fr#1631
   wave: 26
+- id: ops-gate-truth
+  title: 'Ops gate truth: no stale ops workspace; every gate walks the rows it verifies'
+  ids:
+  - super-fr#1617
+  - super-fr#1621
+  rationale: '#1621 is L and changes gate semantics: spec first.'
+  wave: 26
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
