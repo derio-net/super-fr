@@ -10089,6 +10089,11 @@ batches:
   ids:
   - super-fr#1517
   wave: 25
+- id: arch-plan-ops-split
+  title: '#1318: split self-review, the spec table and the refactor-gate read out of plan_ops.py'
+  ids:
+  - super-fr#1518
+  wave: 25
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
