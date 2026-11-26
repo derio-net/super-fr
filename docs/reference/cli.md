@@ -181,7 +181,7 @@ one artifact kind.
     - `fr triage batch defer`: Take a batch out of its wave's queue and drain; its PR stays open.
     - `fr triage batch requeue`: Put a batch in a later queue: wave N's, or the next one to open.
     - `fr triage batch queue-retry`: Let a halted merge queue try again.
-    - `fr triage batch suggest`: Print candidate groupings (shared file, theme, pattern).
+    - `fr triage batch suggest`: Print candidate groupings and the overlaps within one wave.
     - `fr triage batch replace`: Replace a managed batch harness/model in place, or reconcile without replay.
     - `fr triage batch dispatch`: Hand a batch to a runner as one fr-goal run, and mark its issues taken.
     - `fr triage batch adopt`: Put a running session under the wave driver as an existing batch; launches nothing.
@@ -213,6 +213,9 @@ one artifact kind.
     - `fr triage origins collect`: Read the issues created since a date and write origins-facts.json.
     - `fr triage origins check`: List issues with no classification, and classifications for issues not in the facts.
     - `fr triage origins render`: Write the Origins page from origins-facts.json, origins.yaml and (for links) judgements.yaml, with the fragments `origins/manifest.yaml` places among the sections.
+  - `fr triage queue`: Put a PR in the wave merge queue, or take it out (operator entries).
+    - `fr triage queue add`: Put an open PR of this repo into the wave merge queue as an operator entry.
+    - `fr triage queue remove`: Take a PR `queue add` put in out again: the driver ejects it from a combination with reason `operator`, and a batch PR's preapproval ends.
   - `fr triage state`: Copy a scope's durable state (judgements, origins, manifests, fragments, snapshots) to a repo directory and back, or push and fetch its state ref.
     - `fr triage state export`: Copy the scope's durable state to <dir>/<scope>/.
     - `fr triage state push`: Push the scope's state to its ref, refs/heads/fr-triage/<scope-id>.

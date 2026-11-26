@@ -116,9 +116,9 @@ def _queue(**over: Any) -> dict[str, Any]:
     }
 
 
-def test_judgements_schema_is_13_and_reads_1_to_13() -> None:
-    assert JUDGEMENTS_SCHEMA == 13
-    assert JUDGEMENTS_READS == tuple(range(1, 14))
+def test_judgements_schema_is_at_least_13_and_reads_1_to_it() -> None:
+    assert JUDGEMENTS_SCHEMA >= 13
+    assert JUDGEMENTS_READS == tuple(range(1, JUDGEMENTS_SCHEMA + 1))
 
 
 def test_a_queue_record_round_trips_every_kind_of_r24() -> None:
@@ -202,15 +202,15 @@ def test_queues_in_a_file_stamped_12_are_refused() -> None:
         Judgements.model_validate(_doc(12, queues=[_queue()]))
 
 
-def test_writing_stamps_13(tmp_path: Path) -> None:
+def test_writing_stamps_the_current_schema(tmp_path: Path) -> None:
     path = tmp_path / "judgements.yaml"
     path.write_text(yaml.safe_dump(_doc(12)))
     batches = load_judgements(path).batches
 
     save_batches(path, batches, read=batches)
 
-    assert "\nschema: 13\n" in path.read_text("utf-8")
-    assert load_judgements(path).schema_ == 13
+    assert f"\nschema: {JUDGEMENTS_SCHEMA}\n" in path.read_text("utf-8")
+    assert load_judgements(path).schema_ == JUDGEMENTS_SCHEMA
 
 
 # ------------------------------------------------------------------ patch-ids (R12; p1-r5, p1-r7)

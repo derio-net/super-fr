@@ -431,7 +431,11 @@ def build(
     try:
         for entry, slot in zip(entries, slots, strict=False):
             wt.reset_hard(prev)
-            tree, tip = _combine(checkout, wt, prev, entry, method, version, regen or Regen())
+            try:
+                tree, tip = _combine(checkout, wt, prev, entry, method, version, regen or Regen())
+            except MergeConflictError as exc:
+                exc.onto = prev  # wave-queue-gaps §A: what it was built on
+                raise
             ref = slot_ref(scope, slot)
             # R13: never the sha the slot holds on the remote either. A rebuild in the
             # same second as a build the leases do not name would otherwise be that very
@@ -1457,6 +1461,9 @@ class QueueExecutor:
                 lines.append(f"{line}: {said}")
             elif action.kind == "queue-eject" and record is not None:
                 lines.append(f"{line}: {self._eject(action, record)}")
+            elif action.kind in ("queue-reissue", "queue-carry"):  # wave-queue-gaps R2, R4
+                said = self.ports.hand_back(action) if self.ports.hand_back else "no hand-back"
+                lines.append(f"{line}: {said}")
             elif action.kind == "queue-drain":
                 again = record is not None and any(
                     isinstance(e, QueueDrainEvent) for e in record.events)  # fmt: skip
@@ -1488,7 +1495,8 @@ class QueueExecutor:
         except MergeConflictError as exc:
             dropped = "rebase would drop" in str(exc) or isinstance(exc, MirrorFailedError)
             self.conflicts[exc.batch] = BuildConflict(exc.head, exc.paths,
-                                                      str(exc) if dropped else "")  # fmt: skip
+                                                      str(exc) if dropped else "",
+                                                      exc.onto)  # fmt: skip
             if dropped:
                 return f"{exc}: it leaves the queue"
             return f"{exc.batch} conflicts in {', '.join(exc.paths)}: it leaves the queue"
@@ -1559,10 +1567,11 @@ class QueueExecutor:
         key = action.entries[0]
         ref = _refs(record).get(key) or QueueEntryRef(batch=key)
         reason: Literal["conflict", "red", "operator"] = (
-            "conflict" if action.reason == "conflict" else "red")  # fmt: skip
+            "conflict" if action.reason == "conflict"
+            else "operator" if action.reason == "operator" else "red")  # fmt: skip
         p.record(QueueEjectEvent(kind="queue_eject", at=p.now(), entry=ref, reason=reason,
                                  detail=action.detail, head=action.head or None))  # fmt: skip
         self.conflicts.pop(key, None)
-        if p.hand_back is None:
+        if p.hand_back is None or reason == "operator":  # wave-queue-gaps R12: no hand-back
             return "ejected"
         return f"ejected; {p.hand_back(action)}"

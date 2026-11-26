@@ -53,7 +53,6 @@ from fr.triage.batch_drive import (
     fact_ledger_unknown,
     fact_ledgers,
     held_archive_conflict,
-    held_conflict,
 )
 from fr.triage.batch_drive import _dispatch_key as dispatch_key
 from fr.triage.batch_drive import (
@@ -62,6 +61,7 @@ from fr.triage.batch_drive import (
 from fr.triage.check import batch_awaits_live, classify, stale_dispatches
 from fr.triage.driver_record import DriverRecord, stopped, stopped_line
 from fr.triage.errors import TriageError
+from fr.triage.handback_rules import held_conflict
 from fr.triage.intake import rejected_by_batch
 from fr.triage.lanes import gated_pr_lane, lane_of, live_stops, unlisted_gated_prs
 from fr.triage.merge_stops import MergeStop

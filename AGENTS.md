@@ -185,7 +185,7 @@ uv workspace monorepo, version lockstepped across every manifest (see
     {list,create,edit,cancel,suggest,dispatch,merge,drive}`
     (`commands/triage_batch_cmd.py`) turn a group of judged issues into one
     fr-goal run with one PR. `judgements.yaml` carries `batches:` with
-     engine-appended `events` (fr reads schemas 1–13 and writes 13, see
+     engine-appended `events` (fr reads schemas 1–14 and writes 14, see
     the waves paragraph below) and `facts.json` schema 8
     (open-PR join with `files`/`head_oid`, `batch_prs`, per-repo `config` from
     the target repo's `.fr/triage.yaml`). The engine is `fr/triage/batch.py`
@@ -218,9 +218,14 @@ uv workspace monorepo, version lockstepped across every manifest (see
     taken member's claim owed (gh#1120); 9 the merge-train events; 10 the collected close-out
     (`closeouts:`, `closeout_handback`, `closeout_hold`, exit-gates R15/R27); 11 added
      `archive_conflict` (merge-truth R12); 12 recovery ownership/session audit metadata;
-     current writers stamp 13 (read 1–13), adding the wave merge queue's `queues:` list,
-     the batch `deferred`/`requeued` events and the `patch_id` of an approval and an update
-     (wave-merge-queue R12, R24).
+     13 the wave merge queue's `queues:` list, the batch `deferred`/`requeued` events and
+     the `patch_id` of an approval and an update (wave-merge-queue R12, R24); current
+     writers stamp 14 (read 1–14), adding the `conflict` event's `onto` and `reissue`
+     and the operator's `queue_requests:` (`queue_add`/`queue_remove`, folded by
+     `fr.triage.queue_requests`; wave-queue-gaps R11, R16). The driver's queue readers
+     read every collected repo a request names, batch or not (`reader_repos`), and a
+     pending operator entry counts as `pending` work (`wave_queue.operator_work`), so the
+     loop never reads `done` over an undrained queue.
     `fr triage batch replace` owns scope then pane locks, checkpoints and cross-store
     repair, never replaying uncertain submission; `drive` runs waves to completion.
     `batch_drive.py` is the pure pass (a `Snapshot` in, ordered `closeout`,
