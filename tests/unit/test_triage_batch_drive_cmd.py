@@ -2744,10 +2744,23 @@ def test_a_push_queue_on_a_squash_default_is_held_naming_the_method_and_its_sour
     _methods(world, monkeypatch, _ALL_SQUASH)
     code, out = _drive(tmp_path, "--once")  # a dry run
     assert code in (0, 3), out
-    assert "queue-held" in out or "held" in out
+    assert "queue-held" in out
     assert "squash" in out and "the forge's default" in out and "unmerged" in out
     assert "merge_method: merge" in out and "queue.land: merge" in out
     assert world.queue_plans == [] and world.merged == []
+
+
+def test_a_push_queue_on_a_squash_default_with_yes_is_held_and_moves_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _pr_open(world, tmp_path)
+    world.config = {"queue": {"ci": "push", "land": "push"}}
+    _methods(world, monkeypatch, _ALL_SQUASH)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code in (0, 3), out
+    assert "queue-held" in out and "squash" in out and "unmerged" in out
+    assert not _opened(world) and world.queue_plans == [] and world.merged == []
 
 
 def test_a_configured_merge_method_lifts_the_hold(
@@ -2759,7 +2772,8 @@ def test_a_configured_merge_method_lifts_the_hold(
     _methods(world, monkeypatch, _ALL_SQUASH)
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code in (0, 3), out
-    assert "unmerged" not in out
+    assert "unmerged" not in out and "queue-held" not in out
+    assert _opened(world)  # the queue planned its work: it is not held
 
 
 def test_batch_merge_method_override_under_a_push_queue_is_held_naming_the_flag(
@@ -2792,6 +2806,7 @@ def test_a_squash_only_repo_is_told_to_allow_merge_commits(
     code, out = _drive(tmp_path, "--once")
     assert code in (0, 3), out
     assert "merge commits" in out and "merge_method: merge" not in out
+    assert world.queue_plans == [] and world.merged == []
 
 
 def test_an_unreadable_merge_methods_read_holds_the_pass_and_is_read_again(
@@ -2822,6 +2837,32 @@ def test_an_unreadable_merge_methods_read_holds_the_pass_and_is_read_again(
     assert len(reads) == 2
 
 
+def test_a_moved_config_holds_the_pass_without_promising_a_retry(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """l-errors-r1: `merge_ctx` raises `ForgeReadError(code=2)` when main's config moved
+    under the pass; that is not a transient merge-methods read."""
+    _pr_open(world, tmp_path)
+    world.config = {"queue": {"ci": "push"}}
+
+    from fr.triage.errors import TriageError
+
+    def _moved(*a: Any, **kw: Any) -> str:
+        raise TriageError("the triage config moved under the pass")
+
+    monkeypatch.setattr(triage_batch_cmd, "_config_fresh", _moved)
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=False,
+    )  # fmt: skip
+    monkeypatch.setattr(driver, "client", lambda facts, repo: world)
+    monkeypatch.setattr(driver, "checkout", lambda repo: checkout)
+    why = str(driver._landing_hold(world.facts(), REPO))
+    assert "read again next pass" not in why
+    assert "merge context could not be built" in why and "moved under the pass" in why
+
+
 def test_a_repo_with_no_choosable_method_is_held_with_the_config_error(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
     monkeypatch: pytest.MonkeyPatch,
@@ -2832,6 +2873,7 @@ def test_a_repo_with_no_choosable_method_is_held_with_the_config_error(
     code, out = _drive(tmp_path, "--once")
     assert code in (0, 3), out
     assert "merge_method" in out and "--method" in out and "no default merge method" in out
+    assert world.queue_plans == [] and world.merged == []
 
 
 def test_the_resume_pass_still_runs_for_a_landing_refused_repo(

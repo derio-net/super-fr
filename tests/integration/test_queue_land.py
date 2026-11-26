@@ -214,15 +214,44 @@ def test_a_tip_not_built_on_the_base_is_held_and_main_never_rewritten(tmp_path: 
 
 
 def test_a_chain_whose_bottom_was_built_on_another_commit_is_held(tmp_path: Path) -> None:
-    from dataclasses import replace
-
+    """The bottom landing claims a parent its commit does not have: the parents check
+    (R2) refuses it first, before any ref moves."""
     w, built = _two(tmp_path, "merge")
     main = w.main()
     landings = landings_of(built)
     landings[0] = replace(landings[0], parent="f" * 40)
     result = land_push(w.checkout, default="main", base=main, landings=landings,
                        method="merge")  # fmt: skip
-    assert result.outcome == "held" and w.main() == main
+    assert result.outcome == "held" and "second parent" in result.detail and w.main() == main
+
+
+def test_a_chain_whose_second_commit_does_not_follow_the_first_is_held(tmp_path: Path) -> None:
+    """R2: each commit's first parent is the one before it; a second landing that is not
+    built on the first is held with nothing moved."""
+    w, built = _two(tmp_path, "merge")
+    main, heads = w.main(), (w.head(1), w.head(2))
+    landings = landings_of(built)
+    landings[1] = replace(landings[1], commit=landings[0].commit)  # not a child of the first
+    result = land_push(w.checkout, default="main", base=main, landings=landings,
+                       method="merge")  # fmt: skip
+    assert result.outcome == "held" and "second parent" in result.detail
+    assert w.main() == main and (w.head(1), w.head(2)) == heads
+
+
+def test_a_correctly_built_chain_on_a_moved_base_is_held_as_not_built_on_the_base(
+    tmp_path: Path,
+) -> None:
+    """p3-r7 stays reachable behind the parents check: the chain is a well-formed merge
+    chain on its own parent, but main moved, so the tip would not fast-forward."""
+    w, built = _two(tmp_path, "merge")
+    built_on = w.main()
+    moved = w.move_main({"z.txt": "zulu\n"})
+    assert moved != built_on
+    heads = (w.head(1), w.head(2))
+    result = land_push(w.checkout, default="main", base=moved, landings=landings_of(built),
+                       method="merge")  # fmt: skip
+    assert result.outcome == "held" and "is not built on the queue's base" in result.detail
+    assert w.main() == moved and (w.head(1), w.head(2)) == heads
 
 
 @pytest.mark.parametrize("method", ["squash", "rebase"])

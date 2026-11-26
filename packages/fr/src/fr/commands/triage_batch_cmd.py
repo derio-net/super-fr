@@ -349,6 +349,7 @@ from fr.triage.queue_exec import (
     forge_refusal,
     held_plan,
     landing_refusal,
+    merge_read_hold,
     queue_config,
     queue_refusal,
     read_hold,
@@ -7088,7 +7089,7 @@ class _Driver:
         except DriverRefusal as exc:
             return exc.message
         except (ForgeReadError, TransientPassFailure) as exc:
-            return f"the merge methods could not be read: {exc}; read again next pass"
+            return merge_read_hold(exc, transient=getattr(exc, "code", 1) == 1)
         land = self._queue_block(facts, repo).land
         why = landing_refusal(land, ctx.method, source=self._method_source[repo],
                               allowed=self._allowed[repo]["allowed"])  # fmt: skip

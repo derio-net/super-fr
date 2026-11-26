@@ -1638,7 +1638,13 @@ def test_gh1333_logged_prs_reads_the_first_parent_line_and_skips_the_release_bot
     assert release.logged_prs(world.clone, tag) == {42, 50}
 
 
-def _closed_landing_world(world: World, state: str = "CLOSED", view_rc: int = 0) -> Any:
+def _closed_landing_world(
+    world: World,
+    state: str = "CLOSED",
+    view_rc: int = 0,
+    merged_at: str | None = None,
+    raw: str | None = None,
+) -> Any:
     """#1704 landed by a push the forge reports closed unmerged (gh#1705): its first-parent
     subject names it, `gh pr list --state merged` does not, and `gh pr view` says why."""
     world.land("a.txt", "a\n", "chore: x (#1704)")
@@ -1650,9 +1656,10 @@ def _closed_landing_world(world: World, state: str = "CLOSED", view_rc: int = 0)
     def gh_read(args: list[str]) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["pr", "view"]:
             views.append(list(args))
-            body = {"number": 1704, "state": state, "mergedAt": None,
+            body = {"number": 1704, "state": state, "mergedAt": merged_at,
                     "labels": [{"name": "gate:tester"}]}  # fmt: skip
-            return subprocess.CompletedProcess(["gh", *args], view_rc, json.dumps(body), "boom")
+            out = json.dumps(body) if raw is None else raw
+            return subprocess.CompletedProcess(["gh", *args], view_rc, out, "boom")
         return subprocess.CompletedProcess(["gh", *args], 0, "[]", "")
 
     cmds.gh_read = gh_read
@@ -1672,16 +1679,24 @@ def test_r7_a_closed_unmerged_first_parent_landing_counts_as_landed(world: World
     assert "state" not in pr and pr["labels"] == [{"name": "gate:tester"}]
 
 
-def test_r7_an_open_pr_the_log_names_is_still_missing(world: World) -> None:
-    cmds = _closed_landing_world(world, state="OPEN")
-    with pytest.raises(release.GateStateUnknownError, match="#1704"):
+@pytest.mark.parametrize(
+    ("kw", "reason"),
+    [
+        ({"state": "OPEN"}, "state OPEN"),
+        ({"state": "MERGED", "merged_at": "2026-11-25T10:00:00Z"}, "state MERGED"),
+        ({"state": "CLOSED", "merged_at": "2026-11-25T10:00:00Z"}, "state CLOSED but mergedAt set"),
+        ({"raw": "not json"}, "gh pr view did not return JSON"),
+        ({"view_rc": 1}, "gh pr view failed: boom"),
+    ],
+)
+def test_r7_a_pr_the_log_names_and_the_view_does_not_confirm_is_missing_with_its_reason(
+    world: World, kw: dict[str, Any], reason: str
+) -> None:
+    cmds = _closed_landing_world(world, **kw)
+    with pytest.raises(release.GateStateUnknownError, match="#1704") as err:
         release.waiting_prs(world.clone, cmds)
-
-
-def test_r7_a_failing_pr_view_leaves_the_pr_missing(world: World) -> None:
-    cmds = _closed_landing_world(world, view_rc=1)
-    with pytest.raises(release.GateStateUnknownError, match="#1704"):
-        release.waiting_prs(world.clone, cmds)
+    assert str(err.value).startswith("the merged-PR read misses #1704 (")
+    assert reason in str(err.value)
 
 
 def test_r7_logged_pr_dates_names_the_newest_commit_of_a_number_named_twice(

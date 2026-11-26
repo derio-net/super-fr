@@ -773,19 +773,24 @@ class GateStateUnknownError(Exception):
     """What waits on a post-merge gate cannot be known: the run cuts an RC (R20)."""
 
 
-def _closed_unmerged(cmds: Commands, number: int, date: str) -> dict[str, object] | None:
+def _closed_unmerged(cmds: Commands, number: int, date: str) -> dict[str, object] | str:
     """PR *number* as `gh pr list --state merged` would carry it, when the forge reports it
     CLOSED with no `mergedAt` (a push landing GitHub did not mark merged, gh#1705): dated by
-    its first-parent commit. None for anything else, or a read that fails."""
+    its first-parent commit. Otherwise a short reason string, for the message that names
+    the PR still missing."""
     r = cmds.gh_read(["pr", "view", str(number), "--json", MERGED_PR_FIELDS + ",state"])
     if r.returncode != 0:
-        return None
+        return f"gh pr view failed: {(r.stderr or r.stdout).strip()}"
     try:
         view = json.loads(r.stdout or "{}")
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(view, dict) or view.get("state") != "CLOSED" or view.get("mergedAt"):
-        return None
+    except json.JSONDecodeError as exc:
+        return f"gh pr view did not return JSON: {exc}"
+    if not isinstance(view, dict):
+        return "gh pr view did not return an object"
+    if view.get("state") != "CLOSED":
+        return f"state {view.get('state')}"
+    if view.get("mergedAt"):
+        return "state CLOSED but mergedAt set"
     view.pop("state")
     return {**view, "mergedAt": date}
 
@@ -823,13 +828,16 @@ def waiting_prs(repo: Path, cmds: Commands) -> list[dict[str, object]]:
         read = {int(p["number"]) for p in prs if isinstance(p.get("number"), int)}
         logged = logged_pr_dates(repo, tag)
         missing = sorted(set(logged) - read)
+        why: dict[int, str] = {}
         for n in list(missing):  # R7, gh#1704: a landing the forge closed unmerged still landed
             landed = _closed_unmerged(cmds, n, logged[n])
-            if landed is not None:
+            if isinstance(landed, str):
+                why[n] = landed
+            else:
                 prs.append(landed)
                 missing.remove(n)
         if missing:
-            names = ", ".join(f"#{n}" for n in missing)
+            names = ", ".join(f"#{n} ({why[n]})" for n in missing)
             raise GateStateUnknownError(
                 f"the merged-PR read misses {names}, merged since {tag.tag}"
             )

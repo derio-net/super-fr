@@ -221,7 +221,8 @@ A push landing needs the merge method `merge`. GitHub marks a pushed pull reques
 merged only when its commit is a merge commit; after a squash or a rebase it closes the
 pull request as unmerged. So a repo that lands by push and chooses `squash` or `rebase`
 is held, and the message names the fix: `merge_method: merge` in `.fr/triage.yaml`, or
-`queue.land: merge`. A `merge_method` that you set wins over the forge's default.
+`queue.land: merge`. When the repo does not allow merge commits, the message says to
+allow them in the repository settings instead. A `merge_method` that you set wins over the forge's default.
 The checks must also run on pushes to `fr-queue/**`, where the driver tests each combination.
 See spec `2026-11-19-wave-merge-queue-design.md` §D and R22.
 

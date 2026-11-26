@@ -804,6 +804,14 @@ REBASE_WARNING = (
 )
 
 
+def merge_read_hold(exc: Exception, *, transient: bool) -> str:
+    """The hold text when `merge_ctx` raised: a transient read is read again next pass, any
+    other failure (main's `.fr/triage.yaml` moved under the pass) promises no retry."""
+    if transient:
+        return f"the merge methods could not be read: {exc}; read again next pass"
+    return f"the merge context could not be built: {exc}"
+
+
 def landing_refusal(land: str, method: str, *, source: str, allowed: Collection[str]) -> str | None:
     """Why *method* cannot land by push, None when it may (spec 2026-11-26-landing-method
     R2, gh#1705): only a merge commit, whose second parent is the PR's head, makes GitHub

@@ -122,7 +122,7 @@ one of these happens:
 - a pull request the git log names is missing from that read, and the forge does not report it as closed without a merge;
 - the decision itself fails.
 
-A pull request that the forge closed without a merge, after the queue pushed its commit, still counts as landed. The script then reads it from the git log, and gives it the commit's date.
+A pull request that the forge closed without a merge, after the queue pushed its commit, still counts as landed. The script then reads its labels and its closed state with `gh pr view`. Only the date comes from the git log: it is the commit's date.
 
 Unknown cuts a candidate, never a final and never an error. A token that cannot read
 labels therefore means candidates only, until someone fixes it. An explicit `--version`
