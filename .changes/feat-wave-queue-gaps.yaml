@@ -1,0 +1,2 @@
+bump: minor
+summary: "Wave merge queue: conflict hand-backs name the commit ahead and are re-issued when it moves, wave overlaps are reported, and `fr triage queue add/remove` puts any trusted PR into the queue"
