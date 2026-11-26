@@ -30,9 +30,15 @@ rows:
     - spec:2026-11-26-landing-method#R2
     - spec:2026-11-26-landing-method#R3
     - spec:2026-11-26-landing-method#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_queue_exec.py#test_a_push_landing_refuses_a_method_github_closes_unmerged
+      - super-fr:tests/unit/test_cloud_remedy.py#test_a_squash_method_under_a_push_queue_fails_with_the_landing_refusal
+      int:
+      - super-fr:tests/integration/test_queue_land.py#test_a_push_landing_in_squash_or_rebase_is_held_and_moves_nothing
+    status: ci
+    notes: 'R2, R3, R5: landing_refusal, the driver''s queue-held, land_push held for
+      squash and rebase over real bare git, and the cloud doctor check (#1705)'
     verify: none
   - id: landing-method-rebase-warning
     capability: triage-merge-queue
