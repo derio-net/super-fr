@@ -10167,6 +10167,13 @@ batches:
   wave: 27
   after:
   - arch-plan-ops-split
+- id: tester-gate-walker
+  title: An interactive, idempotent fr tester gate walker
+  ids:
+  - super-fr#1310
+  wave: 27
+  after:
+  - ops-gate-truth
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
