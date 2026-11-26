@@ -1,0 +1,33 @@
+schema_version: 12
+run: 2026-11-26-feat-batch-landing-method
+step: spec-plan-review
+outcome: done
+journal:
+  - {kind: finding, id: spr-r1, review_scope: in, title: "The design never says how the existing squash-by-push fixtures are migrated; R2/R3 turn them into holds", body: "target: spec. tests/unit/fakes.py:499-501; tests/unit/test_triage_batch_drive_cmd.py:212-213 + autouse _queue_stub :561-571; tests/integration/test_queue_land.py:79-226; test_queue_errors.py:47-74; test_queue_resume.py:58; test_queue_drive_cmd.py:150. Fixtures must move to merge keeping each R10 proof."}
+  - {kind: finding, id: spr-r2, review_scope: in, title: "The plan looks for land_push tests in the wrong files; files: omits the integration tests and fakes", body: "target: plan. land_push tests live in tests/integration/test_queue_{land,errors,resume,drive_cmd}.py; files: lists none of tests/integration/*, tests/unit/fakes.py, tests/integration/queue_git.py."}
+  - {kind: finding, id: spr-r3, review_scope: in, title: "R3 contradicts merged row wave-queue-land-methods and its cited test; the spec amends neither", body: "target: spec. docs/acceptance/features/2026-11-19-wave-merge-queue.yaml:39-60 says push landing works for squash; it cites the parametrised squash/rebase test_queue_land.py test. Amend wave-merge-queue R10 and the rows."}
+  - {kind: finding, id: spr-r4, review_scope: in, title: "_queue_refusal cannot just call _ctx_or_hold: ConfigError/ForgeReadError escape, and its first use is a new fetch and forge read", body: "target: spec. triage_batch_cmd.py:4466-4477 catches only DefaultBranchUnknown; merge_ctx raises at :4429-4432, :4449-4450; _queue_refusal callers :7082 (resume), :7116 (reads), :7316. State the behaviour on each error; correct 'no new forge read'."}
+  - {kind: finding, id: spr-r5, review_scope: in, title: "R3 checks the current method, not the one a stored combination was built in", body: "target: spec. QueueBuiltEvent (model.py:1175-1189) records no method; _land passes the current p.method (queue_exec.py:1450-1476). A squash-built combination landed after the method becomes merge closes PRs unmerged. Guard structurally: each landing commit must be a merge whose second parent is x.head."}
+  - {kind: finding, id: spr-r6, review_scope: in, title: "R2's fix merge_method: merge fails when the repo does not allow merge commits", body: "target: spec. batch_merge.py:115-121 refuses a disallowed configured method; squash-only repos exist (test_triage_batch_drive_cmd.py:212-213). Word the fix from the allowed set."}
+  - {kind: finding, id: spr-r7, review_scope: in, title: "The resume path skips a landing-refused repo, so an already-pushed landing is not recorded", body: "target: spec. triage_batch_cmd.py:7081-7083 skips any repo _queue_refusal refuses; resume (queue_exec.py:1050-1063, :1101-1109) only records. Keep the landing rule out of resume."}
+  - {kind: finding, id: spr-r8, review_scope: in, title: "The plan says the existing choose_method test needs no change, but one case encodes the old order", body: "target: plan. tests/unit/test_triage_batch_merge.py:346-347 '# The forge's own default still wins where it names one'."}
+  - {kind: finding, id: spr-r9, review_scope: in, title: "R8 and files: miss pages and AGENTS.md text covering or describing the changed paths", body: "target: spec. docs/explainers/fr-exit-gates.md:15, docs/exit-gates-release-walk.md:7, docs/explainers/index.md:40 cover scripts/release.py; docs/explainers/fr-triage.md:15 covers triage/**; docs/merge-protection.md:215-221; AGENTS.md Release gating."}
+  - {kind: finding, id: spr-r10, review_scope: in, title: "R5's 'or leaves it at its default' would fail doctor for a repo with no queue block", body: "target: spec. queue_exec.py:758-763; triage_batch_cmd.py:7049-7051: a repo with no queue: block lands nothing by any path."}
+  - {kind: review, id: spec-plan-review-1, title: "independent spec+plan review: 10 findings", body: "Reviewer checked decisions d1-d6 (all honoured), every named file/function/test with file:line, the spec against itself and the plan against the spec. Findings spr-r1..spr-r10, all in scope, all fixed in the spec and plan before resolve. fr release status --from-json verified tolerant of R7's facts (release_cmd.py:53-65, :112-131)."}
+  - {kind: lens, lens: tests, title: "A large fixture migration across unit and integration drive and land tests must keep every R10 proof"}
+  - {kind: lens, lens: errors, title: "The queue gate now builds a merge context whose exceptions must not escape dry runs, snapshot reads or resume"}
+resolves:
+  - {id: spr-r1, state: fixed, body: "R9 + Design 'Fixtures (R9)' name every fixture and say they move to merge keeping each R10 proof; plan P1.T2.S3."}
+  - {id: spr-r2, state: fixed, body: "Plan T2.S1/S3 point at tests/integration/test_queue_*.py; files: adds tests/integration/*, tests/unit/fakes.py, queue_git.py, test_queue_build.py; integration runs use -m \"\"."}
+  - {id: spr-r3, state: fixed, body: "New R9 amends wave-merge-queue R10 and the wave-queue-land-methods row (reword) plus level amendments for renamed tests; plan P1.T5.S3 runs the amend ops."}
+  - {id: spr-r4, state: fixed, body: "Design moves the check to a new _landing_hold called only from _queue_gate; it catches DefaultBranchUnknown, ConfigError and ForgeReadError into hold reasons (R2 states each); the forge-read sentence is corrected; plan T2.S4 tests a dry run and a failed read."}
+  - {id: spr-r5, state: fixed, body: "R3 now requires every landing commit to be a merge whose second parent is the PR head (checkout parents seam, gitseam.py:1092); plan T2.S1 tests a squash-built combination landed with method=merge."}
+  - {id: spr-r6, state: fixed, body: "landing_refusal takes the allowed set; R2's fix names allowing merge commits when merge is not allowed; plan T2.S1/T2.S4 test squash-only."}
+  - {id: spr-r7, state: fixed, body: "R2 says the resume pass still runs; the check lives in _queue_gate only and _queue_refusal is unchanged; plan T2.S4 tests resume recording for a landing-refused repo."}
+  - {id: spr-r8, state: fixed, body: "Plan T1.S1 rewrites the :346-347 case to expect squash as the first #1702 assertion and renames the test."}
+  - {id: spr-r9, state: fixed, body: "R8 now names merge-protection.md and AGENTS.md's Release gating paragraph and every other covering page (stamp or fix); plan T5.S2 and files: include them."}
+  - {id: spr-r10, state: fixed, body: "R5 fails only when a queue: block exists (land push or unset); no queue: block keeps today's check; plan T3.S1 tests all three."}
+acceptance: []
+evidence:
+  review: spec-plan-review-1
+  reviewer: a2bd709c2fd01c919

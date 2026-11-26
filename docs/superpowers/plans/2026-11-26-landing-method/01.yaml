@@ -1,8 +1,8 @@
 schema_version: 2
 phase:
   number: 1
-  title: Landing method — configured merge_method wins, land push lands merge commits
-    only, release counts closed-unmerged landings (R1-R8)
+  title: Landing method — configured merge_method wins, land push lands merge commits only, release counts
+    closed-unmerged landings (R1-R9)
   tag: agentic
   depends_on: []
   tracking_issue: null
@@ -34,68 +34,195 @@ phase:
   - README.md
   - .changes/feat-batch-landing-method.yaml
   - docs/acceptance/features/2026-11-26-landing-method.yaml
-  estimate_lines: 450
+  - tests/unit/fakes.py
+  - tests/integration/test_queue_land.py
+  - tests/integration/test_queue_errors.py
+  - tests/integration/test_queue_resume.py
+  - tests/integration/test_queue_drive_cmd.py
+  - tests/integration/queue_git.py
+  - tests/integration/test_queue_build.py
+  - docs/merge-protection.md
+  - AGENTS.md
+  - docs/explainers/fr-triage.md
+  - docs/explainers/fr-exit-gates.md
+  - docs/explainers/index.md
+  - docs/exit-gates-release-walk.md
+  - docs/acceptance/features/*.yaml
+  estimate_lines: 700
 tasks:
 - number: 1
   title: Method order and its source (R1)
   steps:
   - id: P1.T1.S1
-    text: |-
-      RED: in `tests/unit/test_triage_batch_merge.py`, add tests for `choose_method` and a new `choose_method_source` (import both from `fr.triage.batch_merge`). Cases, with `methods = {"default": "squash", "allowed": ["merge", "rebase", "squash"]}` unless stated: configured `merge` with forge default `squash` returns `merge` (source `merge_method in .fr/triage.yaml`) — the #1702 case; explicit `rebase` beats configured `merge` (source `--method`); nothing configured returns the default `squash` (source `the forge's default`); no default and one allowed method returns it (source `the one allowed method`); no default, several allowed, nothing configured raises `ConfigError` naming `merge_method` and `--method`; a configured or explicit method the repo disallows raises `ConfigError` as today. Update `test_choose_method_uses_the_configured_method_when_the_forge_names_none` only if its expectation changes (it should not). Run `uv run pytest tests/unit/test_triage_batch_merge.py -q --no-cov` and see the new ones fail.
+    text: 'RED: in `tests/unit/test_triage_batch_merge.py`, add tests for `choose_method` and a new `choose_method_source`
+      (import both from `fr.triage.batch_merge`). Cases, with `methods = {"default": "squash", "allowed":
+      ["merge", "rebase", "squash"]}` unless stated: configured `merge` with forge default `squash` returns
+      `merge` (source `merge_method in .fr/triage.yaml`) — the #1702 case; explicit `rebase` beats configured
+      `merge` (source `--method`); nothing configured returns the default `squash` (source `the forge''s
+      default`); no default and one allowed method returns it (source `the one allowed method`); no default,
+      several allowed, nothing configured raises `ConfigError` naming `merge_method` and `--method`; a
+      configured or explicit method the repo disallows raises `ConfigError` as today. Rewrite the existing
+      case at `tests/unit/test_triage_batch_merge.py:346-347` (comment "The forge''s own default still
+      wins where it names one", `({"default": "merge", ...}, "squash", "merge")`) to expect `squash`,
+      as the first #1702 assertion, and rename `test_choose_method_uses_the_configured_method_when_the_forge_names_none`
+      to say the configured method wins over a forge default. Run `uv run pytest tests/unit/test_triage_batch_merge.py
+      -q --no-cov` and see the new ones fail.'
   - id: P1.T1.S2
-    text: |-
-      GREEN: in `packages/fr/src/fr/triage/batch_merge.py` add `choose_method_source(explicit, methods, *, configured=None) -> tuple[str, str]` holding the logic in the order explicit > configured > default > single, with the four source strings above as module constants (`SOURCE_EXPLICIT`, `SOURCE_CONFIGURED`, `SOURCE_DEFAULT`, `SOURCE_ONLY`); make `choose_method` return `choose_method_source(...)[0]`. Rewrite the docstring: the configured method is the repo's decision, the forge's (viewer) default only a fallback (spec 2026-11-26-landing-method R1, gh#1702). Tests pass.
+    text: 'GREEN: in `packages/fr/src/fr/triage/batch_merge.py` add `choose_method_source(explicit, methods,
+      *, configured=None) -> tuple[str, str]` holding the logic in the order explicit > configured > default
+      > single, with the four source strings above as module constants (`SOURCE_EXPLICIT`, `SOURCE_CONFIGURED`,
+      `SOURCE_DEFAULT`, `SOURCE_ONLY`); make `choose_method` return `choose_method_source(...)[0]`. Rewrite
+      the docstring: the configured method is the repo''s decision, the forge''s (viewer) default only
+      a fallback (spec 2026-11-26-landing-method R1, gh#1702). Tests pass.'
   - id: P1.T1.S3
-    text: |-
-      REFACTOR: grep the callers (`triage_batch_cmd.py` `merge_ctx`, `cloud.py` `_check_merge_method`) and confirm they still read only the method; run `uv run pytest tests/unit/test_triage_batch_merge.py tests/unit/test_cloud_remedy.py -q --no-cov` and fix any test whose expectation encoded the old order (say why in the step note).
+    text: 'REFACTOR: grep the callers (`triage_batch_cmd.py` `merge_ctx`, `cloud.py` `_check_merge_method`)
+      and confirm they still read only the method; run `uv run pytest tests/unit/test_triage_batch_merge.py
+      tests/unit/test_cloud_remedy.py -q --no-cov` and fix any test whose expectation encoded the old
+      order (say why in the step note).'
 - number: 2
-  title: The push landing rule (R2, R3)
+  title: The push landing rule (R2, R3) and the fixture move (R9)
   steps:
   - id: P1.T2.S1
-    text: |-
-      RED: in `tests/unit/test_queue_exec.py`, test a new pure `landing_refusal(land, method, *, source)` from `fr.triage.queue_exec`: `("push", "squash", source=...)` and `("push", "rebase", ...)` return a string naming the method, the source, that GitHub closes such a PR unmerged (`closes`/`unmerged`), and both fixes (`merge_method: merge` and `queue.land: merge`); `("push", "merge", ...)`, `("merge", "squash", ...)` and `("merge", "rebase", ...)` return None. Then test `land_push` with `method="squash"` and `method="rebase"`: it returns `LandResult` with status `held`, the reason text, and the fake checkout's `push_leased` is never called. Find the existing `land_push` tests in that file (or `tests/unit/test_wave_queue_drive.py`) and reuse their fake checkout; remove or rewrite any test that asserts a squash/rebase head-ref rewrite under `land_push`, noting why.
+    text: 'RED: in `tests/unit/test_queue_exec.py`, test a new pure `landing_refusal(land, method, *,
+      source, allowed)` from `fr.triage.queue_exec`: `("push", "squash", source=..., allowed={"merge","squash"})`
+      and the same for `rebase` return a string naming the method, the source, that GitHub closes such
+      a PR unmerged, `merge_method: merge` and `queue.land: merge`; with `allowed={"squash"}` the string
+      names allowing merge commits in the repo''s settings and `queue.land: merge`, and does NOT suggest
+      `merge_method: merge`; `("push", "merge", ...)`, `("merge", "squash", ...)` and `("merge", "rebase",
+      ...)` return None. Then, in `tests/integration/test_queue_land.py` (real bare git, `tests/integration/queue_git.py`),
+      add: `land_push` with `method="squash"` and `method="rebase"` returns status `held` with the reason
+      and moves neither main nor any head ref; and a combination BUILT in squash but landed with `method="merge"`
+      is `held` (its commit is not a merge whose second parent is the PR head) and moves nothing. Run
+      `uv run pytest tests/unit/test_queue_exec.py tests/integration/test_queue_land.py -q --no-cov -m
+      ""` and see them fail.'
   - id: P1.T2.S2
-    text: |-
-      GREEN: in `packages/fr/src/fr/triage/queue_exec.py` add `landing_refusal` next to `queue_refusal` (docstring: spec 2026-11-26-landing-method R2, gh#1705 — only a merge commit, whose second parent is the PR's head, makes GitHub mark a PR merged by push). In `land_push`, before anything else, return `LandResult("held", detail=landing_refusal("push", method, source="the queue's method"))` when `method != "merge"`; then simplify the head-ref refspec to `(x.head, ref)` and update the docstring (no squash/rebase case any more). Tests pass.
+    text: 'GREEN: in `packages/fr/src/fr/triage/queue_exec.py` add `landing_refusal` next to `queue_refusal`
+      (docstring: spec 2026-11-26-landing-method R2, gh#1705: only a merge commit, whose second parent
+      is the PR''s head, makes GitHub mark a PR merged by push). In `land_push`, first: when `method !=
+      "merge"`, or when any landing''s commit has parents other than `(<its parent: the previous landing''s
+      commit, or base for the first>, x.head)` (use the checkout''s `parents(sha)`, `gitseam.py:1092`;
+      add it to the `Checkout` protocol / fakes this module uses if missing), return `LandResult("held",
+      detail=...)` with no push. Simplify the head-ref refspec to `(x.head, ref)` and update the docstring.
+      Tests pass.'
   - id: P1.T2.S3
-    text: |-
-      RED: in `tests/unit/test_triage_batch_drive_cmd.py` (or `tests/unit/test_wave_queue_drive.py`, wherever the driver's `_queue_refusal` / `queue-held` plans are already driven with a fake client), add: a repo whose fake `repo_merge_methods` reports `default: squash` with `.fr/triage.yaml` having `queue: {ci: push, land: push}` and no `merge_method` gets a `queue-held` plan whose detail names `squash` and `the forge's default`; the same with `merge_method: merge` configured is not held; with `--method rebase` (the driver's `method_override`) under `land: push` it is held naming `--method`. Run and see them fail.
+    text: 'Fixtures (R9): move every fixture that lands squash or rebase BY PUSH to `merge`, keeping each
+      test''s R10 proof (atomic push, leases, protection refusals, resume): `tests/unit/fakes.py:499-501`
+      (shared fake''s default squash), the drive tests'' World in `tests/unit/test_triage_batch_drive_cmd.py:212-213`
+      (squash-only) under the autouse `_queue_stub` (`land: push`), `tests/integration/test_queue_land.py:79-226`,
+      `tests/integration/test_queue_errors.py:47-74`, `tests/integration/test_queue_resume.py` (ports
+      `method="squash"`) and `tests/integration/test_queue_drive_cmd.py:150`. Rewrite the parametrised
+      `test_one_atomic_push_moves_main_to_the_tip_and_each_head_to_its_commit` (squash, rebase) into the
+      merge case''s proof (main moves to the tip, heads unchanged), deleting the head-moves-to-its-commit
+      assertion R3 removes, and note each renamed or deleted test id for T5''s amendments. Run `uv run
+      pytest tests/integration -m "" -q --no-cov -n 2` plus the unit drive files; all green.'
   - id: P1.T2.S4
-    text: |-
-      GREEN: in `packages/fr/src/fr/commands/triage_batch_cmd.py`, make `merge_ctx` record the source too (use `choose_method_source`, store it on the driver per repo, e.g. `self._method_source[repo]`, refreshed where `ctx.method` is refreshed). In `_queue_refusal`, after `queue_refusal(...)` returns None, get the context through `self._ctx_or_hold(facts, repo)` (None → return None, the existing hold path already says why) and return `landing_refusal(block.land, ctx.method, source=self._method_source[repo])`. Keep the module within its line budget (`tests/unit/test_tripwire_module_budget.py`); if it would grow past it, put the helper in `queue_exec.py`. Tests pass.
+    text: 'RED: in `tests/unit/test_triage_batch_drive_cmd.py` (where the driver''s `queue-held` plans
+      are already driven with a fake client), add: a repo whose fake `repo_merge_methods` reports `default:
+      squash` (allowed merge, squash) under `queue: {ci: push, land: push}` with no `merge_method` gets
+      a `queue-held` plan naming `squash` and `the forge''s default`; with `merge_method: merge` it is
+      not held; with the driver''s `method_override = "rebase"` (what `batch merge --method rebase` sets)
+      it is held naming `--method`; a squash-only repo''s hold names allowing merge commits; a repo whose
+      merge-methods read raises gets a `queue-held` plan naming the read error on a dry run (no exception)
+      and is read again on the next pass; a repo with no choosable method (several allowed, no default,
+      nothing configured) is held with the `ConfigError` text; and `_queue_resume` still records a landing
+      already pushed for a landing-refused repo. Keep `test_a_failed_merge_method_read_does_not_end_the_loop`
+      and `test_merge_methods_read_failure_still_fails_the_pass` green or update them with a note saying
+      why. See the new ones fail.'
+  - id: P1.T2.S5
+    text: 'GREEN: in `packages/fr/src/fr/commands/triage_batch_cmd.py`, make `merge_ctx` use `choose_method_source`
+      and store the source per repo (`self._method_source[repo]`, refreshed where `ctx.method` is). Add
+      `_landing_hold(facts, repo) -> str | None`: call `merge_ctx`, catching `DefaultBranchUnknown` (its
+      existing hold text), the classified `ConfigError` (its text) and `ForgeReadError` ("the merge methods
+      could not be read: <error>; read again next pass"), else return `landing_refusal(block.land, ctx.method,
+      source=..., allowed=self._allowed[repo])`. Call it ONLY from `_queue_gate`, after `_queue_refusal`
+      and before the needs, returning `held_plan(qplan, reason)` when non-None. Leave `_queue_refusal`
+      and its callers (`_queue_resume`, `_wave_queue_reads`) unchanged. Keep the module within `tests/unit/test_tripwire_module_budget.py`''s
+      budget; if it would not fit, move the helper''s pure part into `queue_exec.py`. Tests pass.'
 - number: 3
   title: The rebase warning and fr cloud doctor (R4, R5)
   steps:
   - id: P1.T3.S1
-    text: |-
-      RED: a driver test: under `queue: {ci: push, land: merge}` with method `rebase`, two passes print the warning (naming first-parent, `(#N)`, `Merge pull request #N`, and `merge` or `squash` as the fix) exactly once; under `land: merge` with `squash` nothing is printed. In `tests/unit/test_cloud_remedy.py`: `.fr/triage.yaml` with `merge_method: squash` and `queue: {land: push}` (and with no `queue:` block, land's default is push) fails the `merge_method` check with the landing refusal text; `merge_method: merge` passes; `merge_method: squash` with `queue: {land: merge}` passes. Update the existing `test_a_configured_or_single_merge_method_passes` parametrisation so it writes `land: merge` for non-merge methods, or expects the failure, and say which in the step note.
+    text: 'RED: a driver test: under `queue: {ci: push, land: merge}` with method `rebase`, two passes
+      print the warning (naming first-parent, `(#N)`, `Merge pull request #N`, and `merge` or `squash`
+      as the fix) exactly once; under `land: merge` with `squash` nothing is printed. In `tests/unit/test_cloud_remedy.py`:
+      `.fr/triage.yaml` with `merge_method: squash` and `queue: {land: push}` fails the `merge_method`
+      check with the landing refusal text; the same with `queue: {ci: push}` (no `land`, default push)
+      fails too; with NO `queue:` block the check keeps today''s verdict; `merge_method: merge` passes;
+      `merge_method: squash` with `queue: {land: merge}` passes. Update the existing `test_a_configured_or_single_merge_method_passes`
+      parametrisation so it writes `land: merge` for non-merge methods, or expects the failure, and say
+      which in the step note.'
   - id: P1.T3.S2
-    text: |-
-      GREEN: in `_queue_refusal` (or a small helper it calls), when the landing is allowed, `block.land == "merge"` and the method is `rebase`, say the R4 warning through `self._report_once(f"rebase-first-parent\0{repo}", ...)`. In `packages/fr/src/fr/cloud.py`, read `queue.land` (default `push`) beside `_configured_merge_method`, use `choose_method_source`, and fail the check with `landing_refusal`'s text when it refuses. Tests pass.
+    text: 'GREEN: in `_queue_refusal` (or a small helper it calls), when the landing is allowed, `block.land
+      == "merge"` and the method is `rebase`, say the R4 warning through `self._report_once(f"rebase-first-parent\0{repo}",
+      ...)`. In `packages/fr/src/fr/cloud.py`, read the `queue:` block beside `_configured_merge_method`;
+      only when the block exists, take its `land` (default `push`), use `choose_method_source`, and fail
+      the check with `landing_refusal`''s text (passing the allowed methods) when it refuses. Tests pass.'
 - number: 4
   title: release.py counts a closed-unmerged first-parent landing (R7)
   steps:
   - id: P1.T4.S1
-    text: |-
-      RED: in `tests/unit/test_release_script.py`, reuse the existing git-fixture and fake `Commands.gh_read` helpers that drive `waiting_prs`. Build a repo with a final tag and, after it, a first-parent commit `chore: x (#1704)`. The fake `gh pr list` returns no #1704; the fake `gh pr view 1704 --json ...` returns `{"number":1704,"state":"CLOSED","mergedAt":null,"labels":[{"name":"gate:tester"}],...}`. Assert `waiting_prs` does not raise, and that the facts `cmds.decide` receives hold #1704 with `mergedAt` equal to that commit's `%cI` and its labels, and no `state` key. Two more: `state: OPEN` raises `GateStateUnknownError` naming #1704; a failing `pr view` (non-zero returncode) raises it too. Also a test for `logged_pr_dates` returning the newest commit's date for a number named twice.
+    text: 'RED: in `tests/unit/test_release_script.py`, reuse the existing git-fixture and fake `Commands.gh_read`
+      helpers that drive `waiting_prs`. Build a repo with a final tag and, after it, a first-parent commit
+      `chore: x (#1704)`. The fake `gh pr list` returns no #1704; the fake `gh pr view 1704 --json ...`
+      returns `{"number":1704,"state":"CLOSED","mergedAt":null,"labels":[{"name":"gate:tester"}],...}`.
+      Assert `waiting_prs` does not raise, and that the facts `cmds.decide` receives hold #1704 with `mergedAt`
+      equal to that commit''s `%cI` and its labels, and no `state` key. Two more: `state: OPEN` raises
+      `GateStateUnknownError` naming #1704; a failing `pr view` (non-zero returncode) raises it too. Also
+      a test for `logged_pr_dates` returning the newest commit''s date for a number named twice.'
   - id: P1.T4.S2
-    text: |-
-      GREEN: in `scripts/release.py` add `logged_pr_dates(repo, tag) -> dict[int, str]` (`git log --first-parent --format=%an%x00%cI%x00%s`, same bot/prefix skips, first occurrence wins = newest) and make `logged_prs` return its keys. In `waiting_prs`, for each missing number run `cmds.gh_read(["pr", "view", str(n), "--json", MERGED_PR_FIELDS + ",state"])`; a `CLOSED` PR with no `mergedAt` is appended to `prs` with `mergedAt` = the date and `state` removed; anything else keeps it missing, and the existing `GateStateUnknownError` names the still-missing ones. Docstring cites spec 2026-11-26-landing-method R7 and #1704. Tests pass.
+    text: 'GREEN: in `scripts/release.py` add `logged_pr_dates(repo, tag) -> dict[int, str]` (`git log
+      --first-parent --format=%an%x00%cI%x00%s`, same bot/prefix skips, first occurrence wins = newest)
+      and make `logged_prs` return its keys. In `waiting_prs`, for each missing number run `cmds.gh_read(["pr",
+      "view", str(n), "--json", MERGED_PR_FIELDS + ",state"])`; a `CLOSED` PR with no `mergedAt` is appended
+      to `prs` with `mergedAt` = the date and `state` removed; anything else keeps it missing, and the
+      existing `GateStateUnknownError` names the still-missing ones. Docstring cites spec 2026-11-26-landing-method
+      R7 and #1704. Tests pass.'
 - number: 5
   title: Repo config, docs, fragment and full checks (R6, R8)
   steps:
   - id: P1.T5.S1
-    text: |-
-      In `.fr/triage.yaml` set `merge_method: merge` and replace its comment: under `queue.land: push` only a merge commit makes GitHub mark the PR merged (a squash or rebase push closes it unmerged, #1705), and this repo's release attributes PRs by first-parent `Merge pull request #N`, which a rebase breaks (#1603); a configured method wins over the forge's viewer default (#1702).
+    text: 'In `.fr/triage.yaml` set `merge_method: merge` and replace its comment: under `queue.land:
+      push` only a merge commit makes GitHub mark the PR merged (a squash or rebase push closes it unmerged,
+      #1705), and this repo''s release attributes PRs by first-parent `Merge pull request #N`, which a
+      rebase breaks (#1603); a configured method wins over the forge''s viewer default (#1702).'
   - id: P1.T5.S2
-    text: |-
-      Docs (R8): in `plugins/super-fr/skills/fr-triage/SKILL.md` replace "The merge method is the forge's default, else `merge_method: merge | squash | rebase` in `.fr/triage.yaml`, which a repo allowing several methods needs under `rest`." with the new order (`--method`, then `merge_method`, then the forge's default, then the one allowed method) and the rule that under `queue.land: push` a squash or rebase method holds the queue with the fix named (GitHub closes such a PR unmerged), plus the rebase warning under `land: merge`. Update `docs/explainers/fr-wave-driver.md` around line 305 and the merge-method row of `docs/cloud-setup.md` to say the same, in each page's writing standard, and bump their `reviewed:` stamps. Run `uv run python scripts/sync-opencode.py`, `uv run python scripts/sync-hermes.py` and `uv run python scripts/sync-readme.py` and commit the regenerated mirrors. Run `uv run fr docs check --base origin/main` and fix what it names.
+    text: 'Docs (R8): in `plugins/super-fr/skills/fr-triage/SKILL.md` replace "The merge method is the
+      forge''s default, else `merge_method: merge | squash | rebase` in `.fr/triage.yaml`, which a repo
+      allowing several methods needs under `rest`." with the new order (`--method`, then `merge_method`,
+      then the forge''s default, then the one allowed method), the rule that under `queue.land: push`
+      a squash or rebase method holds the queue with the fix named (GitHub closes such a PR unmerged),
+      and the rebase warning under `land: merge`. Say the same in `docs/explainers/fr-wave-driver.md`
+      (around line 305), the merge-method row of `docs/cloud-setup.md` (line 30) and `docs/merge-protection.md`''s
+      `queue.land: push` paragraph (around line 215), each in its page''s writing standard, with `reviewed:`
+      stamps moved. In AGENTS.md''s "Release gating" paragraph, add that a PR the first-parent log names
+      and the forge reports closed unmerged counts as landed, dated by its commit (spec 2026-11-26-landing-method
+      R7). Run `uv run fr docs check --base origin/main`; for every other page it names (expected: `docs/explainers/fr-triage.md`,
+      `fr-exit-gates.md`, `index.md`, `docs/exit-gates-release-walk.md`), check its text against the change,
+      fix anything now false, and move its `reviewed:` stamp. Run `uv run python scripts/sync-opencode.py`,
+      `uv run python scripts/sync-hermes.py` and `uv run python scripts/sync-readme.py` and commit the
+      regenerated mirrors.'
   - id: P1.T5.S3
-    text: |-
-      Add `.changes/feat-batch-landing-method.yaml` with `bump: patch` and a one-line summary ("the wave merge queue uses the configured merge_method over the forge's viewer default and, under queue.land: push, refuses squash and rebase, which GitHub closes unmerged; release gating counts a closed-unmerged first-parent landing"). Move the four acceptance rows to `ci` with `uv run fr acceptance set-status --id <row> --status ci --notes "<why>" --level unit=derio-net/super-fr:tests/unit/<file>.py#<test>` naming the tests written above (or put them in the step record's `acceptance:` section).
+    text: 'Add `.changes/feat-batch-landing-method.yaml` with `bump: patch` and a one-line summary ("the
+      wave merge queue uses the configured merge_method over the forge''s viewer default and, under queue.land:
+      push, refuses squash and rebase, which GitHub closes unmerged; release gating counts a closed-unmerged
+      first-parent landing"). Move the four acceptance rows to `ci` with `uv run fr acceptance set-status
+      --id <row> --status ci --notes "<why>" --level unit=derio-net/super-fr:tests/unit/<file>.py#<test>`
+      naming the tests written above (or put them in the step record''s `acceptance:` section). Then amend
+      the merged rows (R9), each with `--feature 2026-11-26-landing-method`: `uv run fr acceptance amend
+      --id wave-queue-land-methods --op reword --acceptance "Landing by atomic push lands merge commits
+      only and leaves every landed PR reading MERGED on the forge; a squash or rebase method is held under
+      push and lands only through the forge''s merge API (queue.land: merge); landing by forge merge refuses
+      rather than land an untested tree." --why "spec 2026-11-26-landing-method R9: GitHub closes a squash
+      or rebase pushed PR unmerged (#1705)"`, and for every test id T2.S3 renamed or deleted that a merged
+      row cites (grep `docs/acceptance/features/*.yaml` for `test_queue_land.py`, `test_queue_errors.py`,
+      `test_queue_resume.py`, `test_queue_drive_cmd.py`, `test_triage_batch_drive_cmd.py`), `fr acceptance
+      amend --id <row> --op drop-level --level <level>=<old ref> --why ...` and `--op add-level --level
+      <level>=<new ref> --why ...`. Run `uv run fr acceptance check` and fix what it names.'
   - id: P1.T5.S4
-    text: |-
-      Run `uv run ruff format packages/ tests/ scripts/`, `uv run ruff check packages/ tests/ scripts/`, the mypy command from AGENTS.md, `uv run --no-project python scripts/bump-version.py --check`, `uv run python scripts/sync-opencode.py --check`, `uv run python scripts/sync-hermes.py --check`, then the repo's fast tier last (`.fr/ci.yaml`'s `fast_tier`, with `{base}` = origin/main). All green.
+    text: Run `uv run ruff format packages/ tests/ scripts/`, `uv run ruff check packages/ tests/ scripts/`,
+      the mypy command from AGENTS.md, `uv run --no-project python scripts/bump-version.py --check`, `uv
+      run python scripts/sync-opencode.py --check`, `uv run python scripts/sync-hermes.py --check`, then
+      the repo's fast tier last (`.fr/ci.yaml`'s `fast_tier`, with `{base}` = origin/main). All green.
 state:
   steps:
     P1.T1.S1:
@@ -123,6 +250,10 @@ state:
       ticked_at: null
       note: null
     P1.T2.S4:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S5:
       state: ' '
       ticked_at: null
       note: null
