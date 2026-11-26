@@ -1,0 +1,28 @@
+schema_version: 12
+run: 2026-11-26-feat-spec-requirements-table
+workflow: fr-goal@1
+branch: feat/spec-requirements-table
+started: '2026-11-26T10:59:36+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  lens-review:
+    state: pending
+  deliver:
+    state: pending
+driver: standalone
+fr_version: 9.0.0
