@@ -5506,6 +5506,10 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:41:09.419973Z'
     reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#667
 - id: cursor-model
   title: The cursor records the model an attempt ran on, not its tier binding
   ids:
@@ -8191,6 +8195,13 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:40:29.487957Z'
     reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1086
+    - super-fr#1082
+    - super-fr#1065
+    - super-fr#1066
 - id: batch-finish-labels
   title: 'A finished batch cleans up after itself: drop fr:in-progress at release, and batch merge skips
     only the held batch'
@@ -8207,6 +8218,11 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:40:38.699841Z'
     reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1085
+    - super-fr#1076
 - id: adopt-fixes
   title: 'batch adopt: adopt a session on the default branch, show what --list needs, and add --hold'
   ids:
@@ -8221,6 +8237,12 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:40:50.504628Z'
     reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1081
+    - super-fr#1069
+    - super-fr#1071
 - id: models-hardening
   title: 'fr models: a corrupt models.yaml is refused, not a crash, and dead-binding reasons read clean'
   ids:
@@ -8233,6 +8255,11 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:41:00.461487Z'
     reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1055
+    - super-fr#1057
 - id: merge-queue
   title: 'Merge race: require an up-to-date or merge-queued main, release bot bypass, the driver enqueues
     where a queue is required'
@@ -8248,6 +8275,10 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:41:18.731317Z'
     reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1062
 - id: claims-pr-authors
   title: 'Claims trust across hosts: a driving account outside pr_authors and the repo''s members is still
     recognised'
@@ -8261,6 +8292,10 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:41:45.917118Z'
     reason: 'Re-judged 2026-11-19: its issue is parked or moved to batch triage-hardening.'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1075
 - id: adopt-multi-repo
   title: 'batch adopt: a session spanning several repos'
   ids:
@@ -8274,6 +8309,10 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:41:27.493030Z'
     reason: 'Re-judged 2026-11-19: its issue is parked or moved to batch triage-hardening.'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1070
 - id: issue-from-transcript
   title: 'triage: open an issue from an ad-hoc session''s transcript'
   ids:
@@ -8285,6 +8324,10 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:41:36.092148Z'
     reason: 'Re-judged 2026-11-19: its issue is parked or moved to batch triage-hardening.'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1072
 - id: suite-health
   title: Green, unthrottled local suite
   ids:
@@ -9114,6 +9157,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T18:26:34.023457Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -10114,6 +10164,12 @@ batches:
     runner: hand
     handle: archived
     archived: 0
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1603
+    - super-fr#1702
+    - super-fr#1705
 - id: queue-followups
   title: 'Queue follow-ups: approval revive, conflict probe, close-out wait, case-insensitive repo names'
   ids:
@@ -10146,21 +10202,45 @@ batches:
   - super-fr#1523
   rationale: '#1318 cheap shared-helper slices; no giant module touched.'
   wave: 25
+  events:
+  - kind: dispatch
+    at: '2026-11-26T18:27:44.659581Z'
+    runner: herdr
+    handle: w3V:p4
+    branch: feat/batch-arch-shared-helpers
 - id: arch-run-ledger
   title: '#1318: move the write ledger out of run_cmd.py into fr/run/writes.py'
   ids:
   - super-fr#1515
   wave: 25
+  events:
+  - kind: dispatch
+    at: '2026-11-26T18:27:21.114102Z'
+    runner: herdr
+    handle: w3V:p3
+    branch: feat/batch-arch-run-ledger
 - id: arch-isolation-split
   title: '#1318: split the free functions out of isolation/local.py'
   ids:
   - super-fr#1517
   wave: 25
+  events:
+  - kind: dispatch
+    at: '2026-11-26T18:26:37.426257Z'
+    runner: herdr
+    handle: w3V:p1
+    branch: feat/batch-arch-isolation-split
 - id: arch-plan-ops-split
   title: '#1318: split self-review, the spec table and the refactor-gate read out of plan_ops.py'
   ids:
   - super-fr#1518
   wave: 25
+  events:
+  - kind: dispatch
+    at: '2026-11-26T18:27:00.164006Z'
+    runner: herdr
+    handle: w3V:p2
+    branch: feat/batch-arch-plan-ops-split
 - id: triage-privacy
   title: 'Triage privacy: outsider text never reaches worker sessions or the state ref unfenced'
   ids:
