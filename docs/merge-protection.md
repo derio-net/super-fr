@@ -218,11 +218,12 @@ checks refuses that push. So the identity that pushes must be a bypass actor of 
 ruleset. Otherwise, the repo must use `queue.land: merge`. With it, the driver merges
 each pull request through the forge's merge API. The operator's own credential is never a bypass actor.
 A push landing needs the merge method `merge`. GitHub marks a pushed pull request as
-merged only when its commit is a merge commit; after a squash or a rebase it closes the
-pull request as unmerged. So a repo that lands by push and chooses `squash` or `rebase`
-is held, and the message names the fix: `merge_method: merge` in `.fr/triage.yaml`, or
+merged only when its commit is a merge commit. After a squash or a rebase, GitHub closes
+the pull request as unmerged. So the driver holds a repo that lands by push with `squash`
+or `rebase`. The message names the fix: `merge_method: merge` in `.fr/triage.yaml`, or
 `queue.land: merge`. When the repo does not allow merge commits, the message says to
-allow them in the repository settings instead. A `merge_method` that you set wins over the forge's default.
+allow them in the repository settings instead. A `merge_method` that you set wins over
+the forge's default.
 The checks must also run on pushes to `fr-queue/**`, where the driver tests each combination.
 See spec `2026-11-19-wave-merge-queue-design.md` §D and R22.
 
