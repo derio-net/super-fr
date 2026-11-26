@@ -22,14 +22,15 @@ from typing import Literal
 from fr.labels import pre_merge_held
 from fr.triage.approval import ApprovalVerdict, is_approved
 from fr.triage.batch import BatchStage
-from fr.triage.batch_drive import (
+from fr.triage.batch_drive import LivePr
+from fr.triage.handback_rules import (
     HANDBACKS_PER_DISPATCH,
     RED_HANDBACKS_PER_DISPATCH,
-    LivePr,
     conflict_decision,
     handbacks_since,
     held_conflict,
     red_decision,
+    spends_handback,
 )
 from fr.triage.model import (
     ApprovalEvent,
@@ -53,6 +54,14 @@ from fr.triage.model import (
     RedHandbackEvent,
     RequeuedEvent,
 )
+from fr.triage.queue_handback import (
+    aimed,
+    brief_mode,
+    hold_lineage,
+    lineage_actions,
+    merge_clause,
+    reissue_actions,
+)
 
 QueuePhase = Literal["open", "releasing", "idle"]
 HoldState = Literal["open", "drained", "cleared"]
@@ -69,6 +78,8 @@ QueueActionKind = Literal[
     "queue-held",
     "queue-need",
     "queue-warn",
+    "queue-reissue",  # wave-queue-gaps R2: a hand-back re-issued on the new stack target
+    "queue-carry",  # R4: a head carrying a dead combination, held and briefed
 ]
 REPORT_KINDS: frozenset[str] = frozenset({"queue-held", "queue-need", "queue-warn"})
 """The actions that only say something: the driver runs them before the executor exists
@@ -184,6 +195,7 @@ class BuildConflict:
     head: str
     paths: tuple[str, ...]
     reason: str = ""
+    onto: str = ""  # the commit it was being built on (wave-queue-gaps §A)
 
 
 @dataclass(frozen=True)
@@ -240,6 +252,18 @@ class QueueSnapshot:
     runs: Mapping[str, str] = field(default_factory=dict)  # entry key -> its run id, for the Need
     scope_args: tuple[str, ...] = ()  # the drive's own scope arguments, for pasted commands
     default: str = ""  # the repo's default branch; "": unread, no entry is base-checked
+    # wave-queue-gaps §A: the merge method ("": unread, R1's mode is then `main`); per entry
+    # whether its hand-back's `onto` still leads to `main`, and the dead combinations its
+    # head carries (None for each: git could not read it, R5)
+    method: str = ""
+    leads: Mapping[str, bool | None] = field(default_factory=dict)
+    carries: Mapping[str, tuple[str, ...] | None] = field(default_factory=dict)
+    # wave-queue-gaps R12, R15: each operator entry added, open and not removed, with its add
+    # time (a wave's drain waits on it), and the operator entries removed since (ejected)
+    pending_operator: Mapping[str, datetime] = field(default_factory=dict)
+    removed: frozenset[str] = frozenset()
+    # l-errors-r2: the pending operator entries their trust rule refuses, with why
+    refused_operator: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -266,6 +290,7 @@ class QueueAction:
     batch: str = ""  # need, eject: the batch it is about
     key: str = ""  # warn: the report key, said once
     scope: str = ""  # held: the scope holding the hold
+    carried: tuple[str, ...] = ()  # carry: the dead combinations the head reaches (R4)
 
 
 @dataclass(frozen=True)
@@ -420,6 +445,7 @@ class _Cand:
     at: datetime | None
     order: int | None = None
     last: bool = False  # R15: a wave's close-out is its queue's last entry
+    operator: bool = False  # wave-queue-gaps R14: any queue's, and it may open one between waves
 
 
 def _other_ready(o: OtherEntry, qs: QueueSnapshot) -> bool:
@@ -450,6 +476,9 @@ def _cands(qs: QueueSnapshot, open_wave: int | None = None) -> list[_Cand]:
     live_waves = _unfinished_waves(qs)
     for o in qs.others:
         if not _other_ready(o, qs):
+            continue
+        if o.kind == "operator":  # wave-queue-gaps R14: the open queue's, whatever its wave
+            out.append(_Cand(o.key, open_wave, o.at, operator=True))
             continue
         wave = o.wave if o.wave is not None and (o.wave in live_waves or o.wave == open_wave) \
             else None  # fmt: skip
@@ -536,21 +565,23 @@ def _plan_idle_open(qs: QueueSnapshot) -> QueuePlan:
     until then nothing opens and no hold is written, so a wave still being developed never
     holds the repo's releases (plan decision p2-queue-opens-on-first-ready). With no waved
     batch unfinished, a one-entry queue for the oldest ready between-waves entry (a batch
-    with no wave, or any other entry of R32)."""
+    with no wave, or any other entry of R32). A ready operator entry opens such a queue
+    even while a wave is unfinished, unless the lowest one has a ready entry: that wave
+    opens, and the operator entry joins it (wave-queue-gaps R14)."""
     unfinished = sorted(_unfinished_waves(qs))
     ready = _by_readiness(_cands(qs))
     # An entry a between-waves queue ejected is ejected, not waiting, until its head moves:
     # it opens none again meanwhile, or a drain, a release and a re-open would loop on the
     # same conflict (p2-r6).
     ready = [c for c in ready if c.wave is not None or not _ejected_before(c.key, qs)]
-    if unfinished:
-        wave: int | None = unfinished[0]
-        if not any(c.wave == wave for c in ready):
-            return QueuePlan(qs.repo, "idle", None, (), waiting=tuple(c.key for c in ready))
-        entries: tuple[str, ...] = ()
+    wave: int | None = unfinished[0] if unfinished else None
+    entries: tuple[str, ...] = ()
+    if unfinished and any(c.wave == wave for c in ready):
         why = f"open {qs.repo}'s merge queue for wave {wave}"
     else:
-        loose = [c for c in ready if c.wave is None]
+        # wave-queue-gaps R14: an operator entry opens a queue between waves at once, even
+        # while a wave is unfinished; any other loose entry only once every wave is done
+        loose = [c for c in ready if c.wave is None and (c.operator or not unfinished)]
         if not loose:
             return QueuePlan(qs.repo, "idle", None, (), waiting=tuple(c.key for c in ready))
         wave, entries = None, (loose[0].key,)
@@ -654,6 +685,9 @@ def replay(record: QueueRecord) -> Replay:
             order = [k for k in order if k not in done]
         elif isinstance(event, QueueEjectEvent):
             key = entry_key(event.entry)
+            if event.reason == "operator":  # taken out, not judged: it may join again at once
+                order = [k for k in order if k != key]
+                continue
             # A conflict met at build has no `queue_built` at its head: the last build's head
             # is an older one, so only the event's own head is trusted for it.
             last = "" if event.reason == "conflict" else heads.get(key, "")
@@ -874,6 +908,7 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
     depth = qs.config.depth
     actions: list[QueueAction] = []
     wave = record.wave
+    held = hold_lineage(qs, entries)  # wave-queue-gaps R4, R5: never built, nor rebuilt
     if qs.base and qs.base != rep.base:  # R14: a move of `main` the queue did not make
         key = f"queue-base\0{qs.repo}\0{qs.base}"
         if key not in qs.warned:
@@ -887,18 +922,23 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
                 "queue-rebuild", qs.repo, f"rebuild {', '.join(window)} on {qs.base[:12]}",
                 wave=wave, entries=window, slots=tuple(range(1, len(window) + 1)),
                 base=qs.base))  # fmt: skip
+            moved = replace(rep, base=qs.base, combos={})  # nothing stands on the moved base
+            actions += lineage_actions(qs, moved, held, aimed(qs, moved, ()), wave)
             return _tail(record, rep, qs, actions, entries, waiting)
         # Nothing to rebuild: the queue's base is the moved `main`, and it drains or stalls
         # there like any other pass (an empty window must not hold the hold open forever).
         rep = replace(rep, base=qs.base)
+    actions += _removed_ejects(rep, qs, wave)
     by_id = {b.id: b for b in qs.batches}
     earlier: list[tuple[str, Sequence[str]]] = []
+    ejects = len(actions)
     for key in list(entries):  # R6: a conflict met at build, at the head it still has
         met = qs.conflicts.get(key)
         if met is None or met.head != _head(key, qs):
             continue
         batch = by_id.get(key)
-        decided = (conflict_decision(batch.events, met.head, met.paths, earlier).kind
+        decided = (conflict_decision(batch.events, met.head, met.paths, earlier,
+                                     qs.leads.get(key)).kind
                    if batch is not None else "")  # fmt: skip
         earlier.append((key, met.paths))
         entries.remove(key)
@@ -908,6 +948,10 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
             wave=wave, entries=(key,), reason="conflict", paths=met.paths, decision=decided,
             batch=key if batch is not None else "", head=met.head))  # fmt: skip
     valid = _valid(entries, rep.base, rep.combos, qs)
+    target = aimed(qs, rep, valid)  # R1: computed after this pass's ejections
+    actions[ejects:] = [replace(a, base=target[0], slots=target[1]) for a in actions[ejects:]]
+    actions += [*lineage_actions(qs, rep, held, target, wave),
+                *reissue_actions(qs, rep, target, wave)]  # fmt: skip
     green = 0
     while green < len(valid) and _verdict(valid[green], qs).verdict == "green":
         green += 1
@@ -960,6 +1004,72 @@ def _plan_open(record: QueueRecord, qs: QueueSnapshot) -> QueuePlan:
     return _tail(record, rep, qs, actions, entries, waiting)
 
 
+def _removed_ejects(rep: Replay, qs: QueueSnapshot, wave: int | None) -> list[QueueAction]:
+    """wave-queue-gaps R12: an operator entry taken out with `fr triage queue remove` while it
+    is in the queue leaves it, with reason `operator` (no verdict on its head: re-added, it
+    joins again at the same head)."""
+    out = []
+    for key in rep.order:
+        if key not in qs.removed:
+            continue
+        head = next((c.heads[c.chain.index(key)] for c in rep.combos.values() if key in c.chain),
+                    "")  # fmt: skip
+        out.append(QueueAction("queue-eject", qs.repo, f"eject {key}: the operator removed it "
+                               "(`fr triage queue remove`)", wave=wave, entries=(key,),
+                               reason="operator", head=head))  # fmt: skip
+    return out
+
+
+def _operator_pending(qs: QueueSnapshot) -> dict[str, datetime]:
+    """wave-queue-gaps R15: the pending operator entries (added, not removed, open), less any a
+    queue record of the repo landed, with their add time."""
+    landed = landed_keys(qs.records)
+    return {k: at for k, at in qs.pending_operator.items() if k not in landed}
+
+
+def operator_needs(qs: QueueSnapshot) -> tuple[QueueAction, ...]:
+    """wave-queue-gaps R15, as amended by l-errors-r2: every pending operator entry is a Need
+    naming `queue remove`, whatever the queue's state: at once when its trust rule refuses it,
+    else once it has been pending for `stall_hours` since the later of its add and the queue's
+    last landing. A Need is blocked, so a drive whose only work is such an entry can end."""
+    mine = [r for r in qs.records if r.scope == qs.scope]
+    last = mine[-1] if mine else None
+    lands = [e.at for e in last.events if isinstance(e, QueueLandEvent)] if last else []
+    holding = (last is not None and last.wave is not None and _drain_event(last) is None
+               and queue_phase(mine, qs.hold) == "open")  # fmt: skip
+    drain = f", holding wave {last.wave}'s drain" if holding and last is not None else ""
+    args = "".join(f" {a}" for a in qs.scope_args)
+    out = []
+    for key, added_at in sorted(_operator_pending(qs).items()):
+        n = key.rpartition("#")[2]
+        remove = f"`fr triage queue remove --pr {n}{args}`"
+        wave = last.wave if holding and last is not None else None
+        if (why := qs.refused_operator.get(key)) is not None:
+            out.append(QueueAction(
+                "queue-need", qs.repo, f"{key} was added to {qs.repo}'s merge queue but is "
+                f"not admitted ({why}){drain}: take it out with {remove}", wave=wave,
+                entries=(key,)))  # fmt: skip
+            continue
+        if qs.now - max([added_at, *lands]) < timedelta(hours=qs.config.stall_hours):
+            continue
+        out.append(QueueAction(
+            "queue-need", qs.repo, f"{key} was added to {qs.repo}'s merge queue and has not "
+            f"landed for {qs.config.stall_hours} h{drain}: land it (a valid approved-fr, green "
+            f"checks), or take it out with {remove}", wave=wave, entries=(key,)))  # fmt: skip
+    return tuple(out)
+
+
+def operator_work(pending: Mapping[str, Mapping[str, datetime]], plans: Sequence[QueuePlan]) -> int:
+    """How many operator entries are the driver's work this pass (review p2-r2, R14, R15):
+    every pending one (added, not removed, open, not landed) but those whose stall Need
+    *plans* report, which count as the operator's (a `queue-need` is blocked). So a drive
+    whose batches have all finished keeps running while an added PR has yet to land: a
+    wave queue it holds open still drains, and a between-waves queue still lands."""
+    stalled = {(q.repo, k) for q in plans for a in q.actions if a.kind == "queue-need"
+               for k in a.entries}  # fmt: skip
+    return sum((repo, k) not in stalled for repo, keys in pending.items() for k in keys)
+
+
 def _tail(
     record: QueueRecord,
     rep: Replay,
@@ -973,7 +1083,9 @@ def _tail(
     landing = any(a.kind == "queue-land" for a in actions)
     waiting_on = barrier_open([r for r in qs.records if r.scope == qs.scope])
     drained = None if entries or landing or waiting_on else _drained(record, rep, qs)
-    if drained is not None:
+    if drained is not None and record.wave is not None and _operator_pending(qs):
+        pass  # wave-queue-gaps R15: the drain waits on an operator entry (its Need: plan_queue)
+    elif drained is not None:
         actions.append(drained)
     elif (need := _stall_need(record, qs, entries)) is not None:
         actions.append(need)
@@ -1030,15 +1142,18 @@ def _ejected_other_needs(record: QueueRecord, rep: Replay, qs: QueueSnapshot) ->
     """R32: a non-batch entry ejected at the head it still has has no session to hand it
     back to, so it is a Need until its head moves or it is closed."""
     out: list[QueueAction] = []
+    target = aimed(qs, rep, tuple(rep.combos.values()))
     for o in qs.others:
         head = rep.ejected.get(o.key)
         pr = qs.live.get(o.key)
         if head is None or pr is None or pr.state != "OPEN" or head != pr.head:
             continue
+        merge = (f"; to fix a conflict, {merge_clause(qs, target)}"
+                 if brief_mode(qs.config, qs.method) == "slot" else "")  # R6  # fmt: skip
         out.append(QueueAction(
             "queue-need", qs.repo, f"{o.kind} PR #{o.pr} was ejected from {qs.repo}'s merge "
             f"queue at {head[:12]} (it conflicts or its combination failed): the queue holds "
-            "it out until its head moves; fix it on its branch, or close it",
+            f"it out until its head moves; fix it on its branch, or close it{merge}",
             wave=record.wave, batch=o.batch))  # fmt: skip
     return out
 
@@ -1086,9 +1201,7 @@ def _budget_spent(batch: Batch) -> bool:
     red = handbacks_since(
         batch.events, lambda e: isinstance(e, RedHandbackEvent) and e.delivered == "session"
     )
-    conflicts = handbacks_since(
-        batch.events, lambda e: isinstance(e, ConflictEvent) and e.delivered != "held"
-    )
+    conflicts = handbacks_since(batch.events, spends_handback)
     return (red >= RED_HANDBACKS_PER_DISPATCH or conflicts >= HANDBACKS_PER_DISPATCH
             or held_conflict(batch) is not None)  # fmt: skip
 
@@ -1153,6 +1266,7 @@ def plan_queue(qs: QueueSnapshot) -> QueuePlan:
     """One pass of one repo's queue (§A)."""
     plan = _plan_queue(qs)
     needs = () if any(a.kind == "queue-held" for a in plan.actions) else _base_needs(qs)
+    needs = (*needs, *operator_needs(qs))  # l-errors-r2: whatever the queue's state
     plan = replace(plan, actions=(*plan.actions, *needs)) if needs else plan
     return replace(plan, view=queue_view(plan, qs=qs))
 
