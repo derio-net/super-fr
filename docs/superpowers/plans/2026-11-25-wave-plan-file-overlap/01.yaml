@@ -1,0 +1,149 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Plan file overlap in fr triage check and on the Batches page (R1-R9)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - plan-overlap-check
+  - plan-overlap-board
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/plan_overlap.py
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/triage/kanban_render.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/triage_kanban_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/test_triage_plan_overlap.py
+  - tests/unit/test_triage_check.py
+  - tests/unit/test_triage_kanban.py
+  - tests/unit/test_triage_kanban_render.py
+  - tests/unit/test_triage_kanban_cmd.py
+  - docs/explainers/fr-triage.md
+  - docs/explainers/fr-wave-driver.md
+  - docs/herdr-control-sessions.md
+  - .changes/feat-wave-plan-file-overlap.yaml
+  - docs/acceptance/features/2026-11-25-wave-plan-file-overlap.yaml
+  estimate_lines: 650
+tasks:
+- number: 1
+  title: Read a batch branch's plan paths (R1, R2)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: create `tests/unit/test_triage_plan_overlap.py` with an in-memory `FakeSource` (a dict of ref -> {path: text}) that implements `exists_at(ref, path)` (`""` is the root tree: true when the ref exists), `list_dir(ref, directory)` and `show(ref, file)`. Build the fixtures from the REAL shapes. The cursor is `docs/superpowers/runs/<run>.yaml` with `branch: feat/batch-x` and `steps: {plan: {state: done, emitted: {plan: docs/superpowers/plans/2026-11-25-x}}}`; copy the layout of `docs/superpowers/runs/2026-11-24-feat-ci-economy.yaml`. The phase files are `01.yaml`/`02.yaml` with `schema_version: 2` and `phase: {number, files: [...]}`; copy the layout of `docs/superpowers/plans/2026-11-24-ci-economy/01.yaml`. Assert that `read_plan_paths(source, "feat/batch-x")` reads at `refs/remotes/origin/feat/batch-x` and returns a `PlanPaths` whose paths are the union of both phases' `files:`. Assert that a plan recorded under a step not named `plan` is still found. Assert each `Unread.reason`: `no ref origin/feat/batch-x` (the ref is absent), `no run cursor` (no cursor names the branch, and a cursor for another branch is skipped), `no recorded plan` (no step emits `plan`), and `unreadable <path>: <why>` (invalid YAML in a cursor or phase file, or a `TriageError` from the source).
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create `packages/fr/src/fr/triage/plan_overlap.py`, with a module docstring that names spec 2026-11-25-wave-plan-file-overlap. Add the `PlanSource` Protocol, the frozen dataclasses `PlanPaths(paths: tuple[str, ...], plan: str)` and `Unread(reason: str)`, and `read_plan_paths`. Use `fr.artifacts.paths.KIND_DIRS["run"]` and `yaml.safe_load` on raw mappings; never use the plan parser or `fr.run.model`. Catch `TriageError` and `yaml.YAMLError` and turn them into `Unread`. The reader does no fetch, makes no forge call and writes nothing. Tests pass.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: keep the reader's mapping access in small helpers (`_cursor_plan(doc, branch)`, `_phase_files(doc)`) that tolerate missing keys and keys that are not lists. ruff and mypy are green on the module.
+- number: 2
+  title: The overlap rule and the report (R3, R4, R5, R9)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: tests for `overlaps(entries, ignore=...)`. A path both batches name literally is shared. A glob of A that matches a literal of B is shared, and the reverse. Two globs are never shared (`tests/**/*.py` against `tests/**/*.py`, `docs/**/*.md` against `docs/*.md`). A path that matches an *ignore* glob (`.opencode/skills/*`, a `version.files` glob) is dropped. A pair with no shared path is absent. Shared paths are sorted. Batches of different repos are never paired. Tests for the `after` closure: A after B, B after A, and A after C after B (C merged) each suppress the pair. Two batches of different waves with no link are compared.
+  - id: P1.T2.S2
+    text: |-
+      RED: tests for `plan_overlap_report(judgements, facts, source_for)` over the existing triage fixtures. Reuse the Batch/DispatchEvent/Facts builders that the batch and kanban tests use; find them with `grep -n "DispatchEvent(" tests/unit/*.py`. Only batches in stage `dispatched` or `pr-open` with a dispatch branch are read; a `proposed`, `merged` or `cancelled` batch is not. When `batch_repo` returns None, the `Unread` reason is `repo of batch unknown`. When `source_for` returns a str, that str is the reason. The ignore globs come from `facts.config_for(repo).generated`, plus `version.files` when a version block exists. Tests for `source_for_clones`: with a checkouts map it opens that path. Without one, it uses a cwd clone whose origin is the repo (compared case-insensitively), gives any other repo the reason `no clone of <repo> here`, and gives `no clone here` without raising when the cwd is outside a clone or the clone has no origin. Use a temp git repo (`git init`, `git remote add origin https://github.com/o/r.git`) for the clone cases. Tests for `fix_text(a, b)`: it names both ids, `fr triage batch edit <b> --after <a>` and `--wave`. Tests for `card_lines(report)`: each batch gets one sentence per overlap, naming the other batch and the shared paths.
+  - id: P1.T2.S3
+    text: |-
+      GREEN: in `plan_overlap.py`, implement `Overlap(a, b, repo, wave_a, wave_b, paths)`, `OverlapReport(overlaps, unread: tuple[tuple[str, str], ...])` (batch id, reason), `overlaps`, `plan_overlap_report`, `source_for_clones(cwd, checkouts)`, `fix_text` and `card_lines`. A path is a glob when it contains `*`, `?` or `[`, and matching uses `fnmatch.fnmatchcase`. Compute the after closure over every batch in `judgements.batches`. Tests pass.
+  - id: P1.T2.S4
+    text: |-
+      REFACTOR: the rule and the ignore filter share one private `_is_glob` and one `_matches`. ruff and mypy are green.
+- number: 3
+  title: fr triage check reports the set (R6, R8)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: add the test to `tests/unit/test_triage_check.py`, or to the file that holds the `check_command` CLI tests (find it with `grep -ln "\"check\"" tests/unit/test_triage*.py`). Run `fr triage check` through the typer runner over a state dir with two overlapping dispatched batches, and monkeypatch `fr.commands.triage_cmd.source_for_clones` to return a FakeSource-backed function. Assert the output holds `plan overlap (1)`, both ids, the shared path and the fix text, followed by a not-compared line for a third batch with its reason. Assert `--json` holds `plan_overlap: {overlaps: [{a, b, repo, waves, paths, fix}], unread: [{batch, reason}]}`. Assert exit code 0 in both modes, and also when every batch is unread.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: in `check_command` (`packages/fr/src/fr/commands/triage_cmd.py`), build the report after `classify` with `source_for_clones(Path.cwd(), None)`. Print the section after the existing sets, and add the `plan_overlap` key to the JSON object (`{**result.to_json(), "plan_overlap": report_json(report)}`, with `report_json` in `plan_overlap.py`). Leave `fr/triage/check.py` unchanged. Tests pass.
+- number: 4
+  title: The Batches page shows it (R7, R9)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in `tests/unit/test_triage_kanban.py`, assert that `build_board(..., overlaps={"a": ("...",)})` puts the sentences on card `a` (`Card.overlaps`) and leaves every other card at `()`, and that omitting `overlaps` leaves every existing test unchanged. In `tests/unit/test_triage_kanban_render.py`, assert that a card with overlaps renders one `<p class="overlap">` with the escaped sentences inside its detail, and that a card without overlaps renders none. In `tests/unit/test_triage_kanban_cmd.py`, monkeypatch `source_for_clones` and assert that `write_board` renders the overlap on both cards, adds one page note `plan overlap not checked for <batch>: <reason>` per unread batch, and passes its `checkouts` argument through.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: add `overlaps: tuple[str, ...] = ()` as the last field of `kanban.Card`, and add an `overlaps: Mapping[str, tuple[str, ...]] | None = None` keyword to `build_board` that fills each card. Render the paragraph in `kanban_render`'s card detail. In `write_board`, add `checkouts: Mapping[str, Path] | None = None`. Build the report with `source_for_clones(Path.cwd(), checkouts)` inside a `try` that turns any exception into one note (the board is a view), extend `notes`, and pass `overlaps=card_lines(report)`. In `triage_batch_cmd.py`'s `_write_board`, add the one line `checkouts=self.checkout_paths,`. The module budget in `tests/unit/test_tripwire_module_budget.py` leaves 2 lines, so add no more than that. Keep the kanban edits to these lines, because a live batch is editing the same files. Tests pass.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: confirm that `uv run pytest tests/unit/test_tripwire_module_budget.py -q --no-cov` is green and that the kanban diff holds only the field, the keyword and the paragraph. ruff format and mypy are green.
+- number: 5
+  title: Docs, change fragment and quality gate
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Add `.changes/feat-wave-plan-file-overlap.yaml` with `bump: minor` and the summary "fr triage check and the Batches page flag unmerged batches whose plans name the same non-generated files, before they conflict at merge". In `docs/explainers/fr-triage.md`, add a short plain-language paragraph where `fr triage check`'s sets are described. It says what the plan overlap set compares (plan `files:`, glob against literal only, no generated or version files, no `after`-linked pairs), that it is advisory, that it reads the local clone's remote branches without fetching, and what the fix is. Add a line to the page's `reviewed:` stamp. Re-stamp `reviewed:` on `docs/explainers/fr-wave-driver.md` and `docs/herdr-control-sessions.md` with "2026-11-25 still true after wave-plan-file-overlap (the driver's board shows plan overlaps; nothing the page describes changed)". Run `uv run fr docs check` and fix any finding.
+  - id: P1.T5.S2
+    text: |-
+      Quality gate: run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/` and `uv run mypy packages/fr/src`. Run `uv run fr acceptance set-status --id plan-overlap-check --status ci --notes "unit tests in this PR's CI" --level unit=derio-net/super-fr:tests/unit/test_triage_plan_overlap.py#<test name>`, and the same for `plan-overlap-board` with the kanban test refs; anchor each ref on a test name, never a line. Then run the fast tier the brief names, last.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-25T15:44:18+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-11-25T15:44:18+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-11-25T15:44:18+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-25T15:44:18+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-25T15:44:18+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-25T15:44:18+00:00'
+      note: null
+    P1.T2.S4:
+      state: x
+      ticked_at: '2026-11-25T15:44:18+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-25T15:44:18+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-25T15:44:18+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-25T15:44:18+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-25T15:44:18+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-11-25T15:44:18+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-25T15:44:18+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-25T15:44:18+00:00'
+      note: null
+  completion:
+    at: '2026-11-25T15:44:18+00:00'
+    note: null
+    observed_prs: []

@@ -390,6 +390,8 @@ def _body(card: Card, scope_args: Sequence[str]) -> str:
         parts.append(f'<p class="meta">already closed: {esc(", ".join(closed))}</p>')
     if card.pr is not None:
         parts.append(_pr(card.pr))
+    if card.overlaps:
+        parts.append(f'<p class="overlap">{esc(" ".join(card.overlaps))}</p>')
     parts.append(_lifecycle(card))
     parts.append(_timeline(card))
     if card.status is not None:
