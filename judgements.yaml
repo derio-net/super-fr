@@ -1,4 +1,4 @@
-schema: 13
+schema: 14
 ranked_at: 2026-11-26
 tiers:
 - n: 1
@@ -9069,6 +9069,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-26T17:32:51.141469Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T17:33:35.643520Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -9956,6 +9971,13 @@ batches:
     - packages/fr/src/fr/triage/kanban.py
     delivered: session
     handle: derio-net/super-fr/run/batch-merge-readiness
+  - kind: post_merge
+    at: '2026-11-26T17:33:12.675829Z'
+  - kind: claims_released
+    at: '2026-11-26T17:33:35.643520Z'
+    keys:
+    - super-fr#1578
+    - super-fr#1581
 - id: consumer-followups
   title: 'Consumer-delivery follow-ups: plugin-dir judgement, Gitea job token, tea login error'
   ids:
@@ -10585,6 +10607,11 @@ exports:
   pr: 1685
   head: 95ff894e31fa07a7d6023dd84941669cd19e6568
   merged: true
+- wave: '20'
+  repo: derio-net/super-fr
+  at: '2026-11-26T17:33:33.731671Z'
+  pr: 1718
+  head: b0ca528cb2605655df8a4ca095ac5939880139e1
 closeouts:
 - repo: derio-net/super-fr
   item: derio-net/super-fr/run/closeout-2026-11-15-1
@@ -11204,6 +11231,14 @@ closeouts:
   - "D\tdocs/superpowers/usage/2026-11-18-feat-batch-consumer-delivery.yaml"
   closes:
   - derio-net/super-fr#1691
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-26-1
+  branch: chore/closeout-2026-11-26-1
+  at: '2026-11-26T17:33:16.439871Z'
+  runner: herdr
+  handle: w3T:p5
+  planned:
+  - merge-readiness
 queues:
 - repo: derio-net/super-fr
   wave: 22
