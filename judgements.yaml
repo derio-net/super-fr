@@ -10117,6 +10117,16 @@ batches:
   - super-fr#1592
   - super-fr#1689
   wave: 26
+- id: ci-hygiene
+  title: CI hygiene sweep
+  ids:
+  - super-fr#1594
+  - super-fr#1595
+  - super-fr#1596
+  - super-fr#1598
+  - super-fr#1605
+  - super-fr#1675
+  wave: 26
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
