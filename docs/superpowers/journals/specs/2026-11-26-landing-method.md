@@ -191,3 +191,10 @@ row_kinds:
 run_gate: developer
 run_kind: none
 ```
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-26T17:17:20+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: pre-merge — CI: `choose_method` returns the configured method over a forge default, the default when nothing is configured, the single allowed method last, and refuses a disallowed explicit or configured method (row `landing-method-order`).
+
+Evidence: CI ci-ok green on PR #1708's final head 3a7f2e9 (run 45865158880), merged as 714686c9d: tests/unit/test_triage_batch_merge.py choose_method order tests (row landing-method-order)
