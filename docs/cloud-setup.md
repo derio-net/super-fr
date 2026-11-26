@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/cloud.py
   - packages/fr/src/fr/commands/cloud_cmd.py
-reviewed: 2026-11-24 the setup script installs the newest release through bootstrap.sh, never main (fix/install-stable-by-default). 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 the doctor's fr check now compares release candidates and fails a version it cannot read (batch release-truth)
+reviewed: 2026-11-26 landing-method, the doctor's merge_method check fails a squash or rebase method when the repo's queue lands by push, and the merge-method row says so (R5, R8); 2026-11-24 the setup script installs the newest release through bootstrap.sh, never main (fix/install-stable-by-default). 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 the doctor's fr check now compares release candidates and fails a version it cannot read (batch release-truth)
 ---
 
 # fr in a Claude Code cloud session
@@ -27,7 +27,7 @@ fr relies on the script for four things, and on the repo for two more (spec
 | a current `fr` | the session's CLI is the one that the script installed | a new session |
 | `rsync` | `scripts/install.sh` copies the plugin with it | the setup script |
 | the repo's `agents` artifact | the plugin's agents are not dispatchable in a fresh session | `fr init agents` |
-| a merge method the driver may use | under `forge.api: rest` the driver sees no default merge method, so in a repo that lets you use several methods, the driver stops every merge | `merge_method` in `.fr/triage.yaml` |
+| a merge method the driver may use | under `forge.api: rest` the driver sees no default merge method, so in a repo that lets you use several methods, the driver stops every merge. In a repo with a `queue:` block that lands by push (the default), the method must be `merge`: GitHub closes a pushed pull request as unmerged after a squash or a rebase | `merge_method` in `.fr/triage.yaml`, set to `merge` when the queue lands by push (or `queue.land: merge`) |
 
 ## The setup script
 

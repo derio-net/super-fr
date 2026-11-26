@@ -743,25 +743,56 @@ def _installable_changed(repo: Path, tag: str) -> bool:
 _PR_SUBJECT_RE = re.compile(r"\(#(\d+)\)\s*$|^Merge pull request #(\d+)\b")
 
 
-def logged_prs(repo: Path, tag: Version) -> set[int]:
-    """The PR numbers `git log --first-parent <tag>..HEAD` names: a squash merge's `(#N)`
-    subject or a merge commit's `Merge pull request #N`; the release bot's own commits
-    are skipped. Only the first-parent line: a commit inside a merge-committed branch
-    is not a landing, and its `(#N)` is usually an issue ref, not a PR (gh#1333)."""
-    out = _out(repo, "log", "--first-parent", f"refs/tags/{tag.tag}..HEAD", "--format=%an%x00%s")
-    numbers: set[int] = set()
+def logged_pr_dates(repo: Path, tag: Version) -> dict[int, str]:
+    """The PR numbers `git log --first-parent <tag>..HEAD` names, each with the committer
+    date of its newest commit: a squash merge's `(#N)` subject or a merge commit's
+    `Merge pull request #N`; the release bot's own commits are skipped. Only the
+    first-parent line: a commit inside a merge-committed branch is not a landing, and its
+    `(#N)` is usually an issue ref, not a PR (gh#1333)."""
+    out = _out(
+        repo, "log", "--first-parent", f"refs/tags/{tag.tag}..HEAD", "--format=%an%x00%cI%x00%s"
+    )
+    dates: dict[int, str] = {}
     for line in out.splitlines():
-        author, _, subject = line.partition("\x00")
+        author, _, rest = line.partition("\x00")
+        date, _, subject = rest.partition("\x00")
         if author == BOT_NAME or subject.startswith(RELEASE_PREFIX):
             continue
         m = _PR_SUBJECT_RE.search(subject)
         if m:
-            numbers.add(int(m.group(1) or m.group(2)))
-    return numbers
+            dates.setdefault(int(m.group(1) or m.group(2)), date)  # newest first: keep it
+    return dates
+
+
+def logged_prs(repo: Path, tag: Version) -> set[int]:
+    """The PR numbers the first-parent log names (see `logged_pr_dates`)."""
+    return set(logged_pr_dates(repo, tag))
 
 
 class GateStateUnknownError(Exception):
     """What waits on a post-merge gate cannot be known: the run cuts an RC (R20)."""
+
+
+def _closed_unmerged(cmds: Commands, number: int, date: str) -> dict[str, object] | str:
+    """PR *number* as `gh pr list --state merged` would carry it, when the forge reports it
+    CLOSED with no `mergedAt` (a push landing GitHub did not mark merged, gh#1705): dated by
+    its first-parent commit. Otherwise a short reason string, for the message that names
+    the PR still missing."""
+    r = cmds.gh_read(["pr", "view", str(number), "--json", MERGED_PR_FIELDS + ",state"])
+    if r.returncode != 0:
+        return f"gh pr view failed: {(r.stderr or r.stdout).strip()}"
+    try:
+        view = json.loads(r.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        return f"gh pr view did not return JSON: {exc}"
+    if not isinstance(view, dict):
+        return "gh pr view did not return an object"
+    if view.get("state") != "CLOSED":
+        return f"state {view.get('state')}"
+    if view.get("mergedAt"):
+        return "state CLOSED but mergedAt set"
+    view.pop("state")
+    return {**view, "mergedAt": date}
 
 
 def waiting_prs(repo: Path, cmds: Commands) -> list[dict[str, object]]:
@@ -771,7 +802,9 @@ def waiting_prs(repo: Path, cmds: Commands) -> list[dict[str, object]]:
     into main since the last final tag, with its labels), checks it covers every PR the
     git log names since that tag (the search index lags), writes the facts to a temp
     file and lets fr decide from them credential-free (`cmds.decide`). A failed read, a
-    read at its limit, a PR the read misses or a failed decision is `GateStateUnknownError`."""
+    read at its limit, a PR the read misses or a failed decision is `GateStateUnknownError`.
+    A PR the log names that the forge reports closed unmerged counts as landed (spec
+    2026-11-26-landing-method R7, gh#1704): a push landing GitHub did not mark merged."""
     tag = last_final(repo)
     since = _out(repo, "log", "-1", "--format=%cI", f"refs/tags/{tag.tag}").strip() if tag else None
     args = ["pr", "list", "--state", "merged", "--base", BRANCH, "--limit", str(MERGED_PR_LIMIT)]
@@ -793,9 +826,18 @@ def waiting_prs(repo: Path, cmds: Commands) -> list[dict[str, object]]:
         )
     if tag is not None:
         read = {int(p["number"]) for p in prs if isinstance(p.get("number"), int)}
-        missing = sorted(logged_prs(repo, tag) - read)
+        logged = logged_pr_dates(repo, tag)
+        missing = sorted(set(logged) - read)
+        why: dict[int, str] = {}
+        for n in list(missing):  # R7, gh#1704: a landing the forge closed unmerged still landed
+            landed = _closed_unmerged(cmds, n, logged[n])
+            if isinstance(landed, str):
+                why[n] = landed
+            else:
+                prs.append(landed)
+                missing.remove(n)
         if missing:
-            names = ", ".join(f"#{n}" for n in missing)
+            names = ", ".join(f"#{n} ({why[n]})" for n in missing)
             raise GateStateUnknownError(
                 f"the merged-PR read misses {names}, merged since {tag.tag}"
             )

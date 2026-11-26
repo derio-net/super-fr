@@ -225,7 +225,7 @@ class World:
             self.issues[i] = "closed"
 
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
-        return {"default": "squash", "allowed": ["squash"]}
+        return {"default": "merge", "allowed": ["merge"]}
 
     def list_prs_by_head(self, repo: str, branch: str) -> list[dict[str, Any]]:
         return [
@@ -2777,6 +2777,217 @@ def test_merge_methods_read_failure_still_fails_the_pass(
     assert code != 0, out
     assert "default branch unknown" not in out
     assert world.merged == []
+
+
+# --------------- the landing method (spec 2026-11-26-landing-method R1-R4, gh#1702, gh#1705)
+
+
+def _methods(world: World, monkeypatch: pytest.MonkeyPatch, answer: Any) -> None:
+    monkeypatch.setattr(world, "repo_merge_methods", lambda repo: answer)
+
+
+_ALL_SQUASH = {"default": "squash", "allowed": ["merge", "rebase", "squash"]}
+
+
+def test_a_push_queue_on_a_squash_default_is_held_naming_the_method_and_its_source(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _pr_open(world, tmp_path)
+    world.config = {"queue": {"ci": "push", "land": "push"}}
+    _methods(world, monkeypatch, _ALL_SQUASH)
+    code, out = _drive(tmp_path, "--once")  # a dry run
+    assert code in (0, 3), out
+    assert "queue-held" in out
+    assert "squash" in out and "the forge's default" in out and "unmerged" in out
+    assert "merge_method: merge" in out and "queue.land: merge" in out
+    assert world.queue_plans == [] and world.merged == []
+
+
+def test_a_push_queue_on_a_squash_default_with_yes_is_held_and_moves_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _pr_open(world, tmp_path)
+    world.config = {"queue": {"ci": "push", "land": "push"}}
+    _methods(world, monkeypatch, _ALL_SQUASH)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code in (0, 3), out
+    assert "queue-held" in out and "squash" in out and "unmerged" in out
+    assert not _opened(world) and world.queue_plans == [] and world.merged == []
+
+
+def test_a_configured_merge_method_lifts_the_hold(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _pr_open(world, tmp_path)
+    world.config = {"queue": {"ci": "push", "land": "push"}, "merge_method": "merge"}
+    _methods(world, monkeypatch, _ALL_SQUASH)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code in (0, 3), out
+    assert "unmerged" not in out and "queue-held" not in out
+    assert _opened(world)  # the queue planned its work: it is not held
+
+
+def test_batch_merge_method_override_under_a_push_queue_is_held_naming_the_flag(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _pr_open(world, tmp_path)
+    world.config = {"queue": {"ci": "push"}, "merge_method": "merge"}
+    _methods(world, monkeypatch, _ALL_SQUASH)
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=False,
+    )  # fmt: skip
+    driver.method_override = "rebase"
+    monkeypatch.setattr(driver, "client", lambda facts, repo: world)
+    monkeypatch.setattr(driver, "checkout", lambda repo: checkout)
+    monkeypatch.setattr(driver, "_ci_none", lambda repo: False)
+    monkeypatch.setattr(driver, "_base_rules", lambda facts, repo: BaseRules())
+    why = driver._landing_hold(world.facts(), REPO)
+    assert why is not None and "rebase" in why and "--method" in why
+
+
+def test_a_squash_only_repo_is_told_to_allow_merge_commits(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _pr_open(world, tmp_path)
+    world.config = {"queue": {"ci": "push"}}
+    _methods(world, monkeypatch, {"default": "squash", "allowed": ["squash"]})
+    code, out = _drive(tmp_path, "--once")
+    assert code in (0, 3), out
+    assert "merge commits" in out and "merge_method: merge" not in out
+    assert world.queue_plans == [] and world.merged == []
+
+
+def test_an_unreadable_merge_methods_read_holds_the_pass_and_is_read_again(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _pr_open(world, tmp_path)
+    world.config = {"queue": {"ci": "push"}}
+    reads: list[str] = []
+
+    def _read(repo: str) -> dict[str, Any]:
+        reads.append(repo)
+        raise GhError(EOF_MSG, returncode=1)
+
+    monkeypatch.setattr(world, "repo_merge_methods", _read)
+    code, out = _drive(tmp_path, "--once")  # a dry run: no exception
+    assert code in (0, 3), out
+    assert "merge methods could not be read" in out and "unexpected EOF" in out
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=False,
+    )  # fmt: skip
+    monkeypatch.setattr(driver, "client", lambda facts, repo: world)
+    monkeypatch.setattr(driver, "checkout", lambda repo: checkout)
+    reads.clear()
+    for _ in range(2):  # the next pass reads again: a failed read is never cached
+        assert "could not be read" in str(driver._landing_hold(world.facts(), REPO))
+    assert len(reads) == 2
+
+
+def test_a_moved_config_holds_the_pass_without_promising_a_retry(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """l-errors-r1: `merge_ctx` raises `ForgeReadError(code=2)` when main's config moved
+    under the pass; that is not a transient merge-methods read."""
+    _pr_open(world, tmp_path)
+    world.config = {"queue": {"ci": "push"}}
+
+    from fr.triage.errors import TriageError
+
+    def _moved(*a: Any, **kw: Any) -> str:
+        raise TriageError("the triage config moved under the pass")
+
+    monkeypatch.setattr(triage_batch_cmd, "_config_fresh", _moved)
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=False,
+    )  # fmt: skip
+    monkeypatch.setattr(driver, "client", lambda facts, repo: world)
+    monkeypatch.setattr(driver, "checkout", lambda repo: checkout)
+    why = str(driver._landing_hold(world.facts(), REPO))
+    assert "read again next pass" not in why
+    assert "merge context could not be built" in why and "moved under the pass" in why
+
+
+def test_a_repo_with_no_choosable_method_is_held_with_the_config_error(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _pr_open(world, tmp_path)
+    world.config = {"queue": {"ci": "push"}}
+    _methods(world, monkeypatch, {"default": None, "allowed": ["merge", "squash"]})
+    code, out = _drive(tmp_path, "--once")
+    assert code in (0, 3), out
+    assert "merge_method" in out and "--method" in out and "no default merge method" in out
+    assert world.queue_plans == [] and world.merged == []
+
+
+def test_the_resume_pass_still_runs_for_a_landing_refused_repo(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """R2: the rule holds planned builds and landings only; `_queue_refusal`, which the
+    resume pass calls, never builds the merge context."""
+    _pr_open(world, tmp_path)
+    world.config = {"queue": {"ci": "push"}}
+    _methods(world, monkeypatch, _ALL_SQUASH)
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=True,
+    )  # fmt: skip
+    monkeypatch.setattr(driver, "client", lambda facts, repo: world)
+    monkeypatch.setattr(driver, "checkout", lambda repo: checkout)
+    monkeypatch.setattr(driver, "_ci_none", lambda repo: False)
+    monkeypatch.setattr(driver, "_base_rules", lambda facts, repo: BaseRules())
+    assert driver._queue_refusal(world.facts(), REPO) is None
+    assert REPO not in driver._merge  # the refusal alone builds no context
+    assert driver._landing_hold(world.facts(), REPO) is not None
+    assert REPO in driver._merge  # only the landing hold builds the context
+
+
+def test_the_rebase_warning_under_land_merge_prints_once_per_process(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _pr_open(world, tmp_path)
+    world.config = {"queue": {"ci": "push", "land": "merge"}, "merge_method": "rebase"}
+    _methods(world, monkeypatch, _ALL_SQUASH)
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=False,
+    )  # fmt: skip
+    monkeypatch.setattr(driver, "client", lambda facts, repo: world)
+    monkeypatch.setattr(driver, "checkout", lambda repo: checkout)
+    monkeypatch.setattr(driver, "_ci_none", lambda repo: False)
+    monkeypatch.setattr(driver, "_base_rules", lambda facts, repo: BaseRules())
+    said: list[str] = []
+    monkeypatch.setattr(
+        triage_batch_cmd.err_console, "print", lambda msg, **kw: said.append(str(msg))
+    )
+    for _ in range(2):
+        assert driver._landing_hold(world.facts(), REPO) is None
+    assert len(said) == 1
+    for word in ("first-parent", "(#N)", "Merge pull request #N", "merge", "squash"):
+        assert word in said[0]
+    world.config = {"queue": {"ci": "push", "land": "merge"}, "merge_method": "squash"}
+    said.clear()
+    fresh = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={}, max_inflight=4,
+        yes=False,
+    )  # fmt: skip
+    monkeypatch.setattr(fresh, "client", lambda facts, repo: world)
+    monkeypatch.setattr(fresh, "checkout", lambda repo: checkout)
+    monkeypatch.setattr(fresh, "_ci_none", lambda repo: False)
+    monkeypatch.setattr(fresh, "_base_rules", lambda facts, repo: BaseRules())
+    assert fresh._landing_hold(world.facts(), REPO) is None and said == []
 
 
 # ------------------------------------------------- closing finished sessions (#918)

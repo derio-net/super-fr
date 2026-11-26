@@ -16,6 +16,7 @@ import sys
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fr.release_status import hold_verdict
@@ -1562,8 +1563,9 @@ def test_p7_r2_a_pr_in_git_log_but_missing_from_the_read_is_unknown_never_a_fina
     assert world.run() == 0
 
     assert world.origin_log()[0] == "release: v4.24.0-rc.1"
-    (read,) = world.read_calls
+    read, view = world.read_calls  # R7: the missing PR is looked up before it is called unknown
     assert read[read.index("--base") + 1] == "main"
+    assert view[:3] == ["pr", "view", "42"]
     assert "#42" in capsys.readouterr().out
 
 
@@ -1607,7 +1609,7 @@ def test_gh1333_a_merge_commit_the_read_misses_is_named_by_its_pr_not_its_issues
 
     assert world.origin_log()[0] == "release: v4.24.0-rc.1"
     out = capsys.readouterr().out
-    assert "misses #50," in out
+    assert "misses #50 (" in out
     assert "#7" not in out and "#8" not in out
 
 
@@ -1634,6 +1636,81 @@ def test_gh1333_logged_prs_reads_the_first_parent_line_and_skips_the_release_bot
     tag = release.last_final(world.clone)
     assert tag is not None
     assert release.logged_prs(world.clone, tag) == {42, 50}
+
+
+def _closed_landing_world(
+    world: World,
+    state: str = "CLOSED",
+    view_rc: int = 0,
+    merged_at: str | None = None,
+    raw: str | None = None,
+) -> Any:
+    """#1704 landed by a push the forge reports closed unmerged (gh#1705): its first-parent
+    subject names it, `gh pr list --state merged` does not, and `gh pr view` says why."""
+    world.land("a.txt", "a\n", "chore: x (#1704)")
+    _git(world.clone, "pull", "-q", "--ff-only", "origin", "main")
+    world.merged = []
+    cmds = world.commands()
+    views: list[list[str]] = []
+
+    def gh_read(args: list[str]) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["pr", "view"]:
+            views.append(list(args))
+            body = {"number": 1704, "state": state, "mergedAt": merged_at,
+                    "labels": [{"name": "gate:tester"}]}  # fmt: skip
+            out = json.dumps(body) if raw is None else raw
+            return subprocess.CompletedProcess(["gh", *args], view_rc, out, "boom")
+        return subprocess.CompletedProcess(["gh", *args], 0, "[]", "")
+
+    cmds.gh_read = gh_read
+    cmds.views = views  # type: ignore[attr-defined]
+    return cmds
+
+
+def test_r7_a_closed_unmerged_first_parent_landing_counts_as_landed(world: World) -> None:
+    """Spec 2026-11-26-landing-method R7, gh#1704: a PR the first-parent log names and the
+    forge reports CLOSED with no `mergedAt` is counted as landed, dated by its commit."""
+    cmds = _closed_landing_world(world)
+    release.waiting_prs(world.clone, cmds)
+    (facts,) = world.decided
+    (pr,) = facts["prs"]
+    when = _git(world.clone, "log", "-1", "--format=%cI").strip()
+    assert pr["number"] == 1704 and pr["mergedAt"] == when
+    assert "state" not in pr and pr["labels"] == [{"name": "gate:tester"}]
+
+
+@pytest.mark.parametrize(
+    ("kw", "reason"),
+    [
+        ({"state": "OPEN"}, "state OPEN"),
+        ({"state": "MERGED", "merged_at": "2026-11-25T10:00:00Z"}, "state MERGED"),
+        ({"state": "CLOSED", "merged_at": "2026-11-25T10:00:00Z"}, "state CLOSED but mergedAt set"),
+        ({"raw": "not json"}, "gh pr view did not return JSON"),
+        ({"view_rc": 1}, "gh pr view failed: boom"),
+    ],
+)
+def test_r7_a_pr_the_log_names_and_the_view_does_not_confirm_is_missing_with_its_reason(
+    world: World, kw: dict[str, Any], reason: str
+) -> None:
+    cmds = _closed_landing_world(world, **kw)
+    with pytest.raises(release.GateStateUnknownError, match="#1704") as err:
+        release.waiting_prs(world.clone, cmds)
+    assert str(err.value).startswith("the merged-PR read misses #1704 (")
+    assert reason in str(err.value)
+
+
+def test_r7_logged_pr_dates_names_the_newest_commit_of_a_number_named_twice(
+    world: World,
+) -> None:
+    world.land("a.txt", "a\n", "chore: x (#1704)")
+    world.land("b.txt", "b\n", "chore: y (#1704)")
+    _git(world.clone, "pull", "-q", "--ff-only", "origin", "main")
+    tag = release.last_final(world.clone)
+    assert tag is not None
+    dates = release.logged_pr_dates(world.clone, tag)
+    assert set(dates) == {1704}
+    assert dates[1704] == _git(world.clone, "log", "-1", "--format=%cI").strip()
+    assert release.logged_prs(world.clone, tag) == {1704}
 
 
 def test_p7_r3_bump_and_lock_check_run_with_no_forge_token(
