@@ -1563,8 +1563,9 @@ def test_p7_r2_a_pr_in_git_log_but_missing_from_the_read_is_unknown_never_a_fina
     assert world.run() == 0
 
     assert world.origin_log()[0] == "release: v4.24.0-rc.1"
-    (read,) = world.read_calls
+    read, view = world.read_calls  # R7: the missing PR is looked up before it is called unknown
     assert read[read.index("--base") + 1] == "main"
+    assert view[:3] == ["pr", "view", "42"]
     assert "#42" in capsys.readouterr().out
 
 
