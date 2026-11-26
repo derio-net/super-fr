@@ -1,5 +1,5 @@
 schema: 13
-ranked_at: 2026-11-25
+ranked_at: 2026-11-26
 tiers:
 - n: 1
   title: Work can be lost
@@ -3650,11 +3650,11 @@ issues:
     verified: true
     detail: 'Still live: `ready-fr` admission (`triage/intake.py:8-10`) is not pinned to content; the author can edit after the label.'
   super-fr#1522:
-    tier: 4
-    theme: run-contracts
+    tier: 3
+    theme: arch-sweep
     cx: M
     severity: low
-    kind: parked
+    kind: feature
     verified: false
     detail: 'Behaviour change from the #1318 review that needs its own spec; #1318''s lane is set aside.'
   super-fr#1489:
@@ -3682,93 +3682,93 @@ issues:
     verified: false
     detail: 'Record of an operator decision (restore scope of #1394); nothing left to do.'
   super-fr#1512:
-    tier: 4
-    theme: run-contracts
+    tier: 3
+    theme: arch-sweep
     cx: M
     severity: low
-    kind: parked
+    kind: feature
     verified: false
     detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with it.'
   super-fr#1513:
-    tier: 4
-    theme: run-contracts
+    tier: 3
+    theme: arch-sweep
     cx: M
     severity: low
-    kind: parked
+    kind: feature
     verified: false
     detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with it.'
   super-fr#1514:
-    tier: 4
-    theme: run-contracts
+    tier: 3
+    theme: arch-sweep
     cx: M
     severity: low
-    kind: parked
+    kind: feature
     verified: false
     detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with it.'
   super-fr#1515:
-    tier: 4
-    theme: run-contracts
+    tier: 3
+    theme: arch-sweep
     cx: M
     severity: low
-    kind: parked
+    kind: feature
     verified: false
     detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with it.'
   super-fr#1516:
-    tier: 4
-    theme: run-contracts
+    tier: 3
+    theme: arch-sweep
     cx: M
     severity: low
-    kind: parked
+    kind: feature
     verified: false
-    detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with it.'
+    detail: 'Refactor slice from the #1318 review. The operator prioritised the #1318 epic on 2026-11-26: placed in waves 25-27, one module per wave, cheap slice before the big move.'
     distinct_from:
     - super-fr#1520
   super-fr#1517:
-    tier: 4
-    theme: run-contracts
+    tier: 3
+    theme: arch-sweep
     cx: M
     severity: low
-    kind: parked
+    kind: feature
     verified: false
     detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with it.'
   super-fr#1518:
-    tier: 4
-    theme: run-contracts
+    tier: 3
+    theme: arch-sweep
     cx: M
     severity: low
-    kind: parked
+    kind: feature
     verified: false
     detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with it.'
   super-fr#1519:
-    tier: 4
-    theme: run-contracts
+    tier: 3
+    theme: arch-sweep
     cx: M
     severity: low
-    kind: parked
+    kind: feature
     verified: false
     detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with it.'
   super-fr#1520:
-    tier: 4
-    theme: run-contracts
+    tier: 3
+    theme: arch-sweep
     cx: M
     severity: low
-    kind: parked
+    kind: feature
     verified: false
     detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with it.'
   super-fr#1521:
-    tier: 4
-    theme: run-contracts
+    tier: 3
+    theme: arch-sweep
     cx: M
     severity: low
-    kind: parked
+    kind: feature
     verified: false
     detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with it.'
   super-fr#1523:
-    tier: 4
-    theme: run-contracts
+    tier: 3
+    theme: arch-sweep
     cx: M
     severity: low
-    kind: parked
+    kind: feature
     verified: false
     detail: 'Refactor slice from the #1318 review; #1318''s lane, which the operator set aside. Parked with it.'
   super-fr#1561:
@@ -10047,6 +10047,17 @@ batches:
     runner: herdr
     handle: w38:p1D
     branch: feat/batch-landing-method
+- id: queue-followups
+  title: 'Queue follow-ups: approval revive, conflict probe, close-out wait, case-insensitive repo names'
+  ids:
+  - super-fr#1680
+  - super-fr#1676
+  - super-fr#1663
+  - super-fr#1695
+  rationale: 'All in queue_exec/batch_drive; lands after #1688 and landing-method.'
+  wave: 25
+  after:
+  - landing-method
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
