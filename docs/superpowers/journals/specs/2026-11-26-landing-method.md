@@ -212,3 +212,10 @@ Evidence: CI ci-ok green on PR #1708's final head 3a7f2e9 (run 45865158880), mer
 Step: pre-merge — CI: under `land: merge` a `rebase` method prints the warning once per repo per process (row `landing-method-rebase-warning`).
 
 Evidence: CI ci-ok green on PR #1708's final head 3a7f2e9 (run 45865158880), merged as 714686c9d: rebase-under-land-merge warning test in test_triage_batch_drive_cmd.py (row landing-method-rebase-warning)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-11-26T17:17:28+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: pre-merge — CI: `waiting_prs` counts a first-parent PR the forge reports `CLOSED` and unmerged with the commit's date and its labels, and stays unknown for an `OPEN` PR or a failed read (row `release-closed-unmerged-landing`).
+
+Evidence: CI ci-ok green on PR #1708's final head 3a7f2e9 (run 45865158880), merged as 714686c9d: waiting_prs closed-unmerged tests in tests/unit/test_release_script.py (row release-closed-unmerged-landing)
