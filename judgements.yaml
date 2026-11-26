@@ -10079,6 +10079,11 @@ batches:
   - super-fr#1523
   rationale: '#1318 cheap shared-helper slices; no giant module touched.'
   wave: 25
+- id: arch-run-ledger
+  title: '#1318: move the write ledger out of run_cmd.py into fr/run/writes.py'
+  ids:
+  - super-fr#1515
+  wave: 25
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
