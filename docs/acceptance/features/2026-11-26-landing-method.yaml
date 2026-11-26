@@ -77,3 +77,10 @@ amendments:
       merge refuses rather than land an untested tree.'
     why: 'spec 2026-11-26-landing-method R9: GitHub closes a squash or rebase pushed
       PR unmerged (#1705)'
+  - row: wave-queue-land-methods
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/integration/test_queue_land.py#test_one_atomic_push_moves_main_to_the_tip_and_each_head_to_its_commit
+    why: 'renamed: squash and rebase by push are held (R3), the test now proves the
+      merge landing'
