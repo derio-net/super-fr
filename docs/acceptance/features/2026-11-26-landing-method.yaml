@@ -60,7 +60,10 @@ rows:
       counts it as landed and its gate labels decide.'
     origin:
     - spec:2026-11-26-landing-method#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py#test_r7_a_closed_unmerged_first_parent_landing_counts_as_landed
+    status: ci
+    notes: 'R7: waiting_prs counts a closed-unmerged first-parent landing, dated by
+      its commit (#1704)'
     verify: none
