@@ -10150,6 +10150,15 @@ batches:
   wave: 26
   after:
   - arch-isolation-split
+- id: arch-triage-ports
+  title: '#1318: the triage driver takes every command-layer effect through one ports object'
+  ids:
+  - super-fr#1520
+  wave: 27
+  after:
+  - arch-triage-leaves
+  - triage-privacy
+  - silent-failures
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
