@@ -10041,6 +10041,12 @@ batches:
   rationale: 'All three meet in choose_method and the queue''s landing shape; #1704 was closed unmerged
     because the viewer default flipped to SQUASH. Hand-merged as a merge commit before the driver restarts.'
   wave: 24
+  events:
+  - kind: dispatch
+    at: '2026-11-26T13:00:18.432826Z'
+    runner: herdr
+    handle: w38:p1D
+    branch: feat/batch-landing-method
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
