@@ -10109,6 +10109,14 @@ batches:
   - super-fr#1621
   rationale: '#1621 is L and changes gate semantics: spec first.'
   wave: 26
+- id: silent-failures
+  title: 'Silent failures: errors that report success or lose their reason'
+  ids:
+  - super-fr#1682
+  - super-fr#1668
+  - super-fr#1592
+  - super-fr#1689
+  wave: 26
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
