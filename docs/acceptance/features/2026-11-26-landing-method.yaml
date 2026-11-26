@@ -67,3 +67,13 @@ rows:
     notes: 'R7: waiting_prs counts a closed-unmerged first-parent landing, dated by
       its commit (#1704)'
     verify: none
+amendments:
+  - row: wave-queue-land-methods
+    op: reword
+    base: 0
+    acceptance: 'Landing by atomic push lands merge commits only and leaves every landed
+      PR reading MERGED on the forge; a squash or rebase method is held under push and
+      lands only through the forge''s merge API (queue.land: merge); landing by forge
+      merge refuses rather than land an untested tree.'
+    why: 'spec 2026-11-26-landing-method R9: GitHub closes a squash or rebase pushed
+      PR unmerged (#1705)'
