@@ -18,7 +18,7 @@ def _two(tmp_path: Path) -> tuple[World, list]:  # type: ignore[type-arg]
     w = world(tmp_path)
     w.pr(1, {"b.txt": "bravo\n"}, title="Add bravo")
     w.fetch()
-    built = build(w.checkout, w.main(), [w.entry(1)], "squash", None,  # type: ignore[arg-type]
+    built = build(w.checkout, w.main(), [w.entry(1)], "merge", None,  # type: ignore[arg-type]
                   scope=SCOPE, slots=(1,), scratch=w.scratch)  # fmt: skip
     return w, built
 
@@ -45,7 +45,7 @@ def test_a_push_the_remote_rejected_is_a_refusal_and_holds(tmp_path: Path) -> No
         w.checkout.push_leased([(built[0].sha, "refs/heads/main")],
                                {"refs/heads/main": built[0].base}, atomic=True)  # fmt: skip
     result = land_push(w.checkout, default="main", base=built[0].base,
-                       landings=landings_of(built), method="squash")  # fmt: skip
+                       landings=landings_of(built), method="merge")  # fmt: skip
     assert result.outcome == "held"
 
 
@@ -56,7 +56,7 @@ def test_a_push_that_landed_before_the_connection_died_is_a_landing(
     _drop_the_connection(monkeypatch, after_landing=True)
     recorded: list = []  # type: ignore[type-arg]
     result = land_push(w.checkout, default="main", base=built[0].base,
-                       landings=landings_of(built), method="squash",
+                       landings=landings_of(built), method="merge",
                        record=recorded.append)  # fmt: skip
     assert result.outcome == "landed" and w.main() == built[0].sha and len(recorded) == 1
 
@@ -71,7 +71,7 @@ def test_a_failed_connection_that_landed_nothing_is_transient_not_a_halt(
         w.checkout.push_leased([(built[0].sha, "refs/heads/main")],
                                {"refs/heads/main": built[0].base}, atomic=True)  # fmt: skip
     result = land_push(w.checkout, default="main", base=built[0].base,
-                       landings=landings_of(built), method="squash")  # fmt: skip
+                       landings=landings_of(built), method="merge")  # fmt: skip
     assert result.outcome == "transient" and "hung up" in result.detail and w.main() == main
 
 

@@ -19,7 +19,7 @@ through the `GhClient` adapter, both passed in, so this module starts no process
 from __future__ import annotations
 
 import tempfile
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -618,13 +618,31 @@ def land_push(
 ) -> LandResult:
     """R10: ONE `git push --atomic` that moves *default* by fast-forward to the last
     entry's commit, leased on *base*, and every landed PR's head ref, leased on the head
-    its combination was built from: under `squash` and `rebase` to the PR's own commit in
-    the combination, under `merge` unchanged (so a session push since the build still
-    fails the lease). Nothing moves unless everything does. *record* gets the
+    its combination was built from, pushed unchanged (so a session push since the build
+    still fails the lease). Only a merge commit lands (R2, gh#1705): any other *method*, or
+    a commit that is not a merge of the PR's head, is held with no push. Nothing moves
+    unless everything does. *record* gets the
     `queue_land` after a successful landing."""
     if not landings:
         return LandResult("stopped", detail="nothing to land")
     tip = landings[-1].commit
+    if method != "merge":
+        # R2, gh#1705: a squash or rebase commit leaves the pushed PR closed unmerged.
+        return LandResult(
+            "held",
+            detail=landing_refusal("push", method, source="the landing's method", allowed={"merge"})
+            or "",
+        )
+    prev = landings[0].parent or base
+    for x in landings:
+        if checkout.parents(x.commit) != (prev, x.head):
+            return LandResult(
+                "held",
+                detail=f"{x.key}'s combination commit {x.commit[:12]} is not a merge commit "
+                f"whose second parent is PR #{x.pr}'s head, so GitHub would close the PR "
+                "unmerged; the queue never lands it by push",
+            )
+        prev = x.commit
     if (landings[0].parent and landings[0].parent != base) or not checkout.is_ancestor(base, tip):
         # p3-r7: a lease on *base* checks the remote, not the tip, and a leased push may
         # move a ref by any amount: only a tip built on *base* is a fast-forward of it.
@@ -638,7 +656,7 @@ def land_push(
     leases: dict[str, str | None] = {main_ref: base}
     for x in landings:
         ref = f"refs/heads/{x.head_ref}"
-        refspecs.append((x.head if method == "merge" else x.commit, ref))
+        refspecs.append((x.head, ref))
         leases[ref] = x.head
     try:
         checkout.push_leased(refspecs, leases, atomic=True)
@@ -781,6 +799,43 @@ def queue_refusal(block: QueueBlock, *, ci_none: bool, versioned: bool = False) 
             "tested one. Use `queue.land: push`, or drop the `version:` block"
         )
     return None
+
+
+REBASE_WARNING = (
+    "a rebase landing puts the branch's commit subjects on the default branch's first-parent "
+    "line, so a release that attributes PRs by first-parent `(#N)` or `Merge pull request #N` "
+    "cannot see them: use `merge` or `squash`"
+)
+
+
+def merge_read_hold(exc: Exception, *, transient: bool) -> str:
+    """The hold text when `merge_ctx` raised: a transient read is read again next pass, any
+    other failure (main's `.fr/triage.yaml` moved under the pass) promises no retry."""
+    if transient:
+        return f"the merge methods could not be read: {exc}; read again next pass"
+    return f"the merge context could not be built: {exc}"
+
+
+def landing_refusal(land: str, method: str, *, source: str, allowed: Collection[str]) -> str | None:
+    """Why *method* cannot land by push, None when it may (spec 2026-11-26-landing-method
+    R2, gh#1705): only a merge commit, whose second parent is the PR's head, makes GitHub
+    mark a PR merged by a push; a squash or rebase commit leaves it closed unmerged.
+    *source* says where the method came from; *allowed* is what the repo allows."""
+    if land != "push" or method == "merge":
+        return None
+    head = (
+        f"`queue.land: push` cannot land with the {method} method ({source}): GitHub closes "
+        f"a PR landed that way unmerged, and only a merge commit reads as merged. "
+    )
+    if "merge" in allowed:
+        return head + (
+            "Set `merge_method: merge` in .fr/triage.yaml (or give `--method merge`), or set "
+            "`queue.land: merge` to land through the forge's merge API"
+        )
+    return head + (
+        "This repo does not allow merge commits: allow them in the repository's settings, "
+        "or set `queue.land: merge` to land through the forge's merge API"
+    )
 
 
 def held_plan(plan: QueuePlan, reason: str) -> QueuePlan:

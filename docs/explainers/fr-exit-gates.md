@@ -16,7 +16,7 @@ covers:
   - docs/verification-strategies.md
   - docs/exit-gates-release-walk.md
   - docs/gate-backfill.md
-reviewed: 2026-11-23 still true; gate-backfill.md and verification-strategies.md were only re-stamped for the 3.14 reformat (#1589); 2026-11-23 still true; verification-strategies gained the settle override line, which sets no gate (pr-readiness-wait). 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-21 still true; release.py's protection-refusal hint now names the "require ci-ok" ruleset and setup-release-app.sh (release-app-hardening); 2026-11-19 still true; release.py staged suite passes -m "" to keep the scenario tier (local-suite-cost); 2026-11-17 still true; gate-backfill now says a tracker close reports every error kind (batch triage-intake); 2026-11-21 the queue lands a gate:devops pull request after the stage released it and holds later entries until post-merge is done; 2026-11-20 added the merge queue's hold on a release (wave merge queue); 2026-11-19 still true; release.py staged suite passes -m "" to keep the scenario tier (local-suite-cost)
+reviewed: 2026-11-26 landing-method, a pull request the log names that the forge closed unmerged counts as landed (R7); the page says so; 2026-11-23 still true; gate-backfill.md and verification-strategies.md were only re-stamped for the 3.14 reformat (#1589); 2026-11-23 still true; verification-strategies gained the settle override line, which sets no gate (pr-readiness-wait). 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-21 still true; release.py's protection-refusal hint now names the "require ci-ok" ruleset and setup-release-app.sh (release-app-hardening); 2026-11-19 still true; release.py staged suite passes -m "" to keep the scenario tier (local-suite-cost); 2026-11-17 still true; gate-backfill now says a tracker close reports every error kind (batch triage-intake); 2026-11-21 the queue lands a gate:devops pull request after the stage released it and holds later entries until post-merge is done; 2026-11-20 added the merge queue's hold on a release (wave merge queue); 2026-11-19 still true; release.py staged suite passes -m "" to keep the scenario tier (local-suite-cost)
 ---
 
 ## What work cannot finish in the pull request?
@@ -119,8 +119,10 @@ one of these happens:
 
 - the script cannot read the labels;
 - the read of merged pull requests comes back at its limit;
-- a pull request the git log names is missing from that read;
+- a pull request the git log names is missing from that read, and the forge does not report it as closed without a merge;
 - the decision itself fails.
+
+A pull request that the forge closed without a merge, after the queue pushed its commit, still counts as landed. The script then reads its labels and its closed state with `gh pr view`. Only the date comes from the git log: it is the commit's date.
 
 Unknown cuts a candidate, never a final and never an error. A token that cannot read
 labels therefore means candidates only, until someone fixes it. An explicit `--version`

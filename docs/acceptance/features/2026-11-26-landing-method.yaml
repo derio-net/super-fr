@@ -1,0 +1,105 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-26-landing-method
+repo: derio-net/super-fr
+rows:
+  - id: landing-method-order
+    capability: triage-merge-queue
+    acceptance: The wave merge queue lands in the merge method the repo configured in
+      .fr/triage.yaml, whatever merge-button default the forge user has chosen; the
+      forge default applies only when nothing is configured.
+    origin:
+    - spec:2026-11-26-landing-method#R1
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_merge.py#test_choose_method_source_names_where_the_method_came_from
+    status: ci
+    notes: 'R1: choose_method_source orders explicit, configured, forge default, single;
+      the configured method beats the forge default (#1702)'
+    verify: none
+  - id: landing-method-push-merge-only
+    capability: triage-merge-queue
+    acceptance: 'Under queue.land: push the queue never lands a squash or rebase on
+      GitHub (which would close the PR unmerged): the repo''s queue is held with the
+      method, its source and the fix named, and fr cloud doctor reports the same.'
+    origin:
+    - spec:2026-11-26-landing-method#R2
+    - spec:2026-11-26-landing-method#R3
+    - spec:2026-11-26-landing-method#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_queue_exec.py#test_a_push_landing_refuses_a_method_github_closes_unmerged
+      - super-fr:tests/unit/test_cloud_remedy.py#test_a_squash_method_under_a_push_queue_fails_with_the_landing_refusal
+      int:
+      - super-fr:tests/integration/test_queue_land.py#test_a_push_landing_in_squash_or_rebase_is_held_and_moves_nothing
+    status: ci
+    notes: 'R2, R3, R5: landing_refusal, the driver''s queue-held, land_push held for
+      squash and rebase over real bare git, and the cloud doctor check (#1705)'
+    verify: none
+  - id: landing-method-rebase-warning
+    capability: triage-merge-queue
+    acceptance: 'Under queue.land: merge a rebase landing is allowed, and the driver
+      warns once that it hides the PR from a release that attributes PRs by first-parent
+      subject.'
+    origin:
+    - spec:2026-11-26-landing-method#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_the_rebase_warning_under_land_merge_prints_once_per_process
+    status: ci
+    notes: 'R4: one warning per repo per driver process under land merge with rebase'
+    verify: none
+  - id: release-closed-unmerged-landing
+    capability: release-gating
+    acceptance: 'A PR whose commit landed on main''s first-parent line but which the
+      forge reports closed unmerged no longer forces release candidates only: the release
+      counts it as landed and its gate labels decide.'
+    origin:
+    - spec:2026-11-26-landing-method#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_release_script.py#test_r7_a_closed_unmerged_first_parent_landing_counts_as_landed
+    status: ci
+    notes: 'R7: waiting_prs counts a closed-unmerged first-parent landing, dated by
+      its commit (#1704)'
+    verify: none
+amendments:
+  - row: wave-queue-land-methods
+    op: reword
+    base: 0
+    acceptance: 'Landing by atomic push lands merge commits only and leaves every landed
+      PR reading MERGED on the forge; a squash or rebase method is held under push and
+      lands only through the forge''s merge API (queue.land: merge); landing by forge
+      merge refuses rather than land an untested tree.'
+    why: 'spec 2026-11-26-landing-method R9: GitHub closes a squash or rebase pushed
+      PR unmerged (#1705)'
+  - row: wave-queue-land-methods
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/integration/test_queue_land.py#test_one_atomic_push_moves_main_to_the_tip_and_each_head_to_its_commit
+    why: 'renamed: squash and rebase by push are held (R3), the test now proves the
+      merge landing'
+  - row: wave-queue-land-methods
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/integration/test_queue_land.py#test_one_atomic_push_moves_main_to_the_tip_and_leaves_each_head
+    why: the renamed test proves the merge landing
+  - row: wave-queue-speculative-land
+    op: drop-level
+    base: 0
+    level: int
+    ref: super-fr:tests/integration/test_queue_land.py#test_one_atomic_push_moves_main_to_the_tip_and_each_head_to_its_commit
+    why: 'renamed: squash and rebase by push are held (spec 2026-11-26-landing-method
+      R3)'
+  - row: wave-queue-speculative-land
+    op: add-level
+    base: 1
+    level: int
+    ref: super-fr:tests/integration/test_queue_land.py#test_one_atomic_push_moves_main_to_the_tip_and_leaves_each_head
+    why: the renamed test proves the merge landing

@@ -58,7 +58,7 @@ class Driver:
     def ports(self) -> QueuePorts:
         return QueuePorts(
             checkout=self.w.checkout, client=self.f, repo=REPO, scope=SCOPE, default="main",
-            method="squash", version=None, config=self.config, scratch=self.w.scratch,
+            method="merge", version=None, config=self.config, scratch=self.w.scratch,
             record=self.record, entry_of=self.entry_of, pr_of=self.pr_of,
             post_merge=self.post_merge, now=self.now,
         )  # fmt: skip

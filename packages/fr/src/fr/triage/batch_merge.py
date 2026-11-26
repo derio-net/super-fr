@@ -95,12 +95,20 @@ class MergeContext:
         return f"origin/{self.checkout.default_branch()}"
 
 
-def choose_method(
+SOURCE_EXPLICIT = "--method"
+SOURCE_CONFIGURED = f"merge_method in {TRIAGE_CONFIG_PATH}"
+SOURCE_DEFAULT = "the forge's default"
+SOURCE_ONLY = "the one allowed method"
+
+
+def choose_method_source(
     explicit: str | None, methods: dict[str, Any], *, configured: str | None = None
-) -> str:
-    """The merge method (spec §3.F step 2): *explicit*, else the repo's default,
-    else *configured* (`.fr/triage.yaml`'s `merge_method`, cloud-triage §A: REST
-    names no default), else the one method the repo allows.
+) -> tuple[str, str]:
+    """The merge method and where it came from (spec §3.F step 2, amended by
+    2026-11-26-landing-method R1, gh#1702): *explicit*, else *configured*
+    (`.fr/triage.yaml`'s `merge_method`: the repo's own decision), else the
+    forge's default (the viewer's, only a fallback), else the one method the
+    repo allows.
 
     *methods* is `GhClient.repo_merge_methods`: `{default, allowed}`. An
     explicit or configured method the repo disallows is refused here, before
@@ -114,23 +122,30 @@ def choose_method(
             raise ConfigError(
                 f"--method {explicit}: the repo does not allow it (allowed: {', '.join(allowed)})"
             )
-        return explicit
-    default = methods.get("default")
-    if default in allowed:
-        return str(default)
+        return explicit, SOURCE_EXPLICIT
     if configured is not None:
         if configured not in allowed:
             raise ConfigError(
                 f"merge_method: {configured} in {TRIAGE_CONFIG_PATH}: the repo does not allow it "
                 f"(allowed: {', '.join(allowed)}); change it, or give --method"
             )
-        return configured
+        return configured, SOURCE_CONFIGURED
+    default = methods.get("default")
+    if default in allowed:
+        return str(default), SOURCE_DEFAULT
     if len(allowed) == 1:
-        return allowed[0]
+        return allowed[0], SOURCE_ONLY
     raise ConfigError(
         "the repo names no default merge method you may use; set `merge_method` in "
         f"{TRIAGE_CONFIG_PATH} or give --method ({', '.join(allowed)})"
     )
+
+
+def choose_method(
+    explicit: str | None, methods: dict[str, Any], *, configured: str | None = None
+) -> str:
+    """The merge method alone; see `choose_method_source` for the order."""
+    return choose_method_source(explicit, methods, configured=configured)[0]
 
 
 def pr_checks_verdict(

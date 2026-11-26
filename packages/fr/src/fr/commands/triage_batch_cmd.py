@@ -250,7 +250,7 @@ from fr.triage.batch_merge import (
     MergeConflictError,
     MergeContext,
     MergeStopError,
-    choose_method,
+    choose_method_source,
     pr_checks_verdict,
     trial_conflicts,
 )
@@ -343,6 +343,7 @@ from fr.triage.probe import PassPlan
 from fr.triage.queue_comment import CommentBook
 from fr.triage.queue_comment import sync as queue_comments_sync
 from fr.triage.queue_exec import (
+    REBASE_WARNING,
     EntryInput,
     Landing,
     QueueExecutor,
@@ -350,6 +351,8 @@ from fr.triage.queue_exec import (
     QueueWriter,
     forge_refusal,
     held_plan,
+    landing_refusal,
+    merge_read_hold,
     queue_config,
     queue_refusal,
     read_hold,
@@ -4194,6 +4197,7 @@ class _Driver:
         self._comment_books: dict[str, CommentBook] = {}  # repo -> its marker comments (R28)
         self._queue_needs: dict[str, list[str]] = {}
         self._allowed: dict[str, dict[str, Any]] = {}  # repo -> its merge methods, read at build
+        self._method_source: dict[str, str] = {}  # repo -> where its chosen method came from
         # per pass (triage-intake R9): repos whose origin this pass checked, and those held
         self._ctx_checked: set[str] = set()
         self._ctx_held: dict[str, DefaultBranchUnknown] = {}
@@ -4436,7 +4440,7 @@ class _Driver:
         if repo not in self._merge:
             try:
                 self._allowed[repo] = client.repo_merge_methods(repo)
-                method = choose_method(
+                method, self._method_source[repo] = choose_method_source(
                     self.method_override,
                     self._allowed[repo],
                     configured=facts.config_for(repo).merge_method,
@@ -4458,7 +4462,7 @@ class _Driver:
         config = facts.config_for(repo)
         ctx.version = config.version
         try:  # the allowed methods were read at the build: no forge read here
-            ctx.method = choose_method(
+            ctx.method, self._method_source[repo] = choose_method_source(
                 self.method_override, self._allowed[repo], configured=config.merge_method
             )
         except TriageError as exc:
@@ -7120,6 +7124,26 @@ class _Driver:
             versioned=facts.config_for(repo).version is not None,
         )  # fmt: skip
 
+    def _landing_hold(self, facts: Facts, repo: str) -> str | None:
+        """Why *repo*'s queue may not plan builds and landings (spec 2026-11-26-landing-method
+        R2, R4): its chosen method cannot land by push, or no method can be chosen or read.
+        Only `_queue_gate` asks: `_queue_refusal`, which the resume pass calls, builds no
+        merge context. Says the rebase warning, once, when the landing is allowed."""
+        try:
+            ctx = self._ctx_or_hold(facts, repo)  # says a held default branch once (R13)
+            if ctx is None:
+                return f"cannot tell {repo}'s default branch ({self._ctx_held[repo]}): held"
+        except DriverRefusal as exc:
+            return exc.message
+        except (ForgeReadError, TransientPassFailure) as exc:
+            return merge_read_hold(exc, transient=getattr(exc, "code", 1) == 1)
+        land = self._queue_block(facts, repo).land
+        why = landing_refusal(land, ctx.method, source=self._method_source[repo],
+                              allowed=self._allowed[repo]["allowed"])  # fmt: skip
+        if why is None and land == "merge" and ctx.method == "rebase":
+            self._report_once(f"rebase-first-parent\0{repo}", f"{repo}: {REBASE_WARNING}")
+        return why
+
     def _queue_resume(self, facts: Facts, judgements: Judgements, skip: Iterable[str]) -> bool:
         """R24: before the pass reads anything, finish what a killed driver left in each
         queue repo's current record. Whether it wrote."""
@@ -7308,7 +7332,7 @@ class _Driver:
         """The pass's own word on a queue plan: a repo that cannot run the queue is held
         (R7, R20, R35); a check that never reported is a Need (R7); with --yes, the last
         landing's `post_merge` and read-back gate the next one (R33, R35)."""
-        refusal = self._queue_refusal(facts, qplan.repo)
+        refusal = self._queue_refusal(facts, qplan.repo) or self._landing_hold(facts, qplan.repo)
         if refusal is not None:
             return held_plan(qplan, refusal)
         needs = tuple(QueueAction("queue-need", qplan.repo, n, wave=qplan.wave)
