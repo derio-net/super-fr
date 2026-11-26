@@ -306,3 +306,8 @@ what: Post-merge, live: in the next wave on this repo, a conflict hand-back name
 why: operator decision 2026-11-26: the live wave walk (row wave-queue-gaps-live, gate:tester) is walked with the next release walk, not at close-out
 how: fr journal resolve --scope spec --slug 2026-11-24-wave-queue-gaps --id test-plan-step-1 --state fixed --note "<evidence>"
 owed_key: spec:2026-11-24-wave-queue-gaps#step1
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-1-resolved created=2026-11-26T16:01:14+00:00 state=open resolves=test-plan-step-1 filed_as=derio-net/super-fr#1712 -->
+### test-plan-step-1-resolved · finding [filed → derio-net/super-fr#1712] · resolves test-plan-step-1: Test Plan step 1 owed
+
+Filed at archive as derio-net/super-fr#1712; still owed until discharged.
