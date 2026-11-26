@@ -91,6 +91,14 @@ class BranchRun:
     active: bool
     file: str  # repo-relative
     unreadable: bool = False
+    # The first step with state `running`, itself or through a unit (`None`: none).
+    running_step: str | None = None
+
+    @property
+    def running(self) -> bool:
+        """Work may be in flight: a step or unit `running`, or a file fr cannot
+        read (unknown is not finished). `pending` and `blocked` are not running."""
+        return self.unreadable or self.running_step is not None
 
     def to_json(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -199,6 +207,74 @@ def _rel(path: Path, worktree: Path) -> str:
         return str(path)
 
 
+def _running_step(steps: dict[Any, dict[str, Any]]) -> str | None:
+    for name, step in steps.items():
+        units = step.get("units")
+        in_units = isinstance(units, dict) and any(
+            isinstance(u, dict) and u.get("state") == "running" for u in units.values()
+        )
+        if step.get("state") == "running" or in_units:
+            return str(name)
+    return None
+
+
+def running_hold(runs: list[BranchRun]) -> str | None:
+    """Why gc must keep a workspace: `run <id> step <step> is running`, or the
+    unreadable file's own line (R9). `None` when no run is running."""
+    for r in runs:
+        if r.unreadable:
+            return f"run {r.id} is unreadable ({r.file})"
+        if r.running_step is not None:
+            return f"run {r.id} step {r.running_step} is running"
+    return None
+
+
+def _listing_failure(root: Path) -> str | None:
+    """Why the runs dir below *root* exists and cannot be listed, else None. An absent dir
+    is no cursor; `Path.glob`, which `branch_runs` lists with, reads an unlistable one as
+    empty, i.e. "nothing running" (l-security-r2)."""
+    runs = below(root, "run")
+    try:
+        os.listdir(runs)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        return f"{runs} cannot be listed: {exc.strerror or exc}"
+    return None
+
+
+def gc_run_hold(worktree: Path, branch: str) -> str | None:
+    """Why gc must keep the workspace at *worktree* (R9), under every placement, or None.
+
+    The run cursors live at the placement's own artifact root (l-security-r1): the
+    worktree itself under `repo`, the feature's root in the repo's `fr` worktree under
+    quiet, or in the stealth tracking clone (`fr.artifacts.paths.space_for`, computed with
+    `create=False`, so gc never creates a quiet worktree). Both that root and the worktree
+    are read, and either one running, unreadable or unlistable keeps it. Fail closed: a
+    placement that cannot be resolved (the error, e.g. a lost marker whose state records
+    quiet), or a non-`repo` root that is absent, is `run cursor location unknown`."""
+    from fr.artifacts.paths import REPO, feature_root, space_for
+
+    wt = Path(worktree)
+    try:
+        space = space_for(wt, create=False)
+    except Exception as exc:  # any failure is unknown, and unknown keeps it (fail closed)
+        return f"run cursor location unknown ({exc})"
+    roots = [wt]
+    if space.placement != REPO:
+        if not space.root.is_dir():
+            return (
+                f"run cursor location unknown (the {space.placement} root {space.root} is absent)"
+            )
+        roots.insert(0, feature_root(space))
+    for root in dict.fromkeys(roots):
+        if (failed := _listing_failure(root)) is not None:
+            return f"run cursor location unknown ({failed})"
+        if (hold := running_hold(branch_runs(root, branch))) is not None:
+            return hold
+    return None
+
+
 def branch_runs(worktree: Path, branch: str) -> list[BranchRun]:
     """This branch's run files under `docs/superpowers/runs/`, read with plain
     `yaml.safe_load` — never the live `extra="forbid"` model, so an old stamp or
@@ -237,6 +313,7 @@ def branch_runs(worktree: Path, branch: str) -> list[BranchRun]:
                 cursor=cursor if isinstance(cursor, str) and cursor else "?",
                 active=any(s.get("state") != "done" for s in steps.values()),
                 file=_rel(path, worktree),
+                running_step=_running_step(steps),
             )
         )
     return runs

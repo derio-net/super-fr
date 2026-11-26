@@ -251,3 +251,66 @@ run_kind: none
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-24-ci-economy-p2 created=2026-11-24T15:00:09+00:00 -->
 ### tier-2026-11-24-ci-economy-p2 · decision · hard: phase 2 changes ci-ok, the one required check of main, and the lane rules every PR and landing relies on
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-26T13:32:20+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: pre-merge — CI: unit tests of `fr.checkstate` and of each R3 reader read `CANCELLED` as pending and `STALE`/`TIMED_OUT` as failing, the check-state tripwire passes, and `slot_check` reports a cancelled required check late after `wait_minutes` (row `ci-cancelled-reads-pending`).
+
+Evidence: ci-ok green on PR #1669 head 06f19722 (merged as 3e0df5b4); the named unit and workflow-shape tests run in CI's test job
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-11-26T13:32:23+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: pre-merge — CI: workflow-shape tests pin `ci.yml`'s concurrency block and `ci-ok`'s `if: always()` (row `ci-superseded-runs`).
+
+Evidence: ci-ok green on PR #1669 head 06f19722 (merged as 3e0df5b4); the named unit and workflow-shape tests run in CI's test job
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-11-26T13:32:26+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: pre-merge — CI: `ci_lane.py landed` over recorded run payloads (an `fr-queue/**` success, a PR run, another workflow, an error) and the workflow shape of the landed lane (`validate-artifacts` kept) (row `ci-landed-skip`).
+
+Evidence: ci-ok green on PR #1669 head 06f19722 (merged as 3e0df5b4); the named unit and workflow-shape tests run in CI's test job
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-11-26T13:32:29+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: pre-merge — CI: queue builder tests over real bare git repos: a whole generated file and a generated block regenerate and build, a stamp conflict takes the newer date, a mixed real conflict hands back naming only the real path, a failing, timed-out or overreaching mirror command hands back; `TriageConfig.generated` loads and facts schema 16 still reads (row `queue-regenerates-generated`).
+
+Evidence: ci-ok green on PR #1669 head 06f19722 (merged as 3e0df5b4); the named unit and workflow-shape tests run in CI's test job
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-5 created=2026-11-26T13:32:32+00:00 -->
+### test-plan-step-5 · discovery · Test Plan step 5: ran
+
+Step: pre-merge — CI: `ci_lane.py classify` and `verdict` for each lane, and the workflow shape (`fetch-depth: 0`, lane conditions, `scoped-tests`) (row `ci-light-lane`).
+
+Evidence: ci-ok green on PR #1669 head 06f19722 (merged as 3e0df5b4); the named unit and workflow-shape tests run in CI's test job
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-6 created=2026-11-26T13:32:34+00:00 -->
+### test-plan-step-6 · discovery · Test Plan step 6: ran
+
+Step: pre-merge — CI: `--fr-scope` selects `own_artifacts` tests for a docs change, and the tripwire passes over the repo and fails a fixture module that names the root unmarked (row `own-artifacts-tests-selected`).
+
+Evidence: ci-ok green on PR #1669 head 06f19722 (merged as 3e0df5b4); the named unit and workflow-shape tests run in CI's test job
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-7 created=2026-11-26T13:32:38+00:00 -->
+### test-plan-step-7 · discovery · Test Plan step 7: ran
+
+Step: post-merge — operator-driven: two quick pushes to one PR leave the first run cancelled, and the PR's head shows only the second run's `ci-ok` (row `ci-superseded-runs`).
+
+Evidence: walked 2026-11-25 on PR #1686: two pushes a minute apart; CI run 45598124780 ended cancelled, run 45598191102 passed, and the head reports one ci-ok (row ci-superseded-runs walked)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-8 created=2026-11-26T13:32:40+00:00 -->
+### test-plan-step-8 · discovery · Test Plan step 8: ran
+
+Step: post-merge — operator-driven: the next queue landing's `main` run shows `classify`, `validate-artifacts` and `ci-ok`, green, naming the `fr-queue/**` run (row `ci-landed-skip`).
+
+Evidence: walked 2026-11-25: queue slot run 45595562849 built e7564c69e (#1685); the main push of that sha (CI run 45596644755) ran only classify, validate-artifacts and ci-ok, green, naming the fr-queue run (row ci-landed-skip walked)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-9 created=2026-11-26T13:32:43+00:00 -->
+### test-plan-step-9 · discovery · Test Plan step 9: ran
+
+Step: post-merge — operator-driven: the next close-out or archive PR runs `scoped-tests` and no shards, with a green `ci-ok` (row `ci-light-lane`).
+
+Evidence: walked 2026-11-25 on PR #1686 (docs/acceptance only): CI run 45598191102 skipped plan, collect, the shards, split-check and coverage, ran scoped-tests, ci-ok green (row ci-light-lane walked)

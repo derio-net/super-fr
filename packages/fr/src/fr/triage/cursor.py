@@ -7,11 +7,17 @@ mapping, because a cursor at a PR head may be written by an older or newer `fr` 
 this one, and the three facts it needs (a `blocked` step, a done `deliver`, a `manual`
 unit) are spelled the same in every run version that has them. `read_cursor` reaches
 the document through the git seam's `Checkout` alone: this module starts no process.
+
+Fail-closed (spec 2026-11-24-batch-merge-readiness R1): a PR's head may carry more than one
+cursor naming its branch, and its run is delivered only when EVERY one records `deliver`
+done; the fold (`fold_positions`) lives here alone. `read_cursor` also says whether it read
+at all, so "no cursor names the branch" is never mistaken for "the head could not be read",
+and a run file it cannot use is "could not be read" too, with its cause, never skipped.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import yaml
@@ -19,10 +25,14 @@ import yaml
 from fr.artifacts.paths import KIND_DIRS
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout
-from fr.triage.model import CursorPosition, PullRequest
+from fr.triage.model import CursorAnswer, CursorPosition, PullRequest
 
 RUNS_DIR = KIND_DIRS["run"]
 DELIVER = "deliver"
+
+
+class UnreadableCursorError(ValueError):
+    """A run file that is no usable cursor (R1 fail closed): its text says why."""
 
 
 def _step(steps: Mapping[str, Any], step_id: str) -> Mapping[str, Any]:
@@ -30,17 +40,36 @@ def _step(steps: Mapping[str, Any], step_id: str) -> Mapping[str, Any]:
     return record if isinstance(record, Mapping) else {}
 
 
-def cursor_position(doc: object, branch: str) -> CursorPosition | None:
-    """The position of the run cursor *doc* when it names *branch*; None when it is not
-    a cursor, or another branch's. First match: `deliver` done, the cursor step
-    `blocked` on its gate, a `manual` unit of the cursor step that is all that is left
-    of it (every other unit done), else `none`."""
-    if not isinstance(doc, Mapping) or doc.get("branch") != branch:
-        return None
+def _usable(doc: Mapping[str, Any]) -> tuple[str, str, Mapping[str, Any]]:
+    """*doc*'s run, cursor step and steps, or `UnreadableCursorError`: the shape
+    `fr.isolation.preserve.branch_runs` reads (steps a mapping of mappings)."""
     run, cursor, steps = doc.get("run"), doc.get("cursor"), doc.get("steps")
-    if not isinstance(run, str) or not run or not isinstance(cursor, str) or not cursor:
+    if not isinstance(run, str) or not run:
+        raise UnreadableCursorError("names no run")
+    if not isinstance(cursor, str) or not cursor:
+        raise UnreadableCursorError("names no cursor step")
+    if not isinstance(steps, Mapping):
+        raise UnreadableCursorError("steps is not a mapping")
+    bad = next((str(k) for k, v in steps.items() if not isinstance(v, Mapping)), None)
+    if bad is not None:
+        raise UnreadableCursorError(f"step {bad} is not a mapping")
+    return run, cursor, steps
+
+
+def cursor_position(doc: object, branch: str) -> CursorPosition | None:
+    """The position of the run cursor *doc* when it names *branch*; None when it names
+    another branch. A document that is no run (not a mapping, no `branch`) or that names
+    *branch* with no usable run, cursor or steps raises `UnreadableCursorError`: unknown, never
+    "no cursor" (R1). First match: `deliver` done, the cursor step `blocked` on its gate, a
+    `manual` unit of the cursor step that is all that is left of it (every other unit done),
+    else `none`."""
+    if not isinstance(doc, Mapping):
+        raise UnreadableCursorError("is not a mapping")
+    if "branch" not in doc:
+        raise UnreadableCursorError("names no branch")
+    if doc.get("branch") != branch:
         return None
-    steps = steps if isinstance(steps, Mapping) else {}
+    run, cursor, steps = _usable(doc)
     if _step(steps, DELIVER).get("state") == "done":
         return CursorPosition(run=run, step=DELIVER, kind="deliver-done")
     record = _step(steps, cursor)
@@ -58,27 +87,52 @@ def cursor_position(doc: object, branch: str) -> CursorPosition | None:
     return CursorPosition(run=run, step=cursor, kind="none")
 
 
-def read_cursor(checkout: Checkout, pr: PullRequest) -> CursorPosition | None:
-    """The cursor position at *pr*'s head, read through *checkout*: every
-    `docs/superpowers/runs/*.yaml` at the head commit, the first naming the PR's branch.
-    None when the clone cannot reach the head, no cursor names the branch, or the read
-    fails: unknown, never a guess."""
+def fold_positions(found: Sequence[CursorPosition]) -> CursorPosition | None:
+    """One position for every cursor naming a branch (batch-merge-readiness R1): `deliver`
+    done only when every one is, otherwise the first that is not; None for none."""
+    return next((p for p in found if p.kind != "deliver-done"), found[0] if found else None)
+
+
+def read_cursor(checkout: Checkout, pr: PullRequest) -> CursorAnswer:
+    """The folded cursor position at *pr*'s head, read through *checkout*, and whether it
+    was read: every `docs/superpowers/runs/*.yaml` at the head commit naming the PR's
+    branch, folded by `fold_positions`. `(None, "read")` when none names the branch. Fail
+    closed (R1): the head not reached, a failed git read, and any run file that is not YAML
+    or not a usable cursor (`cursor_position`) make the whole read `unread`, with the cause
+    in `detail` (l-errors-r2), so a corrupt file beside a delivered cursor never delivers."""
+    at = pr.head_oid[:12]
+    found: list[CursorPosition] = []
     try:
-        if not checkout.reach_commit(pr.head_oid, pr.head_ref):
-            return None
-        for name in checkout.list_dir(pr.head_oid, RUNS_DIR):
+        why = checkout.reach_failure(pr.head_oid, pr.head_ref)
+        if why:
+            return CursorAnswer(None, "unread", f"head {at} not reached: {why}")
+        for name in sorted(checkout.list_dir(pr.head_oid, RUNS_DIR)):
             if not name.endswith(".yaml"):
                 continue
-            text = checkout.show(pr.head_oid, f"{RUNS_DIR}/{name}")
+            path = f"{RUNS_DIR}/{name}"
+            text = checkout.show(pr.head_oid, path)
             if text is None:
-                continue
+                return CursorAnswer(None, "unread", f"{path} at {at} could not be shown")
             try:
-                doc = yaml.safe_load(text)
-            except yaml.YAMLError:
-                continue
-            found = cursor_position(doc, pr.head_ref)
-            if found is not None:
-                return found
-    except TriageError:
-        return None
-    return None
+                position = cursor_position(yaml.safe_load(text), pr.head_ref)
+            except yaml.YAMLError as exc:
+                return CursorAnswer(None, "unread", f"{path} at {at} is not YAML: {exc}")
+            except UnreadableCursorError as exc:
+                return CursorAnswer(None, "unread", f"{path} at {at} {exc}")
+            if position is not None:
+                found.append(position)
+    except TriageError as exc:
+        return CursorAnswer(None, "unread", f"reading {RUNS_DIR} at {at} failed: {exc}")
+    return CursorAnswer(fold_positions(found), "read")
+
+
+def answer_at(pr: PullRequest, open_clone: Callable[[], Checkout] | None) -> CursorAnswer:
+    """The driver's read of *pr*'s head cursor (batch-merge-readiness R1): `no-clone` when
+    *open_clone* is None, else `read_cursor` through it, a clone that cannot be opened or
+    read being `unread` with its cause (l-errors-r2)."""
+    if open_clone is None:
+        return CursorAnswer(None, "no-clone", f"no clone of {pr.repo}")
+    try:
+        return read_cursor(open_clone(), pr)
+    except TriageError as exc:
+        return CursorAnswer(None, "unread", f"the clone of {pr.repo} could not be read: {exc}")

@@ -142,6 +142,20 @@ def test_a_named_batch_without_the_approval_label_is_refused(
     assert world.queue_plans == []
 
 
+def test_a_named_approved_batch_whose_run_has_not_delivered_is_held_for_that_reason(
+    tmp_path: Path, world: World, clone: DriveCheckout
+) -> None:
+    """p1-r1: an approved PR whose run has not delivered is not "not approved": `batch merge`
+    names the readiness reason (batch-merge-readiness R1, R2) and opens no queue."""
+    _ready(world, tmp_path, 1)
+    world.prs[101]["delivered"] = False
+    code, out = _merge(tmp_path, "b1", "--yes")
+    assert code == 2, out
+    assert "not approved" not in out
+    assert "b1: approved, not delivered: no run cursor names feat/batch-b1" in out
+    assert world.queue_plans == []
+
+
 def test_a_named_batch_that_is_not_pr_open_is_refused(
     tmp_path: Path, world: World, clone: DriveCheckout
 ) -> None:

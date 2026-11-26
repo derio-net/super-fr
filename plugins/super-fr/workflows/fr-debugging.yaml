@@ -1,0 +1,43 @@
+# The shipped `fr-debugging` shape (spec 2026-11-24-batch-merge-readiness §E,
+# R10, R11): the minimum cursor a debug run needs so its fix-PR's head carries
+# a `deliver` step the batch driver can read (R1). Three steps, no stations and
+# no staffing — those stay with super-fr#1655.
+#
+# `debug` emits the debug journal's path as the `debug` artifact (a file that
+# must exist, like `spec` and `plan`); every later reader — record entries, the
+# review evidence target, the derived `findings` gate, the PR body and
+# `deliver`'s leftovers gate — finds the journal through it.
+#
+# `review` owes a dispatched reviewer's `kind: review` entry in the debug
+# journal and, DERIVED, no open `d-r<k>` finding there. `deliver` owes the
+# suite log, the docs-currency witness and the PR-settle witness: nothing that
+# needs a plan (no `proportionality`).
+workflow: fr-debugging
+schema: 1
+description: Debug a failure to a reviewed fix-PR, with a run cursor.
+
+unit: run
+requires: [git, tests, scm]
+verification: candidate
+
+steps:
+  - id: debug
+    kind: agent
+    skill: super-fr:fr-debugging
+    emits: [debug, journal:debug]
+
+  - id: review
+    kind: agent
+    skill:
+      - superpowers:requesting-code-review
+      - superpowers:receiving-code-review
+    needs: [debug]
+    emits: [journal:debug]
+    evidence: [review, reviewer, findings]
+
+  - id: deliver
+    kind: agent
+    skill: superpowers:verification-before-completion
+    needs: [debug]
+    emits: [pr]
+    evidence: [tests, docs, settle]

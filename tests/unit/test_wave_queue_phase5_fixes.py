@@ -110,13 +110,15 @@ def test_p5_r2_a_configured_repo_has_no_such_need(tmp_path: Path, world: World) 
 def test_p5_r2_the_facts_only_board_says_the_queue_holds_it_not_merge_ready(
     tmp_path: Path, world: World
 ) -> None:
-    from fr.triage.kanban import HINT_MERGE_READY, HINT_QUEUE_UNCONFIGURED, build_board
+    from fr.triage.kanban import HINT_QUEUE_UNCONFIGURED, build_board
 
     judgements = _unconfigured(world, tmp_path)
     card = build_board(world.facts(), judgements, {}).card("b1")
-    assert card.hint == HINT_QUEUE_UNCONFIGURED != HINT_MERGE_READY
+    assert card.hint == HINT_QUEUE_UNCONFIGURED
     world.config = {"queue": {"ci": "push"}}
-    assert build_board(world.facts(), judgements, {}).card("b1").hint == HINT_MERGE_READY
+    card = build_board(world.facts(), judgements, {}).card("b1")
+    assert card.hint == "" and card.readiness is not None  # the verdict leads (R7)
+    assert card.readiness.verdict == "Approved, merges next"
 
 
 # ------------------------------------------------------------------ p5-r3
