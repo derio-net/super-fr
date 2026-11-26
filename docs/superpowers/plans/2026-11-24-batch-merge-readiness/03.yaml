@@ -1,0 +1,48 @@
+schema_version: 2
+phase:
+  number: 3
+  title: gc keeps a workspace whose run is still running (R9)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - gc-keeps-running-run
+  tier: standard
+  files:
+  - packages/fr/src/fr/isolation/local.py
+  - packages/fr/src/fr/isolation/preserve.py
+  - tests/**
+  - docs/**/*.md
+  estimate_lines: 250
+tasks:
+- number: 1
+  title: The running predicate and the reap guard (spec §D)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests that `preserve.branch_runs` results expose a `running` predicate (true when any step or unit is `running`; true for an unreadable file; false for `pending`, `blocked` or `done` only), and that `gc` (dry run and live) over a merged and a merged-by-content workspace whose worktree cursor has a running step keeps it with `kept: run <id> step <step> is running`, while one with no running step reaps as before. A test asserts `fr isolation down --branch` on the same workspace behaves exactly as before.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: add the predicate in `isolation/preserve.py` and the guard at the top of `local.py` `_reap_or_classify` for both merged verdicts and both paths; leave `_reap_hazard` and `_down_worktree_tail` untouched. Tests green.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: keep `isolation/local.py` within its module line budget; update the gc paragraph of the fr-isolation docs page if it lists what gc keeps. ruff, mypy and the fast tier green.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-11-25T05:38:20+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-11-25T05:38:20+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-11-25T05:38:20+00:00'
+      note: null
+  completion:
+    at: '2026-11-25T05:38:20+00:00'
+    note: null
+    observed_prs: []

@@ -45,6 +45,11 @@ printf '%s' "$config" > "$seed/.fr/triage.yaml"
 printf 'code\n' > "$seed/code.py"
 git -C "$seed" add -A && git -C "$seed" commit -qm "seed" && git -C "$seed" push -q origin HEAD:main \
   || fail "seed main"
+# The batch's run has delivered (its cursor at the head records `deliver` done): the
+# driver asks for an approval only of a delivered PR (2026-11-24-batch-merge-readiness R2).
+mkdir -p "$seed/docs/superpowers/runs"
+printf 'run: r1\nbranch: feat/batch-b1\ncursor: deliver\nsteps:\n  deliver: {state: done}\n' \
+  > "$seed/docs/superpowers/runs/r1.yaml"
 git -C "$seed" checkout -qb feat/batch-b1 && printf 'a\n' > "$seed/a.txt" \
   && git -C "$seed" add -A && git -C "$seed" commit -qm "b1: the change" \
   && git -C "$seed" push -q origin feat/batch-b1 || fail "seed the batch branch"
@@ -98,7 +103,11 @@ refuse_grep "pulls/1080/merge" "$(log)" "no merge call for an unlabelled PR"
 page="$(board)"
 expect_grep "label it approved-fr to merge" "$page" "the board's Needs you asks for the label"
 expect_grep 'data-need="approve-pr"' "$page" "the ask is an approve-pr Need"
-expect_grep "awaiting approval" "$(cat "$state/batches.html")" "the kanban card awaits approval"
+# The card leads with its readiness verdict (batch-merge-readiness R5: a held queue is the
+# first match) and lists the approval it still waits for (R6).
+card="$(cat "$state/batches.html")"
+expect_grep "Not ready: queue held" "$card" "the kanban card leads with the held queue"
+expect_grep "<dt>Approval</dt><dd>none</dd>" "$card" "the kanban card awaits approval"
 
 # `batch merge` names the label when a named batch lacks it; nothing is written.
 merge() { run_fr out triage batch merge "$@" --repo "$repo" --dir "$state" --checkout "$PWD"; }

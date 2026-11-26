@@ -1,0 +1,83 @@
+schema_version: 2
+phase:
+  number: 4
+  title: A minimal fr-debugging workflow with a cursor (R10, R11)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - fr-debugging-run-cursor
+  tier: standard
+  files:
+  - plugins/super-fr/workflows/fr-debugging.yaml
+  - packages/fr/src/fr/workflows/fr-debugging.yaml
+  - packages/fr/src/fr/workflow/artifacts.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/**
+  - packages/fr/src/fr/run/**
+  - plugins/super-fr/skills/fr-debugging/SKILL.md
+  - .opencode/**
+  - .hermes/**
+  - README.md
+  - tests/**
+  - docs/**/*.md
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: The shape and its debug artifact (spec §E)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: tests that the shipped `fr-debugging` manifest passes `fr workflow check` and resolves through the same lookup as `fr-goal` (the wheel copy equals the plugin copy, per the shipped-workflows tripwire); that `debug` is an emitted artifact token whose path must exist; and that `fr run start fr-debugging --branch fix/x` starts a run whose cursor walks debug, review, deliver.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: add `plugins/super-fr/workflows/fr-debugging.yaml` and its wheel copy (the same sync the shipped workflows use), and the `debug` token in `fr.workflow.artifacts` next to `spec` and `plan`. Tests green.
+- number: 2
+  title: The debug journal's readers (spec §E, R11)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: resolve tests through `fr run resolve --record`: a `debug` record emitting `debug: <journal path>` with journal entries applies them to that journal (scope `debug`, slug from the path); `review` is refused without a `kind: review` entry in the debug journal, without a dispatched reviewer, or while a `d-r<k>` finding is open, and passes when they hold; `deliver` asks only `tests`, `docs` and `settle`, never `proportionality`; the rendered PR body lists the debug journal's in-scope and out-of-scope findings, and `unaccounted` sees an open out-of-scope debug finding.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: `record/apply.py` slug resolution for scope `debug` from the emitted `debug` path; `_EvidenceTarget` scope `debug` (a flat step emitting `journal:debug`), the review-entry lookup and the derived `findings` gate; `record/pr_body._journals`/`unaccounted` include the debug journal. Tests green.
+- number: 3
+  title: The skill drives the run (R10)
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Edit `plugins/super-fr/skills/fr-debugging/SKILL.md`: §0 starts `fr run start fr-debugging --branch <fix-branch>` (reuse case: an existing workspace with a run starts no run and the fix rides it); §3 resolves `debug` with a record emitting `debug: <journal path>`; the review section resolves `review` with the dispatched reviewer's entry (ids `d-r<k>`); §4 resolves `deliver`. Replace "There is no cursor here" with the cursor's role. Keep harness-specific words inside per-harness clauses (tool-neutrality tripwire).
+  - id: P4.T3.S2
+    text: |-
+      Run `scripts/sync-opencode.py`, `scripts/sync-hermes.py` and `scripts/sync-readme.py`; then the skill, mirror, readme, workflow and neutrality tripwires (`uv run pytest tests/unit -k "tripwire or mirror or skill" -q --no-cov`) and `uv run fr docs check`: green. Update any docs page `fr docs check` names for the skill.
+state:
+  steps:
+    P4.T1.S1:
+      state: x
+      ticked_at: '2026-11-25T07:03:08+00:00'
+      note: null
+    P4.T1.S2:
+      state: x
+      ticked_at: '2026-11-25T07:03:08+00:00'
+      note: null
+    P4.T2.S1:
+      state: x
+      ticked_at: '2026-11-25T07:03:08+00:00'
+      note: null
+    P4.T2.S2:
+      state: x
+      ticked_at: '2026-11-25T07:03:08+00:00'
+      note: null
+    P4.T3.S1:
+      state: x
+      ticked_at: '2026-11-25T07:03:08+00:00'
+      note: null
+    P4.T3.S2:
+      state: x
+      ticked_at: '2026-11-25T07:03:08+00:00'
+      note: null
+  completion:
+    at: '2026-11-25T07:03:08+00:00'
+    note: null
+    observed_prs: []
