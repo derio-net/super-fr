@@ -1,0 +1,29 @@
+schema_version: 12
+run: 2026-11-26-feat-batch-landing-method
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T2.S4, P1.T2.S5, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T5.S4]
+refactor:
+  "P1.T2": "land_push's refspec loop is now one line; nothing more to clean beyond the shared landing_refusal"
+  "P1.T3": "the cloud check reuses choose_method_source and landing_refusal; the queue block reader is a sibling of the merge_method reader, nothing to merge further"
+  "P1.T4": "logged_prs is now a thin wrapper over logged_pr_dates; nothing else to clean"
+  "P1.T5": "docs and config only; stamps follow the page text"
+journal:
+  - kind: decision
+    id: landing-hold-budget
+    title: triage_batch_cmd.py module budget moved from 8225 to 8250
+    body: "_landing_hold (about 20 lines) must sit in the driver because it calls merge_ctx; the pure parts (landing_refusal, REBASE_WARNING) live in queue_exec.py. The budget stays within 400 lines of the module."
+    phase: 1
+  - kind: discovery
+    id: batch-merge-method-hold-exit
+    title: batch merge --method with a disallowed method now exits 1 with queue-held, not 2
+    body: "R2 makes an unchoosable method a held plan instead of a raise, so test_batch_merge_uses_the_method_it_is_given_or_the_repos_default now expects exit 1 and the held reason."
+    phase: 1
+  - kind: discovery
+    id: writing-standard-unchecked
+    title: the writing-standard check of the edited pages was not run locally
+    body: "scripts/check-writing-standards.sh needs a pinned blog-craft checkout; CI's site-build job runs it. Edited pages: fr-wave-driver.md, fr-exit-gates.md (plain-language), cloud-setup.md, merge-protection.md (ste)."
+    phase: 1
+resolves: []
+evidence: {}
