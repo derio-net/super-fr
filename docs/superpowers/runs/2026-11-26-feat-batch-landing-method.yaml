@@ -3,7 +3,7 @@ run: 2026-11-26-feat-batch-landing-method
 workflow: fr-goal-light@1
 branch: feat/batch-landing-method
 started: '2026-11-26T13:02:01+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -48,7 +48,11 @@ steps:
           reviewer: a2bd709c2fd01c919
           findings: spr-r1,spr-r2,spr-r3,spr-r4,spr-r5,spr-r6,spr-r7,spr-r8,spr-r9,spr-r10
   plan-review:
-    state: pending
+    state: done
+    at: '2026-11-26T13:17:55+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
