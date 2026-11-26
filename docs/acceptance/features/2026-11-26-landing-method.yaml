@@ -47,9 +47,11 @@ rows:
       subject.'
     origin:
     - spec:2026-11-26-landing-method#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_the_rebase_warning_under_land_merge_prints_once_per_process
+    status: ci
+    notes: 'R4: one warning per repo per driver process under land merge with rebase'
     verify: none
   - id: release-closed-unmerged-landing
     capability: release-gating
