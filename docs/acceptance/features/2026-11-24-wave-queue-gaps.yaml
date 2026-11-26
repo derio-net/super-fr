@@ -1,0 +1,131 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-24-wave-queue-gaps
+repo: derio-net/super-fr
+rows:
+  - id: wave-queue-handback-slot
+    capability: Wave merge queue hand-backs
+    acceptance: A conflict hand-back names the combination commit ahead of the PR (fr-queue/<scope>/slot-<k-1>,
+      or the default branch for the first entry) to merge, and is re-issued free of
+      budget when an ejection ahead or a foreign move makes that commit stop leading
+      to main.
+    origin:
+    - spec:2026-11-24-wave-queue-gaps#R1
+    - spec:2026-11-24-wave-queue-gaps#R2
+    - spec:2026-11-24-wave-queue-gaps#R3
+    - spec:2026-11-24-wave-queue-gaps#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_queue_handback.py#test_the_slot_brief_fetches_the_slot_and_merges_its_sha
+      - super-fr:tests/unit/test_queue_handback.py#test_reissues_spend_no_handback
+      - super-fr:tests/unit/test_wave_queue_handback_planner.py#test_a_conflict_ejection_names_the_last_standing_combination_and_its_slot
+      - super-fr:tests/unit/test_wave_queue_handback_planner.py#test_an_ejected_entry_whose_onto_no_longer_leads_is_reissued_once_on_the_new_target
+      - super-fr:tests/unit/test_wave_queue_handback_planner.py#test_an_ejected_non_batch_entry_need_names_the_commit_to_merge
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_slot_hand_back_names_the_slot_and_records_its_onto
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_reissue_sends_one_brief_on_the_new_target_and_spends_no_budget
+    status: ci
+    notes: 'wave-queue-gaps phase 1: the planner aims a conflict eject at the stack
+      target and re-issues free (pure), the slot brief, and the driver''s slot and re-issue
+      hand-backs over a fake forge'
+    verify: none
+  - id: wave-queue-handback-carry
+    capability: Wave merge queue hand-backs
+    acceptance: A PR whose head carries a queue combination commit that no longer leads
+      to main is never built and is briefed once to reset, force-with-lease push and
+      merge the new commit.
+    origin:
+    - spec:2026-11-24-wave-queue-gaps#R4
+    - spec:2026-11-24-wave-queue-gaps#R5
+    levels:
+      unit:
+      - super-fr:tests/integration/test_queue_lineage.py#test_a_head_that_merged_an_ejected_entrys_combination_carries_it
+      - super-fr:tests/integration/test_queue_lineage.py#test_a_combination_rebuilt_fresh_into_mains_history_is_not_carried
+      - super-fr:tests/integration/test_queue_lineage.py#test_an_unknown_object_raises
+      - super-fr:tests/unit/test_wave_queue_handback_planner.py#test_a_carrying_entry_is_not_built_and_yields_one_carry_action
+      - super-fr:tests/unit/test_wave_queue_handback_planner.py#test_an_unreadable_carry_or_lead_drops_the_entry_with_a_warning
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_carrying_head_gets_one_carry_brief_naming_the_reset_head
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_carrying_head_with_no_clean_hand_back_head_is_held
+    status: ci
+    notes: 'wave-queue-gaps phase 1: Checkout.carried/leads over real bare remotes,
+      the planner''s carry hold and R5 warnings, and the driver''s carry brief and hold'
+    verify: none
+  - id: wave-queue-gaps-live
+    capability: Wave merge queue hand-backs
+    acceptance: In a real wave on this repo, a hand-back merged onto the slot commit
+      lands with no second conflict, and an operator-added PR ships in the wave's release.
+    origin:
+    - spec:2026-11-24-wave-queue-gaps#R1
+    - spec:2026-11-24-wave-queue-gaps#R14
+    - spec:2026-11-24-wave-queue-gaps#R15
+    levels: {}
+    status: walk-owed
+    notes: ''
+    verify: live
+  - id: wave-queue-overlap-report
+    capability: Wave composition by file overlap
+    acceptance: batch suggest and batch create/edit --wave report each pair of batches
+      in one wave whose expected change sets overlap outside generated and version files,
+      with both remedies, and the later batch's dispatch brief names the overlap.
+    origin:
+    - spec:2026-11-24-wave-queue-gaps#R7
+    - spec:2026-11-24-wave-queue-gaps#R8
+    - spec:2026-11-24-wave-queue-gaps#R9
+    - spec:2026-11-24-wave-queue-gaps#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_wave_overlap.py#test_two_open_batches_of_one_wave_sharing_a_path_overlap_by_suffix
+      - super-fr:tests/unit/test_triage_batch_verbs.py#test_create_with_a_wave_writes_the_batch_then_prints_the_overlap
+      - super-fr:tests/unit/test_triage_batch_dispatch.py#test_the_dispatch_brief_names_an_overlapping_batch_of_its_wave
+    status: ci
+    notes: 'R7-R10 shipped: fr.triage.wave_overlap, suggest/create/edit print the pairs,
+      the dispatch brief names the overlap'
+    verify: none
+  - id: wave-queue-operator-entry
+    capability: Operator queue entries
+    acceptance: fr triage queue add/remove --pr N records who added or removed any open
+      same-repo PR by an allowed author; the PR enters the open queue (or opens a between-waves
+      one) under approved-fr pinned to its patch-id, and the wave's drain and release
+      wait for it.
+    origin:
+    - spec:2026-11-24-wave-queue-gaps#R11
+    - spec:2026-11-24-wave-queue-gaps#R12
+    - spec:2026-11-24-wave-queue-gaps#R14
+    - spec:2026-11-24-wave-queue-gaps#R15
+    - spec:2026-11-24-wave-queue-gaps#R16
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_queue_cmd.py#test_add_records_one_queue_add_by_the_authenticated_login
+      - super-fr:tests/unit/test_wave_queue_operator_planner.py#test_while_idle_a_ready_operator_entry_opens_a_between_waves_queue_at_once
+      - super-fr:tests/unit/test_wave_queue_operator_planner.py#test_a_wave_queue_does_not_drain_while_an_operator_entry_is_pending
+      - super-fr:tests/unit/test_operator_reads.py#test_an_added_pr_with_a_valid_label_is_admitted_as_an_operator_entry
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_an_added_approved_pr_opens_a_between_waves_queue_through_the_driver
+      - super-fr:tests/unit/test_queue_requests.py#test_queue_requests_below_schema_14_are_refused
+    status: ci
+    notes: 'phase 2 of wave-queue-gaps: queue add/remove verb with its refusals (fake
+      forge), the operator entry admitted and settled by operator_reads, the planner''s
+      join/open/drain/stall/eject rules, the driver seam end to end, and the schema-14
+      stamp; all in CI'
+    verify: none
+  - id: wave-queue-operator-preapproval
+    capability: Operator queue entries
+    acceptance: A PR added with --preapproved gets approved-fr from the driver, pinned
+      to its patch-id, whenever its own head is green and conflict-free, for as long
+      as it stays added.
+    origin:
+    - spec:2026-11-24-wave-queue-gaps#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_operator_reads.py#test_preapproval_labels_and_comments_with_head_and_patch_id
+      - super-fr:tests/unit/test_operator_reads.py#test_preapproval_needs_an_allowed_adder_at_use_time
+      - super-fr:tests/unit/test_operator_reads.py#test_preapproval_renews_at_the_next_green_head_after_a_void
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_preapproved_pr_is_labelled_and_commented_by_the_driver
+    status: ci
+    notes: 'phase 2 of wave-queue-gaps: the driver labels a preapproved PR only with
+      an allowed adder at use time, green own checks, no forge or queue conflict and
+      a readable patch-id, comments each head and patch-id, renews after a void, writes
+      nothing in a dry run; fake forge in CI'
+    verify: none

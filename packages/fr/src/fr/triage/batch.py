@@ -37,7 +37,9 @@ from fr.triage.model import (
     Judgements,
     Launch,
     PullRequest,
+    QueueAddEvent,
     QueueRecord,
+    QueueRemoveEvent,
     ReplacementEvent,
     TriageConfig,
     _check_schema,
@@ -627,6 +629,21 @@ def save_queues(
     return _rewrite(path, "queues", block, unchanged=lambda now: list(now.queues) == list(read))
 
 
+def save_queue_requests(
+    path: Path,
+    requests: Sequence[QueueAddEvent | QueueRemoveEvent],
+    *,
+    read: Sequence[QueueAddEvent | QueueRemoveEvent],
+) -> Judgements:
+    """Write *requests* as `path`'s `queue_requests:` section (spec 2026-11-24-wave-queue-gaps
+    R11): the sibling of `save_queues`, under the same refuse-or-write discipline."""
+    docs = [r.model_dump(mode="json", exclude_defaults=True) for r in requests]
+    block = yaml.safe_dump({"queue_requests": docs}, sort_keys=False, allow_unicode=True, width=100)
+    return _rewrite(
+        path, "queue_requests", block, unchanged=lambda now: list(now.queue_requests) == list(read)
+    )
+
+
 # ------------------------------------------------------------------ launch
 
 HARNESS_ALIASES: dict[str, str] = {"claude": "claude-code"}
@@ -787,7 +804,7 @@ def cited_paths(text: str) -> set[str]:
     return {m.strip(".,;:") for m in _PATH.findall(_URL.sub(" ", text))}
 
 
-def _same_file(a: str, b: str) -> bool:
+def same_file(a: str, b: str) -> bool:
     """Two citations name one file when one is a path suffix of the other."""
     return a == b or a.endswith("/" + b) or b.endswith("/" + a)
 
@@ -812,7 +829,7 @@ def suggest(judgements: Judgements, facts: Facts) -> list[Suggestion]:
     cites = {k: cited_paths(judgements.issues[k].detail) for k in free}
     groups: dict[frozenset[str], str] = {}
     for path in sorted({p for ps in cites.values() for p in ps}):
-        members = frozenset(k for k in free if any(_same_file(path, q) for q in cites[k]))
+        members = frozenset(k for k in free if any(same_file(path, q) for q in cites[k]))
         if len(members) > 1 and len(path) > len(groups.get(members, "")):
             groups[members] = path
     out += [

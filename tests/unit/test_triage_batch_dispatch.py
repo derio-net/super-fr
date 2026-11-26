@@ -518,6 +518,49 @@ def test_a_runner_without_from_env_is_refused(
     assert "cannot be constructed outside its own bridge" in out
 
 
+# ------------------------------------------- overlap brief (wave-queue-gaps R10)
+
+_OVERLAP_JUDGEMENTS = JUDGEMENTS.replace("schema: 2", "schema: 6")
+_OVERLAP_JUDGEMENTS = (
+    _OVERLAP_JUDGEMENTS.replace(
+        "    launch: {runner: fake, harness: claude, model: claude-opus-5-5}\n",
+        "    launch: {runner: fake, harness: claude, model: claude-opus-5-5}\n    wave: 1\n"
+        '  - id: other\n    title: Other\n    ids: ["super-fr#420"]\n    wave: 1\n',
+    )
+    .replace("executor guard", "executor guard in `isolation/local.py`")
+    .replace(
+        "rebuild routes through down",
+        "rebuild routes through `packages/fr/src/fr/isolation/local.py`",
+    )
+)
+
+
+def test_the_dispatch_brief_names_an_overlapping_batch_of_its_wave(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(tmp_path, judgements=_OVERLAP_JUDGEMENTS)
+    code, out = _dispatch(tmp_path, "lifecycle")
+    assert code == 0, out
+    text = " ".join(out.split())
+    assert "Batch `other` of this wave also expects to change" in text
+    assert "isolation/local.py" in text
+    assert "Whichever of the two lands second gets the queue's conflict hand-back" in text
+
+
+def test_the_dispatch_brief_of_a_batch_with_no_overlap_says_nothing_of_one(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _state(
+        tmp_path,
+        judgements=_OVERLAP_JUDGEMENTS.replace(
+            "wave: 1\n  - id: other", "wave: 2\n  - id: other", 1
+        ),
+    )
+    code, out = _dispatch(tmp_path, "lifecycle")
+    assert code == 0, out
+    assert "lands second" not in out
+
+
 # ------------------------------------------------------------- brief (§3.C.3)
 
 
