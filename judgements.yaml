@@ -10180,6 +10180,15 @@ batches:
   - super-fr#1690
   - super-fr#1590
   wave: 27
+- id: release-app-hardening-2
+  title: Release app hardening, round two
+  ids:
+  - super-fr#1610
+  - super-fr#1611
+  - super-fr#1612
+  - super-fr#1604
+  - super-fr#1607
+  wave: 27
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
