@@ -1609,7 +1609,7 @@ def test_gh1333_a_merge_commit_the_read_misses_is_named_by_its_pr_not_its_issues
 
     assert world.origin_log()[0] == "release: v4.24.0-rc.1"
     out = capsys.readouterr().out
-    assert "misses #50," in out
+    assert "misses #50 (" in out
     assert "#7" not in out and "#8" not in out
 
 
