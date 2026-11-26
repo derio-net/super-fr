@@ -185,8 +185,9 @@ def test_batch_merge_uses_the_method_it_is_given_or_the_repos_default(
 ) -> None:
     _ready(world, tmp_path, 1)
     code, out = _merge(tmp_path, "b1", "--yes", "--method", "rebase")
-    assert code == 2
-    assert "rebase" in out and "squash" in out  # the repo allows squash only
+    # R2: a method that cannot be chosen holds the queue with the error's text (no raise)
+    assert code == 1
+    assert "queue is held" in out and "rebase" in out and "allowed: merge" in out
     assert world.queue_plans == []
 
 

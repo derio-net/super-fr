@@ -57,11 +57,11 @@ def test_another_entry_lands_in_the_same_push_and_is_recorded_by_its_kind(
     w.pr(2, {"docs/superpowers/implemented/plans/p.md": "archived\n"}, title="chore: archive p")
     w.fetch()
     other = replace(w.entry(2), key=f"{kind}#2", ref=QueueEntryRef(pr=2, kind=kind))  # type: ignore[arg-type]
-    built = build(w.checkout, w.main(), [w.entry(1), other], "squash", None,  # type: ignore[arg-type]
+    built = build(w.checkout, w.main(), [w.entry(1), other], "merge", None,  # type: ignore[arg-type]
                   scope=SCOPE, slots=(1, 2), scratch=w.scratch)  # fmt: skip
     recorded: list[QueueLandEvent] = []
     result = land_push(w.checkout, default="main", base=built[0].base,
-                       landings=landings_of(built), method="squash",
+                       landings=landings_of(built), method="merge",
                        record=recorded.append, now=lambda: AT)  # fmt: skip
     assert result.outcome == "landed" and w.main() == built[-1].sha  # the tested tip (R9)
     assert [(e.batch, e.pr, e.kind) for e in recorded[0].entries] == [
@@ -76,16 +76,14 @@ def test_another_entry_lands_in_the_same_push_and_is_recorded_by_its_kind(
     assert "archived" in git(w.clone, "show", "origin/main:docs/superpowers/implemented/plans/p.md")
 
 
-@pytest.mark.parametrize("method", ["squash", "rebase"])
-def test_one_atomic_push_moves_main_to_the_tip_and_each_head_to_its_commit(
-    tmp_path: Path, method: str
-) -> None:
-    w, built = _two(tmp_path, method)
+def test_one_atomic_push_moves_main_to_the_tip_and_leaves_each_head(tmp_path: Path) -> None:
+    w, built = _two(tmp_path, "merge")
+    heads = (w.head(1), w.head(2))
     recorded: list[QueueLandEvent] = []
-    result = _land(w, built, method, record=recorded.append, now=lambda: AT)
+    result = _land(w, built, "merge", record=recorded.append, now=lambda: AT)
     assert result.outcome == "landed" and result.main == built[-1].sha
     assert w.main() == built[-1].sha  # exactly the tested commit (R9)
-    assert (w.head(1), w.head(2)) == (built[0].sha, built[1].sha)
+    assert (w.head(1), w.head(2)) == heads  # pushed unchanged: the merge commit holds them (R3)
     assert [e.main for e in recorded] == [built[-1].sha]
     assert [e.entries[0].batch for e in recorded] == ["b1"] and len(recorded[0].entries) == 2
 
@@ -99,8 +97,8 @@ def test_under_merge_the_heads_are_pushed_unchanged(tmp_path: Path) -> None:
     assert [forge_.pr_view("r", n)["state"] for n in (1, 2)] == ["MERGED", "MERGED"]
 
 
-@pytest.mark.parametrize("method", ["squash", "merge"])
-def test_a_session_push_since_the_build_fails_the_whole_push(tmp_path: Path, method: str) -> None:
+def test_a_session_push_since_the_build_fails_the_whole_push(tmp_path: Path) -> None:
+    method = "merge"
     w, built = _two(tmp_path, method)
     main = w.main()
     moved = w.push_to(2, {"c.txt": "charlie, edited\n"})
@@ -110,21 +108,21 @@ def test_a_session_push_since_the_build_fails_the_whole_push(tmp_path: Path, met
 
 
 def test_a_server_without_atomic_push_holds_the_queue(tmp_path: Path) -> None:
-    w, built = _two(tmp_path, "squash")
+    w, built = _two(tmp_path, "merge")
     git(w.origin, "config", "receive.advertiseAtomic", "false")
     main = w.main()
-    result = _land(w, built, "squash")
+    result = _land(w, built, "merge")
     assert result.outcome == "held" and "--atomic" in result.detail and "R22" in result.detail
     assert w.main() == main
 
 
 def test_a_push_refused_by_protection_names_both_remedies_and_land_merge(tmp_path: Path) -> None:
-    w, built = _two(tmp_path, "squash")
+    w, built = _two(tmp_path, "merge")
     hook = w.origin / "hooks" / "pre-receive"
     hook.write_text('#!/bin/sh\necho "error: GH013: Repository rule violations found" >&2\n'
                     "exit 1\n")  # fmt: skip
     hook.chmod(0o755)
-    result = _land(w, built, "squash")
+    result = _land(w, built, "merge")
     assert result.outcome == "held"
     assert "GH013" in result.detail and "queue.land: merge" in result.detail
     assert "bypass" in result.detail and "require a pull request" in result.detail
@@ -206,11 +204,11 @@ def test_a_tip_not_built_on_the_base_is_held_and_main_never_rewritten(tmp_path: 
     """p3-r7: a leased push moves a ref by any amount; the landing pushes only a tip that
     fast-forwards the queue's base (its chain's bottom built on it, the base its
     ancestor). Built on the old main, after a foreign move it is held, main untouched."""
-    w, built = _two(tmp_path, "squash")
+    w, built = _two(tmp_path, "merge")
     moved = w.move_main({"f.txt": "foreign\n"})
     w.fetch()
     result = land_push(w.checkout, default="main", base=moved, landings=landings_of(built),
-                       method="squash")  # fmt: skip
+                       method="merge")  # fmt: skip
     assert result.outcome == "held" and "fast-forward" in result.detail
     assert w.main() == moved and w.head(1) == built[0].entry.head
 
@@ -218,10 +216,32 @@ def test_a_tip_not_built_on_the_base_is_held_and_main_never_rewritten(tmp_path: 
 def test_a_chain_whose_bottom_was_built_on_another_commit_is_held(tmp_path: Path) -> None:
     from dataclasses import replace
 
-    w, built = _two(tmp_path, "squash")
+    w, built = _two(tmp_path, "merge")
     main = w.main()
     landings = landings_of(built)
     landings[0] = replace(landings[0], parent="f" * 40)
     result = land_push(w.checkout, default="main", base=main, landings=landings,
-                       method="squash")  # fmt: skip
+                       method="merge")  # fmt: skip
     assert result.outcome == "held" and w.main() == main
+
+
+@pytest.mark.parametrize("method", ["squash", "rebase"])
+def test_a_push_landing_in_squash_or_rebase_is_held_and_moves_nothing(
+    tmp_path: Path, method: str
+) -> None:
+    """R2, gh#1705: GitHub marks a pushed PR merged only for a merge commit, so a squash or
+    rebase landing by push is held with the reason, before any ref moves."""
+    w, built = _two(tmp_path, method)
+    main, heads = w.main(), (w.head(1), w.head(2))
+    result = _land(w, built, method)
+    assert result.outcome == "held" and "merge" in result.detail
+    assert w.main() == main and (w.head(1), w.head(2)) == heads
+
+
+def test_a_combination_built_in_squash_is_held_when_landed_as_merge(tmp_path: Path) -> None:
+    """R2: the commit must be a merge whose second parent is the PR's head."""
+    w, built = _two(tmp_path, "squash")
+    main, heads = w.main(), (w.head(1), w.head(2))
+    result = _land(w, built, "merge")
+    assert result.outcome == "held" and "second parent" in result.detail
+    assert w.main() == main and (w.head(1), w.head(2)) == heads
