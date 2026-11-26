@@ -1,0 +1,550 @@
+"""A batch PR's merge readiness, as one pure verdict (spec 2026-11-24-batch-merge-readiness
+R1-R6).
+
+`batch_readiness(batch, qs)` is the one place a batch PR's readiness is decided. The wave
+merge queue admits a batch entry by its `admits` (`fr.triage.wave_queue._ready`), the
+driver's member classification reports by it (`fr.triage.batch_drive._member_reports`) and
+the Batches page shows its verdict, so given the same `QueueSnapshot` none of them can
+contradict another (R4).
+
+`admits` is the queue's admission rule (wave-merge-queue R3: `pr-open`, eligible, a valid
+approval, its own head green, on the default branch, no pre-merge gate) AND delivered (R1,
+R2). Delivered means the run cursor read at the PR's live head, folded over every cursor
+naming its branch (`fr.triage.cursor.fold_positions`), records `deliver` done; every other
+read is a reason it is not (`delivered`).
+
+The verdict is exactly one of R5's, decided in this order, first match wins (`_decide`; the
+pair tests of `tests/unit/test_triage_readiness.py` pin each adjacent pair):
+
+1. `queue-held`: Not ready: queue held: <reason>
+2. `approved-not-delivered` / `not-delivered`: Approved, not delivered / Not ready: not
+   delivered: <R1 reason>
+3. `ci-red` / `ci-running`: Not ready: CI red: <failing checks> / Not ready: CI running
+4. `gate-held`: Not ready: held by a pre-merge gate
+5. `other-base`: Not ready: based on <branch>, not <default>
+6. `approval-voided`: Approval voided by a push at <sha>: re-label once Ready for approval
+7. `conflicting`: Not ready: conflicting: <paths> (unapproved only: an approved entry's
+   conflict is the queue's to find and eject)
+8. `ready-for-approval`: Ready for approval (no valid approval)
+9. `merges-next` / `queued-behind`: Approved, merges next / Approved, queued behind <entry>
+   (`in_queue_order`, from the plan's own entry order); `not-queued` when the plan did not
+   place it: ejected at its live head (it re-enters once the head moves), or not placed
+   this pass
+
+Merge state (clean, behind, conflicting) never changes `admits`. A batch with no open PR
+reads `not-open`, outside R5's list, and is never admitted.
+
+Pure: no git, no forge, no clock read (the time is `QueueSnapshot.now`).
+"""
+
+from __future__ import annotations
+
+import shlex
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, replace
+from typing import Literal
+
+from fr.labels import APPROVED_FR, pre_merge_held
+from fr.triage.approval import (
+    ApprovalVerdict,
+    Approved,
+    First,
+    Held,
+    Void,
+    is_approved,
+)
+from fr.triage.batch import QueueEntry
+from fr.triage.batch_drive import (
+    Action,
+    Admitted,
+    LivePr,
+    Pass,
+    Snapshot,
+    queue_snapshot,
+)
+from fr.triage.mergeability import conflicting
+from fr.triage.model import (
+    ApprovalEvent,
+    Batch,
+    ConflictEvent,
+    CursorPosition,
+    CursorRead,
+    QueueEjectEvent,
+)
+from fr.triage.wave_queue import (
+    OtherEntry,
+    QueueSnapshot,
+    base_refusal,
+    is_deferred,
+    queue_held_reason,
+)
+
+DeliveredState = Literal["delivered", "at-step", "no-cursor", "unread", "no-clone", "stale-head"]
+VerdictKind = Literal[
+    "queue-held",
+    "approved-not-delivered",
+    "not-delivered",
+    "ci-red",
+    "ci-running",
+    "gate-held",
+    "other-base",
+    "approval-voided",
+    "conflicting",
+    "ready-for-approval",
+    "merges-next",
+    "queued-behind",
+    "not-queued",
+    "not-open",
+    "refused",
+]
+_LINES: dict[VerdictKind, str] = {
+    "queue-held": "Not ready: queue held: {r}",
+    "approved-not-delivered": "Approved, not delivered",
+    "not-delivered": "Not ready: not delivered: {r}",
+    "ci-red": "Not ready: CI red: {r}",
+    "ci-running": "Not ready: CI running",
+    "gate-held": "Not ready: held by a pre-merge gate",
+    "other-base": "Not ready: {r}",
+    "approval-voided": "Approval voided by a push at {r}: re-label once Ready for approval",
+    "conflicting": "Not ready: conflicting: {r}",
+    "ready-for-approval": "Ready for approval",
+    "merges-next": "Approved, merges next",
+    "queued-behind": "Approved, queued behind {r}",
+    "not-queued": "Approved, {r}",
+    "not-open": "Not ready: no open PR",
+    "refused": "Not ready: {r}",
+}
+
+NO_CURSOR_ACTION = "merge it by hand after review, or deliver it through a run"
+"""R12: the next action of a batch PR whose head carries no run cursor naming its branch."""
+
+Mover = Literal["session", "driver", "operator"]
+
+
+@dataclass(frozen=True)
+class Delivered:
+    """R1: whether the batch PR's run delivered at its live head, and the reason when not."""
+
+    state: DeliveredState
+    reason: str = ""
+    cause: str = ""  # an `unread` read's cause, from facts (l-errors-r2); "" when unknown
+
+    @property
+    def ok(self) -> bool:
+        return self.state == "delivered"
+
+
+@dataclass(frozen=True)
+class ReadinessFacts:
+    """R6: what the verdict came from, one line each, and the next action's *link* (a URL) or
+    *command* (the pane focus command a session-owned verdict names; never a link)."""
+
+    delivered: str
+    ci: str
+    merge: str
+    approval: str
+    whose_move: str
+    next_action: str
+    link: str
+    command: str = ""
+
+
+@dataclass(frozen=True)
+class Readiness:
+    """One batch PR's verdict (R5): its *kind*, the line the page leads with (*verdict*),
+    the *reason* inside it, the R6 *facts*, R1's *delivered*, whether its approval is valid
+    (*approved*) and whether the queue *admits* it."""
+
+    kind: VerdictKind
+    verdict: str
+    reason: str
+    facts: ReadinessFacts
+    admits: bool
+    delivered: Delivered
+    approved: bool = False
+    entry: OtherEntry | None = None  # R8: the non-batch queue entry this verdict is about
+
+
+def _short(sha: str) -> str:
+    return sha[:12] if sha else "an unread head"
+
+
+def delivered(batch: Batch, pr: LivePr, qs: QueueSnapshot) -> Delivered:
+    """R1 from `qs.cursors`: the cursor's read status, the head it was read at and its
+    folded position, compared with the PR's live head."""
+    read = qs.cursors.get(batch.id)
+    if read is None or read[2] is None:
+        return Delivered("unread", "the run cursor was not read")
+    head, position, status = read
+    if status == "no-clone":
+        return Delivered("no-clone", f"no clone of {qs.repo} to read the run cursor from")
+    if status != "read":
+        why = qs.cursor_details.get(batch.id, "")
+        tail = f": {why}" if why else ""
+        return Delivered("unread", f"the run cursor at {_short(head)} could not be read{tail}", why)
+    if head != pr.head:
+        why = f"the run cursor was read at {_short(head)}, the PR is at {_short(pr.head)}"
+        return Delivered("stale-head", why)
+    if position is None:
+        return Delivered("no-cursor", f"no run cursor names {pr.head_ref or 'its branch'}")
+    if position.kind != "deliver-done":
+        return Delivered("at-step", f"run {position.run} is at {position.step}")
+    return Delivered("delivered")
+
+
+def _admission(batch: Batch, pr: LivePr, qs: QueueSnapshot, approved: bool) -> bool:
+    """Wave-merge-queue R3 for a batch entry, before delivered."""
+    if qs.stages.get(batch.id) != "pr-open" or is_deferred(batch):
+        return False
+    if qs.eligible is not None and batch.id not in qs.eligible:
+        return False
+    return approved and not gated(batch, pr, qs) and not base_refusal(pr, qs) \
+        and pr.checks == "green"  # fmt: skip
+
+
+def gated(batch: Batch, pr: LivePr, qs: QueueSnapshot) -> bool:
+    """R26: a gate:devops entry waits for the DevOps stage's release. The driver holds an
+    approved PR for DevOps by this test itself, whatever its verdict (CI, the queue)."""
+    return bool(pre_merge_held(pr.labels)) and batch.id not in qs.released
+
+
+def _voided_sha(batch: Batch, pr: LivePr, verdict: ApprovalVerdict | None) -> str | None:
+    """R3: the push that voided the approval, None when none did. Before settlement
+    (`Void`) the live head; after it, the last approval event's `voided_at` (never
+    `approval.voided_at()`, which returns the approved head). A `Held` verdict (the label
+    is on, its patch-id unreadable) is no void: an older event's push does not speak for it."""
+    if isinstance(verdict, Void):
+        return pr.head
+    if isinstance(verdict, Held) or (verdict is not None and is_approved(verdict)):
+        return None
+    last = [e for e in batch.events if isinstance(e, ApprovalEvent) and e.pr == pr.number]
+    return last[-1].voided_at if last else None
+
+
+def _conflict_paths(batch: Batch, pr: LivePr, qs: QueueSnapshot) -> tuple[str, ...]:
+    """The paths a conflict at the PR's live head names: the executor's, else the probe's."""
+    met = qs.conflicts.get(batch.id)
+    if met is not None and met.head == pr.head:
+        return met.paths
+    for event in reversed(batch.events):
+        if isinstance(event, ConflictEvent) and event.head == pr.head:
+            return tuple(event.paths)
+    return ()
+
+
+def _ci_fact(pr: LivePr) -> str:
+    at = f"at {_short(pr.head)}"
+    if pr.checks == "failing":
+        return f"red: {', '.join(pr.failing) or 'checks failing'} {at}"
+    return f"{'green' if pr.checks == 'green' else 'running'} {at}"
+
+
+def _merge_fact(batch: Batch, pr: LivePr, qs: QueueSnapshot) -> str:
+    if conflicting(pr.mergeable, pr.merge_state):
+        paths = _conflict_paths(batch, pr, qs)
+        return f"conflicting: {', '.join(paths)}" if paths else "conflicting"
+    if pr.merge_state == "BEHIND":
+        return "behind"
+    return "clean" if pr.mergeable == "MERGEABLE" else "unknown"
+
+
+def _approval_fact(verdict: ApprovalVerdict | None, voided: str | None) -> str:
+    if isinstance(verdict, Approved):
+        return f"recorded at {_short(verdict.approved_head)}"
+    if isinstance(verdict, First):
+        return f"recorded at {_short(verdict.head)}"
+    if isinstance(verdict, Held):
+        return f"held unreadable: {verdict.why}"
+    if voided is not None:
+        return f"voided by a push at {_short(voided)}"
+    return "none"
+
+
+def _mover(kind: VerdictKind, d: Delivered) -> Mover:
+    """Whose move a verdict is. Not delivered: the session's while its run works; the
+    driver's for a head it reads again next pass (another head, or a read never asked); the
+    operator's for no cursor (R12), no clone, and a read that failed with a known cause: the
+    driver re-reads it every pass, and it already failed (l-errors-r3, `cursor_remedy`)."""
+    if kind in ("approved-not-delivered", "not-delivered"):
+        if d.state == "at-step":
+            return "session"
+        known = d.state == "unread" and d.cause
+        return "driver" if d.state in ("unread", "stale-head") and not known else "operator"
+    if kind in ("ci-red", "conflicting"):
+        return "session"
+    return "driver" if kind in ("ci-running", "merges-next", "queued-behind") else "operator"
+
+
+def _whose_move(mover: Mover, batch: Batch, qs: QueueSnapshot) -> str:
+    if mover != "session":
+        return "the driver" if mover == "driver" else "the operator"
+    status = qs.sessions.get(batch.id)
+    if status == "idle":
+        since = qs.head_changed.get(batch.id)
+        if since is None:
+            return "the session, idle"
+        return f"the session, idle for {int((qs.now - since).total_seconds() // 60)} minutes"
+    if status in ("absent", "done"):
+        return f"the operator (the session is {status})"
+    return "the session, working"
+
+
+def _next(kind: VerdictKind, d: Delivered, mover: Mover, batch: Batch, pr: LivePr,
+          qs: QueueSnapshot) -> tuple[str, str, str]:  # fmt: skip
+    """R6's next action, its link (the PR or its checks tab) and its command (the pane focus)."""
+    if d.state == "no-cursor":
+        return NO_CURSOR_ACTION, pr.url, ""
+    if (remedy := cursor_remedy(d, qs.repo)) and kind in (
+        "approved-not-delivered",
+        "not-delivered",
+    ):
+        return remedy, pr.url, ""
+    if kind in ("ci-red", "ci-running"):
+        what = "fix the failing checks" if kind == "ci-red" else "wait for CI"
+        return what, f"{pr.url}/checks" if pr.url else "", ""
+    if mover == "session":
+        focus = shlex.join(["fr", "triage", "batch", "focus", batch.id, *qs.scope_args])
+        return "let the session finish, or focus it", pr.url, focus
+    actions: dict[str, str] = {
+        "approval-voided": "re-label `approved-fr` once the PR reads Ready for approval",
+        "ready-for-approval": "review the PR and label it `approved-fr`",
+        "merges-next": "none: the queue merges it",
+        "queued-behind": "none: the queue merges it",
+        "gate-held": "pass the DevOps stage",
+    }
+    return actions.get(kind, "look at the PR"), pr.url, ""
+
+
+def cursor_remedy(d: Delivered, repo: str) -> str:
+    """What the operator does about a run cursor the driver cannot read (l-errors-r3), ""
+    when it is not theirs (`_mover`): clone the repo, or fix the read's known cause. The
+    card's next action and the Needs-you row both say it."""
+    if d.state == "no-clone":
+        return f"clone {repo} on the driver host"
+    if d.state == "unread" and d.cause:
+        return f"fix what stops the run cursor being read: {d.cause}"
+    return ""
+
+
+def _decide(batch: Batch, pr: LivePr, qs: QueueSnapshot, d: Delivered,
+            approved: bool, voided: str | None) -> tuple[VerdictKind, str]:  # fmt: skip
+    """R5, in `R5_ORDER`: the first verdict that applies, and its reason."""
+    held = queue_held_reason(qs)
+    if held:
+        return "queue-held", held
+    if not d.ok:
+        return ("approved-not-delivered", d.reason) if approved else ("not-delivered", d.reason)
+    if pr.checks == "failing":
+        return "ci-red", ", ".join(pr.failing) or "checks failing"
+    if pr.checks != "green":
+        return "ci-running", ""
+    if gated(batch, pr, qs):
+        return "gate-held", ""
+    refused = base_refusal(pr, qs)
+    if refused:
+        return "other-base", refused.removeprefix("is ")
+    if voided is not None:
+        return "approval-voided", _short(voided)
+    if not approved and conflicting(pr.mergeable, pr.merge_state):
+        return "conflicting", ", ".join(_conflict_paths(batch, pr, qs)) or "paths unknown"
+    return ("merges-next", "") if approved else ("ready-for-approval", "")
+
+
+def batch_readiness(batch: Batch, qs: QueueSnapshot) -> Readiness:
+    """*batch*'s verdict, facts and admission over *qs* (R1-R6)."""
+    pr = qs.live.get(batch.id)
+    verdict = qs.approvals.get(batch.id)
+    if pr is None or pr.state != "OPEN":
+        facts = ReadinessFacts("unknown", "unknown", "unknown", "none", "the driver", "", "")
+        return Readiness("not-open", _LINES["not-open"], "", facts, False,
+                         Delivered("unread", "no open PR"))  # fmt: skip
+    d = delivered(batch, pr, qs)
+    approved = verdict is not None and is_approved(verdict)
+    voided = _voided_sha(batch, pr, verdict)
+    kind, reason = _decide(batch, pr, qs, d, approved, voided)
+    mover = _mover(kind, d)
+    action, link, command = _next(kind, d, mover, batch, pr, qs)
+    facts = ReadinessFacts(
+        delivered="yes" if d.ok else d.reason,
+        ci=_ci_fact(pr),
+        merge=_merge_fact(batch, pr, qs),
+        approval=_approval_fact(verdict, voided),
+        whose_move=_whose_move(mover, batch, qs),
+        next_action=action,
+        link=link,
+        command=command,
+    )
+    admits = d.ok and _admission(batch, pr, qs, approved)
+    return Readiness(kind, _LINES[kind].format(r=reason), reason, facts, admits, d, approved)
+
+
+def snapshot_readiness(snap: Snapshot, batch: Batch) -> Readiness:
+    """*batch*'s verdict over a pass's `Snapshot`, through the slice its repo's queue reads
+    (`queue_snapshot`): the board asks it before it asks for a label (R4)."""
+    return batch_readiness(batch, queue_snapshot(snap, snap.repos.get(batch.id, "")))
+
+
+def fact_cursors(
+    queue: Iterable[QueueEntry],
+) -> dict[str, tuple[str, CursorPosition | None, CursorRead | None]]:
+    """Each queued batch's run cursor as collect read it (R1): the head it was read at, its
+    folded position and the read status. The driver and the board both build
+    `Snapshot.cursors` with it, so the verdict reads one input path."""
+    return {e.batch.id: (e.pr.head_oid, e.pr.cursor, e.pr.cursor_read) for e in queue}
+
+
+def fact_cursor_details(queue: Iterable[QueueEntry]) -> dict[str, str]:
+    """Each queued batch's `unread` cursor read's cause as collect stored it (l-errors-r2):
+    `Snapshot.cursor_details`, beside `fact_cursors`."""
+    return {e.batch.id: e.pr.cursor_detail for e in queue if e.pr.cursor_detail}
+
+
+def _ejected(key: str, qs: QueueSnapshot | None) -> str | None:
+    """Why *key* left the queue at its live head (it waits for the head to move), else None."""
+    pr = qs.live.get(key) if qs is not None else None
+    if qs is None or pr is None:
+        return None
+    events = [e for rec in qs.records for e in rec.events if isinstance(e, QueueEjectEvent)]
+    last = next((e for e in reversed(events) if e.entry.batch == key), None)
+    if last is None or last.head != pr.head:
+        return None
+    why = f"{last.reason}: {last.detail}" if last.detail else last.reason
+    return f"ejected at {_short(pr.head)} ({why}): re-enters once its head moves"
+
+
+def in_queue_order(
+    r: Readiness, key: str, order: Sequence[str], qs: QueueSnapshot | None = None
+) -> Readiness:
+    """An approved verdict placed in the plan's entry *order* (R5's last pair): merges next
+    when *key* leads it, queued behind the entry before it, and `not-queued` when the plan
+    did not place it (ejected at its live head, by *qs*'s records, or not placed this pass)."""
+    if r.kind not in ("merges-next", "queued-behind"):
+        return r
+    word = "Admitted" if r.entry is not None else "Approved"
+    if key not in order:
+        why = _ejected(key, qs) or "not in the queue this pass"
+        line = _LINES["not-queued"].format(r=why).replace("Approved", word, 1)
+        return replace(r, kind="not-queued", reason=why, verdict=line)
+    at = list(order).index(key)
+    kind: VerdictKind = "merges-next" if at == 0 else "queued-behind"
+    ahead = "" if at == 0 else order[at - 1]
+    line = _LINES[kind].format(r=ahead).replace("Approved", word, 1)
+    return replace(r, kind=kind, reason=ahead, verdict=line)
+
+
+def merge_refusal(names: Sequence[str], plan: Pass) -> str:
+    """Why `fr triage batch merge` refuses its named batches after *plan*'s pass, "" when it
+    does not: the pass holds them (`awaiting`), and the readiness verdict says why. Only a
+    batch with no valid approval is "not approved"; an approved one the pass holds names its
+    hold (not delivered, R1; awaiting DevOps, fr-ops R14), never the label."""
+    verdicts = {k: r for q in plan.queues for k, r in q.readiness.items()}
+    why = {a.batch: a.detail for a in plan.actions if a.kind == "held"}  # approved holds only
+    held = [n for n in names if n in plan.awaiting]
+    unapproved = [n for n in held if n not in why and not (n in verdicts and verdicts[n].approved)]
+    if unapproved:
+        return (f"not approved: {', '.join(unapproved)}: fr merges a batch PR only with the "
+                f"operator's `{APPROVED_FR.name}` label on it")  # fmt: skip
+    lines = [f"{n}: {why.get(n) or verdicts[n].verdict}" for n in held]
+    return f"not ready: {'; '.join(lines)}" if lines else ""
+
+
+@dataclass(frozen=True)
+class Refused:
+    """A non-batch PR a trust rule refused (R8): what `Admitted` is for an admitted one, with
+    the rule's *reason*. It is never a queue entry; the page shows it."""
+
+    kind: Literal["closeout", "archive", "export", "housekeeping"]
+    repo: str
+    pr: LivePr
+    reason: str
+    batch: str = ""
+
+    @property
+    def key(self) -> str:
+        return f"{self.kind}#{self.pr.number}"
+
+
+_REFUSING = frozenset({
+    "closeout-needs-review", "closeout-stuck", "closeout-handback", "closeout-pr-closed",
+    "blocked", "warn", "export-conflict", "archive-conflict",
+})  # fmt: skip
+
+
+def refused_others(
+    snap: Snapshot, actions: Iterable[Action], admitted: Iterable[Admitted]
+) -> tuple[Refused, ...]:
+    """R8: the close-out, archive and export PRs a trust rule held back this pass, each with
+    the reason the rule's own action carries. A candidate is told apart by which of the
+    pass's PR sets holds its number, never by its text; one admitted is not refused."""
+    taken = {(a.repo, a.pr.number) for a in admitted}
+    pool: dict[tuple[str, int], tuple[Literal["closeout", "archive", "export"], LivePr]] = {}
+    for marker in snap.closeouts:
+        if (p := snap.collected_prs.get(marker.item)) is not None:
+            pool[marker.repo, p.number] = ("closeout", p)
+    for repo, prs in snap.archives.items():
+        pool.update({(repo, p.number): ("archive", p) for p in prs})
+    pool.update({(repo, p.number): ("export", p) for (repo, _), p in snap.export_prs.items()})
+    out: dict[tuple[str, int], Refused] = {}
+    for a in actions:
+        # an action names a batch, or (an export's) the repo itself: only a batch is "about"
+        # one; the rest are the board's own (R8)
+        repo = snap.repos.get(a.batch, a.batch)
+        if a.pr is None or a.kind not in _REFUSING:
+            continue
+        at = (repo, a.pr)
+        if at in taken or at in out or at not in pool:
+            continue
+        kind, pr = pool[at]
+        out[at] = Refused(kind, repo, pr, a.detail, a.batch if a.batch in snap.repos else "")
+    return tuple(out.values())
+
+
+def other_readiness(key: str, qs: QueueSnapshot) -> Readiness:
+    """The verdict of a non-batch entry (R8): its trust rule takes the place of Delivered,
+    "admitted" or the reason the rule refused it. `admits` is the queue's own test for it
+    (listed by the rule, open, its own head green, on the default branch), and the verdict
+    follows R5's CI, base and place-in-the-queue lines. A key that is no entry is `not-open`."""
+    entry = next((o for o in (*qs.others, *qs.refused_entries) if o.key == key), None)
+    pr = qs.live.get(key)
+    if entry is None or pr is None or pr.state != "OPEN":
+        facts = ReadinessFacts("unknown", "unknown", "unknown", "none", "the driver", "", "")
+        return Readiness("not-open", _LINES["not-open"], "", facts, False,
+                         Delivered("unread", "no open PR"), entry=entry)  # fmt: skip
+    why = qs.refused.get(key, "")
+    admitted = not why and any(o.key == key for o in qs.others)
+    refused = base_refusal(pr, qs)
+    kind: VerdictKind
+    if not admitted:
+        kind, reason = "refused", why or "its trust rule did not admit it"
+    elif held := queue_held_reason(qs):
+        kind, reason = "queue-held", held
+    elif pr.checks == "failing":
+        kind, reason = "ci-red", ", ".join(pr.failing) or "checks failing"
+    elif pr.checks != "green":
+        kind, reason = "ci-running", ""
+    elif refused:
+        kind, reason = "other-base", refused.removeprefix("is ")
+    else:
+        kind, reason = "merges-next", ""
+    mover: Mover = "driver" if kind in ("ci-running", "merges-next", "queue-held") else "operator"
+    action = {
+        "refused": "look at the PR: its trust rule refused it",
+        "ci-red": "fix the failing checks",
+        "ci-running": "wait for CI",
+        "other-base": "retarget the PR",
+    }.get(kind, "none: the queue merges it")
+    link = f"{pr.url}/checks" if pr.url and kind in ("ci-red", "ci-running") else pr.url
+    facts = ReadinessFacts(
+        delivered="admitted" if admitted else reason,
+        ci=_ci_fact(pr),
+        merge="conflicting" if conflicting(pr.mergeable, pr.merge_state) else "clean",
+        approval="not required: its trust rule decides",
+        whose_move="the driver" if mover == "driver" else "the operator",
+        next_action=action,
+        link=link,
+    )
+    ok = admitted and pr.checks == "green" and not refused
+    line = _LINES[kind].format(r=reason).replace("Approved", "Admitted", 1)
+    return Readiness(kind, line, reason, facts, ok,
+                     Delivered("delivered" if admitted else "unread", "" if admitted else reason),
+                     entry=entry)  # fmt: skip

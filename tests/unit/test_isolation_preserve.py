@@ -146,6 +146,40 @@ def test_branch_runs_finished_run_is_not_active(tmp_path: Path) -> None:
     assert run.active is False
 
 
+def test_branch_runs_running_predicate_over_steps(tmp_path: Path) -> None:
+    _write_run(tmp_path, "r1", cursor="plan", states={"brainstorm": "done", "plan": "running"})
+    (run,) = preserve.branch_runs(tmp_path, BRANCH)
+    assert run.running and run.running_step == "plan"
+    assert preserve.running_hold([run]) == "run r1 step plan is running"
+
+
+def test_branch_runs_running_predicate_over_units(tmp_path: Path) -> None:
+    path = _write_run(tmp_path, "r1", states={"a": "done", "impl": "pending"})
+    doc = yaml.safe_load(path.read_text())
+    doc["steps"]["impl"]["units"] = {"phase/1": {"state": "done"}, "phase/2": {"state": "running"}}
+    path.write_text(yaml.safe_dump(doc))
+    (run,) = preserve.branch_runs(tmp_path, BRANCH)
+    assert run.running and run.running_step == "impl"
+
+
+@pytest.mark.parametrize("state", ["pending", "blocked", "done"])
+def test_branch_runs_not_running_for_other_states(tmp_path: Path, state: str) -> None:
+    _write_run(tmp_path, "r1", states={"a": "done", "b": state})
+    (run,) = preserve.branch_runs(tmp_path, BRANCH)
+    assert not run.running
+    assert preserve.running_hold([run]) is None
+
+
+def test_branch_runs_unreadable_file_counts_as_running(tmp_path: Path) -> None:
+    runs = tmp_path / "docs" / "superpowers" / "runs"
+    runs.mkdir(parents=True)
+    (runs / "bad.yaml").write_text("run: [unclosed\n  : : :\n")
+    (run,) = preserve.branch_runs(tmp_path, BRANCH)
+    assert run.running
+    hold = preserve.running_hold([run])
+    assert hold is not None and "bad" in hold and "unreadable" in hold
+
+
 def test_branch_runs_ignores_a_foreign_branchs_run(tmp_path: Path) -> None:
     _write_run(tmp_path, "other", branch="feat/other")
     assert preserve.branch_runs(tmp_path, BRANCH) == []
@@ -377,7 +411,8 @@ def test_gc_reap_preserves_into_the_workspaces_own_repo(tmp_path: Path) -> None:
     other = tmp_path / "other"
     other.mkdir()
     repo_b, runner, _, st = _upped(other)
-    _write_run(st.worktree, "r1")  # active, committed and landed
+    # active (pending, not running: gc keeps a running run, R9), committed and landed
+    _write_run(st.worktree, "r1", states={"brainstorm": "done", "plan": "pending"})
     _commit(st.worktree, "cursor")
     _git(st.worktree, "push", "-q", "origin", f"{BRANCH}:main")  # landed → reapable
     repo_a = make_repo(tmp_path)
@@ -1229,3 +1264,78 @@ def test_p4_n9_the_decline_hint_names_the_real_worktree(
     (aside,) = _aside_dirs(repo)
     assert f"cp -R {aside / 'files'}/. {wt}/" in err
     assert "<worktree>" not in err
+
+
+# --------------------------- gc reads the placement's run dir (R9, l-security-r1/r2)
+
+
+def _quiet(monkeypatch: pytest.MonkeyPatch, root: Path) -> None:
+    from fr.artifacts import paths
+
+    space = paths.ArtifactSpace(paths.QUIET, root, "feat__x")
+    monkeypatch.setattr(paths, "space_for", lambda wt, create=True: space)
+
+
+def test_gc_hold_reads_a_quiet_features_runs_in_the_fr_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Under quiet the product worktree holds no cursor: the run is the fr worktree's."""
+    wt, fr_root = tmp_path / "wt", tmp_path / "fr"
+    wt.mkdir()
+    _write_run(fr_root / "features" / "feat__x", states={"deliver": "running"}, cursor="deliver")
+    _quiet(monkeypatch, fr_root)
+    assert preserve.gc_run_hold(wt, BRANCH) == "run r1 step deliver is running"
+
+
+def test_gc_hold_still_reads_the_worktree_under_quiet(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wt, fr_root = tmp_path / "wt", tmp_path / "fr"
+    fr_root.mkdir()
+    _write_run(wt, states={"deliver": "running"}, cursor="deliver")
+    _quiet(monkeypatch, fr_root)
+    assert preserve.gc_run_hold(wt, BRANCH) == "run r1 step deliver is running"
+
+
+def test_gc_hold_keeps_an_absent_quiet_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _quiet(monkeypatch, tmp_path / "gone")
+    hold = preserve.gc_run_hold(tmp_path, BRANCH)
+    assert hold == f"run cursor location unknown (the quiet root {tmp_path / 'gone'} is absent)"
+
+
+def test_gc_hold_keeps_a_placement_it_cannot_resolve(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.artifacts import paths
+    from fr.settings import SettingsError
+
+    def lost(wt: Path, create: bool = True) -> Any:
+        raise SettingsError("the marker is missing, and its state records placement quiet")
+
+    monkeypatch.setattr(paths, "space_for", lost)
+    assert preserve.gc_run_hold(tmp_path, BRANCH) == (
+        "run cursor location unknown (the marker is missing, and its state records placement quiet)"
+    )
+
+
+def test_gc_hold_under_repo_reads_the_worktree_and_an_absent_dir_is_no_cursor(
+    tmp_path: Path,
+) -> None:
+    assert preserve.gc_run_hold(tmp_path, BRANCH) is None
+    _write_run(tmp_path, states={"plan": "running"})
+    assert preserve.gc_run_hold(tmp_path, BRANCH) == "run r1 step plan is running"
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root lists any directory")
+def test_gc_hold_keeps_a_runs_dir_it_cannot_list(tmp_path: Path) -> None:
+    """l-security-r2: a runs dir that exists and cannot be listed is unknown, never empty."""
+    path = _write_run(tmp_path, states={"plan": "done"})
+    path.parent.chmod(0o000)
+    try:
+        hold = preserve.gc_run_hold(tmp_path, BRANCH)
+    finally:
+        path.parent.chmod(0o755)
+    assert hold is not None and hold.startswith("run cursor location unknown (")
+    assert "cannot be listed: Permission denied" in hold

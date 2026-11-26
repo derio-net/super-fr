@@ -2305,6 +2305,9 @@ class LocalWorktreeDevcontainerTarget:
             # never reaped, by a worktree sweep (same verdict ExternalTarget.gc
             # reports).
             return GcAction(wt, state.branch, "external", "skipped", GC_EXTERNAL_DETAIL)
+        hold = _preserve.gc_run_hold(Path(wt), state.branch)
+        if hold is not None:  # R9: a running or unreadable cursor, at the placement's root
+            return GcAction(wt, state.branch, verdict, "skipped", f"kept: {hold}")
         # Rooted at the WORKSPACE's repo (see the dry-run note below) and built
         # with the NO-OP spawner so a reap never re-triggers a sweep. The cast
         # is sound: with external excluded above, routing only ever returns

@@ -267,7 +267,7 @@ from fr.triage.claim_sync import (
 from fr.triage.claims import Claim, expired, held_line, held_map, held_members, taken_keys
 from fr.triage.claims import stale as claim_stale
 from fr.triage.components import page
-from fr.triage.cursor import read_cursor
+from fr.triage.cursor import answer_at
 from fr.triage.dedupe import candidates
 from fr.triage.drive_errors import DriverRefusal, TransientPassFailure, classify
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
@@ -305,7 +305,7 @@ from fr.triage.model import (
     CollectedCloseout,
     ConflictDelivery,
     ConflictEvent,
-    CursorPosition,
+    CursorAnswer,
     CursorReader,
     DeferredEvent,
     DispatchEvent,
@@ -362,6 +362,7 @@ from fr.triage.queue_exec import (
 from fr.triage.queue_handback import handback_onto
 from fr.triage.queue_requests import reader_repos
 from fr.triage.quota import Pace
+from fr.triage.readiness import fact_cursor_details, fact_cursors, merge_refusal
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
@@ -683,7 +684,7 @@ def event_writer(target: Path, facts: Facts, *, read_errors: bool = False) -> Ev
 
 
 _REPORTED_AS = {"queue-held": "held", "queue-need": "blocked", "queue-warn": "warn"}
-"""The pass action each queue report becomes (`batch_drive._queue_reports`)."""
+"""The pass action each queue report becomes (`fr.triage.queue_reports.queue_reports`)."""
 
 
 def queue_writer(target: Path, repo: str, scope: str) -> QueueWriter:
@@ -3299,13 +3300,8 @@ def batch_merge_command(
             except (DriverRefusal, TransientPassFailure) as exc:  # the pass's own boundary
                 _fail(exc.message, code=exc.code)
             plan = driver.last_pass
-            if batch_ids and plan is not None:
-                unapproved = [n for n in names if n in plan.awaiting]
-                if unapproved:
-                    _fail(
-                        f"not approved: {', '.join(unapproved)}: fr merges a batch PR only "
-                        f"with the operator's `{APPROVED_FR.name}` label on it"
-                    )
+            if batch_ids and plan is not None and (refused := merge_refusal(names, plan)):
+                _fail(refused)
             if not yes:
                 return
             done, said = _merge_progress(driver, names, plan)
@@ -4237,7 +4233,7 @@ class _Driver:
         self.pace: Pace | None = None
         # (repo, head sha) -> the run cursor's position there: a commit never changes, so
         # each open batch PR head is read once per process (exit-gates R18)
-        self._cursors: dict[tuple[str, str], CursorPosition | None] = {}
+        self._cursors: dict[tuple[str, str], CursorAnswer] = {}
         # (repo, default-branch tip, batch branch) -> its gated rows there (R13, R14): they
         # move only when the default branch does
         self._ledger_rows: dict[tuple[str, str, str], LedgerRead] = {}
@@ -4251,18 +4247,20 @@ class _Driver:
 
     # -------------------------------------------------------------- reaching out
 
-    def cursor_at(self, pr: PullRequest) -> CursorPosition | None:
-        """The run cursor's position at open batch PR *pr*'s head, read through the repo's
-        clone (`gitseam`); None with no clone, or one that cannot reach the head."""
+    def cursor_at(self, pr: PullRequest) -> CursorAnswer:
+        """*pr*'s head cursor and read status (`cursor.answer_at`, R1): a read head is cached,
+        an `unread` one is read again next call, its cause said once per head (l-errors-r2)."""
         key = (pr.repo, pr.head_oid)
-        if key not in self._cursors:
-            if self.path_of(pr.repo) is None or not pr.head_oid:
-                return None
-            try:
-                self._cursors[key] = read_cursor(self._reader(pr.repo), pr)
-            except TriageError:
-                return None  # unknown this pass; read again next pass
-        return self._cursors[key]
+        if key in self._cursors:
+            return self._cursors[key]
+        has_clone = self.path_of(pr.repo) is not None
+        got = answer_at(pr, (lambda: self._reader(pr.repo)) if has_clone else None)
+        if got.read == "unread":
+            said = f"{pr.repo}#{pr.number}: run cursor not read: {got.detail}"
+            self._report_once(f"cursor\0{pr.repo}\0{pr.head_oid}", said)
+        if got.read == "read":
+            self._cursors[key] = got
+        return got
 
     def client(self, facts: Facts, repo: str) -> GhClient:
         if repo not in self._clients:
@@ -4572,6 +4570,7 @@ class _Driver:
                     base=str(view.get("base_ref") or ""),
                     mergeable=str(view.get("mergeable") or ""),  # R17: the conflict probe
                     merge_state=str(view.get("merge_state") or ""),
+                    url=e.pr.url,
                 )
             # Every landed batch, selected or not: adopting a finished close-out is
             # bookkeeping (gh#990). Only the selection is read further.
@@ -4687,6 +4686,8 @@ class _Driver:
             closeout_waits=self._closeout_waits(due, repos),
             **reads,
             approvals=approvals,
+            cursors=fact_cursors(queue),
+            cursor_details=fact_cursor_details(queue),
             batches=tuple(judgements.batches),
             stages=stages,
             queue=queue,

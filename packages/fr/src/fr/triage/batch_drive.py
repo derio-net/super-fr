@@ -25,9 +25,9 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from fr.artifacts.paths import KIND_DIRS
 from fr.checkstate import bucket_verdict
-from fr.labels import awaiting_devops, held_gates, pre_merge_held
+from fr.labels import awaiting_devops, held_gates
 from fr.settle.managed import MANAGED_SENTENCE
-from fr.triage.approval import ApprovalVerdict, Approved, is_approved
+from fr.triage.approval import ApprovalVerdict, Approved
 from fr.triage.batch import (
     UNSATISFIABLE,
     BatchStage,
@@ -62,6 +62,8 @@ from fr.triage.model import (
     CloseoutHoldEvent,
     CollectedCloseout,
     ConflictEvent,
+    CursorPosition,
+    CursorRead,
     DispatchEvent,
     Export,
     Facts,
@@ -69,6 +71,7 @@ from fr.triage.model import (
 )
 
 if TYPE_CHECKING:  # `fr.triage.wave_queue` imports this module: read at run time lazily
+    from fr.triage.readiness import Refused
     from fr.triage.wave_queue import (
         BuildConflict,
         Hold,
@@ -190,6 +193,7 @@ class LivePr:
     # a collected close-out's PR merges only once `MERGEABLE` (exit-gates R15).
     mergeable: str = ""
     merge_state: str = ""
+    url: str = ""  # the PR's page; "" when not read (batch-merge-readiness R6's links)
 
 
 @dataclass(frozen=True)
@@ -468,6 +472,11 @@ class Snapshot:
     )
     head_changed: Mapping[str, datetime] = field(default_factory=dict)
     session_status: Mapping[str, str] = field(default_factory=dict)
+    # batch id -> (head read at, cursor position, read status) from facts (readiness R1)
+    cursors: Mapping[str, tuple[str, CursorPosition | None, CursorRead | None]] = field(
+        default_factory=dict
+    )
+    cursor_details: Mapping[str, str] = field(default_factory=dict)  # an unread read's cause
 
     # marker item -> its open PR's approval verdict (gh#1497), settled as a `closeout`
     # queue entry's (R32): what admits a PR `review_reasons` holds. None is never approved.
@@ -1502,39 +1511,36 @@ def _red_action(bid: str, pr: LivePr) -> Action:
 
 
 def _member_reports(
-    entries: Sequence[QueueEntry], snap: Snapshot
+    entries: Sequence[QueueEntry], snap: Snapshot, repo: str
 ) -> tuple[list[Action], list[str], list[str]]:
-    """What the pass says about a repo's pr-open batches before the queue takes them (the
-    reports the retired merge train made, R22): a failing PR is a red `warn` for the red
-    recovery, wherever it sits, draft or ready, approved or not (batch-train-truth R15);
-    one with no valid approval is *awaiting* it, said by the board; one a pre-merge gate
-    holds is `held` (fr-ops R14: the DevOps stage owns it). A draft is a member only with
-    a valid approval (merge-train-safety §A): an unapproved one is reported red and never
-    awaits approval. The queue itself takes the rest: it plans no merge here."""
+    """A repo's pr-open batches before the queue takes them (R22), by `batch_readiness` over
+    the queue's own snapshot (R4): failing is a red `warn` wherever it sits; unapproved is
+    *awaiting* (an unapproved draft is no member); approved but not delivered (readiness R2)
+    or gated (fr-ops R14) is *awaiting* and `held`. Only what the queue admits is ready."""
+    from fr.triage.readiness import batch_readiness, gated
+
+    qs = queue_snapshot(snap, repo)
     actions: list[Action] = []
     awaiting: list[str] = []
     ready: list[str] = []
     for entry in entries:
         bid = entry.batch.id
         pr = snap.live.get(bid)
-        verdict = snap.approvals.get(bid)
-        approved = verdict is not None and is_approved(verdict)
         if pr is None or pr.state != "OPEN":
             continue
         if pr.checks == "failing":  # wherever it sits: reported now, not when it leads
             actions.append(_red_action(bid, pr))
             continue
-        if pr.draft and not approved:
-            continue  # not a member
-        if not approved:
-            awaiting.append(bid)
-            continue
-        if pre_merge_held(pr.labels):  # fr-ops R14: held until the DevOps stage released it
-            awaiting.append(bid)
-            actions.append(Action("held", bid, awaiting_devops(pr.number), pr=pr.number))
-            continue
-        if pr.checks == "green":
+        r = batch_readiness(entry.batch, qs)
+        if r.admits:
             ready.append(bid)
+        elif not r.approved:
+            awaiting.extend(() if pr.draft else (bid,))
+        elif not r.delivered.ok or gated(entry.batch, pr, qs):
+            awaiting.append(bid)
+            why = awaiting_devops(pr.number) if r.delivered.ok else (
+                f"approved, not delivered: {r.delivered.reason}")  # fmt: skip
+            actions.append(Action("held", bid, why, pr=pr.number))
     return actions, awaiting, ready
 
 
@@ -1668,13 +1674,17 @@ def wave_landings_done(snap: Snapshot, repo: str, wave: int | None) -> bool:
 
 
 def queue_snapshot(
-    snap: Snapshot, repo: str, held: Iterable[str] = (), admitted: Iterable[Admitted] = ()
+    snap: Snapshot,
+    repo: str,
+    held: Iterable[str] = (),
+    admitted: Iterable[Admitted] = (),
+    refused: Iterable[Refused] = (),
 ) -> QueueSnapshot:
     """*repo*'s slice of the pass's snapshot, for `fr.triage.wave_queue.plan_queue`: every
     batch of it (the wave choice reads them all), as entries only the selected ones that no
     other scope's claim holds (*held*), and the non-batch PRs its own trust rules *admitted*
     (R32), none of them one a queue already landed."""
-    from fr.triage.wave_queue import OtherEntry, QueueSnapshot, landed_keys
+    from fr.triage.wave_queue import OtherEntry, QueueConfig, QueueSnapshot, landed_keys
 
     batches = tuple(b for b in snap.batches if snap.repos.get(b.id) == repo)
     skip = set(held)
@@ -1685,6 +1695,7 @@ def queue_snapshot(
     records = tuple(r for r in snap.queue_records if r.repo == repo)
     landed = landed_keys(records)
     mine = [a for a in admitted if a.repo == repo and a.key not in landed]
+    refused = [r for r in refused if r.repo == repo and r.key not in landed]
     open_wave = next((r.wave for r in reversed(records)
                       if r.scope == (snap.scope_id or snap.me)), None)  # fmt: skip
     closeout = snap.queue_closeouts.get(repo)
@@ -1693,17 +1704,23 @@ def queue_snapshot(
     if snap.placements.get(repo, "repo") != "repo":
         # R15: the repo keeps no fr artifacts on its default branch, so the queue holds batch
         # PRs only: no close-out, archive, export or housekeeping entry, and no wave waits on one
-        closeout, mine = None, [a for a in mine if a.kind == "operator"]  # no fr artifact
+        closeout, refused = None, []  # refused: close-out/archive/export/housekeeping only
+        mine = [a for a in mine if a.kind == "operator"]  # no fr artifact
     return QueueSnapshot(
-        repo=repo, scope=snap.scope_id or snap.me, config=snap.wave_queues[repo], now=snap.now,
-        batches=batches, stages=snap.stages, live={**snap.live, **{a.key: a.pr for a in mine}},
-        approvals=snap.approvals, records=records,
+        repo=repo, scope=snap.scope_id or snap.me, now=snap.now, cursors=snap.cursors,
+        config=snap.wave_queues.get(repo) or QueueConfig(ci=None),
+        batches=batches, stages=snap.stages,
+        live={**snap.live, **{a.key: a.pr for a in mine}, **{r.key: r.pr for r in refused}},
+        approvals=snap.approvals, records=records, cursor_details=snap.cursor_details,
         hold=snap.queue_holds.get(repo), hold_read=repo in snap.queue_holds,
         releases=snap.queue_releases.get(repo, ()), base=snap.bases.get(repo, ""),
         slots=snap.queue_slots, default=snap.queue_defaults.get(repo, ""),
         conflicts=snap.queue_conflicts, eligible=eligible, sessions=snap.session_status,
         head_changed=snap.head_changed, closeout_landed=closeout,
         others=tuple(OtherEntry(a.key, a.kind, a.pr.number, a.wave, a.at, a.batch) for a in mine),
+        refused={r.key: r.reason for r in refused},
+        refused_entries=tuple(OtherEntry(r.key, r.kind, r.pr.number, batch=r.batch)
+                              for r in refused),
         warned=snap.warned, scope_args=snap.scope_args,
         released=snap.queue_released, runs=snap.queue_runs,
         method=snap.queue_methods.get(repo, ""), leads=snap.queue_leads.get(repo, {}),
@@ -1728,7 +1745,10 @@ def _carries(
 
 
 def _queue_plans(
-    snap: Snapshot, held: Iterable[str], admitted: Sequence[Admitted] = ()
+    snap: Snapshot,
+    held: Iterable[str],
+    admitted: Sequence[Admitted] = (),
+    refused: Sequence[Refused] = (),
 ) -> list[QueuePlan]:
     """One wave-queue plan per repo the queue drives, in repo order."""
     if not snap.wave_queues:
@@ -1736,27 +1756,8 @@ def _queue_plans(
     from fr.triage.wave_queue import plan_queue
 
     held = tuple(held)
-    return [plan_queue(queue_snapshot(snap, repo, held, admitted))
+    return [plan_queue(queue_snapshot(snap, repo, held, admitted, refused))
             for repo in sorted(snap.wave_queues)]  # fmt: skip
-
-
-QUEUE_REPORT_KEY = "queue"
-"""The `key` of an `Action` the merge queue reported (R28): `needs_you` reads it as a
-`queue-need`, not as a blocked batch."""
-
-
-def _queue_reports(plan: QueuePlan) -> list[Action]:
-    """The queue's report actions, as the pass's own: a held repo is `held` (R31), a Need is
-    `blocked` (the operator's, R28, R30), a report said once is a `warn` keyed in `warned`."""
-    out: list[Action] = []
-    for a in plan.actions:
-        if a.kind == "queue-held":
-            out.append(Action("held", plan.repo, a.detail, key=QUEUE_REPORT_KEY))
-        elif a.kind == "queue-need":
-            out.append(Action("blocked", a.batch or plan.repo, a.detail, key=QUEUE_REPORT_KEY))
-        elif a.kind == "queue-warn":
-            out.append(Action("warn", plan.repo, a.detail, head=a.key))
-    return out
 
 
 def drive_pass(snap: Snapshot) -> Pass:
@@ -1806,7 +1807,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     awaiting: list[str] = []
     ready_members: list[str] = []
     for repo in sorted(by_repo):
-        reports, waits, ok = _member_reports(by_repo[repo], snap)
+        reports, waits, ok = _member_reports(by_repo[repo], snap, repo)
         actions.extend(reports)
         awaiting.extend(waits)
         ready_members.extend(ok)
@@ -2045,9 +2046,12 @@ def drive_pass(snap: Snapshot) -> Pass:
         )
 
     # 3d. The wave merge queue: every merge the driver makes is an entry of it (R22, R32).
-    queues = _queue_plans(snap, held_ids, admitted)
+    from fr.triage.queue_reports import queue_reports
+    from fr.triage.readiness import refused_others
+
+    queues = _queue_plans(snap, held_ids, admitted, refused_others(snap, actions, admitted))
     for qplan in queues:
-        actions.extend(_queue_reports(qplan))
+        actions.extend(queue_reports(qplan))
     slotted = frozenset(k for q in queues for k in q.entries)
     for repo in sorted(by_repo):
         actions.extend(_conflict_probes(by_repo[repo], snap, slotted))

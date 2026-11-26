@@ -33,7 +33,7 @@ __all__ = [
     "required_inputs",
 ]
 
-REPO_TRACKED_ARTIFACTS = frozenset({"spec", "plan"})
+REPO_TRACKED_ARTIFACTS = frozenset({"spec", "plan", "debug"})
 """Artifact names that denote a path in a git repo.
 
 Reachability (§4.E) is "is this file on `origin/HEAD`", so it is only

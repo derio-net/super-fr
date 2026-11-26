@@ -19,6 +19,7 @@ from fr.triage.approval import First
 from fr.triage.batch_drive import LivePr
 from fr.triage.model import (
     Batch,
+    CursorPosition,
     PostMergeEvent,
     QueueBuiltEvent,
     QueueHaltEvent,
@@ -31,6 +32,8 @@ from fr.triage.queue_exec import EntryInput, QueueExecutor, QueuePorts, slot_ref
 from fr.triage.wave_queue import QueueConfig, QueueSnapshot, plan_queue
 
 from tests.integration.queue_git import REPO, SCOPE, FakeForge, World, forge, git, world
+
+DELIVERED = CursorPosition(run="r", step="deliver", kind="deliver-done")
 
 
 class KilledError(Exception):
@@ -94,6 +97,8 @@ class Driver:
             live=live, approvals={k: First(pr.head) for k, pr in live.items()},
             records=tuple(self.records), base=self.w.main(),
             conflicts=dict(self.executor.conflicts),
+            # every PR's run delivered (batch-merge-readiness R1): the queue is under test
+            cursors={k: (pr.head, DELIVERED, "read") for k, pr in live.items()},
         )  # fmt: skip
 
     def one_pass(self) -> list[str]:

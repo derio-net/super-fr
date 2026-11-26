@@ -31,6 +31,7 @@ from fr.triage.errors import ForgeError
 from fr.triage.gitseam import Checkout, GitError
 from fr.triage.merge_stops import load_stops
 from fr.triage.model import (
+    CursorPosition,
     Facts,
     Issue,
     PullRequest,
@@ -53,6 +54,10 @@ COLLECTED = f"{REPO}/run/closeout-2026-10-02-1"  # the pass's one collected clos
 
 
 # ------------------------------------------------------------------ fakes
+
+
+DELIVERED = CursorPosition(run="r-delivered", step="deliver", kind="deliver-done")
+DELIVERED_FILE = "docs/superpowers/runs/r-delivered.yaml"
 
 
 class World:
@@ -96,8 +101,16 @@ class World:
             "cross_repo": False,
             # The operator's approval (merge-train-safety §A): on unless a test says not.
             "labels": ["approved-fr"],
+            # Its run delivered (batch-merge-readiness R1): on unless a test says not.
+            "delivered": True,
             **kw,
         }
+
+    def delivered_at(self, head: str) -> str | None:
+        """The branch of the open, delivered PR at *head*: its head carries a run cursor at
+        `deliver` done (the fake clone serves it). None for any other head."""
+        return next((p["head_ref"] for p in self.prs.values() if p["head_oid"] == head
+                     and p["state"] == "OPEN" and p.get("delivered", True)), None)  # fmt: skip
 
     def facts(self) -> Facts:
         prs = {n: self._pr(n) for n in self.prs}
@@ -154,6 +167,8 @@ class World:
             author=p["author"],
             cross_repo=p["cross_repo"],
             labels=list(p["labels"]) if p["state"] == "OPEN" else None,
+            cursor=DELIVERED if p["state"] == "OPEN" and p.get("delivered", True) else None,
+            cursor_read="read" if p["state"] == "OPEN" else None,
         )
 
     # -- the GhClient adapter
@@ -357,7 +372,16 @@ class DriveCheckout:
     def show(self, ref: str, file: str) -> str | None:
         if file == ".fr/triage.yaml":
             return yaml.safe_dump(self.world.config) if self.world.config else None
+        if file == DELIVERED_FILE and (branch := self._delivered(ref)) is not None:
+            return yaml.safe_dump({"run": "r-delivered", "branch": branch, "cursor": "deliver",
+                                   "steps": {"deliver": {"state": "done"}}})  # fmt: skip
         return self.files.get((ref, file))
+
+    def _delivered(self, ref: str) -> str | None:
+        """A delivered PR head with no runs of its own in `files` serves one cursor."""
+        if any(at == ref and f.startswith("docs/superpowers/runs/") for at, f in self.files):
+            return None
+        return self.world.delivered_at(ref)
 
     def remote_branch_exists(self, branch: str) -> bool:
         return False
@@ -370,6 +394,9 @@ class DriveCheckout:
 
     def reach_commit(self, sha: str, branch: str) -> bool:
         return bool(sha)
+
+    def reach_failure(self, sha: str, branch: str) -> str:
+        return "" if sha else "the PR has no head sha"
 
     # head -> its patch-id (R12); a head not here has none, and the gate judges by `reaches`
     patch_ids: dict[str, str] = {}  # noqa: RUF012 - replaced per instance by a test
@@ -393,6 +420,8 @@ class DriveCheckout:
 
     def list_dir(self, ref: str, directory: str) -> list[str]:
         prefix = directory.rstrip("/") + "/"
+        if DELIVERED_FILE.startswith(prefix) and self._delivered(ref) is not None:
+            return [DELIVERED_FILE.removeprefix(prefix)]
         return sorted({f.removeprefix(prefix).split("/")[0] for (at, f) in self.files
                        if at == ref and f.startswith(prefix)})  # fmt: skip
 
@@ -4986,14 +5015,16 @@ def test_the_drivers_board_asks_for_the_label_in_a_ci_none_repo(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:  # fmt: skip
-    """p1-r2: the driver holds a `ci none` repo's unlabelled PR, so its board says so."""
-    _pr_open(world, tmp_path, labels=[])
+    """p1-r2: the driver holds a `ci none` repo's unlabelled PR, so its board says so (no
+    run cursor at its head: a delivered one asks to approve it from the Reviewer lane)."""
+    world.config = {"queue": {"ci": "none"}}
+    _pr_open(world, tmp_path, labels=[], delivered=False)
     world.checks[101] = []
     world.all_checks[101] = {"pass": 0, "fail": 0, "pending": 0}
     monkeypatch.setattr(triage_batch_cmd, "ci_is_none", lambda path: True)
     code, out = _drive(tmp_path, "--once", "--yes")
     assert not _opened(world)
-    assert "awaiting approval" in _page(tmp_path)
+    assert "Not ready: not delivered" in _page(tmp_path)  # R7: the verdict says it
 
 
 def test_a_local_clone_tells_the_board_its_repo_is_ci_none(
@@ -6071,6 +6102,33 @@ def test_a_probe_git_error_is_said_once_and_retried_uncached(
     lines = [x for x in result.output.splitlines() if "the conflict probe could not run" in x]
     assert len(lines) == 1 and len(attempts) >= 2, result.output  # said once, tried each pass
     assert _conflicts(tmp_path) == [] and messenger.messages == []
+
+
+def test_a_pr_whose_head_moved_since_the_cursor_was_read_is_held_with_both_heads(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """p1-r5, batch-merge-readiness R1: the forge reads the PR at a head other than the one
+    its run cursor was read at, so it is not delivered: no queue opens, the draft is not
+    readied, and the hold names both heads."""
+    from fr.triage import batch_drive
+    from fr.triage.wave_queue import QueueConfig
+
+    real = batch_drive.drive_pass
+    monkeypatch.setattr(
+        triage_batch_cmd, "drive_pass",
+        lambda snap: real(replace(snap, wave_queues={REPO: QueueConfig()})),
+    )  # fmt: skip
+    _pr_open(world, tmp_path, draft=True)
+    view = world.pr_view
+    monkeypatch.setattr(
+        world, "pr_view", lambda repo, n: {**view(repo, n), "head_oid": "sha-moved"}
+    )
+    code, out = _drive(tmp_path, "--once")
+    assert code in (0, 3), out
+    assert _lines(out, "queue-open") == [] and world.merged == []
+    assert not any(c.startswith("pr_ready") for c in world.calls)
+    assert "the run cursor was read at sha-101, the PR is at sha-moved" in out
 
 
 # ------------------------------------- hand-backs onto the stack target (wave-queue-gaps §A)

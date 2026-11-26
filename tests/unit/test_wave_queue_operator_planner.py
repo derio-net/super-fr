@@ -26,6 +26,8 @@ from fr.triage.wave_queue import (
     replay,
 )
 
+from tests.unit.test_wave_queue_planner import DELIVERED
+
 REPO = "derio-net/super-fr"
 ME = "s-11111111"
 NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
@@ -79,6 +81,10 @@ def _operator(n: int = 7, *, checks: str = "green") -> tuple[OtherEntry, dict[st
 def _qs(batches: Sequence[Batch], stages: dict[str, str], live: dict[str, LivePr],
         **kw: Any) -> QueueSnapshot:  # fmt: skip
     kw.setdefault("approvals", {b.id: First(live[b.id].head) for b in batches if b.id in live})
+    # batch-merge-readiness R1: a batch PR enters only once its run delivered
+    kw.setdefault(
+        "cursors", {b.id: (live[b.id].head, DELIVERED, "read") for b in batches if b.id in live}
+    )
     kw.setdefault("base", MAIN)
     return QueueSnapshot(repo=REPO, scope=ME, config=kw.pop("config", QueueConfig()), now=NOW,
                          batches=tuple(batches), stages=stages, live=live,  # type: ignore[arg-type]

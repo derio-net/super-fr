@@ -969,15 +969,23 @@ class Checkout:
     def reach_commit(self, sha: str, branch: str) -> bool:
         """Whether this clone has commit *sha*, fetching origin's *branch* once when it
         does not (a PR head the clone never saw). A failed fetch is no commit."""
+        return not self.reach_failure(sha, branch)
+
+    def reach_failure(self, sha: str, branch: str) -> str:
+        """Why `reach_commit` would be False ("" when the clone has *sha*): no head, the
+        fetch of *branch* failing (its error), origin having no such branch, or the fetched
+        branch not holding *sha* (batch-merge-readiness R1: a cause is never dropped)."""
         if not sha:
-            return False
+            return "the PR has no head sha"
         if has_commit(self.path, sha):
-            return True
+            return ""
         try:
-            fetch_ref(self.path, "origin", f"refs/heads/{branch}")
-        except GitError:
-            return False
-        return has_commit(self.path, sha)
+            fetched = fetch_ref(self.path, "origin", f"refs/heads/{branch}")
+        except GitError as exc:
+            return f"fetch of {branch} failed: {exc}"
+        if fetched is None:
+            return f"origin has no branch {branch}"
+        return "" if has_commit(self.path, sha) else f"{sha[:12]} is not on origin's {branch}"
 
     def list_dir(self, ref: str, directory: str) -> list[str]:
         """The names of the entries directly under *directory* at *ref*; empty when it

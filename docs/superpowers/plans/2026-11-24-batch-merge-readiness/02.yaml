@@ -1,0 +1,88 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The Batches page leads every PR card with its verdict (R4-R8)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - batch-readiness-verdict
+  - batch-readiness-other-entries
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/readiness.py
+  - packages/fr/src/fr/triage/wave_queue.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/triage/kanban_render.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/triage/components.py
+  - tests/**
+  - docs/**/*.md
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: Close-out, archive and export verdicts (spec §C, R8)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests that `drive_pass` keeps the candidates a trust rule refused with their reason, `QueueSnapshot.refused` carries them, and `other_readiness(key, qs)` returns a `Readiness` whose trust fact is "admitted" or the refusal reason, with `admits` equal to `_other_ready` for every fixture (open, green, base; close-out, archive, export).
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add `QueueSnapshot.refused: Mapping[str, str]`, fill it from `drive_pass`'s trust rules (`_export_row`, the archive and close-out admissions), implement `other_readiness` in `readiness.py`, and make `_other_ready` return its `.admits`; `QueuePlan.readiness` includes other entries. Tests green.
+- number: 2
+  title: The board reads the plan's verdicts (spec §C, R4, R7)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: in the kanban tests: `build_board` over facts puts on each batch PR `Card` the verdict and facts from the plan's `readiness`; the board's `LivePr` (`views.drive_snapshot`) carries `mergeable`/`merge_state` from `PullRequest`; one test builds the board's snapshot and the queue's from the same facts and asserts equal verdicts and equal `admits`; a queue-held repo's card reads `Not ready: queue held: <reason>`; close-out, archive and export PRs on a card carry their verdict line.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: `Card` gains `readiness` (and one per other entry it shows); `build_board`/`_card` take them from `_default_plan`'s queues. Keep the existing hint for cards with no open PR. Tests green.
+- number: 3
+  title: Render the verdict first, the facts beneath (R5-R7)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: `kanban_render` tests over a board fixture: every batch PR card's first content line is the verdict text; beneath it a facts list with Delivered, CI, Merge, Approval, Whose move and Next action (a link); the facts' collection time shows where R4 says the page may lag; every verdict string is escaped; close-out and export lines render.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: render it in `kanban_render._card` with classes from `components.py` (colour tokens, no literal colours); keep the phone gutter layout. Tests green.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: remove hint branches in `kanban._card` the verdict now covers (`HINT_MERGE_READY`, `HINT_AWAITING_APPROVAL`, `HINT_IN_MERGE_QUEUE`, `CONFLICT_HINT`) only where no other surface reads them; update the docs page that describes the Batches page (`fr docs check` names it) to describe the verdict. ruff, mypy and the fast tier green.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-25T03:08:29+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-25T03:08:29+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-25T03:08:29+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-25T03:08:29+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-25T03:08:29+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-25T03:08:29+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-11-25T03:08:29+00:00'
+      note: null
+  completion:
+    at: '2026-11-25T03:08:29+00:00'
+    note: null
+    observed_prs: []

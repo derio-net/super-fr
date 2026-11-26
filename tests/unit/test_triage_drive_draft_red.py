@@ -11,7 +11,9 @@ from typing import Any
 from fr.triage.approval import Approved, Unlabelled
 from fr.triage.batch import QueueEntry
 from fr.triage.batch_drive import LivePr, Pass, Snapshot, _conflict_probes, drive_pass
-from fr.triage.model import Batch, PullRequest
+from fr.triage.model import Batch, CursorPosition, PullRequest
+
+DELIVERED = CursorPosition(run="r", step="deliver", kind="deliver-done")
 
 REPO = "derio-net/super-fr"
 NOW = datetime(2026, 11, 19, 12, 0, tzinfo=UTC)
@@ -59,6 +61,7 @@ def _snap(rows: list[tuple[str, bool, str, Any]], **live_extra: Any) -> Snapshot
         repos={b.id: REPO for b in batches},
         now=NOW,
         approvals={r[0]: r[3] for r in rows},
+        cursors={bid: (p.head, DELIVERED, "read") for bid, p in live.items()},
     )
 
 
