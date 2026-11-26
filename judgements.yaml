@@ -10127,6 +10127,15 @@ batches:
   - super-fr#1605
   - super-fr#1675
   wave: 26
+- id: arch-triage-leaves
+  title: '#1318: split the wave-export and hand-back leaves out of triage/batch_drive.py'
+  ids:
+  - super-fr#1516
+  wave: 26
+  after:
+  - queue-followups
+  - closeout-state
+  - export-drift
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
