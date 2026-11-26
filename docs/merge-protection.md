@@ -7,7 +7,7 @@ covers:
   - scripts/setup-release-app.sh
   - .github/workflows/release.yml
   - packages/fr/src/fr/triage/intake.py
-reviewed: 2026-11-23 still true; release.yml now runs its suite on Python 3.14, which the page does not name (ci-single-python, #1589); 2026-11-23 admit reads the issue's own host (URL key or --host), and dispatch re-reads an admit-pinned member live before it starts a batch (triage-hardening lens fixes); 2026-11-22 in issue intake, ready-fr admits only with a trusted fr triage admit marker that matches the content, and an ineligible issue's title is withheld (triage-hardening); 2026-11-23 a drained hold push starts the release on main through hold-relay, so the hold branch never reaches the release environment; 2026-11-22 the release app is a dedicated super-fr-release app, never frank's derio-fr-automation; the variable is replaced when it names another app; 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening); 2026-11-21 the wave driver has its own queue (no forge merge queue, no branch update), queue.land push needs a bypass actor or land merge, and ci-ok runs on fr-queue/**; 2026-11-20 the release job has a third authenticated push, the clear of a drained merge queue hold, and release.yml also starts on a drained hold push (wave merge queue)
+reviewed: 2026-11-26 landing-method, the push landing paragraph says only a merge commit lands by push and a configured merge_method wins over the forge's default (R2, R8); 2026-11-23 still true; release.yml now runs its suite on Python 3.14, which the page does not name (ci-single-python, #1589); 2026-11-23 admit reads the issue's own host (URL key or --host), and dispatch re-reads an admit-pinned member live before it starts a batch (triage-hardening lens fixes); 2026-11-22 in issue intake, ready-fr admits only with a trusted fr triage admit marker that matches the content, and an ineligible issue's title is withheld (triage-hardening); 2026-11-23 a drained hold push starts the release on main through hold-relay, so the hold branch never reaches the release environment; 2026-11-22 the release app is a dedicated super-fr-release app, never frank's derio-fr-automation; the variable is replaced when it names another app; 2026-11-21 after lens review, both-modes environment note, conditional key prompt and deferred bypass; the key is a release environment secret; one setup script replaces the two stages; the security model and the runbook are rewritten (release-app-hardening); 2026-11-21 the wave driver has its own queue (no forge merge queue, no branch update), queue.land push needs a bypass actor or land merge, and ci-ok runs on fr-queue/**; 2026-11-20 the release job has a third authenticated push, the clear of a drained merge queue hold, and release.yml also starts on a drained hold push (wave merge queue)
 ---
 
 # Merge protection for `main`
@@ -217,6 +217,11 @@ atomic `git push` straight to the default branch. A ruleset that requires pull r
 checks refuses that push. So the identity that pushes must be a bypass actor of the
 ruleset. Otherwise, the repo must use `queue.land: merge`. With it, the driver merges
 each pull request through the forge's merge API. The operator's own credential is never a bypass actor.
+A push landing needs the merge method `merge`. GitHub marks a pushed pull request as
+merged only when its commit is a merge commit; after a squash or a rebase it closes the
+pull request as unmerged. So a repo that lands by push and chooses `squash` or `rebase`
+is held, and the message names the fix: `merge_method: merge` in `.fr/triage.yaml`, or
+`queue.land: merge`. A `merge_method` that you set wins over the forge's default.
 The checks must also run on pushes to `fr-queue/**`, where the driver tests each combination.
 See spec `2026-11-19-wave-merge-queue-design.md` §D and R22.
 
