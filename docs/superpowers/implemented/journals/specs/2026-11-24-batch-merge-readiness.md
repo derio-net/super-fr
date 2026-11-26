@@ -226,3 +226,16 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-batch-merge-readiness-p4 created=2026-11-24T22:40:08+00:00 -->
 ### phase-split-2026-11-24-batch-merge-readiness-p4 · decision · ask: the fr-debugging workflow and its debug journal readers (R10, R11) are their own ask
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-1 created=2026-11-26T16:32:39+00:00 -->
+### test-plan-step-1 · owed · Test Plan step 1 owed
+
+what: post-merge — operator-driven: on the next live `fr triage batch drive`, an approved, green batch PR whose run is not at `deliver: done` stays on the Batches page as "Approved, not delivered" and is neither marked ready nor merged; once its run delivers and the operator re-labels, it merges.
+why: needs a live fr triage batch drive that meets an approved, green batch PR whose run is not at deliver: done; no such batch is in flight at closeout
+how: fr journal resolve --scope spec --slug 2026-11-24-batch-merge-readiness --id test-plan-step-1 --state fixed --note "<evidence>"
+owed_key: spec:2026-11-24-batch-merge-readiness#step1
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-1-resolved created=2026-11-26T16:33:08+00:00 state=open resolves=test-plan-step-1 filed_as=derio-net/super-fr#1714 -->
+### test-plan-step-1-resolved · finding [filed → derio-net/super-fr#1714] · resolves test-plan-step-1: Test Plan step 1 owed
+
+Filed at archive as derio-net/super-fr#1714; still owed until discharged.
