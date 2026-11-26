@@ -10174,6 +10174,12 @@ batches:
   wave: 27
   after:
   - ops-gate-truth
+- id: gitea-ci
+  title: Gitea CI scaffold blockers
+  ids:
+  - super-fr#1690
+  - super-fr#1590
+  wave: 27
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
