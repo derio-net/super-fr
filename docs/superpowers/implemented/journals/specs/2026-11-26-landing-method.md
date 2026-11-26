@@ -191,3 +191,31 @@ row_kinds:
 run_gate: developer
 run_kind: none
 ```
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-26T17:17:20+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: pre-merge — CI: `choose_method` returns the configured method over a forge default, the default when nothing is configured, the single allowed method last, and refuses a disallowed explicit or configured method (row `landing-method-order`).
+
+Evidence: CI ci-ok green on PR #1708's final head 3a7f2e9 (run 45865158880), merged as 714686c9d: tests/unit/test_triage_batch_merge.py choose_method order tests (row landing-method-order)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-11-26T17:17:24+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: pre-merge — CI: under `land: push` a `squash` or `rebase` method from each source holds the queue with a reason naming the method, its source and the fix (`merge_method: merge` when merge is allowed, allowing merge commits when it is not); `merge` does not; an unchoosable method or a failed merge-methods read holds the queue for the pass without raising, also under a dry run; the resume pass still records a landing already pushed; `land_push` with a non-merge method, or with a merge-method call whose combination commit is not a merge of its parent and the PR's head, pushes nothing; `fr cloud doctor` fails the check when a `queue:` block lands by push and passes when there is no `queue:` block (row `landing-method-push-merge-only`).
+
+Evidence: CI ci-ok green on PR #1708's final head 3a7f2e9 (run 45865158880), merged as 714686c9d: push-landing hold tests in test_triage_batch_drive_cmd.py, test_queue_exec.py, tests/integration/test_queue_land.py and test_cloud_remedy.py (row landing-method-push-merge-only)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-11-26T17:17:26+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: pre-merge — CI: under `land: merge` a `rebase` method prints the warning once per repo per process (row `landing-method-rebase-warning`).
+
+Evidence: CI ci-ok green on PR #1708's final head 3a7f2e9 (run 45865158880), merged as 714686c9d: rebase-under-land-merge warning test in test_triage_batch_drive_cmd.py (row landing-method-rebase-warning)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-11-26T17:17:28+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: pre-merge — CI: `waiting_prs` counts a first-parent PR the forge reports `CLOSED` and unmerged with the commit's date and its labels, and stays unknown for an `OPEN` PR or a failed read (row `release-closed-unmerged-landing`).
+
+Evidence: CI ci-ok green on PR #1708's final head 3a7f2e9 (run 45865158880), merged as 714686c9d: waiting_prs closed-unmerged tests in tests/unit/test_release_script.py (row release-closed-unmerged-landing)
