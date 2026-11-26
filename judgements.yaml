@@ -10094,6 +10094,14 @@ batches:
   ids:
   - super-fr#1518
   wave: 25
+- id: triage-privacy
+  title: 'Triage privacy: outsider text never reaches worker sessions or the state ref unfenced'
+  ids:
+  - super-fr#1633
+  - super-fr#1634
+  - super-fr#1632
+  - super-fr#1631
+  wave: 26
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
