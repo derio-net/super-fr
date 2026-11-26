@@ -9084,6 +9084,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T18:01:28.976092Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -9978,6 +9985,11 @@ batches:
     keys:
     - super-fr#1578
     - super-fr#1581
+  - kind: closeout
+    at: '2026-11-26T18:01:30.388911Z'
+    runner: hand
+    handle: archived
+    archived: 0
 - id: consumer-followups
   title: 'Consumer-delivery follow-ups: plugin-dir judgement, Gitea job token, tea login error'
   ids:
@@ -10069,6 +10081,11 @@ batches:
     runner: herdr
     handle: w38:p1D
     branch: feat/batch-landing-method
+  - kind: closeout
+    at: '2026-11-26T18:01:31.802078Z'
+    runner: hand
+    handle: archived
+    archived: 0
 - id: queue-followups
   title: 'Queue follow-ups: approval revive, conflict probe, close-out wait, case-insensitive repo names'
   ids:
