@@ -90,3 +90,10 @@ amendments:
     level: unit
     ref: super-fr:tests/integration/test_queue_land.py#test_one_atomic_push_moves_main_to_the_tip_and_leaves_each_head
     why: the renamed test proves the merge landing
+  - row: wave-queue-speculative-land
+    op: drop-level
+    base: 0
+    level: int
+    ref: super-fr:tests/integration/test_queue_land.py#test_one_atomic_push_moves_main_to_the_tip_and_each_head_to_its_commit
+    why: 'renamed: squash and rebase by push are held (spec 2026-11-26-landing-method
+      R3)'
