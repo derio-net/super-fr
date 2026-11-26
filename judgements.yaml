@@ -11239,6 +11239,7 @@ closeouts:
   handle: w3T:p5
   planned:
   - merge-readiness
+  closed: true
 queues:
 - repo: derio-net/super-fr
   wave: 22
