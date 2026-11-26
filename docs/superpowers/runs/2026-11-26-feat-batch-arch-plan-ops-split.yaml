@@ -1,0 +1,28 @@
+schema_version: 12
+run: 2026-11-26-feat-batch-arch-plan-ops-split
+workflow: fr-goal@1
+branch: feat/batch-arch-plan-ops-split
+started: '2026-11-26T18:27:40+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  lens-review:
+    state: pending
+  deliver:
+    state: pending
+fr_version: 9.1.0rc3
+issue: 1518
