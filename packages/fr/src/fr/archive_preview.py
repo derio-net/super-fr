@@ -64,6 +64,7 @@ READS = frozenset(
         "pr_for_branch",
         "issues_enabled",
         "repo_visibility",
+        "repo_default_branch",
         "pages_visibility",
     }
 )

@@ -176,3 +176,38 @@ run_kind: none
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-24-show-me-visuals-p2 created=2026-11-24T13:59:31+00:00 -->
 ### phase-split-2026-11-24-show-me-visuals-p2 · decision · ask: the fr-show-me skill, pipeline prose, spec reviewer and docs are a separately reviewable ask (R1-R5, R13-R15) from the engine
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-26T13:29:42+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: pre-merge — CI: `tests/unit/test_shape.py` pins the shape-block grammar and the section reader (R6); the skill tests pin `fr-show-me`'s presence, mirrors, neutrality and credit (R1–R5), and a text test pins fr-goal's and fr-brainstorming's design-shape and shape-file instructions (R14) (row `show-me-skill`).
+
+Evidence: ci-ok green on PR #1665 head 6cfff980 (merged as d4da4514); the unit tests named run in CI's sharded test job
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-11-26T13:29:45+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: pre-merge — CI: resolve tests refuse a spec without a valid `## Design shape` at `brainstorm`, at `spec-review` on fr-goal and at `spec-plan-review` on fr-goal-light (R7, R8) (row `spec-design-shape-gate`).
+
+Evidence: ci-ok green on PR #1665 head 6cfff980 (merged as d4da4514); the unit tests named run in CI's sharded test job
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-11-26T13:29:47+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: pre-merge — CI: PR-body and deliver tests cover the section's four bodies, the minimal-body durable render, both refusals and an in-flight run whose spec has no section (R9–R11, R18); lens-review brief tests cover the `shape` key and the return-rule sentence (R16) (row `pr-shape-section`).
+
+Evidence: ci-ok green on PR #1665 head 6cfff980 (merged as d4da4514); the unit tests named run in CI's sharded test job
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-11-26T13:29:49+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: pre-merge — CI: archive, trust and adopt-supersede tests (R12, R17) (row `shape-file-archived`); a text test pins the reviewer's instruction (R13) (row `spec-reviewer-checks-shape`).
+
+Evidence: ci-ok green on PR #1665 head 6cfff980 (merged as d4da4514); the unit tests named run in CI's sharded test job
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-5 created=2026-11-26T13:29:52+00:00 -->
+### test-plan-step-5 · discovery · Test Plan step 5: ran
+
+Step: post-merge — operator-driven: run fr-goal on a real goal with the released build; its spec has a `## Design shape` that matches the code, and its PR shows a `## Shape of the change` that matches the diff (R13, R14) (row `show-me-live-run`).
+
+Evidence: walked 2026-11-25: fr-goal run 2026-11-25-feat-wave-plan-file-overlap on released 9.0.0-rc.10 delivered PR #1694 with a matching ## Design shape and ## Shape of the change; row show-me-live-run amended to walked; PR #1665 carries gate:tester-passed

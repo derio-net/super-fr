@@ -41,6 +41,18 @@ from fr.triage.batch import (
 )
 from fr.triage.batch_dispatch import title_block
 from fr.triage.claims import Claim, held_line, held_members
+from fr.triage.handback_rules import (  # noqa: F401 - re-exported, wave-queue-gaps §E
+    HANDBACKS_PER_DISPATCH,
+    RED_HANDBACKS_PER_DISPATCH,
+    ConflictDecision,
+    ConflictKind,
+    RedDecisionKind,
+    conflict_decision,
+    handbacks_since,
+    held_conflict,
+    red_decision,
+    spends_handback,
+)
 from fr.triage.mergeability import conflicting
 from fr.triage.model import (
     ArchiveConflictEvent,
@@ -56,7 +68,6 @@ from fr.triage.model import (
     Export,
     Facts,
     QueueRecord,
-    RedHandbackEvent,
 )
 
 if TYPE_CHECKING:  # `fr.triage.wave_queue` imports this module: read at run time lazily
@@ -437,10 +448,28 @@ class Snapshot:
     queue_housekeeping: Mapping[str, tuple[tuple[LivePr, datetime | None], ...]] = field(
         default_factory=dict
     )
+    # wave-queue-gaps R12-R15 (`operator_entries.operator_reads`): repo -> the admitted
+    # operator entries, the pending ones (key -> add time), the refused ones (key -> why) and
+    # the removed keys
+    queue_operator: Mapping[str, tuple[tuple[LivePr, datetime | None], ...]] = field(
+        default_factory=dict
+    )
+    queue_pending: Mapping[str, Mapping[str, datetime]] = field(default_factory=dict)
+    queue_refused: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
+    queue_removed: Mapping[str, frozenset[str]] = field(default_factory=dict)
     # R26: the batches whose DevOps `fr-queue:release` is settled at the patch-id they have
     # now, and the run id of each landed barrier still open (for its Need)
     queue_released: frozenset[str] = frozenset()
     queue_runs: Mapping[str, str] = field(default_factory=dict)
+    # wave-queue-gaps §A: repo -> its merge method, and repo -> entry -> its hand-back's
+    # lineage: whether its `onto` still leads, the dead combinations its head carries
+    queue_methods: Mapping[str, str] = field(default_factory=dict)
+    queue_leads: Mapping[str, Mapping[str, bool | None]] = field(default_factory=dict)
+    queue_carries: Mapping[str, Mapping[str, tuple[str, ...] | None]] = field(default_factory=dict)
+    # repo -> open head of a non-batch PR -> what it carries (an `OtherEntry`'s, by its head)
+    queue_head_carries: Mapping[str, Mapping[str, tuple[str, ...] | None]] = field(
+        default_factory=dict
+    )
     head_changed: Mapping[str, datetime] = field(default_factory=dict)
     session_status: Mapping[str, str] = field(default_factory=dict)
     # batch id -> (head read at, cursor position, read status) from facts (readiness R1)
@@ -467,7 +496,7 @@ class Admitted:
     head the queue builds; *batch* is the batch it is about, *wave* the wave whose queue it
     joins (None: between waves) and *at* when it was admitted, which orders it."""
 
-    kind: Literal["closeout", "archive", "export", "housekeeping"]
+    kind: Literal["closeout", "archive", "export", "housekeeping", "operator"]
     repo: str
     pr: LivePr
     batch: str = ""
@@ -889,120 +918,6 @@ def closeout_brief(batch: Batch, *, run: str | None, checkout: Path) -> str:
     )
 
 
-# ------------------------------------------------- conflict hand-back (§G)
-
-HANDBACKS_PER_DISPATCH = 2
-"""R22: hand-backs a batch gets per dispatch; the next conflict is held."""
-
-
-def handbacks_since(
-    events: Sequence[object], counted: Callable[[object], bool], *, reset: bool = True
-) -> int:
-    """The hand-back budget's one count: the events *counted* accepts, newest first, back
-    to the batch's latest `dispatch` (*reset*), or all of them. Conflict (R22) and red
-    (R10) hand-backs count per dispatch here; a collected close-out's (R27) counts per
-    close-out item across its members, which no single batch's dispatch resets, so it
-    counts distinct heads instead (`closeout_handback_decision`)."""
-    n = 0
-    for event in reversed(events):
-        if reset and isinstance(event, DispatchEvent):
-            break
-        n += counted(event)
-    return n
-
-
-ConflictKind = Literal["skip", "wait-behind", "held", "handback"]
-
-
-@dataclass(frozen=True)
-class ConflictDecision:
-    """What drive does with a real merge conflict (spec 2026-10-06-verification-
-    strategies §G): `behind` names the batch a `wait-behind` waits on."""
-
-    kind: ConflictKind
-    behind: str | None = None
-
-
-def conflict_decision(
-    events: Sequence[object],
-    head: str,
-    paths: Sequence[str],
-    earlier_in_pass: Sequence[tuple[str, Sequence[str]]],
-) -> ConflictDecision:
-    """The pure decision on a conflict at *head* refusing *paths* (R21, R22).
-
-    `skip`: a `conflict` event already exists for this head, so a restarted driver
-    never hands the same head back twice. `wait-behind`: a refused path is shared
-    with a conflict met earlier in this pass (*earlier_in_pass*, `(batch, paths)` in
-    train order), which is fixed first. `held`: two `session|fresh` hand-backs were
-    made since the batch's latest `dispatch` event (held ones never count). Else
-    `handback`.
-    """
-    if any(isinstance(e, ConflictEvent) and e.head == head for e in events):
-        return ConflictDecision("skip")
-    mine = set(paths)
-    for batch_id, theirs in earlier_in_pass:
-        if mine.intersection(theirs):
-            return ConflictDecision("wait-behind", behind=batch_id)
-    handed = handbacks_since(
-        events, lambda e: isinstance(e, ConflictEvent) and e.delivered != "held"
-    )
-    if handed >= HANDBACKS_PER_DISPATCH:
-        return ConflictDecision("held")
-    return ConflictDecision("handback")
-
-
-# ------------------------------------------------- red recovery (merge-train-safety §C)
-
-RED_HANDBACKS_PER_DISPATCH = 2
-"""R10: red hand-backs a batch gets per dispatch, counted apart from conflict ones."""
-
-RedDecisionKind = Literal["handback", "wait", "needs_you", "skip"]
-
-
-def red_decision(
-    events: Sequence[object],
-    pr: int,
-    head: str,
-    failing: Sequence[str],
-    status: str,
-) -> RedDecisionKind:
-    """What the driver does with PR *pr* red at *head* (*failing* names the checks), by the
-    first rule that applies (R10, R11):
-
-    1. a `red_handback` event exists for (pr, head): `skip`;
-    2. `RED_HANDBACKS_PER_DISPATCH` delivered hand-backs have gone out since the latest
-       dispatch: `needs_you`;
-    3. the session's *status*: `idle` is a `handback`, `absent` or `done` a `needs_you`,
-       anything else `wait`.
-
-    The rule that updated a red head fr itself made (R9's `reupdate`) is gone: the wave
-    merge queue never updates a PR branch (spec 2026-11-19-wave-merge-queue R13, R22).
-    """
-    red = [e for e in events if isinstance(e, RedHandbackEvent)]
-    if any(e.pr == pr and e.head == head for e in red):
-        return "skip"
-    handed = handbacks_since(
-        events, lambda e: isinstance(e, RedHandbackEvent) and e.delivered == "session"
-    )
-    if handed >= RED_HANDBACKS_PER_DISPATCH:
-        return "needs_you"
-    if status == "idle":
-        return "handback"
-    return "needs_you" if status in ("absent", "done") else "wait"
-
-
-def held_conflict(batch: Batch) -> ConflictEvent | None:
-    """The batch's latest `conflict` event when it is `held` and no `dispatch` came after
-    it (R22): the operator owns that conflict. A new dispatch resets the count."""
-    for event in reversed(batch.events):
-        if isinstance(event, DispatchEvent):
-            return None
-        if isinstance(event, ConflictEvent):
-            return event if event.delivered == "held" else None
-    return None
-
-
 def conflict_at(batch: Batch, head: str) -> ConflictEvent | None:
     """The batch's latest `conflict` event at PR head *head*, whatever it delivered
     (batch-train-truth R18): a PR so recorded is never one to approve."""
@@ -1039,7 +954,8 @@ def archive_conflict_decision(events: Sequence[object], head: str) -> ArchiveCon
     """The pure decision on an archive PR conflicting at *head* (R12).
 
     `skip`: an `archive_conflict` event exists for this head, so a restarted driver
-    never hands the same head back twice. `held`: two `session|fresh` hand-backs were
+    does not hand the same head back again (an archive PR has no free re-issue; that is
+    the batch PR's `conflict_decision`). `held`: two `session|fresh` hand-backs were
     made since the batch's latest close-out event (held ones never count; a batch PR's
     `conflict` events are another counter). Else `handback`."""
     if any(isinstance(e, ArchiveConflictEvent) and e.head == head for e in events):
@@ -1788,7 +1704,8 @@ def queue_snapshot(
     if snap.placements.get(repo, "repo") != "repo":
         # R15: the repo keeps no fr artifacts on its default branch, so the queue holds batch
         # PRs only: no close-out, archive, export or housekeeping entry, and no wave waits on one
-        closeout, mine, refused = None, [], []
+        closeout, refused = None, []  # refused: close-out/archive/export/housekeeping only
+        mine = [a for a in mine if a.kind == "operator"]  # no fr artifact
     return QueueSnapshot(
         repo=repo, scope=snap.scope_id or snap.me, now=snap.now, cursors=snap.cursors,
         config=snap.wave_queues.get(repo) or QueueConfig(ci=None),
@@ -1806,7 +1723,25 @@ def queue_snapshot(
                               for r in refused),
         warned=snap.warned, scope_args=snap.scope_args,
         released=snap.queue_released, runs=snap.queue_runs,
+        method=snap.queue_methods.get(repo, ""), leads=snap.queue_leads.get(repo, {}),
+        carries=_carries(snap, repo, mine), pending_operator=snap.queue_pending.get(repo, {}),
+        removed=snap.queue_removed.get(repo, frozenset()),
+        refused_operator=snap.queue_refused.get(repo, {}),
     )  # fmt: skip
+
+
+def _carries(
+    snap: Snapshot, repo: str, admitted: Sequence[Admitted]
+) -> dict[str, tuple[str, ...] | None]:
+    """*repo*'s carries by entry key: its batches', and each admitted non-batch entry's by
+    the head it is built at (wave-queue-gaps R4, R6; review p1-r4). In a repo whose heads
+    were read, a head the read missed is None, held as unread (R5, l-errors-r3); a repo not
+    read (R1's mode off) knows nothing of them, as before R4."""
+    if repo not in snap.queue_head_carries:
+        return dict(snap.queue_carries.get(repo, {}))
+    heads = snap.queue_head_carries[repo]
+    return {**snap.queue_carries.get(repo, {}),
+            **{a.key: heads.get(a.pr.head) for a in admitted}}  # fmt: skip
 
 
 def _queue_plans(
@@ -2105,6 +2040,10 @@ def drive_pass(snap: Snapshot) -> Pass:
     for repo in sorted(snap.queue_housekeeping):
         admitted.extend(Admitted("housekeeping", repo, pr, at=at)
                         for pr, at in snap.queue_housekeeping[repo])  # fmt: skip
+    for repo in sorted(snap.queue_operator):  # wave-queue-gaps R12: `fr triage queue add`
+        admitted.extend(
+            Admitted("operator", repo, pr, at=at) for pr, at in snap.queue_operator[repo]
+        )
 
     # 3d. The wave merge queue: every merge the driver makes is an entry of it (R22, R32).
     from fr.triage.queue_reports import queue_reports
@@ -2121,7 +2060,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     # 4. Dispatch.
     # The cap counts every batch in flight, selected or not (review rg-3); the
     # summary's own figure is the selection's, which is what this drive waits on.
-    from fr.triage.wave_queue import waits_on_queue
+    from fr.triage.wave_queue import operator_work, waits_on_queue
 
     occupants = {
         b.id for b in snap.batches
@@ -2135,6 +2074,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     by_id = {b.id: b for b in snap.batches}
     queue_needs = sum(a.kind == "queue-need" for q in queues for a in q.actions)
     pending, blocked = 0, exports_blocked + archives_blocked + closeouts_held + queue_needs
+    pending += operator_work(snap.queue_pending, queues)  # p2-r2: an added PR is work
     for batch in sorted(chosen, key=_dispatch_key):
         if stages.get(batch.id) != "proposed" or batch.id in held_ids:
             continue

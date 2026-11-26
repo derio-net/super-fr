@@ -336,9 +336,29 @@ class DriveCheckout:
         self.trials = 0  # scratch merges made
         self.removed: list[Path] = []  # scratch worktrees removed
         self.fetches = 0  # `git fetch` calls
+        self.carries: dict[str, tuple[str, ...]] = {}  # head -> the dead combinations it carries
+        self.unreadable: set[str] = set()  # shas whose lineage read raises GitError
+        self.lead: dict[str, bool] = {}  # onto -> whether it leads (default True)
+        self.lineage_reads: list[tuple[str, str, str]] = []  # (kind, sha, target) asked
 
     def origin_repo(self) -> str | None:
         return REPO
+
+    def carried(self, head: str, target: str, built: Any) -> tuple[str, ...]:
+        from fr.triage.gitseam import GitError
+
+        self.lineage_reads.append(("carried", head, target))
+        if head in self.unreadable:
+            raise GitError(f"bad object {head}")
+        return self.carries.get(head, ())
+
+    def leads(self, onto: str, target: str) -> bool:
+        from fr.triage.gitseam import GitError
+
+        self.lineage_reads.append(("leads", onto, target))
+        if onto in self.unreadable:
+            raise GitError(f"bad object {onto}")
+        return self.lead.get(onto, True)
 
     def main_worktree(self) -> Path:
         return self.path
@@ -566,6 +586,11 @@ class RecordingQueue:
                     self.ports.landed(
                         [Landing(f"archive#{number}", ref, number, "", "", "tip", "base")]
                     )
+                continue
+            if isinstance(error, QueueAction):  # a planned hand-back (wave-queue-gaps §A)
+                assert self.ports.hand_back is not None
+                lines.append(f"{error.kind} {error.repo}: {error.detail}: "
+                             f"{self.ports.hand_back(error)}")  # fmt: skip
                 continue
             if not isinstance(error, MergeConflictError):
                 continue
@@ -3981,7 +4006,7 @@ def test_a_conflict_is_messaged_to_the_idle_batch_session(
     assert messenger.dispatched == []
     (line,) = _lines(out, "queue-eject")
     assert "ejected; stopped: PR #101" in line and "handed back to its session" in line
-    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 13
+    assert load_judgements(tmp_path / "judgements.yaml").schema_ == 14
 
 
 @pytest.mark.parametrize("status", ["idle", "absent", "working"])
@@ -5893,3 +5918,496 @@ def test_a_pr_whose_head_moved_since_the_cursor_was_read_is_held_with_both_heads
     assert _lines(out, "queue-open") == [] and world.merged == []
     assert not any(c.startswith("pr_ready") for c in world.calls)
     assert "the run cursor was read at sha-101, the PR is at sha-moved" in out
+
+
+# ------------------------------------- hand-backs onto the stack target (wave-queue-gaps §A)
+
+SLOT_SHA = "5" * 40
+NEW_SHA = "6" * 40
+
+
+def _queue_action(kind: str, **kw: Any) -> Any:
+    from fr.triage.wave_queue import QueueAction
+
+    kw.setdefault("paths", ("src/a.py",))
+    return QueueAction(kind, REPO, "eject b1: PR #101 (batch b1) conflicts in src/a.py",
+                       entries=("b1",), reason="conflict", batch="b1", head="sha-101",
+                       **kw)  # fmt: skip
+
+
+def _at_14(tmp_path: Path) -> None:
+    path = tmp_path / "judgements.yaml"
+    text = path.read_text("utf-8")
+    path.write_text(
+        text.replace("schema: 5\n", "schema: 14\n").replace("schema: 3\n", "schema: 14\n"), "utf-8"
+    )
+
+
+def test_a_slot_hand_back_names_the_slot_and_records_its_onto(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: type[RecordingQueue],
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    train.script[101] = _queue_action("queue-eject", base=SLOT_SHA, slots=(2,),
+                                      decision="handback")  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")
+    ((target, text),) = messenger.messages
+    assert target == BATCH_ITEM_B1, out
+    assert "/slot-2" in text and f"git merge {SLOT_SHA}" in text and "fr-queue/" in text
+    assert f"git fetch origin fr-queue/{_sid()}/slot-2`" in text, text  # l-tests-r5
+    assert "git merge origin/main" not in text
+    (event,) = _conflicts(tmp_path)
+    assert (event.onto, event.reissue, event.delivered) == (SLOT_SHA, False, "session")
+
+
+def test_a_reissue_sends_one_brief_on_the_new_target_and_spends_no_budget(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: type[RecordingQueue],
+) -> None:  # fmt: skip
+    from fr.triage.handback_rules import handbacks_since, spends_handback
+
+    _one_conflicted(world, tmp_path, events=(
+        "      - {kind: conflict, at: '2026-10-01T11:00:00Z', head: sha-101, paths: [src/a.py], "
+        f"delivered: session, handle: h, onto: '{SLOT_SHA}'}}\n"))  # fmt: skip
+    _at_14(tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    train.script[101] = _queue_action("queue-reissue", base=NEW_SHA, slots=(1,),
+                                      decision="reissue")  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")
+    ((_, text),) = messenger.messages
+    assert f"git merge {NEW_SHA}" in text and "/slot-1" in text, out
+    first, again = _conflicts(tmp_path)
+    assert (again.head, again.onto, again.reissue) == ("sha-101", NEW_SHA, True)
+    batch = next(b for b in load_judgements(tmp_path / "judgements.yaml").batches if b.id == "b1")
+    assert handbacks_since(batch.events, spends_handback) == 1
+
+
+def test_a_carrying_head_gets_one_carry_brief_naming_the_reset_head(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: type[RecordingQueue],
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path, events=(
+        "      - {kind: conflict, at: '2026-10-01T11:00:00Z', head: sha-100, paths: [src/a.py], "
+        f"delivered: session, handle: h, onto: '{SLOT_SHA}'}}\n"))  # fmt: skip
+    _at_14(tmp_path)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    train.script[101] = _queue_action("queue-carry", base=NEW_SHA, slots=(), paths=(),
+                                      carried=(SLOT_SHA,))  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")
+    ((_, text),) = messenger.messages
+    assert text.startswith("Merge queue carry on batch b1"), out
+    assert "git reset --hard sha-100" in text and "cherry-pick" in text
+    assert f"git merge {NEW_SHA}" in text and "--force-with-lease" in text
+    assert SLOT_SHA in text
+    _, carry = _conflicts(tmp_path)
+    assert (carry.head, carry.onto, carry.reissue) == ("sha-101", NEW_SHA, True)
+
+
+def test_a_carrying_head_with_no_clean_hand_back_head_is_held(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: type[RecordingQueue],
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path, events=(
+        "      - {kind: conflict, at: '2026-10-01T11:00:00Z', head: sha-100, paths: [src/a.py], "
+        f"delivered: session, handle: h, onto: '{SLOT_SHA}'}}\n"))  # fmt: skip
+    _at_14(tmp_path)
+    checkout.carries["sha-100"] = (SLOT_SHA,)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    train.script[101] = _queue_action("queue-carry", base=NEW_SHA, carried=(SLOT_SHA,))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == []
+    (line,) = _lines(out, "queue-carry")
+    assert "held" in line and "needs you" in line
+    _, held = _conflicts(tmp_path)
+    assert (held.head, held.delivered) == ("sha-101", "held")
+
+
+def test_an_unreadable_reset_candidate_holds_the_carry_this_pass_only(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: type[RecordingQueue],
+) -> None:  # fmt: skip
+    """Review p1-r6 (R5): a reset head git could not read is no reason for a durable Need."""
+    _one_conflicted(world, tmp_path, events=(
+        "      - {kind: conflict, at: '2026-10-01T11:00:00Z', head: sha-100, paths: [src/a.py], "
+        f"delivered: session, handle: h, onto: '{SLOT_SHA}'}}\n"))  # fmt: skip
+    _at_14(tmp_path)
+    checkout.unreadable.add("sha-100")
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    train.script[101] = _queue_action("queue-carry", base=NEW_SHA, carried=(SLOT_SHA,))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == []
+    (line,) = _lines(out, "queue-carry")
+    assert "held this pass" in line and "could not read" in line, out
+    assert "needs you" not in line
+    (only,) = _conflicts(tmp_path)  # no held event written
+    assert only.head == "sha-100"
+
+
+TWO_HANDBACKS = (
+    "      - {kind: conflict, at: '2026-10-01T10:00:00Z', head: sha-099, paths: [src/a.py], "
+    f"delivered: session, handle: h, onto: '{SLOT_SHA}'}}\n"
+    "      - {kind: conflict, at: '2026-10-01T11:00:00Z', head: sha-100, paths: [src/a.py], "
+    f"delivered: session, handle: h, onto: '{SLOT_SHA}'}}\n"
+)
+
+
+@pytest.mark.parametrize(("dirty", "reset"), [((), "sha-100"), (("sha-100",), "sha-099")])
+def test_the_carry_resets_to_the_newest_clean_hand_back_head(  # l-tests-r4
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: type[RecordingQueue], dirty: tuple[str, ...], reset: str,
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path, events=TWO_HANDBACKS)
+    _at_14(tmp_path)
+    for head in dirty:
+        checkout.carries[head] = (SLOT_SHA,)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    train.script[101] = _queue_action("queue-carry", base=NEW_SHA, carried=(SLOT_SHA,))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    ((_, text),) = messenger.messages
+    assert f"git reset --hard {reset}`" in text, out
+
+
+def test_an_unreadable_newest_reset_candidate_never_briefs_an_older_head(  # l-errors-r5
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    train: type[RecordingQueue],
+) -> None:  # fmt: skip
+    _one_conflicted(world, tmp_path, events=TWO_HANDBACKS)
+    _at_14(tmp_path)
+    checkout.unreadable.add("sha-100")
+    messenger.status[BATCH_ITEM_B1] = "idle"
+    train.script[101] = _queue_action("queue-carry", base=NEW_SHA, carried=(SLOT_SHA,))
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert messenger.messages == [], out  # sha-099 is clean, but sha-100 is newer and unread
+    (line,) = _lines(out, "queue-carry")
+    assert "held this pass" in line and "sha-100" in line, out
+    assert len(_conflicts(tmp_path)) == 2  # nothing written
+
+
+# ------------- the planner, not a script, plans the re-issue and the carry (review p1-r7)
+
+DEAD_SHA = "d" * 40
+FETCHED_MAIN = "origin/main@fetched"  # DriveCheckout.rev_parse: the pass's `main`
+
+
+def _queued_b1(tmp_path: Path, world: World, *events: Any, conflict: str = "") -> None:
+    """b1's PR #101 open in a push/squash queue whose open wave-1 record holds *events*."""
+    from fr.triage.model import QueueOpenEvent, Scope
+    from fr.triage.scope_config import scope_id
+
+    world.config = {"queue": {"ci": "push", "land": "push"}}
+    _one_conflicted(world, tmp_path, events=conflict)
+    _at_14(tmp_path)
+    write = triage_batch_cmd.queue_writer(tmp_path, REPO, scope_id(Scope(kind="repo",
+                                                                        target=REPO)))  # fmt: skip
+    write(QueueOpenEvent(kind="queue_open", at=NOW), wave=1, base=FETCHED_MAIN)
+    for event in events:
+        write(event)
+
+
+def _built_other(slot: int = 1, sha: str = DEAD_SHA) -> Any:
+    from fr.triage.model import QueueBuiltEvent, QueueEntryRef
+
+    return QueueBuiltEvent(kind="queue_built", at=NOW, slot=slot, sha=sha,
+                           entry=QueueEntryRef(batch="b9"), head="sha-909", patch_id="p",
+                           base=FETCHED_MAIN, parent=FETCHED_MAIN)  # fmt: skip
+
+
+def test_the_planner_holds_a_carrying_head_with_one_queue_carry(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+) -> None:  # fmt: skip
+    from fr.triage.model import QueueEjectEvent, QueueEntryRef
+
+    _queued_b1(tmp_path, world, _built_other(),
+               QueueEjectEvent(kind="queue_eject", at=NOW, entry=QueueEntryRef(batch="b9"),
+                               reason="red", head="sha-909"))  # fmt: skip
+    checkout.carries["sha-101"] = (DEAD_SHA,)
+    code, out = _drive(tmp_path, "--once", "--yes")
+    (carry,) = [a for a in world.queue_plans if a.kind == "queue-carry"]
+    assert (carry.batch, carry.head, carry.carried) == ("b1", "sha-101", (DEAD_SHA,)), out
+    assert ("carried", "sha-101", FETCHED_MAIN) in checkout.lineage_reads  # nothing stands
+    assert not any(a.kind == "queue-build" and "b1" in a.entries for a in world.queue_plans)
+
+
+def test_the_planner_reissues_a_handback_whose_onto_stopped_leading(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    from fr.triage.model import QueueEjectEvent, QueueEntryRef
+
+    real = RecordingQueue.execute
+
+    def _execute(self: RecordingQueue, plan: Any, record: Any, history: Any = ()) -> list[str]:
+        lines = real(self, plan, record, history)  # and hand back what the planner re-issues
+        return [*lines, *(str(self.ports.hand_back(a)) for a in plan.actions
+                          if a.kind == "queue-reissue")]  # fmt: skip
+
+    monkeypatch.setattr(RecordingQueue, "execute", _execute)
+    messenger.status[BATCH_ITEM_B1] = "idle"
+
+    _queued_b1(tmp_path, world, _built_other(),
+               QueueEjectEvent(kind="queue_eject", at=NOW, entry=QueueEntryRef(batch="b1"),
+                               reason="conflict", head="sha-101"),
+               conflict=("      - {kind: conflict, at: '2026-10-01T11:00:00Z', head: sha-101, "
+                         "paths: [src/a.py], delivered: session, handle: h, "
+                         f"onto: '{SLOT_SHA}'}}\n"))  # fmt: skip
+    checkout.lead[SLOT_SHA] = False
+    code, out = _drive(tmp_path, "--once", "--yes")
+    (again,) = [a for a in world.queue_plans if a.kind == "queue-reissue"]
+    assert (again.batch, again.head, again.paths) == ("b1", "sha-101", ("src/a.py",)), out
+    assert ("leads", SLOT_SHA, DEAD_SHA) in checkout.lineage_reads  # slot 1 still stands
+    # l-tests-r1 (§F 2): the next pass, with the re-issue's target leading, is a no-op
+    assert len(messenger.messages) == 1, out
+    first, reissued = _conflicts(tmp_path)
+    assert (reissued.onto, reissued.reissue) == (again.base, True) and checkout.lead.get(
+        again.base, True
+    )
+    world.queue_plans.clear()
+    del checkout.lineage_reads[:]
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert not [a for a in world.queue_plans if a.kind == "queue-reissue"], out
+    assert ("leads", again.base, DEAD_SHA) in checkout.lineage_reads
+    assert ("leads", SLOT_SHA, DEAD_SHA) not in checkout.lineage_reads
+    assert len(messenger.messages) == 1 and len(_conflicts(tmp_path)) == 2
+
+
+def test_a_non_batch_entrys_head_has_its_carry_read(
+    tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
+) -> None:  # fmt: skip
+    """Review p1-r4: an open PR no batch owns (a housekeeping, close-out, archive or export
+    PR the pass may admit) has its head's carry read too, into `queue_head_carries`."""
+    captured: list[Any] = []
+    real = triage_batch_cmd.drive_pass
+
+    def _capture(snap: Any) -> Any:
+        captured.append(snap)
+        return real(snap)
+
+    _queued_b1(tmp_path, world, _built_other())
+    world.pr(202, "chore/ops-x", [])
+    (tmp_path / "facts.json").write_text(json.dumps(world.facts().to_json()), "utf-8")
+    checkout.carries["sha-202"] = (DEAD_SHA,)
+    import pytest as _pytest
+
+    with _pytest.MonkeyPatch.context() as mp:
+        mp.setattr(triage_batch_cmd, "drive_pass", _capture)
+        _drive(tmp_path, "--once")
+    assert captured and captured[-1].queue_head_carries[REPO]["sha-202"] == (DEAD_SHA,)
+    assert "sha-101" not in captured[-1].queue_head_carries[REPO]  # b1's is by batch id
+
+
+# ----------------------------------- operator entries through the driver (wave-queue-gaps R12-R15)
+
+
+def _operator_added(tmp_path: Path, world: World, *requests: dict[str, Any], **pr: Any) -> None:
+    """b1 dispatched in wave 1 (no PR yet, so the wave is unfinished) and PR #300, no batch's,
+    put in with `fr triage queue add` (*requests*)."""
+    from fr.triage.model import Scope
+    from fr.triage.scope_config import scope_id
+
+    world.config = {"queue": {"ci": "push", "land": "push"}}
+    world.issues[1] = "open"
+    world.pr(300, "fix/typo", [], **pr)
+    _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1")))
+    _at_14(tmp_path)
+    sid = scope_id(Scope(kind="repo", target=REPO))
+    docs = [{"repo": REPO, "scope": sid, "pr": 300, "by": "operator",
+             "at": "2026-10-02T11:00:00Z", **r} for r in requests]  # fmt: skip
+    path = tmp_path / "judgements.yaml"
+    path.write_text(path.read_text("utf-8") + yaml.safe_dump({"queue_requests": docs}), "utf-8")
+
+
+def _snapshots(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    captured: list[Any] = []
+    real = triage_batch_cmd.drive_pass
+
+    def _capture(snap: Any) -> Any:
+        captured.append(snap)
+        return real(snap)
+
+    monkeypatch.setattr(triage_batch_cmd, "drive_pass", _capture)
+    return captured
+
+
+def test_an_added_approved_pr_opens_a_between_waves_queue_through_the_driver(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _operator_added(tmp_path, world, {"kind": "queue_add"})
+    snaps = _snapshots(monkeypatch)
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert snaps[-1].queue_pending[REPO].keys() == {"operator#300"}, out
+    ((live, _),) = snaps[-1].queue_operator[REPO]
+    assert (live.number, live.head, live.checks) == (300, "sha-300", "green")
+    (opened,) = [a for a in world.queue_plans if a.kind == "queue-open"]
+    assert (opened.wave, opened.entries) == (None, ("operator#300",))
+    approvals = [e for q in load_judgements(tmp_path / "judgements.yaml").queues
+                 for e in q.events if e.kind == "approval"]  # fmt: skip
+    assert [(a.entry.kind, a.entry.pr, a.head) for a in approvals] == [("operator", 300, "sha-300")]
+    assert RecordingQueue.ports is not None
+    entry = RecordingQueue.ports.entry_of("operator#300")  # the executor's build of it
+    assert entry is not None and (entry.ref.kind, entry.pr, entry.head) == (
+        "operator",
+        300,
+        "sha-300",
+    )
+
+
+def test_a_preapproved_pr_is_labelled_and_commented_by_the_driver(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+) -> None:  # fmt: skip
+    _operator_added(tmp_path, world, {"kind": "queue_add", "preapproved": True}, labels=[])
+    checkout.patch_ids = {"sha-300": "p300"}
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert "label 300" in world.calls and "comment_pr 300" in world.calls, out
+    (body,) = [c["body"] for c in world.comments[300] if "fr-queue:preapproved" in c["body"]]
+    assert "head=sha-300 patch-id=p300" in body and "fr triage queue remove --pr 300" in body
+    approvals = [e for q in load_judgements(tmp_path / "judgements.yaml").queues
+                 for e in q.events if e.kind == "approval"]  # fmt: skip
+    assert [(a.head, a.patch_id) for a in approvals] == [("sha-300", "p300")]
+
+
+def test_an_unreadable_patch_id_holds_a_preapproval_and_writes_nothing(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+) -> None:  # fmt: skip
+    _operator_added(tmp_path, world, {"kind": "queue_add", "preapproved": True}, labels=[])
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert "could not be read: held for this pass" in out
+    assert "label 300" not in world.calls and 300 not in world.comments
+
+
+def test_a_removed_pr_reaches_the_planner_as_removed_and_is_not_read(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _operator_added(tmp_path, world, {"kind": "queue_add"},
+                    {"kind": "queue_remove", "at": "2026-10-02T11:30:00Z"})  # fmt: skip
+    snaps = _snapshots(monkeypatch)
+
+    _drive(tmp_path, "--once", "--yes")
+
+    assert snaps[-1].queue_removed[REPO] == frozenset({"operator#300"})
+    assert REPO not in snaps[-1].queue_operator and "pr_view 300" not in world.calls
+
+
+def _finished_with_added(tmp_path: Path, world: World, *requests: dict[str, Any],
+                         queues: list[dict[str, Any]] | None = None) -> None:  # fmt: skip
+    """Review p2-r2: every batch finished (b0 cancelled) and PR #300, no batch's, added with
+    `fr triage queue add` (*requests*), unlabelled: the operator's entry is all that is left."""
+    from fr.triage.model import Scope
+    from fr.triage.scope_config import scope_id
+
+    world.config = {"queue": {"ci": "push", "land": "push"}}
+    world.issues[1] = "open"
+    world.pr(300, "fix/typo", [], labels=[])
+    cancel = "      - {kind: cancel, at: 2026-10-01T11:00:00Z}\n"
+    _state(tmp_path, world, _batch("b0", 1, events=_dispatch_event("b0") + cancel))
+    _at_14(tmp_path)
+    sid = scope_id(Scope(kind="repo", target=REPO))
+    docs = [{"repo": REPO, "scope": sid, "pr": 300, "by": "operator",
+             "at": "2026-10-02T11:00:00Z", **r} for r in requests]  # fmt: skip
+    extra: dict[str, Any] = {"queue_requests": docs}
+    if queues:
+        extra["queues"] = [{"scope": sid, **q} for q in queues]
+    path = tmp_path / "judgements.yaml"
+    path.write_text(path.read_text("utf-8") + yaml.safe_dump(extra), "utf-8")
+
+
+def test_an_added_operator_entry_keeps_a_finished_drive_from_reading_done(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+) -> None:  # fmt: skip
+    _finished_with_added(tmp_path, world, {"kind": "queue_add"})
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 3, out  # waiting, never `done`: the entry is work (R14, R15)
+    assert "pending 1" in _summary(out), out
+
+
+def test_a_removed_or_landed_operator_entry_lets_the_drive_read_done(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+) -> None:  # fmt: skip
+    _finished_with_added(tmp_path, world, {"kind": "queue_add"},
+                         {"kind": "queue_remove", "at": "2026-10-02T11:30:00Z"})  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert "pending 0" in _summary(out), out
+
+    land = {"kind": "queue_land", "at": "2026-10-02T12:00:00Z",
+            "entries": [{"pr": 300, "kind": "operator"}], "main": "m" * 40}  # fmt: skip
+    _finished_with_added(tmp_path, world, {"kind": "queue_add"}, queues=[
+        {"repo": REPO, "wave": None, "base": "m" * 40,
+         "events": [{"kind": "queue_open", "at": "2026-10-02T11:10:00Z"}, land]},
+    ])  # fmt: skip
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert code == 0, out
+    assert "pending 0" in _summary(out), out
+
+
+def test_the_loop_waits_on_an_added_entry_and_ends_once_it_is_removed(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    from fr.triage.model import Scope
+    from fr.triage.scope_config import scope_id
+
+    _finished_with_added(tmp_path, world, {"kind": "queue_add"})
+    sleeps: list[float] = []
+
+    def _sleep(seconds: float) -> None:  # the operator takes it out while the loop waits
+        sleeps.append(seconds)
+        if len(sleeps) > 3:
+            raise AssertionError("the loop did not end")
+        path = tmp_path / "judgements.yaml"
+        doc = yaml.safe_load(path.read_text("utf-8"))
+        sid = scope_id(Scope(kind="repo", target=REPO))
+        doc["queue_requests"].append({
+            "kind": "queue_remove", "repo": REPO, "scope": sid,
+            "pr": 300, "by": "operator", "at": "2026-10-02T11:30:00Z",
+        })  # fmt: skip
+        path.write_text(yaml.safe_dump(doc, sort_keys=False), "utf-8")
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", _sleep)
+
+    code, out = _drive(tmp_path, "--yes")
+
+    assert code == 0, out
+    assert sleeps, out  # the first pass did not read done
+
+
+def test_an_added_pr_in_a_repo_with_no_batch_is_read_and_lands_between_waves(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Review p2-r3: `queue add` takes any collected repo, so the driver reads the repos its
+    queue requests name, not only its batches'. No batch here at all: PR #300's approval is
+    settled and it opens a between-waves queue (R14)."""
+    from fr.triage.model import Scope
+    from fr.triage.scope_config import scope_id
+
+    world.config = {"queue": {"ci": "push", "land": "push"}}
+    world.issues[1] = "open"
+    world.pr(300, "fix/typo", [])
+    _state(tmp_path, world)
+    _at_14(tmp_path)
+    doc = {"queue_requests": [{"kind": "queue_add", "repo": REPO, "pr": 300, "by": "operator",
+                               "scope": scope_id(Scope(kind="repo", target=REPO)),
+                               "at": "2026-10-02T11:00:00Z"}]}  # fmt: skip
+    path = tmp_path / "judgements.yaml"
+    path.write_text(path.read_text("utf-8") + yaml.safe_dump(doc), "utf-8")
+    snaps = _snapshots(monkeypatch)
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert snaps[-1].queue_pending[REPO].keys() == {"operator#300"}, out
+    assert snaps[-1].repos == {}  # the batch map stays the batches'
+    ((live, _),) = snaps[-1].queue_operator[REPO]
+    assert live.number == 300
+    (opened,) = [a for a in world.queue_plans if a.kind == "queue-open"]
+    assert (opened.wave, opened.entries) == (None, ("operator#300",))

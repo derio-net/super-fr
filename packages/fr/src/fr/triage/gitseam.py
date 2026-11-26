@@ -27,7 +27,7 @@ import signal
 import stat
 import subprocess
 import tempfile
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal
@@ -800,6 +800,28 @@ class Checkout:
 
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         return git_ok(["merge-base", "--is-ancestor", ancestor, descendant], self.path)
+
+    def leads(self, onto: str, target: str) -> bool:
+        """Whether *onto* is an ancestor of (or is) *target* (spec 2026-11-24-wave-queue-gaps
+        R2). Unlike `is_ancestor`, a missing object raises `GitError` (R5), never False."""
+        return not git(["rev-list", "-n", "1", onto, f"^{target}"], self.path).strip()
+
+    def carried(self, head: str, target: str, built: Iterable[str]) -> tuple[str, ...]:
+        """The shas of *built* that *head* reaches and *target* does not (R4), newest first,
+        less any that was rebuilt fresh into *target*'s history (a commit there with its
+        tree and parents, R13 of 2026-11-19-wave-merge-queue). A missing object raises."""
+        wanted = set(built)
+        out: list[str] = []
+        for sha in git(["rev-list", head, f"^{target}"], self.path).split():
+            if sha not in wanted:
+                continue
+            line = git(["log", "-1", "--format=%T %P", sha], self.path).strip()
+            parents = line.split()[1:]
+            since = [target, f"^{parents[0]}"] if parents else [target]
+            twins = git(["log", "--format=%H %T %P", *since], self.path).splitlines()
+            if not any(t.split(" ", 1)[1] == line for t in twins if t.split()[0] != sha):
+                out.append(sha)
+        return tuple(out)
 
     def changed_paths(self, ref: str, head: str) -> frozenset[str]:
         """The paths *head* changed since it forked from *ref* (`ref...head`)."""

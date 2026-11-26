@@ -148,6 +148,8 @@ def test_any_other_conflict_raises_with_its_paths(tmp_path: Path) -> None:
     assert raised.value.paths == ("a.txt",) and raised.value.batch == "b2"
     assert raised.value.head == w.head(2)
     assert w.remote(slot_ref(SCOPE, 1))  # the entry ahead was built
+    # wave-queue-gaps §A: the commit it was built on, the combination ahead
+    assert raised.value.onto == w.remote(slot_ref(SCOPE, 1))
 
 
 def _merge_pr(w: World, *, evil: bool) -> None:
