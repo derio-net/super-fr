@@ -21,6 +21,8 @@ BUDGETS: dict[str, int] = {
     f"{SRC}commands/run_cmd.py": 9120,  # show-me-visuals: three call sites of fr.shape
     # +25 each: batch closeout-truth (gh#1494/#1496/#1497/#1569) changes the close-out steps
     # these modules hold; the split they need is #1516 (hand-back and close-out leaves).
+    # triage_batch_cmd.py +25 more (8225 -> 8250): landing-method (spec 2026-11-26 R2) adds
+    # `_landing_hold`, which must call the driver's `merge_ctx`; its pure part is in queue_exec.
     f"{SRC}commands/triage_batch_cmd.py": 8250,
     f"{SRC}isolation/local.py": 3200,
     f"{SRC}plan_ops.py": 2600,

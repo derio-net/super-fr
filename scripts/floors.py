@@ -72,7 +72,7 @@ def floors_in_source(source: str) -> list[Floor]:
         for tok in tokenize.generate_tokens(io.StringIO(source).readline):
             if tok.type in _STRING_TOKENS:
                 found.extend(_floors_in(tok.string, tok.start[0]))
-    except tokenize.TokenError, SyntaxError, IndentationError:
+    except (tokenize.TokenError, SyntaxError, IndentationError):
         # Not valid Python: fall back to quoted literals found by text alone.
         found = [
             f
