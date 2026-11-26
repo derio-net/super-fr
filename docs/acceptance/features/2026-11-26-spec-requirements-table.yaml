@@ -1,0 +1,47 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-26-spec-requirements-table
+repo: derio-net/super-fr
+rows:
+  - id: spec-requirements-table-read
+    capability: spec requirements
+    acceptance: A spec's Requirements may be written as a two-column `| ID | Requirement
+      |` table that renders one requirement per row in any Markdown previewer; fr reads
+      it to the same ids and text as the R<n>. list and the pre-5.0 table, and the brainstorming
+      skill tells authors to write it
+    origin:
+    - spec:2026-11-26-spec-requirements-table#R1
+    - spec:2026-11-26-spec-requirements-table#R2
+    - spec:2026-11-26-spec-requirements-table#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: spec-requirements-table-migrate
+    capability: spec requirements
+    acceptance: Migrating artifacts rewrites every live spec's R<n>. list into the table
+      without changing any requirement's id or text, stamps it 2, leaves a spec it cannot
+      convert byte-identical and names it, and never touches an archived spec
+    origin:
+    - spec:2026-11-26-spec-requirements-table#R3
+    - spec:2026-11-26-spec-requirements-table#R4
+    - spec:2026-11-26-spec-requirements-table#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: spec-requirements-table-valid
+    capability: spec requirements
+    acceptance: fr validate artifacts refuses a spec stamped 2 whose Requirements section
+      holds an R<n>. list line or a table row that is not exactly two cells, naming
+      the line
+    origin:
+    - spec:2026-11-26-spec-requirements-table#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
