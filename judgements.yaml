@@ -10143,6 +10143,13 @@ batches:
   wave: 26
   after:
   - arch-run-ledger
+- id: arch-isolation-gc
+  title: '#1318: isolation/local.py garbage collection moves to a collaborator'
+  ids:
+  - super-fr#1521
+  wave: 26
+  after:
+  - arch-isolation-split
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
