@@ -70,3 +70,68 @@ BUDGETS comment now names landing-method's +25 and why (ef590a7 amended).
 ### p1-r3-resolved · finding [fixed] · resolves p1-r3: Unrelated scripts/floors.py:75 except-clause reformat rides along; choose_method wrapper is now test-only (phase 1)
 
 scripts/floors.py restored to origin/main's bytes (ruff check passes); choose_method stays as the spec's thin wrapper.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-26T14:10:02+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · _landing_hold labels every ForgeReadError (incl. code-2 config-moved) as a transient merge-methods read
+
+triage_batch_cmd.py _landing_hold's except (ForgeReadError, TransientPassFailure) branch; merge_ctx raises ForgeReadError(code=2) when main's config moved under the pass.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-26T14:10:02+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · release._closed_unmerged swallows the gh pr view failure or JSON error, so GateStateUnknownError cannot say why
+
+scripts/release.py _closed_unmerged returned None with no reason on non-zero exit, bad JSON or another state.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-26T14:10:02+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · test_a_configured_merge_method_lifts_the_hold would pass if the queue did nothing
+
+tests/unit/test_triage_batch_drive_cmd.py: asserted only the exit code and 'unmerged' absent.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-26T14:10:02+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · Held-queue drive tests match 'held' loosely, run dry only, and never check that nothing was built or landed
+
+tests/unit/test_triage_batch_drive_cmd.py squash-default, squash-only and no-choosable-method tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-26T14:10:02+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · land_push's parents check: the multi-entry prev chain is untested and the old not-built-on-base proof may be shadowed
+
+tests/integration/test_queue_land.py; queue_exec.py land_push prev loop.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-26T14:10:02+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · _closed_unmerged lacks tests for MERGED, CLOSED with mergedAt, and invalid JSON
+
+tests/unit/test_release_script.py R7 tests.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-26T14:10:02+00:00 -->
+### lens-review-1 · review · lens review: docs-accuracy (none), errors (2), tests (4) — all fixed
+
+docs-accuracy found no false claims (two optional wording points, applied to docs/merge-protection.md and docs/explainers/fr-exit-gates.md). errors: l-errors-r1, l-errors-r2. tests: l-tests-r1..r4. All six fixed in bf5e42474 and ab5805cae; drive, release, budget, queue_exec, merge and cloud-remedy unit files re-run green (606 passed), queue integration files green (44 passed).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-26T14:10:02+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: _landing_hold labels every ForgeReadError (incl. code-2 config-moved) as a transient merge-methods read
+
+merge_read_hold (queue_exec.py) keeps the read-again wording only for TransientPassFailure and ForgeReadError code 1; any other code says 'the merge context could not be built'. Test: test_triage_batch_drive_cmd.py::test_a_moved_config_holds_the_pass_without_promising_a_retry.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-26T14:10:02+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: release._closed_unmerged swallows the gh pr view failure or JSON error, so GateStateUnknownError cannot say why
+
+_closed_unmerged returns the landed PR or a reason; waiting_prs names it per PR ('misses #1704 (gh pr view failed: boom)'). Test: test_release_script.py::test_r7_a_pr_the_log_names_and_the_view_does_not_confirm_is_missing_with_its_reason.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-26T14:10:02+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: test_a_configured_merge_method_lifts_the_hold would pass if the queue did nothing
+
+Asserts no queue-held text and that a queue-open/queue-build action was planned (_opened(world)).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-26T14:10:02+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: Held-queue drive tests match 'held' loosely, run dry only, and never check that nothing was built or landed
+
+Exact queue-held assertion; queue_plans == [] and merged == [] in all three; new test_a_push_queue_on_a_squash_default_with_yes_is_held_and_moves_nothing.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-26T14:10:02+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: land_push's parents check: the multi-entry prev chain is untested and the old not-built-on-base proof may be shadowed
+
+New test_a_chain_whose_second_commit_does_not_follow_the_first_is_held and test_a_correctly_built_chain_on_a_moved_base_is_held_as_not_built_on_the_base (reaches the old p3-r7 reason); the bottom-built-elsewhere test asserts the second-parent reason it now reaches.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-26T14:10:02+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: _closed_unmerged lacks tests for MERGED, CLOSED with mergedAt, and invalid JSON
+
+Parametrized over OPEN, MERGED, CLOSED with mergedAt, invalid JSON and a failing view; each names #1704 and its reason.

@@ -3,7 +3,7 @@ run: 2026-11-26-feat-batch-landing-method
 workflow: fr-goal-light@1
 branch: feat/batch-landing-method
 started: '2026-11-26T13:02:01+00:00'
-cursor: lens-review
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -96,8 +96,8 @@ steps:
     exit: 0
     stdout: ''
   lens-review:
-    state: running
-    at: '2026-11-26T13:57:18+00:00'
+    state: done
+    at: '2026-11-26T14:10:02+00:00'
     units:
       step/lens-review:
         attempts:
@@ -105,6 +105,13 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: a8672fb1-3dd5-4e17-a3d6-f67d80f01d3f
+          returned: '2026-11-26T14:10:02+00:00'
+          outcome: done
+        evidence:
+          review: lens-review-1
+          reviewer: docs-accuracy=a13503f198a3cd939,errors=a7e9d86598253e4dc,tests=a8fc530df005a967b
+          findings: l-errors-r1,l-errors-r2,l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4
+          lenses: docs-accuracy=16:none;errors=5:l-errors-r1,l-errors-r2;tests=14:l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4
   deliver:
     state: pending
 fr_version: 9.0.0
