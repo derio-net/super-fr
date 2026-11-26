@@ -14,9 +14,12 @@ rows:
       forge default applies only when nothing is configured.
     origin:
     - spec:2026-11-26-landing-method#R1
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_merge.py#test_choose_method_source_names_where_the_method_came_from
+    status: ci
+    notes: 'R1: choose_method_source orders explicit, configured, forge default, single;
+      the configured method beats the forge default (#1702)'
     verify: none
   - id: landing-method-push-merge-only
     capability: triage-merge-queue
