@@ -10058,6 +10058,12 @@ batches:
   wave: 25
   after:
   - landing-method
+- id: closeout-state
+  title: Close-outs and batches never stuck as started or Running
+  ids:
+  - super-fr#1601
+  - super-fr#1626
+  wave: 25
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
