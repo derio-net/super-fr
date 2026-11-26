@@ -32,8 +32,9 @@ rows:
     - spec:2026-11-26-spec-requirements-table#R5
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: scenario named at brainstorm; written in the implementation phase
     verify: candidate
+    scenario: tests/scenarios/spec-requirements-table.sh
   - id: spec-requirements-table-valid
     capability: spec requirements
     acceptance: fr validate artifacts refuses a spec stamped 2 whose Requirements section
