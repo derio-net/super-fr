@@ -6,7 +6,8 @@ started: '2026-11-26T18:28:12+00:00'
 cursor: brainstorm
 steps:
   brainstorm:
-    state: pending
+    state: blocked
+    at: '2026-11-26T18:28:24+00:00'
   plan:
     state: pending
   spec-plan-review:
