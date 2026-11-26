@@ -205,3 +205,10 @@ Evidence: CI ci-ok green on PR #1708's final head 3a7f2e9 (run 45865158880), mer
 Step: pre-merge — CI: under `land: push` a `squash` or `rebase` method from each source holds the queue with a reason naming the method, its source and the fix (`merge_method: merge` when merge is allowed, allowing merge commits when it is not); `merge` does not; an unchoosable method or a failed merge-methods read holds the queue for the pass without raising, also under a dry run; the resume pass still records a landing already pushed; `land_push` with a non-merge method, or with a merge-method call whose combination commit is not a merge of its parent and the PR's head, pushes nothing; `fr cloud doctor` fails the check when a `queue:` block lands by push and passes when there is no `queue:` block (row `landing-method-push-merge-only`).
 
 Evidence: CI ci-ok green on PR #1708's final head 3a7f2e9 (run 45865158880), merged as 714686c9d: push-landing hold tests in test_triage_batch_drive_cmd.py, test_queue_exec.py, tests/integration/test_queue_land.py and test_cloud_remedy.py (row landing-method-push-merge-only)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-11-26T17:17:26+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: pre-merge — CI: under `land: merge` a `rebase` method prints the warning once per repo per process (row `landing-method-rebase-warning`).
+
+Evidence: CI ci-ok green on PR #1708's final head 3a7f2e9 (run 45865158880), merged as 714686c9d: rebase-under-land-merge warning test in test_triage_batch_drive_cmd.py (row landing-method-rebase-warning)
