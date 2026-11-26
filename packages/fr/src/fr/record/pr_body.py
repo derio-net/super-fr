@@ -889,7 +889,7 @@ class UnreadableJournalError(Exception):
 def _journals(
     repo_root: Path, state: RunState, *, strict: bool = False
 ) -> list[tuple[str, str, list[JournalEntry]]]:
-    """`(scope, slug, entries)` of the run's spec and plan journals. A journal
+    """`(scope, slug, entries)` of the run's spec, plan and debug journals. A journal
     that does not parse is skipped by the render (fail open) and raises
     `UnreadableJournalError` when `strict` — what every gate passes."""
     out: list[tuple[str, str, list[JournalEntry]]] = []
@@ -901,6 +901,8 @@ def _journals(
         wanted.append(("spec", spec_journal_slug(Path(emitted["spec"]).stem)))
     if "plan" in emitted:
         wanted.append(("plan", Path(emitted["plan"]).name))
+    if "debug" in emitted:
+        wanted.append(("debug", Path(emitted["debug"]).stem))
     for scope, slug in wanted:
         path = resolve_journal_read_path(repo_root, scope, slug)  # type: ignore[arg-type]
         if not path.is_file():
@@ -1473,6 +1475,22 @@ def _lens_finding_cells(lens: str, entries: list[JournalEntry]) -> str:
     return ", ".join(out) or "none"
 
 
+def _no_lens_review(repo_root: Path, state: RunState) -> str:
+    """The section for a run with no `lens-review` step: its shape declares none (like
+    `fr-debugging`), its run predates the step, or, when the shape cannot be resolved or
+    parsed (`WorkflowError`, an unreadable file), that error, never a guess (l-errors-r4)."""
+    from fr.workflow.model import WorkflowError
+    from fr.workflow.resolve import resolve_workflow
+
+    try:
+        manifest = resolve_workflow(state.workflow.partition("@")[0], repo_root)
+    except (WorkflowError, OSError) as e:
+        return f"fr could not read the workflow shape: {e}"
+    if any(step.id == "lens-review" for step in manifest.steps):
+        return "This run predates review lenses."
+    return "This workflow has no lens review."
+
+
 def _review_lenses(repo_root: Path, state: RunState) -> str:
     """The `## Review lenses` body (spec 2026-11-12-review-lenses R12, §3.D). Not a
     required section: an older live body that lacks it still passes `missing_sections`."""
@@ -1480,7 +1498,7 @@ def _review_lenses(repo_root: Path, state: RunState) -> str:
     from fr.lenses.model import LensError
 
     if "lens-review" not in state.steps:
-        return "This run predates review lenses."
+        return _no_lens_review(repo_root, state)
     try:
         lenses = lens_set(repo_root, state)
     except LensError as e:

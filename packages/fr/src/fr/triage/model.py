@@ -19,7 +19,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Annotated, Any, Final, Literal
+from typing import Annotated, Any, Final, Literal, NamedTuple
 
 import yaml
 from pydantic import (
@@ -94,7 +94,12 @@ from fr.triage.stage import Stage, derive_stage
 # files the repo's `mirrors:` write in whole: `to_json` dumps it, `[]` included, which a
 # closed-world schema-17 reader rejects; a file below 18 reads it as `[]`, so no conflicted
 # path is taken as generated until the next collect.
-FACTS_SCHEMA: Final[int] = 18
+# 19 adds (2026-11-24-batch-merge-readiness §A, R1) `PullRequest.cursor_read`, whether the run
+# cursor at an open batch PR's head was read (`read`, `unread`, `no-clone`): `to_json` dumps
+# it, `null` included, which a closed-world schema-18 reader rejects; a file below 19 reads it
+# as None (never asked), so no batch PR reads as delivered until the next collect.
+# `PullRequest.cursor_detail` (the cause of an `unread` read) rides in the same unreleased 19.
+FACTS_SCHEMA: Final[int] = 19
 FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
 # The version this fr WRITES: every engine write stamps 14 (the `conflict` event's `onto`
 # and `reissue`, 2026-11-24-wave-queue-gaps R16; 13 was the wave merge queue's
@@ -334,10 +339,27 @@ class CursorPosition(_Strict):
     unit: str | None = None
 
 
-CursorReader = Callable[["PullRequest"], CursorPosition | None]
-"""The run cursor's position at an open batch PR's head (exit-gates R18): built by the
-command layer over a `gitseam.Checkout` (`fr.triage.cursor.read_cursor`), so `collect`
-itself starts no process."""
+CursorRead = Literal["read", "unread", "no-clone"]
+"""Whether the run cursor at a PR's head was read (2026-11-24-batch-merge-readiness R1):
+`read` (a position, or none naming the branch), `unread` (the head or a cursor could not be
+read) or `no-clone` (the driver has no clone of the repo)."""
+
+
+class CursorAnswer(NamedTuple):
+    """One read of the run cursor at a PR's head (batch-merge-readiness R1): the folded
+    *position*, the *read* status and, for an `unread` read, its cause (*detail*: which read
+    failed and why), so a failure never reaches the page or the driver without its reason."""
+
+    position: CursorPosition | None
+    read: CursorRead
+    detail: str = ""
+
+
+CursorReader = Callable[["PullRequest"], CursorAnswer]
+"""The run cursor's folded position at an open batch PR's head (exit-gates R18), its read
+status and cause (batch-merge-readiness R1): built by the command layer over a
+`gitseam.Checkout` (`fr.triage.cursor.read_cursor`), so `collect` itself starts no
+process."""
 
 
 class PullRequest(_Strict):
@@ -372,6 +394,12 @@ class PullRequest(_Strict):
     # The run cursor's position at this PR's head (exit-gates R18, facts schema 12): an
     # open batch PR only; None when never read or no cursor names the PR's branch.
     cursor: CursorPosition | None = None
+    # Whether that cursor was read (batch-merge-readiness R1, facts schema 19); None when
+    # never asked. The head it was read at is `head_oid`.
+    cursor_read: CursorRead | None = None
+    # Why an `unread` read failed (the read that failed and its error), None otherwise: it
+    # rides in schema 19 with `cursor_read`, so the page and the driver name the cause.
+    cursor_detail: str | None = None
     anchor: AnchorKind = "unanchored"
     anchor_path: str | None = None
     anchor_body: str = ""

@@ -1,0 +1,2 @@
+bump: minor
+summary: "The wave driver merges a batch PR only once its run delivered, and the Batches page leads each PR card with one readiness verdict"

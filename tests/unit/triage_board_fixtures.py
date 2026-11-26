@@ -16,6 +16,14 @@ URL = f"https://github.com/{REPO}"
 COLLECTED = "2026-10-02T12:00:00+00:00"
 
 
+DELIVERED: dict[str, Any] = {
+    "cursor": {"run": "r1", "step": "deliver", "kind": "deliver-done", "unit": None},
+    "cursor_read": "read",
+}
+"""`pr(..., **DELIVERED)`: the run cursor at the PR's head records `deliver` done
+(batch-merge-readiness R1), so the queue may admit it."""
+
+
 def pr(number: int, head_ref: str, **kw: Any) -> dict[str, Any]:
     return {
         "repo": REPO,
@@ -97,13 +105,14 @@ def j(tier: int = 1, **kw: Any) -> dict[str, Any]:
     return {"tier": tier, "theme": kw.pop("theme", "core"), "cx": kw.pop("cx", "S"), **kw}
 
 
-def busy() -> tuple[Facts, Judgements]:
+def busy(*, delivered: bool = False) -> tuple[Facts, Judgements]:
     """Every kind of thing: a merged batch (post_merge owed), a green draft PR, a
     red batch PR, a blocked batch, a stale dispatch, a cancelled batch's open
     member, an unjudged issue, a parked issue, a feature member, and one batch the
-    driver would dispatch next."""
+    driver would dispatch next. *delivered*: the green draft's run delivered, so the
+    board asks for its label (batch-merge-readiness R4)."""
     merged_pr = pr(10, "feat/batch-a-merged", state="MERGED", merged_at="2026-10-01T09:00:00Z")
-    draft_pr = pr(11, "feat/batch-b-draft", is_draft=True)
+    draft_pr = pr(11, "feat/batch-b-draft", is_draft=True, **(DELIVERED if delivered else {}))
     red_pr = pr(12, "feat/batch-c-red", checks={"pass": 1, "fail": 2, "pending": 0})
     issues = [
         issue(1, state="closed", prs=[merged_pr]),

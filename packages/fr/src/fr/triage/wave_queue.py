@@ -17,10 +17,10 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from fr.labels import pre_merge_held
-from fr.triage.approval import ApprovalVerdict, is_approved
+from fr.triage.approval import ApprovalVerdict
 from fr.triage.batch import BatchStage
 from fr.triage.batch_drive import LivePr
 from fr.triage.handback_rules import (
@@ -36,6 +36,8 @@ from fr.triage.model import (
     ApprovalEvent,
     Batch,
     ConflictEvent,
+    CursorPosition,
+    CursorRead,
     DeferredEvent,
     QueueBuiltEvent,
     QueueClearedEvent,
@@ -62,6 +64,9 @@ from fr.triage.queue_handback import (
     merge_clause,
     reissue_actions,
 )
+
+if TYPE_CHECKING:
+    from fr.triage.readiness import Readiness
 
 QueuePhase = Literal["open", "releasing", "idle"]
 HoldState = Literal["open", "drained", "cleared"]
@@ -245,6 +250,10 @@ class QueueSnapshot:
     # The open wave's close-out: None, it has none; False, not landed yet; True, landed.
     closeout_landed: bool | None = None
     others: tuple[OtherEntry, ...] = ()  # the non-batch entries admitted this pass (R32)
+    # The candidates a trust rule refused (batch-merge-readiness R8): never entries, only
+    # verdicts. `refused` is key -> the rule's reason; `refused_entries` says what each is.
+    refused: Mapping[str, str] = field(default_factory=dict)
+    refused_entries: tuple[OtherEntry, ...] = ()
     warned: frozenset[str] = frozenset()  # report keys said already
     # R26: the entries whose `fr-queue:release` label is settled to a `queue_release` at the
     # patch-id they have now. A `gate:devops` entry is ready only then.
@@ -252,6 +261,13 @@ class QueueSnapshot:
     runs: Mapping[str, str] = field(default_factory=dict)  # entry key -> its run id, for the Need
     scope_args: tuple[str, ...] = ()  # the drive's own scope arguments, for pasted commands
     default: str = ""  # the repo's default branch; "": unread, no entry is base-checked
+    # batch id -> (the head the run cursor was read at, its folded position, the read status),
+    # from facts (2026-11-24-batch-merge-readiness R1): a batch absent here is not delivered.
+    cursors: Mapping[str, tuple[str, CursorPosition | None, CursorRead | None]] = field(
+        default_factory=dict
+    )
+    # batch id -> why its `unread` cursor read failed (l-errors-r2), from facts
+    cursor_details: Mapping[str, str] = field(default_factory=dict)
     # wave-queue-gaps §A: the merge method ("": unread, R1's mode is then `main`); per entry
     # whether its hand-back's `onto` still leads to `main`, and the dead combinations its
     # head carries (None for each: git could not read it, R5)
@@ -302,6 +318,9 @@ class QueuePlan:
     entries: tuple[str, ...] = ()  # the queue's entries in order, after this plan
     waiting: tuple[str, ...] = ()  # ready entries that wait on a later queue
     view: QueueView | None = None  # the queue as R25 reads it, set by `plan_queue`
+    # batch id -> its readiness verdict (2026-11-24-batch-merge-readiness R4, R5), for every
+    # batch of the repo with an open PR, placed in this plan's entry order; set by `plan_queue`
+    readiness: Mapping[str, Readiness] = field(default_factory=dict)
 
 
 # ------------------------------------------------------------------ reading
@@ -390,20 +409,31 @@ def base_refusal(pr: LivePr, qs: QueueSnapshot) -> str:
 
 
 def _ready(batch: Batch, qs: QueueSnapshot) -> bool:
-    """R3: open, a valid approval, its own head's checks green, and no pre-merge gate."""
-    if qs.stages.get(batch.id) != "pr-open" or is_deferred(batch):
-        return False
-    if qs.eligible is not None and batch.id not in qs.eligible:
-        return False
-    pr = qs.live.get(batch.id)
-    verdict = qs.approvals.get(batch.id)
-    if pr is None or pr.state != "OPEN" or verdict is None or not is_approved(verdict):
-        return False
-    if base_refusal(pr, qs):
-        return False
-    if pre_merge_held(pr.labels) and batch.id not in qs.released:
-        return False  # R26: a gate:devops entry waits for the DevOps stage's release
-    return pr.checks == "green"
+    """R3 and batch-merge-readiness R2: open, a valid approval, its own head's checks green,
+    no pre-merge gate, and its run delivered. Decided by `fr.triage.readiness` alone."""
+    from fr.triage.readiness import batch_readiness
+
+    return batch_readiness(batch, qs).admits
+
+
+def held_by_other(qs: QueueSnapshot) -> Hold | None:
+    """R31: the repo's hold when another scope holds it, `open` or `drained`."""
+    hold = qs.hold
+    return None if hold is None or hold.state == "cleared" or hold.scope == qs.scope else hold
+
+
+def queue_held_reason(qs: QueueSnapshot) -> str:
+    """Why *qs*'s queue lands nothing now, "" when it may (batch-merge-readiness R5): another
+    scope holds its hold (R31), this scope's open queue is halted (R11, R28), or the repo's
+    `.fr/triage.yaml` names no `queue.ci`, so the driver plans no queue for it (R7, R22)."""
+    if qs.config.ci is None:
+        return "queue not configured: no `queue.ci` in .fr/triage.yaml, so nothing merges"
+    hold = held_by_other(qs)
+    if hold is not None:
+        return f"held by scope {hold.scope} (hold {hold.state})"
+    mine = [r for r in qs.records if r.scope == qs.scope]
+    halt = live_halt(mine[-1], qs) if mine and queue_phase(mine, qs.hold) == "open" else None
+    return f"{halt.state}: {halt.detail}" if halt is not None else ""
 
 
 def barrier_keys(records: Sequence[QueueRecord]) -> frozenset[str]:
@@ -450,12 +480,10 @@ class _Cand:
 
 def _other_ready(o: OtherEntry, qs: QueueSnapshot) -> bool:
     """R3, R32: its trust rule admitted it (it is listed), its PR is open and its own
-    head's checks are green."""
-    pr = qs.live.get(o.key)
-    return (
-        pr is not None and pr.state == "OPEN" and pr.checks == "green"
-        and not base_refusal(pr, qs)
-    )  # fmt: skip
+    head's checks are green. Decided by `fr.triage.readiness.other_readiness` alone."""
+    from fr.triage.readiness import other_readiness
+
+    return other_readiness(o.key, qs).admits
 
 
 def _unfinished_waves(qs: QueueSnapshot) -> frozenset[int]:
@@ -507,8 +535,8 @@ def _by_readiness(
 
 def _held(qs: QueueSnapshot) -> QueuePlan | None:
     """R31: another scope holds the repo's hold, `open` or `drained`."""
-    hold = qs.hold
-    if hold is None or hold.state == "cleared" or hold.scope == qs.scope:
+    hold = held_by_other(qs)
+    if hold is None:
         return None
     wave = "-" if hold.wave is None else str(hold.wave)
     why = (
@@ -1254,7 +1282,7 @@ def _base_needs(qs: QueueSnapshot) -> tuple[QueueAction, ...]:
     and nothing else would say so."""
     out = []
     for key, pr in sorted(qs.live.items()):
-        why = base_refusal(pr, qs) if pr.state == "OPEN" else ""
+        why = base_refusal(pr, qs) if pr.state == "OPEN" and key not in qs.refused else ""
         if why:
             out.append(QueueAction("queue-need", qs.repo,
                                    f"PR #{pr.number} ({key}) {why}; the queue never merges it",
@@ -1268,7 +1296,30 @@ def plan_queue(qs: QueueSnapshot) -> QueuePlan:
     needs = () if any(a.kind == "queue-held" for a in plan.actions) else _base_needs(qs)
     needs = (*needs, *operator_needs(qs))  # l-errors-r2: whatever the queue's state
     plan = replace(plan, actions=(*plan.actions, *needs)) if needs else plan
-    return replace(plan, view=queue_view(plan, qs=qs))
+    return replace(plan, view=queue_view(plan, qs=qs), readiness=_readiness(plan, qs))
+
+
+def _readiness(plan: QueuePlan, qs: QueueSnapshot) -> dict[str, Readiness]:
+    """batch-merge-readiness R4, R5: every open batch PR's verdict, an approved one placed in
+    the plan's own entry order (its entries, then the entries waiting on a later queue)."""
+    from fr.triage.readiness import batch_readiness, in_queue_order, other_readiness
+
+    order = (*plan.entries, *(k for k in plan.waiting if k not in plan.entries))
+    if plan.phase == "idle" and any(a.kind == "queue-open" for a in plan.actions) \
+            and plan.wave is not None and not plan.entries:  # fmt: skip
+        # a wave's queue opens first and is built on the next pass: its ready entries are
+        # the ones it will take, in the order it will take them
+        opening = [c.key for c in _by_readiness(_cands(qs, plan.wave)) if c.wave == plan.wave]
+        order = (*opening, *(k for k in order if k not in opening))
+    out: dict[str, Readiness] = {
+        o.key: in_queue_order(other_readiness(o.key, qs), o.key, order, qs)
+        for o in (*qs.others, *qs.refused_entries)
+    }
+    for b in qs.batches:
+        pr = qs.live.get(b.id)
+        if pr is not None and pr.state == "OPEN":
+            out[b.id] = in_queue_order(batch_readiness(b, qs), b.id, order, qs)
+    return out
 
 
 def _plan_queue(qs: QueueSnapshot) -> QueuePlan:
