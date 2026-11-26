@@ -1,16 +1,19 @@
 schema_version: 12
 run: 2026-11-26-feat-batch-landing-method
-workflow: fr-goal@1
+workflow: fr-goal-light@1
 branch: feat/batch-landing-method
 started: '2026-11-26T13:02:01+00:00'
-cursor: brainstorm
+cursor: plan
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-26T13:02:10+00:00'
-  spec-review:
-    state: pending
+    state: done
+    at: '2026-11-26T13:05:49+00:00'
+    answered_by: agent
+    emitted:
+      spec: docs/superpowers/specs/2026-11-26-landing-method-design.md
   plan:
+    state: pending
+  spec-plan-review:
     state: pending
   plan-review:
     state: pending

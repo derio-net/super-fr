@@ -1,0 +1,55 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-26-landing-method
+repo: derio-net/super-fr
+rows:
+  - id: landing-method-order
+    capability: triage-merge-queue
+    acceptance: The wave merge queue lands in the merge method the repo configured in
+      .fr/triage.yaml, whatever merge-button default the forge user has chosen; the
+      forge default applies only when nothing is configured.
+    origin:
+    - spec:2026-11-26-landing-method#R1
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: landing-method-push-merge-only
+    capability: triage-merge-queue
+    acceptance: 'Under queue.land: push the queue never lands a squash or rebase on
+      GitHub (which would close the PR unmerged): the repo''s queue is held with the
+      method, its source and the fix named, and fr cloud doctor reports the same.'
+    origin:
+    - spec:2026-11-26-landing-method#R2
+    - spec:2026-11-26-landing-method#R3
+    - spec:2026-11-26-landing-method#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: landing-method-rebase-warning
+    capability: triage-merge-queue
+    acceptance: 'Under queue.land: merge a rebase landing is allowed, and the driver
+      warns once that it hides the PR from a release that attributes PRs by first-parent
+      subject.'
+    origin:
+    - spec:2026-11-26-landing-method#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: release-closed-unmerged-landing
+    capability: release-gating
+    acceptance: 'A PR whose commit landed on main''s first-parent line but which the
+      forge reports closed unmerged no longer forces release candidates only: the release
+      counts it as landed and its gate labels decide.'
+    origin:
+    - spec:2026-11-26-landing-method#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
