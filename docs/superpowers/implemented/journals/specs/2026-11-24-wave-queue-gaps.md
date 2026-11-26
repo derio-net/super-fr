@@ -298,3 +298,16 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-24-wave-queue-gaps-p2 created=2026-11-24T22:52:38+00:00 -->
 ### tier-2026-11-24-wave-queue-gaps-p2 · decision · hard: a new trust path (preapproval adds approved-fr) and drain liveness rules
+
+<!-- fr:journal kind=owed scope=spec id=test-plan-step-1 created=2026-11-26T16:00:17+00:00 -->
+### test-plan-step-1 · owed · Test Plan step 1 owed
+
+what: Post-merge, live: in the next wave on this repo, a conflict hand-back names `fr-queue/<scope>/slot-<j>`; after the session merges it, the PR lands with no second hand-back; a PR added with `fr triage queue add` lands in the same wave and is in the release the drain starts. (row `wave-queue-gaps-live`)
+why: operator decision 2026-11-26: the live wave walk (row wave-queue-gaps-live, gate:tester) is walked with the next release walk, not at close-out
+how: fr journal resolve --scope spec --slug 2026-11-24-wave-queue-gaps --id test-plan-step-1 --state fixed --note "<evidence>"
+owed_key: spec:2026-11-24-wave-queue-gaps#step1
+
+<!-- fr:journal kind=finding scope=spec id=test-plan-step-1-resolved created=2026-11-26T16:01:14+00:00 state=open resolves=test-plan-step-1 filed_as=derio-net/super-fr#1712 -->
+### test-plan-step-1-resolved · finding [filed → derio-net/super-fr#1712] · resolves test-plan-step-1: Test Plan step 1 owed
+
+Filed at archive as derio-net/super-fr#1712; still owed until discharged.
