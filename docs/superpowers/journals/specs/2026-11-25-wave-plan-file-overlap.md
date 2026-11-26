@@ -128,3 +128,10 @@ row_kinds:
 run_gate: developer
 run_kind: none
 ```
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-26T12:56:50+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: pre-merge — CI: `tests/unit/test_triage_plan_overlap.py` covers the reader over the real cursor shape (`steps.plan.emitted.plan`) and real phase files (cursor found, plan read, and every R2 and R9 reason: unknown repo, no ref, no cursor, no recorded plan, unreadable file, no clone, no clone of the repo), the overlap rule (literal, glob against literal, glob against glob not counted, `generated:` and `version.files` ignored), `after` chains in both directions and through a third batch, cross-wave pairs, and R9's clone rule (row `plan-overlap-check`).
+
+Evidence: CI green on PR #1694 (ci-ok); re-run 2026-11-26 on merged main ff14a97ae (contains f753a8413): tests/unit/test_triage_plan_overlap.py 41 passed
