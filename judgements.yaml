@@ -10084,6 +10084,11 @@ batches:
   ids:
   - super-fr#1515
   wave: 25
+- id: arch-isolation-split
+  title: '#1318: split the free functions out of isolation/local.py'
+  ids:
+  - super-fr#1517
+  wave: 25
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
