@@ -1,0 +1,17 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-arch-triage-leaves
+step: spec-review
+outcome: done
+journal:
+  - {kind: finding, id: s-r1, review_scope: in, title: "R11 names two of the four pages fr docs check will report; fr-triage.md and herdr-control-sessions.md are missing", body: "fr-triage.md covers fr/triage/** and herdr-control-sessions.md covers triage/batch*.py; both go stale with this change."}
+  - {kind: finding, id: s-r2, review_scope: in, title: "handback_rules.py also needs Iterable from collections.abc", body: "closeout_handback_decision is annotated with Iterable; handback_rules imports only Callable and Sequence."}
+  - {kind: finding, id: s-r3, review_scope: in, title: "R9 contradicts R8 and R10, which change three tests", body: "R9 said no test assertion changes; R8 rewrites the purity tests and R10 the budget constant."}
+  - {kind: finding, id: s-r4, review_scope: in, title: "Three line citations in Background are off or mis-ordered", body: "test def at :717 not :719; re-export block 44-55 not 45-56; type names paired with lines in reverse order."}
+  - {kind: review, id: spec-review, title: "independent spec review: 4 findings", body: "fr-spec-reviewer checked decisions q1-q5 (all honoured), the no-cycle claim (holds: export bodies use only Action, Admitted, LivePr, CONFLICTING, _wrong_base, EXPORT_PREFIX, Batch, Export, Snapshot as annotation; hand-back bodies only model events and handbacks_since), and every cited file:line. Findings s-r1..s-r4, all in scope."}
+resolves:
+  - {id: s-r1, state: fixed, body: "R11 and the Design shape now name fr-triage.md and herdr-control-sessions.md with the same stamp; their globs already match the new modules."}
+  - {id: s-r2, state: fixed, body: "Design now says handback_rules adds Iterable to its collections.abc import and grows by what the moved bodies use."}
+  - {id: s-r3, state: fixed, body: "R9 reworded: no test assertion changes other than R8's and R10's."}
+  - {id: s-r4, state: fixed, body: "Citations corrected to :717 and :44-55; type names listed in line order."}
+acceptance: []
+evidence: {review: spec-review, reviewer: a1ebae388fd902a4a}
