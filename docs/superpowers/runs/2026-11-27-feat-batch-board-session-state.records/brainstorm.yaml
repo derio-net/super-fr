@@ -44,7 +44,7 @@ acceptance:
     origin: ["spec:2026-11-27-board-session-state#R1", "spec:2026-11-27-board-session-state#R2", "spec:2026-11-27-board-session-state#R8"]
     status: not-implemented
     verify: none
-    visual: "A card in each column shows a wait pill per party (you·reviewer, agent, background, ci, queue, dependency); a terminal card shows none; long batch ids and long owner lists wrap without overflowing the card at phone width."
+    visual: {states: [wait-you-reviewer, wait-agent, wait-background, wait-ci, wait-queue, wait-dependency, terminal-no-wait, phone-width-long-ids]}
   - id: batch-card-background-wait
     capability: Triage Batches page
     acceptance: An idle Claude batch session under the herdr runner whose screen shows running shells, monitors or subagents waits for background; another runner, agent kind or a failed read reports no background, and a failed read adds a page note.
@@ -57,7 +57,7 @@ acceptance:
     origin: ["spec:2026-11-27-board-session-state#R4"]
     status: not-implemented
     verify: none
-    visual: "Each of the four Needs-you headers shows 'owner: @a, @b' or 'owner: unassigned'; a two-repo scope with different owners shows one line per repo; a lane card's wait line names the owners."
+    visual: {states: [owners-named, owner-unassigned, owners-per-repo, lane-card-owners]}
   - id: batch-dwell-ledger
     capability: Triage Batches page
     acceptance: Every Batches page write records, in a dwell ledger carried by the state ref, when each batch entered its current column and wait, closing the previous interval; a first sighting is marked, a departed batch is dropped, and an unreadable ledger is an empty one plus a note.
@@ -70,14 +70,14 @@ acceptance:
     origin: ["spec:2026-11-27-board-session-state#R6"]
     status: not-implemented
     verify: none
-    visual: "The dwell line reads 'in PR open 3h 12m · waits for ci 20m'; minutes-only, hours and days formats; the ≥ prefix on a first-seen state; a terminal card's line has no wait."
+    visual: {states: [dwell-minutes, dwell-hours, dwell-days, dwell-first-seen, terminal-column-only]}
   - id: batch-wave-time-summary
     capability: Triage Batches page
     acceptance: The Batches page shows per wave the time its batches spent per column and per wait party and the longest batch per column, hidden with the waves the cutoff hides.
     origin: ["spec:2026-11-27-board-session-state#R7"]
     status: not-implemented
     verify: none
-    visual: "The 'Time per wave' section has one collapsible block per wave with a table (column/party, total, longest batch); toggling the cutoff hides old waves' blocks too; a wave with one batch and a wave with several both render."
+    visual: {states: [wave-one-batch, wave-several-batches], interactions: [expand-wave-block, toggle-cutoff]}
   - id: batch-background-live
     capability: Triage Batches page
     acceptance: On a live herdr, a dispatched Claude batch session idle at its prompt with a background shell shows 'waits for background' on the next Batches page, and 'waits for agent' after the shell ends.
