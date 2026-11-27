@@ -1,0 +1,29 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-27-ci-hygiene
+repo: derio-net/super-fr
+rows:
+  - id: ci-workflows-pin-the-python-floor
+    capability: CI interpreter pin
+    acceptance: Every workflow that installs uv runs on the declared requires-python
+      floor (UV_PYTHON at workflow level), so no run downloads or drifts to another
+      interpreter.
+    origin:
+    - spec:2026-11-27-ci-hygiene#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: ci-workflows-least-privilege-token
+    capability: CI token scope
+    acceptance: Every workflow declares its token permissions at workflow level, and
+      ci.yml's default is read-only contents, so no job silently takes the repository's
+      default token scope.
+    origin:
+    - spec:2026-11-27-ci-hygiene#R5
+    levels: {}
+    status: not-implemented
+    notes: ''

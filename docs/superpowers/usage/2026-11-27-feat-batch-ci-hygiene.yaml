@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-27-feat-batch-ci-hygiene
+captures:
+- host: h-027801b1
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-11-27T20:15:58+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 1d1108f9-da26-4cbe-8254-4bfd597bcf81
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 58
+        cache_write: 145484
+        cache_read: 3925949
+        output: 17860
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 5
+      other:
+        usd: null
+        turns: 13
+      paperwork:
+        usd: null
+        turns: 9
+    steps:
+      (outside run):
+        usd: null
+        turns: 3
+        input: 8
+        cache_write: 106048
+        cache_read: 270700
+        output: 586
+      brainstorm:
+        usd: null
+        turns: 24
+        input: 50
+        cache_write: 39436
+        cache_read: 3655249
+        output: 17274
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 3
+          input: 8
+          cache_write: 106048
+          cache_read: 270700
+          output: 586
+        brainstorm:
+          usd: null
+          turns: 24
+          input: 50
+          cache_write: 39436
+          cache_read: 3655249
+          output: 17274
