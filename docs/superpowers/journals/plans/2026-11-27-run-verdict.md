@@ -113,3 +113,33 @@ Stamped fr-brainstorming-and-plan.md and verification-strategies.md, plus fr-exi
 ### p2-r3-resolved · finding [fixed] · resolves p2-r3: run-verdict acceptance fragment's layering-row note still says the adopt.py allowance exists until slice 2, which this phase removed (phase 2)
 
 set-status --notes on run-engine-cli-free now names the single workspace.py allowance.
+
+<!-- fr:journal kind=decision scope=plan id=p3-adapters-in-run-cmd created=2026-11-27T20:01:02+00:00 phase=3 -->
+### p3-adapters-in-run-cmd · decision · questions_from_flags and answered_by_or_exit keep one run_cmd adapter each; the witness and the resume hint are parameters (phase 3) (phase 3)
+
+resolve_in_process reads the answered-by narrowing inside its held-stdout try, so a refusal there must still be a typer.Exit: `_answered_by_or_exit` and `_questions_from_flags` run the moved function inside `_refusals()`. `deliver_label_sync` takes the `fr run resolve` hint, and `deliver_local_stamp_plan` / `local_stamp_plan` take the local-suite witness function, because `_resolve_hint` (slice 4) and `_local_stamp_witness` (slice 5) are still in run_cmd and fr/run cannot import it.
+
+<!-- fr:journal kind=decision scope=plan id=p3-stays-in-run-cmd created=2026-11-27T20:01:02+00:00 phase=3 -->
+### p3-stays-in-run-cmd · decision · _queue_exit_baseline, _print_unrunnable_warnings and _spec_review_ids stay in run_cmd (phase 3) (phase 3)
+
+They sit inside the H line range but are not gates: `_queue_exit_baseline` writes a journal decision through `_queue_gate_decision` (slice 6, C), `_print_unrunnable_warnings` reads `_unrunnable_spec_warnings` (still in run_cmd) and `_spec_review_ids` is also called from outside H. `_print_unrunnable_warnings` takes `deliver.repo_relative(root, value)`.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-show-me-skill-names-moved-function created=2026-11-27T20:01:02+00:00 phase=3 -->
+### p3-show-me-skill-names-moved-function · discovery · the fr-show-me skill's call-tree example named `_deliver_pr_gate`, and test_show_me_skill checks that every function it names is defined (phase 3) (phase 3)
+
+The example now names `deliver_pr_gate`; the OpenCode and Hermes mirrors were regenerated and docs/explainers/fr-show-me.md (which covers the skill) was stamped.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-deliver-capture created=2026-11-27T20:01:02+00:00 phase=3 -->
+### p3-deliver-capture · discovery · the deliver capture drives one 40-case table through run_cmd's old functions once and now through the moved ones (phase 3) (phase 3)
+
+tests/unit/test_run_verdict_deliver.py holds the cases; the fixtures in tests/fixtures/run_verdict/deliver/ were taken by a throwaway script (not committed) that called run_cmd's pre-move functions with the same table, in commit 6fffb053f's successor before the move. The test drives only fr.run.deliver. Repo root is a fixed path so no temp directory reaches a fixture.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-27T20:01:02+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+a capture task: fixtures and a test, nothing pre-existing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-27T20:01:02+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+a verbatim move that must keep its bytes; the only cleanup (imports left unused in run_cmd, the test fakes' shapes) was done in the green step
