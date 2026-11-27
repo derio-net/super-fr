@@ -11718,6 +11718,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T21:20:35.167503Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T21:20:44.964498Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -13118,6 +13133,8 @@ batches:
     pr: 1749
     head: 60d735ca31fa237a9a96419b46319b5133898b5b
     patch_id: f540ac23d5d89a57db6aaeebb7e90645de9cdb2c
+  - kind: post_merge
+    at: '2026-11-27T21:20:26.480725Z'
 - id: arch-triage-leaves
   title: '#1318: split the wave-export and hand-back leaves out of triage/batch_drive.py'
   ids:
@@ -14792,6 +14809,11 @@ queues:
     patch_id: f540ac23d5d89a57db6aaeebb7e90645de9cdb2c
     base: 69f8213db7f495fa8dc0bc862b7173b131c8f1de
     parent: 69f8213db7f495fa8dc0bc862b7173b131c8f1de
+  - kind: queue_land
+    at: '2026-11-27T21:20:03.701755Z'
+    main: 085d1cbe90373c257709f84c72243d3b778480c4
+    entries:
+    - batch: ci-hygiene
 queue_requests:
 - kind: queue_add
   at: '2026-11-27T15:25:05.595235Z'
