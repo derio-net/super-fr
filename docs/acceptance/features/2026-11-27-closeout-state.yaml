@@ -60,6 +60,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_triage_left_scope_verbs.py#test_cancel_without_the_flag_names_it
+      - super-fr:tests/unit/test_triage_left_scope_verbs.py#test_focus_refuses_a_left_scope_batch_naming_the_cancel
+      - super-fr:tests/unit/test_triage_left_scope_verbs.py#test_orphaned_yes_appends_only_the_cancel_event
+      - super-fr:tests/unit/test_triage_left_scope_verbs.py#test_orphaned_on_a_batch_whose_repo_is_present_is_refused
     status: ci
-    notes: x
+    notes: CLI tests in CI of batch focus and batch cancel --orphaned against facts
+      lacking the repo; no forge client or checkout is opened
     verify: none
