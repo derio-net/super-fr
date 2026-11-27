@@ -10324,6 +10324,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T11:03:26.177923Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T11:04:08.373346Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -11347,6 +11362,12 @@ batches:
   - super-fr#1601
   - super-fr#1626
   wave: 25
+  events:
+  - kind: dispatch
+    at: '2026-11-27T11:03:36.256801Z'
+    runner: herdr
+    handle: w3V:p5
+    branch: feat/batch-closeout-state
 - id: export-drift
   title: Triage export refuses to overwrite a repo-side edit; targeted import
   ids:
@@ -11387,6 +11408,16 @@ batches:
     - docs/review-lenses.md
     - packages/fr/src/fr/lenses/model.py
     delivered: held
+  - kind: conflict
+    at: '2026-11-27T11:03:32.375182Z'
+    head: 6d9653b2a8225b1dfaf43a0a3e9bb46eabf209fd
+    paths:
+    - docs/explainers/fr-isolation.md
+    - docs/explainers/fr-triage.md
+    - docs/herdr-control-sessions.md
+    - docs/reference/cli.md
+    delivered: session
+    handle: derio-net/super-fr/run/batch-arch-shared-helpers
 - id: arch-run-ledger
   title: '#1318: move the write ledger out of run_cmd.py into fr/run/writes.py'
   ids:
@@ -11415,6 +11446,10 @@ batches:
     runner: herdr
     handle: w3V:p1
     branch: feat/batch-arch-isolation-split
+  - kind: claims_released
+    at: '2026-11-27T11:04:08.373346Z'
+    keys:
+    - super-fr#1517
 - id: arch-plan-ops-split
   title: '#1318: split self-review, the spec table and the refactor-gate read out of plan_ops.py'
   ids:
