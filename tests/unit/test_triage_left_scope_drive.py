@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from fr.commands import triage_batch_cmd
-from fr.triage.model import Facts, Scope
+from fr.triage.model import Facts, Scope, Truncation
 from typer import Exit
 
 SCOPE = Scope(kind="org", target="example-org")
@@ -23,7 +23,9 @@ batches:
 """
 
 
-def _state(tmp_path: Path, repos: list[str], *, facts: bool = True) -> Path:
+def _state(
+    tmp_path: Path, repos: list[str], *, facts: bool = True, truncated: bool = False
+) -> Path:
     (tmp_path / "judgements.yaml").write_text(JUDGEMENTS, "utf-8")
     if facts:
         doc = Facts(
@@ -33,6 +35,9 @@ def _state(tmp_path: Path, repos: list[str], *, facts: bool = True) -> Path:
             collected_at="2026-10-02T12:00:00+00:00",
             repos=repos,
             issues=[],
+            warnings=(
+                [Truncation(source="repos", target="example-org", limit=100)] if truncated else []
+            ),
         )
         (tmp_path / "facts.json").write_text(json.dumps(doc.to_json()), "utf-8")
     return tmp_path
@@ -76,3 +81,15 @@ def test_unusable_facts_count_as_absent(tmp_path: Path, text: str) -> None:
     (target / "facts.json").write_text(text, "utf-8")
     driver = _build(target, ["example-org/kept=/tmp/kept", "example-org/gone=/tmp/gone"])
     assert set(driver.checkout_paths) == {"example-org/kept", "example-org/gone"}
+
+
+def test_a_truncated_repo_list_does_not_hide_a_missing_clone(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The repo list may merely be cut short: a repo missing from it is not departed."""
+    target = _state(tmp_path, ["example-org/kept"], truncated=True)
+    with pytest.raises(Exit):
+        _build(target, ["example-org/kept=/tmp/kept"])
+    assert "give --checkout REPO=PATH for example-org/gone" in capsys.readouterr().err.replace(
+        "\n", ""
+    )

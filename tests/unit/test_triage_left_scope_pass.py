@@ -8,7 +8,7 @@ from pathlib import Path
 from fr.triage import claim_sync as cs
 from fr.triage.batch_drive import finished_waves, wave_landings_done
 from fr.triage.claims import owed_claims, owed_releases, releasing
-from fr.triage.model import Facts, load_judgements
+from fr.triage.model import Facts, Truncation, load_judgements
 from fr.triage.views import cancelled_waves, preselected_wave
 from fr.triage.wave_queue import is_terminal
 
@@ -29,7 +29,7 @@ def test_a_left_scope_batch_owes_no_claim_and_no_release() -> None:
     assert releasing(waved, "left-scope", False) is False
 
 
-def test_claim_sync_plans_nothing_for_a_left_scope_batch(tmp_path: Path) -> None:
+def _claim_world(tmp_path: Path, *, truncated: bool = False) -> cs.SyncPlan:
     (tmp_path / "judgements.yaml").write_text(
         "schema: 6\ntiers: [{n: 1, title: Now}]\nissues:\n  'super-fr#11': {tier: 1}\n"
         "batches:\n  - {id: mine, title: mine, ids: ['super-fr#11'], wave: 1}\n",
@@ -43,10 +43,22 @@ def test_claim_sync_plans_nothing_for_a_left_scope_batch(tmp_path: Path) -> None
         collected_at="2026-10-14T11:00:00+00:00",
         repos=["derio-net/other"],
         issues=[],
+        warnings=[Truncation(source="repos", target="derio-net", limit=100)] if truncated else [],
     )
     me = "s-11111111"
-    plan = cs.plan_sync(_env(me, facts), batches, NOW)
+    return cs.plan_sync(_env(me, facts), batches, NOW)
+
+
+def test_claim_sync_plans_nothing_for_a_left_scope_batch(tmp_path: Path) -> None:
+    plan = _claim_world(tmp_path)
     assert plan.ops == [] and plan.held == []
+
+
+def test_claim_sync_still_plans_the_claim_when_the_repo_list_was_truncated(
+    tmp_path: Path,
+) -> None:
+    plan = _claim_world(tmp_path, truncated=True)
+    assert plan.ops or plan.held
 
 
 def test_a_left_scope_batch_is_terminal_and_finishes_its_wave() -> None:

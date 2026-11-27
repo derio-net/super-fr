@@ -66,9 +66,15 @@ def test_the_card_is_terminal_with_no_jump(dispatched: bool) -> None:
     assert 'class="jump"' not in section.group(0)
 
 
-def test_the_pill_stylesheets_hold_the_left_scope_rule() -> None:
-    assert ".pill.bstage-left-scope" in Path(render.__file__).read_text("utf-8")
-    assert ".pill.bstage-left-scope" in Path(history.__file__).read_text("utf-8")
+def test_the_rendered_pages_carry_the_left_scope_pill_rule() -> None:
+    from fr.triage.fragments import Entry, Resolved
+    from fr.triage.history import GENERATED, render_history
+
+    f, jd = _world(dispatched=True)
+    rule = ".pill.bstage-left-scope"
+    assert rule in render.render_backlog(f, jd)
+    resolved = Resolved(order=[Entry(g) for g in GENERATED], fragments={})
+    assert rule in render_history(f, jd, snapshots=[], resolved=resolved)
 
 
 def _list(tmp_path: Path, f: Facts | None) -> str:
@@ -94,3 +100,15 @@ def test_batch_list_marks_a_left_scope_batch_only_with_facts(tmp_path: Path) -> 
     other: Any = tmp_path / "x"
     other.mkdir()
     assert TEXT not in _list(other, None)
+
+
+def test_batch_list_does_not_mark_a_batch_when_the_repo_list_was_truncated(
+    tmp_path: Path,
+) -> None:
+    from fr.triage.model import Truncation
+
+    warn = Truncation(source="repos", target="example-org", limit=100)
+    f = facts([issue(1)]).model_copy(
+        update={"scope": "example-org--widgets", "warnings": [warn]}
+    )
+    assert TEXT not in _list(tmp_path, f)

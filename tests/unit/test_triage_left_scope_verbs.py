@@ -11,7 +11,7 @@ import pytest
 import yaml
 from fr.cli import app
 from fr.commands import triage_batch_cmd
-from fr.triage.model import Facts, load_judgements
+from fr.triage.model import Facts, Truncation, load_judgements
 from typer.testing import CliRunner
 
 REPO = "example-org/widgets"
@@ -21,7 +21,7 @@ DISPATCH = (
 )
 
 
-def _state(tmp_path: Path, repos: list[str]) -> Path:
+def _state(tmp_path: Path, repos: list[str], *, truncated: bool = False) -> Path:
     (tmp_path / "judgements.yaml").write_text(
         "schema: 3\ntiers: [{n: 1, title: Now}]\nissues:\n  'other#1': {tier: 1}\n"
         "batches:\n  - id: a\n    title: A\n    ids: ['other#1']\n" + DISPATCH,
@@ -34,6 +34,9 @@ def _state(tmp_path: Path, repos: list[str]) -> Path:
         collected_at="2026-10-02T12:00:00+00:00",
         repos=repos,
         issues=[],
+        warnings=(
+            [Truncation(source="repos", target="example-org", limit=100)] if truncated else []
+        ),
     )
     (tmp_path / "facts.json").write_text(json.dumps(facts.to_json()), "utf-8")
     return tmp_path
@@ -54,7 +57,14 @@ def no_forge(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         calls.append(url)
         raise AssertionError("no forge client may be made")
 
+    def no_clone(*a: Any, **kw: Any) -> Any:
+        calls.append("checkout")
+        raise AssertionError("no checkout may be opened")
+
     monkeypatch.setattr(triage_batch_cmd, "make_client", boom)
+    for name in ("make_checkout", "_open_checkout", "_tracking_gate"):
+        if hasattr(triage_batch_cmd, name):
+            monkeypatch.setattr(triage_batch_cmd, name, no_clone)
     return calls
 
 
@@ -67,6 +77,22 @@ def test_focus_refuses_a_left_scope_batch_naming_the_cancel(tmp_path: Path) -> N
     assert code == 2, out
     assert "left this scope" in out
     assert "fr triage batch cancel a --orphaned" in out
+
+
+def test_focus_does_not_refuse_for_leaving_when_the_repo_list_was_truncated(
+    tmp_path: Path,
+) -> None:
+    _, out = _run(_state(tmp_path, ["example-org/other-only"], truncated=True), "focus")
+    assert "left this scope" not in out
+
+
+def test_orphaned_is_refused_when_the_repo_list_was_truncated(
+    tmp_path: Path, no_forge: list[str]
+) -> None:
+    state = _state(tmp_path, ["example-org/other-only"], truncated=True)
+    code, out = _run(state, "cancel", "--orphaned")
+    assert code == 2 and "not left-scope" in out
+    assert _events(tmp_path) == ["dispatch"]
 
 
 def test_cancel_without_the_flag_names_it(tmp_path: Path, no_forge: list[str]) -> None:
@@ -82,6 +108,7 @@ def test_the_orphaned_plan_writes_nothing(tmp_path: Path, no_forge: list[str]) -
     assert "nothing on the forge is withdrawn" in out
     assert "cancel batch a (left-scope)" in out
     assert _events(tmp_path) == ["dispatch"]
+    assert no_forge == []  # neither a client nor a checkout was made
 
 
 def test_orphaned_yes_appends_only_the_cancel_event(tmp_path: Path, no_forge: list[str]) -> None:
