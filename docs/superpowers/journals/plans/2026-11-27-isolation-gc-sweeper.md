@@ -39,3 +39,8 @@ The reviewer's `suggested lenses: tests` was only a request to run the suite, wh
 ### p1-r1-resolved · finding [fixed] · resolves p1-r1: local.py comments (~lines 843, 852) still name `_gc_one`, which moved to GcSweeper (phase 1)
 
 Both comments now name `GcSweeper._gc_one` (fr.isolation.gc); ruff/mypy and the isolation tests pass.
+
+<!-- fr:journal kind=review scope=plan id=lens-review created=2026-11-27T16:24:31+00:00 -->
+### lens-review · review · lens review: docs-accuracy, no findings
+
+docs-accuracy examined docs/explainers/fr-isolation.md, packages/fr/src/fr/isolation/gc.py, packages/fr/src/fr/isolation/local.py, .changes/feat-batch-arch-isolation-gc.yaml. The new reviewed note (line 18), the background-sweep claim (lines 277-280: _spawn_gc still called from local.py and hostworktree.py:62) and the agent-worktree gc claim (line 91: gc.py:454 → agent_worktrees.sweep_agent_worktrees) are true. The shape file matches the diff (line counts, kept methods, the six target call-throughs, TYPE_CHECKING import). No findings.
