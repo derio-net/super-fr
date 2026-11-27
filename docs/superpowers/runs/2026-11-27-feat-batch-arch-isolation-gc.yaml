@@ -3,7 +3,7 @@ run: 2026-11-27-feat-batch-arch-isolation-gc
 workflow: fr-goal-light@1
 branch: feat/batch-arch-isolation-gc
 started: '2026-11-27T14:04:56+00:00'
-cursor: journal-check
+cursor: lens-review
 steps:
   brainstorm:
     state: done
@@ -91,7 +91,10 @@ steps:
           visual: none
           findings: p1-r1
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-27T16:22:52+00:00'
+    exit: 0
+    stdout: ''
   lens-review:
     state: pending
   deliver:
