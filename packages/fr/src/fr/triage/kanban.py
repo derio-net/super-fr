@@ -68,6 +68,7 @@ from fr.triage.model import (
 from fr.triage.readiness import Readiness, Refused, other_readiness, snapshot_readiness
 from fr.triage.stage import Stage
 from fr.triage.views import drive_snapshot, queue_unconfigured
+from fr.triage.waits import Wait, wait_of
 from fr.triage.wave_queue import queue_line
 from fr.triage.wave_report import WaveReport, wave_report
 
@@ -349,6 +350,8 @@ class Card:
     readiness: Readiness | None = None
     others: tuple[Readiness, ...] = ()
     overlaps: tuple[str, ...] = ()  # plan file overlap sentences (spec 2026-11-25)
+    # Who the card waits for (spec 2026-11-27-board-session-state R1): derived after the column
+    wait: Wait | None = None
 
     @property
     def front(self) -> Literal["batch", "closeout"]:
@@ -694,6 +697,7 @@ def _card(
     verdicts: Mapping[str, Readiness] | None = None,
     others: Mapping[str, tuple[Readiness, ...]] | None = None,
     snapshot: Snapshot | None = None,
+    background: Collection[str] = frozenset(),
 ) -> Card:
     stop = stops.get(batch.id)
     lane = lane_of(batch, facts, stop)
@@ -776,6 +780,28 @@ def _card(
     pr = batch_pr(batch, facts)
     default = facts.config_for(repo or "").defaults.launch if repo else Launch()
     launch = batch.launch
+    # The front session decides rows 8, 9 and 12 of the wait (`Card.front`'s own rule)
+    on_closeout = closeout_status not in (None, "absent", "unknown")
+    front_key = ""
+    if repo:
+        front_key = (
+            closeout_item_id(repo, batch.id) if on_closeout else batch_item_id(repo, batch.id)
+        )
+    wait = wait_of(
+        column=column,
+        stage=stage,
+        lane=lane,
+        needs_you=needs_you,
+        front_status=closeout_status if on_closeout else status,
+        front_background=front_key in background,
+        checks=pr.checks if pr is not None and pr.state == "OPEN" else None,
+        has_action=batch.id in actions,
+        queued=batch.id in queued,
+        ready=batch.id in ready,
+        awaiting=batch.id in awaiting,
+        selected=batch.id in selected,
+        deps=tuple(d.state for d in deps),
+    )
     return Card(
         batch=batch,
         column=column,
@@ -806,6 +832,7 @@ def _card(
         claim_expiry=claim_expiry,
         readiness=(verdicts or {}).get(batch.id),
         others=tuple(more),
+        wait=wait,
     )
 
 
@@ -868,6 +895,7 @@ def build_board(
     ci_none: Collection[str] = (),
     scope_args: Sequence[str] | None = None,
     overlaps: Mapping[str, tuple[str, ...]] | None = None,
+    background: Collection[str] = frozenset(),
 ) -> Board:
     """One card per batch in eleven columns, sorted by wave (none last) then id (R2).
     *stops* are the driver's recorded merge stops (gh#987); one counts only while the
@@ -877,7 +905,9 @@ def build_board(
     with it the board lists the issues other scopes hold and each card's claim expiry
     (triage-claims R13), and *now* marks expired ones. *notes* are blocked sessions'
     notes by item id, from a runner that gives them (cloud-triage R15); a blocked card's
-    hint carries its note."""
+    hint carries its note. *background* are the item ids whose session sits idle while
+    background work runs (`SessionActivity`, spec 2026-11-27-board-session-state R3): it
+    changes a card's wait, never its column or hint."""
     if me and now is None:
         raise ValueError("build_board needs `now` (the clock is passed in) when given `me`")
     expiries = _own_expiries(facts, me, now) if me and now else {}
@@ -915,6 +945,7 @@ def build_board(
             verdicts=verdicts,
             others=others,
             snapshot=snapshot,
+            background=background,
         )
         for b in batches
     ]
