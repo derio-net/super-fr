@@ -19,7 +19,6 @@ from __future__ import annotations
 import datetime as _dt
 import logging
 import re
-import subprocess
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,12 +27,15 @@ from typing import Any, Literal, TypedDict
 import yaml
 
 from fr import refs
+from fr._plan_io import _stage, _yaml_dump
+from fr._plan_io import worktree_of as worktree_of
 from fr._urls import is_cross_repo_spec
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.paths import KIND_DIRS, feature_roots, kind_dir, space_for
 from fr.journal.model import JournalEntry, journal_header, journal_path
 from fr.labels import MAX_LABEL_NAME_LEN, normalize_label_slug
 from fr.parser import Plan, PlanSchemaError, _find_repo_root, parse
+from fr.plan_errors import PlanEditError as PlanEditError
 from fr.plan_validator_wrapper import (
     ValidatorWrapperError,
     ensure_validator_wrapper,
@@ -59,65 +61,12 @@ class TaskSpec(TypedDict):
     steps: list[StepSpec]
 
 
-class PlanEditError(Exception):
-    """Raised when an editing operation can't proceed."""
-
-
 # ---------------------------------------------------------------------------
 # helpers
 
 
-def worktree_of(path: Path, fallback: Path) -> Path:
-    """The git checkout holding *path*: the nearest ancestor with a `.git`. Under quiet a
-    plan lives in the `fr` worktree, not the product checkout (`fallback`)."""
-    for parent in path.resolve().parents:
-        if (parent / ".git").exists():
-            return parent
-    return fallback
-
-
-def _stage(repo_root: Path | None, paths: list[Path]) -> None:
-    """git add the paths if we're in a git repo, each in the checkout that holds it."""
-    if repo_root is None:
-        return
-    groups: dict[Path, list[str]] = {}
-    for p in paths:
-        top = worktree_of(p, Path(repo_root).resolve())
-        groups.setdefault(top, []).append(str(p.resolve().relative_to(top)))
-    for top, rels in groups.items():
-        subprocess.run(
-            ["git", "-C", str(top), "add", *rels],
-            check=False,
-            capture_output=True,
-        )
-
-
 def _now_iso() -> str:
     return _dt.datetime.now(tz=_dt.UTC).isoformat(timespec="seconds")
-
-
-def _coerce_step_texts(d: dict[str, Any]) -> dict[str, Any]:
-    """Wrap step text values in LiteralStr so they always emit as `|-`.
-
-    Called before every _yaml_dump so round-tripped phase files (loaded via
-    yaml.safe_load and mutated for state updates) keep the same consistent
-    block-scalar style as freshly-created plans.
-    """
-    from fr._yaml import LiteralStr
-
-    for task in d.get("tasks", []):
-        for step in task.get("steps", []):
-            if "text" in step and not isinstance(step["text"], LiteralStr):
-                step["text"] = LiteralStr(step["text"])
-    return d
-
-
-def _yaml_dump(d: dict[str, Any]) -> str:
-    """Delegate to the shared plan-yaml dumper (literal block scalars for
-    multi-line strings, preserved key order, unicode-as-is)."""
-    from fr._yaml import dump_plan_yaml
-
-    return dump_plan_yaml(_coerce_step_texts(d))
 
 
 _TOP_LEVEL_KEY = re.compile(r"^([A-Za-z_][\w-]*):(?:\s|$)")

@@ -84,8 +84,8 @@ def _staged_among(repo_root: Path, candidates: list[Path]) -> list[Path] | None:
     `None` when git cannot answer: fail closed and commit NOTHING (p3-m3).
     Passing the candidates on instead would hand `commit_paths` exactly the
     foreign file this filter exists to keep out, and it would `git add` it."""
+    from fr._plan_io import worktree_of
     from fr.git import GitUnavailableError, git_answer
-    from fr.plan_ops import worktree_of
 
     # Grouped by the checkout holding each path: under quiet the plan files sit in the
     # `fr` worktree, whose index is not the product checkout's.
