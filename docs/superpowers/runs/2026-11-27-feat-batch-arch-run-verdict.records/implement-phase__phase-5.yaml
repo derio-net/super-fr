@@ -1,0 +1,36 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-arch-run-verdict
+step: implement-phase
+item: phase/5
+outcome: done
+ticks: [P5.T1.S1, P5.T2.S1, P5.T2.S2, P5.T3.S1]
+refactor:
+  P5.T1: "a capture task: fixtures and a test, nothing pre-existing to clean"
+  P5.T2: "a move that must keep its bytes; the only cleanup (run_cmd imports left unused, the re-pointed tests, the stale prose names) was done in the green steps"
+journal:
+  - kind: decision
+    id: p5-evidence-modules
+    phase: 5
+    title: the evidence cluster split into emitted, target, journals, review, lenses, walk, suite, ci and owed; derived gained visual and single-phase
+    body: |
+      fr/run/evidence/: emitted.py (parse_emitted), target.py (the obligation sets, EvidenceTarget, evidence_hint, parse_evidence), journals.py (journal readers, verify_review_entry, closed_findings_witness), review.py (historical bound, verify_reviewer, check_returned_findings, dispatches_since, return_unobserved/return_refusal), lenses.py (+ owed_on, verify_lens_reviewers, lenses_witness, check_lens_returns), walk.py, suite.py (tests logs, reuse, local stamps; named suite, not tests, so it never reads as a test module), ci.py (exit 75 kept), owed.py. Largest is suite.py at 557 lines. `DERIVED_EVIDENCE` stays only in fr.workflow.artifacts (run_cmd's `_DERIVED_EVIDENCE` was a pure alias); the tests that read it import it from there. `fr.run.evidence.refusal(text)` builds the one-line soft-wrapped refusal most verifiers print. review.py imports PHASE_EXECUTOR_AGENT inside verify_reviewer, because fr.run.brief imports the lens checks, which import review.py.
+  - kind: decision
+    id: p5-verified-evidence-wiring
+    phase: 5
+    title: _verified_evidence settles each witness verdict with _settle or the new _witness, and runs each raising check inside _refusals()
+    body: |
+      `_witness` is `_settle` with the witness asserted present, for the tests and walk witnesses the resolve stores directly. derive's lambdas settle single-phase, visual and lenses; the findings closure runs check_returned_findings inside `_refusals()` and settles closed_findings_witness. Every warning-printing callee takes `warn=_say`. Verifiers that call a raising check (verify_tests_log, verify_phase_tests_log, lenses_witness) catch its RunRefusal into their refusal with the warnings gathered first. `_derived_refusal` is gone.
+  - kind: discovery
+    id: p5-evidence-capture
+    phase: 5
+    title: the evidence capture drives one 146-case table through run_cmd's old functions once and now through fr.run.evidence, plus one fr run resolve pinning gh#768's summary line
+    body: |
+      tests/unit/test_run_verdict_evidence.py holds the cases; fixtures in tests/fixtures/run_verdict/evidence/ (stderr at width 80 with colour, exit code, returned value and noted unobserved gates as JSON, tmp paths normalised to <ROOT>) were taken by a throwaway driver (not committed) in commit 7a001a30f, before the move. `_patch` fakes an input at its source module and follows it, by identity, into every fr.run.evidence module that imported it. resolve-two-derived-refusals.txt is a real `fr run resolve --step deliver` with no base for proportionality or docs. The test drives only fr.run.evidence and run_cmd's adapters.
+  - kind: discovery
+    id: p5-historical-prose-kept
+    phase: 5
+    title: dated observations naming `_verify_tests_log` were left as written
+    body: |
+      parity.yaml's 2026-10-23 live-verification note, the acceptance legacy fragment's RE-OBSERVED note and docs/triage's judgement records name `_verify_tests_log` or `_ci_tests_witness` as they stood when observed; they record history, not the current module layout, so they were not edited. Code comments and docstrings naming moved names (settle/read.py, run/ci_evidence.py, run/deliver.py, AGENTS.md's lens-review sentence) were re-pointed.
+resolves: []
+evidence: {}
