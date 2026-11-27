@@ -104,6 +104,9 @@ tests/unit/
 strategy: none
 gate: developer
 
+- ci-workflows-pin-the-python-floor: none — the unit test of R4 reads every workflow file in CI
+- ci-workflows-least-privilege-token: none — the unit test of R5 reads every workflow file in CI
+
 No installable behaviour changes. This PR's own CI runs the edited `ci.yml`, and the new
 unit tests pin R3-R5; `test_version_floors.py` pins R2. Nothing is owed after merge, so
 there is no Test Plan.
