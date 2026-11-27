@@ -42,10 +42,11 @@ rows:
     - spec:2026-11-27-run-verdict#R3
     - spec:2026-11-27-run-verdict#R4
     - spec:2026-11-27-run-verdict#R5
-    - spec:2026-11-27-run-verdict#R7
-    - spec:2026-11-27-run-verdict#R10
+    - spec:2026-11-27-run-verdict#R6
+    - spec:2026-11-27-run-verdict#R8
     - spec:2026-11-27-run-verdict#R11
     - spec:2026-11-27-run-verdict#R12
+    - spec:2026-11-27-run-verdict#R13
     levels: {}
     status: not-implemented
     notes: ''
