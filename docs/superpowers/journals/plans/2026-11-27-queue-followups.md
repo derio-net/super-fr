@@ -215,3 +215,48 @@ test_triage_board_lanes.py::test_deliver_done_labelled_and_waiting_on_a_real_con
 ### p2-r3-resolved · finding [fixed] · resolves p2-r3: Waiting's said-once used a module-global set, the reverse of the plan (phase 2)
 
 default is a fresh set; the driver holds _waiting_said and passes it; test_a_wait_is_said_each_call_by_default_and_once_per_set_the_driver_keeps (67ba3f6db).
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-27T16:07:42+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · fr-wave-driver.md said a generated block is never a conflict in the probe; it is one when the repo declares no mirrors
+
+Raised by the lens reviewer; verified against the code before acting.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-27T16:07:42+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · void_comment discarded _comments_off's reason, so an unreadable policy skipped the comment with no log
+
+Raised by the lens reviewer; verified against the code before acting.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-27T16:07:42+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · R1's unread-labels guard was dead for real clients, which returned [] for a missing key, so a degraded read would end a live approval
+
+Raised by the lens reviewer; verified against the code before acting.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-27T16:07:42+00:00 state=open review_scope=out -->
+### l-errors-r3 · finding [open] (reviewer: out of scope) · trial_conflicts classified before abort_merge, so a GitError there skipped the abort
+
+Raised by the lens reviewer; verified against the code before acting.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-27T16:07:42+00:00 -->
+### lens-review-1 · review · lens review: docs-accuracy 1, errors 3, security none, tests none
+
+One dispatched reviewer per lens over the whole diff from 00809f90 with the shape file. docs-accuracy found one false page claim; errors found a silent comment skip, a dead unread-labels guard and an abort ordering; security found the R2 wait no wider than operator decision q1 and no other issue; tests found every requirement proven by a test that would fail without it. All four findings fixed in a8569adbc.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-27T16:07:42+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: fr-wave-driver.md said a generated block is never a conflict in the probe; it is one when the repo declares no mirrors
+
+Page reworded: only a reviewed: stamp is unconditionally resolved; a generated block or whole file only with mirrors: (a8569adbc).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-27T16:07:42+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: void_comment discarded _comments_off's reason, so an unreadable policy skipped the comment with no log
+
+void_comment says 'voided without a comment: <reason>'; test_no_comment_when_comments_are_off_or_the_policy_is_unreadable_and_it_says_why (a8569adbc).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-27T16:07:42+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: R1's unread-labels guard was dead for real clients, which returned [] for a missing key, so a degraded read would end a live approval
+
+both pr_view clients return labels None for a missing key (fr.ghclient.pr_label_names); verification/labels.py copes; test_gh_/test_rest_pr_view_reads_a_missing_labels_key_as_unread (a8569adbc).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-27T16:07:42+00:00 state=open resolves=l-errors-r3 out_of_scope=true -->
+### l-errors-r3-resolved · finding [out-of-scope] · resolves l-errors-r3: trial_conflicts classified before abort_merge, so a GitError there skipped the abort
+
+Reviewer's tag kept (out). The abort ordering was hardened anyway in a8569adbc (classification in try/finally so abort_merge always runs; test_a_failing_conflict_read_still_aborts_the_merge_and_propagates); the scratch worktree was already removed in every case.
