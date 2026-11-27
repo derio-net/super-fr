@@ -11071,6 +11071,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T16:21:39.452037Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T16:21:44.292994Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -12344,6 +12359,12 @@ batches:
     runner: herdr
     handle: w3X:p1
     branch: feat/batch-arch-isolation-gc
+  - kind: conflict
+    at: '2026-11-27T16:21:41.963304Z'
+    head: 89b647e4c0cfa8e8ef6a71424cbe95001be26f4d
+    paths:
+    - tests/unit/test_tripwire_module_budget.py
+    delivered: held
 - id: arch-triage-ports
   title: '#1318: the triage driver takes every command-layer effect through one ports object'
   ids:
