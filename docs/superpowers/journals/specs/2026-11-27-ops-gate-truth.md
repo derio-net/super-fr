@@ -320,3 +320,8 @@ row_kinds:
 run_gate: developer
 run_kind: none
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-ops-gate-truth-p2 created=2026-11-27T22:05:02+00:00 -->
+### phase-split-2026-11-27-ops-gate-truth-p2 · decision · ask: gate row walks (#1621 part A, R7-R16)
+
+Phase 2 serves its own ask: the step-to-row link and the row term of every post-merge gate. It is independently reviewable from the refresh (phase 1) and reads phase 1's stage hooks.
