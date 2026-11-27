@@ -180,6 +180,8 @@ derive_batch_stage(batch, facts):
 ## Verification
 
 strategy: none
+settle.conflicts: report — batch closeout-state: the wave driver owns this PR's mergeability
+settle.ci: report — batch closeout-state: the wave driver owns this PR's CI
 
 - closeout-takeback-both-errors: none — unit tests drive both close-out starts with a runner whose dispatch raises and a store whose write raises, in CI
 - batch-left-scope-stage: none — unit tests over `derive_batch_stage` (repo missing, list truncated, never dispatched), claims, the pure pass, `build_driver` and the board render with a facts file lacking the repo, in CI
