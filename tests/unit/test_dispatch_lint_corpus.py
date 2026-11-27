@@ -256,7 +256,7 @@ def pattern_hits() -> list[tuple[str, str, str, str]]:
     avoid): there is nothing here to drift from, because this half is
     measuring the PATTERNS, not the gate.
     """
-    from fr.plan_ops import _DISPATCH_RES, _strip_fenced_code
+    from fr.plan_review.vocabulary import _DISPATCH_RES, _strip_fenced_code
 
     out = []
     for step in agentic_steps():

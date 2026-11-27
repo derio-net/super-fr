@@ -5128,7 +5128,7 @@ def _manual_placement_errors(repo_root: Path, state: RunState) -> tuple[str | No
     which is current.
     """
     from fr.parser import PlanSchemaError, parse
-    from fr.plan_ops import _manual_placement_issues
+    from fr.plan_review import _manual_placement_issues
 
     plan_rel = _emitted_plan(state)
     if plan_rel is None:  # pragma: no cover — `_group_phases` refused first

@@ -22,7 +22,8 @@ from fr.journal.model import (
 )
 from fr.parser import Plan
 from fr.parser import parse as parse_plan
-from fr.plan_ops import PhaseSpec, ReviewIssue, _phase_sizing_issues, create
+from fr.plan_ops import PhaseSpec, ReviewIssue, create
+from fr.plan_review.sizing import _phase_sizing_issues
 from fr.version_floor import CEILING_VERSION
 from typer.testing import CliRunner
 

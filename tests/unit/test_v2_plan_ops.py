@@ -1127,7 +1127,7 @@ def test_self_review_dispatch_gate_strips_fences_but_not_inline_backticks(tmp_pa
     object the detector keys on, so stripping them would turn the observed
     defect into "Dispatch   per post" and blind the gate (spec §4.A).
     """
-    from fr.plan_ops import _RE_DISPATCH_HEAD
+    from fr.plan_review.vocabulary import _RE_DISPATCH_HEAD
 
     # The fenced instruction carries its own list-marker boundary, so it
     # DOES match the head pattern on the raw text — verified, because a
