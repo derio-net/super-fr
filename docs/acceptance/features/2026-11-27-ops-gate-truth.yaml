@@ -61,7 +61,7 @@ rows:
     acceptance: The DevOps stage reports archived only when the plan moved, and reports
       the hold and its reasons when fr archive held it
     origin:
-    - spec:2026-11-27-ops-gate-truth#R12
+    - spec:2026-11-27-ops-gate-truth#R15
     levels: {}
     status: not-implemented
     notes: ''
