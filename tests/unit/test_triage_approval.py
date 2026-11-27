@@ -16,6 +16,7 @@ from fr.triage.approval import (
     approval_verdict,
     settle_approvals,
 )
+from fr.triage.approval import _comments_off as _real_comments_off
 from fr.triage.model import ApprovalEvent, Batch, BatchEvent, UpdateEvent
 
 REPO = "derio-net/super-fr"
@@ -719,15 +720,29 @@ def test_a_trusted_marker_for_the_head_suppresses_the_comment() -> None:
         assert len(forge.posted) == 1
 
 
-def test_no_comment_when_comments_are_off_or_the_policy_is_unreadable(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("unreadable", [False, True], ids=["comments-off", "policy-unreadable"])
+def test_no_comment_when_comments_are_off_or_the_policy_is_unreadable_and_it_says_why(
+    monkeypatch: pytest.MonkeyPatch, unreadable: bool
 ) -> None:
+    from fr.settings import SettingsError
     from fr.triage import approval
 
-    monkeypatch.setattr(approval, "_comments_off", lambda *a: "forge.comments is off")
+    if unreadable:
+        monkeypatch.setattr(approval, "_comments_off", _real_comments_off)
+
+        def policy(client: Any, repo: str) -> Any:
+            raise SettingsError("settings unreadable")
+
+        monkeypatch.setattr("fr.settings.remote.client_policy", policy)
+        why = "settings unreadable"
+    else:
+        monkeypatch.setattr(approval, "_comments_off", lambda *a: "forge.comments is off")
+        why = "forge.comments is off"
     forge = _Lifecycle(_voided_view())
-    _, written, _ = _settle(forge, _batch(_approval("h1", "p1")), {"h2": "p2"})
+    said: list[str] = []
+    _, written, _ = _settle(forge, _batch(_approval("h1", "p1")), {"h2": "p2"}, said=said)
     assert forge.label_edits and written and forge.posted == []
+    assert f"approval of PR #7 voided without a comment: {why}" in said
 
 
 def test_comments_off_reads_the_policy_and_an_unreadable_one_blocks(

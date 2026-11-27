@@ -533,11 +533,13 @@ def void_comment(
     client: Any, repo: str, number: int, head: str, why: str, say: Callable[[str], None]
 ) -> None:
     """Say on PR #*number* why fr removed its `approved-fr` at *head* (R3): one comment per
-    voided head, opening with its marker. A trusted marker for *head* already on the PR, a
-    repo whose comments are off, or a policy fr cannot read posts nothing; any failure is a
-    warning and never undoes the void."""
+    voided head, opening with its marker. A trusted marker for *head* already on the PR
+    posts nothing; a repo whose comments are off, or a policy fr cannot read, posts nothing
+    and says why; any failure is a warning and never undoes the void."""
     try:
-        if _comments_off(client, repo) is not None:
+        off = _comments_off(client, repo)
+        if off is not None:
+            say(f"approval of PR #{number} voided without a comment: {off}")
             return
         found = _trusted_markers(client.list_issue_comments(repo, number), _VOID_MARKER)
         if any(m["head"] == head for m in found):

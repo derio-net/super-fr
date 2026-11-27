@@ -313,10 +313,12 @@ def trial_conflicts(
         _clear_scratch(checkout, where)  # a probe's leftover: `worktree add` says if it stays
         wt = checkout.add_worktree(where, head)
         conflicted, refused = merge_main(wt, main, version)
-        if refused:
-            refused = _queue_refuses(wt, refused, generated, mirrors)
-        if conflicted:
-            wt.abort_merge()
+        try:  # the classification reads the merge's conflicted state, so it runs first
+            if refused:
+                refused = _queue_refuses(wt, refused, generated, mirrors)
+        finally:  # and a failing read never skips the abort (l-errors-r3)
+            if conflicted:
+                wt.abort_merge()
         return refused
     finally:
         try:  # cleanup never masks what is in flight, and never skips the temp root

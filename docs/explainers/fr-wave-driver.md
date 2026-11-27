@@ -346,8 +346,9 @@ pull request that the forge shows as conflicting, draft or ready, approved or no
 request that the queue holds in a slot is left to the queue, which rebases or ejects it. The try is a trial merge with the default
 branch in a scratch checkout that the driver always removes. It uses the real merge's rules
 for version files and lock files, so one that the driver would resolve is not a conflict. It
-also sorts the conflicts as the queue's build does: a `reviewed:` stamp or a generated block
-is not a conflict, and neither is a whole generated file when the repo declares `mirrors:`.
+also sorts the conflicts as the queue's build does: a `reviewed:` stamp is not a conflict.
+A generated block or a whole generated file is not a conflict either, but only when the repo
+declares `mirrors:`.
 The try does not model a rebase or a mirrors run that fails.
 The driver tries a given head against a given default-branch commit once for each process.
 A pull request that has been handed back for its current head is not shown as awaiting

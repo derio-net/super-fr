@@ -299,3 +299,37 @@ def test_the_probe_keeps_owed_generated_paths_without_mirrors(tmp_path: Path) ->
         Checkout(repo), "main", None, head, scratch_root=root, generated=("gen/*",), mirrors=False
     )
     assert got == ["a.txt", "gen/out.txt"]
+
+
+def test_a_failing_conflict_read_still_aborts_the_merge_and_propagates(tmp_path: Path) -> None:
+    """l-errors-r3: the classification reads the conflicted merge; a GitError there never
+    skips `abort_merge`, and the error propagates as a merge error does."""
+    repo = _repo(tmp_path)
+    head = _pr_head(repo)
+    (repo / "a.txt").write_text("one\nMAIN\nthree\n")
+    _git(repo, "commit", "-qam", "main")
+    aborted: list[bool] = []
+
+    class _Wt:
+        def __init__(self, inner: object) -> None:
+            self._inner = inner
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._inner, name)
+
+        def unmerged_stages(self) -> object:
+            raise GitError("ls-files: index unreadable")
+
+        def abort_merge(self) -> None:
+            aborted.append(True)
+            self._inner.abort_merge()  # type: ignore[attr-defined]
+
+    class _Checkout(Checkout):
+        def add_worktree(self, where: Path, ref: str) -> _Wt:  # type: ignore[override]
+            return _Wt(super().add_worktree(where, ref))
+
+    root = tmp_path / "probe"
+    with pytest.raises(GitError, match="index unreadable"):
+        trial_conflicts(_Checkout(repo), "main", None, head, scratch_root=root)
+    assert aborted == [True]
+    assert _scratch_gone(repo, root)
