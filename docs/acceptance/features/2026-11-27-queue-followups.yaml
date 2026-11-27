@@ -65,3 +65,9 @@ rows:
     status: not-implemented
     notes: ''
     verify: none
+amendments:
+  - row: queue-approval-waits-conflict-free
+    op: retire
+    base: 0
+    notes: merged into queue-approval-label-lifecycle
+    why: 'q4: one row per issue (sr-12)'
