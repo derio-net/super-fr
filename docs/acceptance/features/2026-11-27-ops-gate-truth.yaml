@@ -19,6 +19,7 @@ rows:
     - spec:2026-11-27-ops-gate-truth#R3
     - spec:2026-11-27-ops-gate-truth#R4
     - spec:2026-11-27-ops-gate-truth#R5
+    - spec:2026-11-27-ops-gate-truth#R6
     levels: {}
     status: not-implemented
     notes: ''
