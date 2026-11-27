@@ -16,6 +16,9 @@ packages/fr/src/fr/triage/
   pacing.py           ~ plan(): drive passes deadline repos (board: none); stamps planned_at      R7
   pacing_state.py     + planned_at in _TIMES, parsed on its own (fail open)                       R7
   plan_overlap.py     ~ overlaps() and plan_overlap_report group repos lower-cased                R8
+packages/fr/src/fr/{ghclient,real_ghclient,real_ghrestclient}.py
+                      ~ pr_view: a payload with no `labels` key reads None (unread), so R1    R1
+                        never ends an approval on a degraded read (pr_label_names)
 packages/fr/src/fr/commands/triage_batch_cmd.py
                       ~ voided set = fr's removals only; due list repo-scoped queued; probe     R1 R4 R5
                         passes generated/mirrors (cache key too); drive's long-lived said set

@@ -1,0 +1,50 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-queue-followups
+step: lens-review
+outcome: done
+journal:
+- kind: finding
+  id: l-docs-accuracy-r1
+  title: fr-wave-driver.md said a generated block is never a conflict in the probe; it is one when the repo declares no mirrors
+  body: Raised by the lens reviewer; verified against the code before acting.
+  review_scope: in
+  global: true
+- kind: finding
+  id: l-errors-r1
+  title: void_comment discarded _comments_off's reason, so an unreadable policy skipped the comment with no log
+  body: Raised by the lens reviewer; verified against the code before acting.
+  review_scope: in
+  global: true
+- kind: finding
+  id: l-errors-r2
+  title: R1's unread-labels guard was dead for real clients, which returned [] for a missing key, so a degraded read would end a live approval
+  body: Raised by the lens reviewer; verified against the code before acting.
+  review_scope: in
+  global: true
+- kind: finding
+  id: l-errors-r3
+  title: trial_conflicts classified before abort_merge, so a GitError there skipped the abort
+  body: Raised by the lens reviewer; verified against the code before acting.
+  review_scope: in
+  global: true
+- kind: review
+  id: lens-review-1
+  global: true
+  title: 'lens review: docs-accuracy 1, errors 3, security none, tests none'
+  body: One dispatched reviewer per lens over the whole diff from 00809f90 with the shape file. docs-accuracy found one false page claim; errors found a silent comment skip, a dead unread-labels guard and an abort ordering; security found the R2 wait no wider than operator decision q1 and no other issue; tests found every requirement proven by a test that would fail without it. All four findings fixed in a8569adbc.
+resolves:
+- id: l-docs-accuracy-r1
+  state: fixed
+  body: 'Page reworded: only a reviewed: stamp is unconditionally resolved; a generated block or whole file only with mirrors: (a8569adbc).'
+- id: l-errors-r1
+  state: fixed
+  body: 'void_comment says ''voided without a comment: <reason>''; test_no_comment_when_comments_are_off_or_the_policy_is_unreadable_and_it_says_why (a8569adbc).'
+- id: l-errors-r2
+  state: fixed
+  body: both pr_view clients return labels None for a missing key (fr.ghclient.pr_label_names); verification/labels.py copes; test_gh_/test_rest_pr_view_reads_a_missing_labels_key_as_unread (a8569adbc).
+- id: l-errors-r3
+  state: fixed
+  body: Reviewer tagged it out; reclassified in, since this change introduced the order. Classification in try/finally so abort_merge always runs; test_a_failing_conflict_read_still_aborts_the_merge_and_propagates (a8569adbc).
+evidence:
+  review: lens-review-1
+  reviewer: docs-accuracy=a24afa1542d396e78,errors=ad2f08e0c56ab67cf,security=aad89841d0b2f8127,tests=ad6201fe480463eeb
