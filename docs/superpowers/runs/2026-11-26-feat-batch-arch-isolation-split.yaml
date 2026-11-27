@@ -3,7 +3,7 @@ run: 2026-11-26-feat-batch-arch-isolation-split
 workflow: fr-goal@1
 branch: feat/batch-arch-isolation-split
 started: '2026-11-26T18:27:45+00:00'
-cursor: journal-check
+cursor: lens-review
 steps:
   brainstorm:
     state: done
@@ -179,7 +179,10 @@ steps:
           visual: none
           findings: p3-r1,p4-r1
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-27T10:24:08+00:00'
+    exit: 0
+    stdout: ''
   lens-review:
     state: pending
   deliver:
