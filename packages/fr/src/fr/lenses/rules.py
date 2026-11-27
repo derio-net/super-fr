@@ -119,6 +119,22 @@ def head_config_text(root: Path) -> str | None:
     return read_text(path, str(REPO_CONFIG_REL)) if path.is_file() else None
 
 
+def config_texts(root: Path, ref: str | None) -> tuple[str | None, str | None]:
+    """`.fr/lenses.yaml` on the default branch `ref` and on the branch. Under quiet and
+    stealth a branch cannot change configuration, so both are the configuration branch's
+    tip (spec 2026-11-19-event-driven-a-la-carte R3, `fr.config.space.at_pair`)."""
+    from fr.config.space import config_space
+    from fr.settings import SettingsError
+
+    try:
+        space = config_space(root)
+        if space.ref is not None:
+            return space.at_pair(REPO_CONFIG_REL.as_posix(), ref or space.ref, "HEAD")
+    except SettingsError as e:
+        raise LensError(f"cannot read {REPO_CONFIG_REL}: {e}") from e
+    return base_config_text(root, ref), head_config_text(root)
+
+
 def rules_in_force_at(root: Path) -> tuple[PathRule, ...]:
     """The rules in force for the repo at `root`. Raises `LensError`."""
-    return rules_in_force(base_config_text(root, default_ref(root)), head_config_text(root))
+    return rules_in_force(*config_texts(root, default_ref(root)))

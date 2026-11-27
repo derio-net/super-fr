@@ -177,8 +177,9 @@ def test_collect_stores_the_fold_its_read_status_and_its_cause() -> None:
     assert (pr.cursor, pr.cursor_read, pr.cursor_detail) == (None, "no-clone", None)
 
 
-def test_facts_are_schema_19_and_still_read_3_to_18(tmp_path: Path) -> None:
-    assert FACTS_SCHEMA == 19
+def test_cursor_read_arrived_at_19_and_facts_still_read_3_to_18(tmp_path: Path) -> None:
+    # The one pin of the stamp is test_triage_model.py (gh#1300); a later field may move it.
+    assert FACTS_SCHEMA >= 19 and 19 in FACTS_READS
     assert set(range(3, 19)) <= set(FACTS_READS)
     old = {"schema": 18, "scope": REPO, "kind": "repo", "collected_at": "2026-09-25T06:00:00Z",
            "repos": [REPO], "issues": []}  # fmt: skip

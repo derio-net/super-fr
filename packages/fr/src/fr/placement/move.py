@@ -268,19 +268,25 @@ def _commit_tree(
     return _git(root, *argv, data=message.encode(), env=dated).decode().strip()
 
 
-def _push_fr_branch(root: Path) -> None:
-    """A plain push of quiet's `fr` branch to origin (never forced), then its tracking
-    ref. The one branch this module pushes itself: a product branch goes through
-    `fr.git_policy.product.push_product_branch` (`_push_product`, review pr1431-r1)."""
-    _git(root, "push", "--quiet", "origin", "refs/heads/fr:refs/heads/fr")
-    _git(root, "fetch", "--quiet", "--no-tags", "origin", "+refs/heads/fr:refs/remotes/origin/fr")
+_QUIET_BRANCHES: Final = ("fr", "fr-config")
+"""Quiet's own branches, the memory and the configuration branch (S1 R5)."""
+
+
+def _push_fr_branch(root: Path, branch: str = "fr") -> None:
+    """A plain push of quiet's `fr` (or `fr-config`) branch to origin (never forced), then
+    its tracking ref. The branches this module pushes itself: a product branch goes
+    through `fr.git_policy.product.push_product_branch` (`_push_product`, review
+    pr1431-r1)."""
+    _git(root, "push", "--quiet", "origin", f"refs/heads/{branch}:refs/heads/{branch}")
+    _git(root, "fetch", "--quiet", "--no-tags", "origin",
+         f"+refs/heads/{branch}:refs/remotes/origin/{branch}")  # fmt: skip
 
 
 def _push_branch(root: Path, branch: str) -> None:
-    """Every push this module makes: quiet's `fr` itself, any other branch through the
-    one product pusher."""
-    if branch == "fr":
-        _push_fr_branch(root)
+    """Every push this module makes: quiet's `fr` and `fr-config` themselves, any other
+    branch through the one product pusher."""
+    if branch in _QUIET_BRANCHES:
+        _push_fr_branch(root, branch)
     else:
         _push_product(root, branch)
 
@@ -739,7 +745,7 @@ def _copy_quiet(ctx: Ctx) -> None:
             "fr placement move: the local `fr` branch is not a descendant of origin/fr; "
             "rename it (`git branch -m fr fr-old`) and retry"
         )
-    parent = local or (_sha(root, paths.SWITCH_REF) if remote else None)
+    parent = local or (_sha(root, paths.MEMORY_REF) if remote else None)
     source = ctx.source
     for g in sorted(ctx.groups(), key=lambda g: (g.date or "", g.fid)):
         message = _fr_message(root, f"chore(fr): move {g.fid} from placement {source}")
@@ -1035,7 +1041,7 @@ def _dest_roots(ctx: Ctx) -> dict[str, dict[str, bytes]] | None:
     fids = {g.fid for g in ctx.groups()}
     if ctx.to == paths.QUIET:
         prefix = f"{paths.FEATURES_DIR}/"
-        got = _files(root, paths.SWITCH_REF, prefix)
+        got = _files(root, paths.MEMORY_REF, prefix)
     elif ctx.to == paths.STEALTH:
         from fr.placement import stealth
 
@@ -1181,31 +1187,44 @@ def _verify(ctx: Ctx) -> None:
 _QUIET_LINE: Final = re.compile(r"(?m)^placement: quiet$")
 
 
-def _switch_text(root: Path, ref: str = paths.SWITCH_REF) -> str | None:
-    out = _git(root, "show", f"{ref}:{paths.SWITCH_SETTINGS}", check=False)
+def _switch_text(root: Path, ref: str, rel: str) -> str | None:
+    out = _git(root, "show", f"{ref}:{rel}", check=False)
     return out.decode() if out else None
 
 
-def _settle_switch(root: Path, rewrite: Callable[[str | None], str | None], subject: str) -> None:
-    """Make the switch say what *rewrite* wants, then push it. Idempotent mid-step (review
-    p7-r2): the decision reads the LOCAL `fr` (the fr worktree's branch, fast-forwarded to
-    origin/fr first), so a switch commit made by a run killed before its push is found and
-    pushed, never committed a second time."""
+def _settle_switch(
+    root: Path, rewrite: Callable[[str | None], str | None], subject: str, to: str
+) -> None:
+    """Make the switch say what *rewrite* wants, on `fr-config` and in step on `fr` (S1 R5,
+    R6), then push both. Idempotent mid-step (review p7-r2): the decision reads the LOCAL
+    branches (`fr-config` first, then `fr`, each fast-forwarded to origin first), so a
+    switch commit made by a run killed before its push is found and pushed, never
+    committed a second time, and a run killed between the two writes finishes the second."""
     from fr.placement import quiet
 
-    _git(root, "fetch", "--quiet", "--no-tags", "origin", quiet.FETCH_REFSPEC, check=False)
-    wt = quiet.ensure_worktree(root)
+    for spec in (quiet.CONFIG_FETCH_REFSPEC, quiet.FETCH_REFSPEC):
+        _git(root, "fetch", "--quiet", "--no-tags", "origin", spec, check=False)
+    quiet.ensure_worktree(root)
     quiet.fast_forward(root)
-    with quiet.fr_worktree_lock(wt):
-        text = rewrite(_switch_text(root, _FR_REF))
-        if text is not None:
-            (wt / paths.SWITCH_SETTINGS).write_text(text)
-            _git(wt, "add", "--", paths.SWITCH_SETTINGS)
-            _git(wt, "commit", "--quiet", "--no-verify", "-m", _fr_message(root, subject),
-                 "--", paths.SWITCH_SETTINGS)  # fmt: skip
-    if _sha(root, _FR_REF) != _sha(root, paths.SWITCH_REF):
-        _push_branch(root, "fr")
+    quiet.ensure_config_worktree(root)
+    current = _switch_text(root, f"refs/heads/{quiet.CONFIG_BRANCH}", paths.SWITCH_SETTINGS)
+    if current is None:
+        current = _switch_text(root, _FR_REF, paths.LEGACY_SWITCH_SETTINGS)
+    text = rewrite(current)
+    if text is None:
+        text = current
+    url = None
+    if text is not None:
+        url = quiet.write_switch(
+            root, text, _fr_message(root, subject), push=lambda r, b: _push_branch(r, b)
+        )
     paths_cache_reset()
+    if url is not None:
+        # spec §B, decision p2-config-changes-by-pr: an existing fr-config changes by review
+        raise _PausedError(
+            f"paused: opened {url} to change the switch on `{quiet.CONFIG_BRANCH}`; merge it, "
+            f"then re-run `fr placement move --to {to}` to finish"
+        )
 
 
 def _to_quiet(text: str | None) -> str | None:
@@ -1250,7 +1269,9 @@ def _switch(ctx: Ctx) -> None:
         return
     ctx.check_source("switch")
     if ctx.to == paths.QUIET:
-        _settle_switch(root, _to_quiet, "chore(fr): switch this repo to the quiet placement")
+        _settle_switch(
+            root, _to_quiet, "chore(fr): switch this repo to the quiet placement", ctx.to
+        )
         ctx.emit("switched: origin/fr says placement: quiet")
         return
     if ctx.to == paths.REPO:
@@ -1267,7 +1288,9 @@ def _switch(ctx: Ctx) -> None:
     if ctx.source == paths.QUIET:
         if ctx.to == paths.STEALTH:
             refuse_live_quiet(root)
-        _settle_switch(root, _to_repo, "chore(fr): switch this repo back to the repo placement")
+        _settle_switch(
+            root, _to_repo, "chore(fr): switch this repo back to the repo placement", ctx.to
+        )
         ctx.emit("switched: origin/fr says placement: repo (a new commit; nothing forced)")
     if ctx.to == paths.STEALTH:
         ctx.emit(
@@ -1403,8 +1426,8 @@ def _refuse_foreign_fr_branch(root: Path) -> None:
     if not quiet.is_switch_branch(root):
         raise MoveError(
             f"fr placement move --to quiet: origin/fr ({remote[:12]}) exists and is not an fr "
-            f"switch branch (its root {paths.SWITCH_SETTINGS} names no placement), and quiet "
-            "keeps its artifacts on a branch named `fr`. Rename or remove that branch on "
+            f"switch branch (its root {paths.LEGACY_SWITCH_SETTINGS} names no placement), and "
+            "quiet keeps its artifacts on a branch named `fr`. Rename or remove that branch on "
             "origin first; nothing was written"
         )
 

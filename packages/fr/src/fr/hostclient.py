@@ -356,7 +356,7 @@ def client_for(repo_root: Path) -> GhClient:
         _WARNED_DECLARED_HOSTS.add((declared, backend))
         print(
             f"warning: host {declared!r} is declared in "
-            ".devcontainer/fr-profiles.yaml but fr does not thread a host "
+            ".fr/profiles.yaml but fr does not thread a host "
             f'to backend "{backend}" — the CLI\'s own host resolution '
             "applies instead. See gh-486.",
             file=sys.stderr,

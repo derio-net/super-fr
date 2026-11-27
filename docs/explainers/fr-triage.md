@@ -16,7 +16,7 @@ covers:
   - packages/fr/src/fr/commands/triage_cmd.py
   - packages/fr/src/fr/commands/triage_batch_cmd.py
   - packages/fr/src/fr/commands/triage_origins_cmd.py
-reviewed: 2026-11-27 still true, isolation/local.py split into modules (#1517), no reader-visible change; 2026-11-26 still true after landing-method (the merge method order and the push landing hold are the fr-triage skill's and fr-wave-driver's to say); 2026-11-25 still true after batch merge-readiness phase 1 (facts schema 19 records whether the run cursor was read; the merge rule is fr-wave-driver's to say); 2026-11-25 plan overlap set of check (wave-plan-file-overlap); 2026-11-25 wave-queue-gaps phase 3 review, suggest also prints the overlapping pairs of one wave (never across repos); 2026-11-25 still true after ci-economy (the queue settles stamp and generated conflicts, cancelled checks read pending; the fr-triage skill and fr-wave-driver say so); 2026-11-24 still true after wave-queue-gaps phase 1 (judgements schema 14 reads every older stamp, so the example still loads; the hand-back changes are fr-wave-driver's to say); 2026-11-24 still true after batch closeout-truth (the close-out re-record, approval, session close and migration wait are the fr-triage skill's and fr-wave-driver's to say); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-23 pr-readiness-wait phase 1, every driver brief gains one sentence (the driver owns the PR's mergeability and CI, so the session runs no `fr pr settle` loop); still true; 2026-11-22 check lists ignored claims, obsolete batches and stale members; untrusted issues lose their titles, and an operator admits one with fr triage admit, since the label alone no longer admits (triage-hardening); gate names, runner status and timestamp refactors preserve this interface; 2026-11-20 batch train-truth R21 cancel of a never-dispatched batch needs no clone, R24 the driver's failure boundary, supervisor, drive status/log/failures, the Activity panel and the early red and conflict hand-backs; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth); 2026-11-19 a full PR list warns (may show not collected); Batches columns fold and the wave cutoff; Origins groups, state filter and merged PRs. 2026-11-18 one name per page (fr triage backlog writes backlog.html and issues.html, fr triage batches writes batches.html; render and board stay as aliases). 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth); 2026-11-21 wave-merge-queue lens fixes, defer, requeue and queue-retry are named, a moved block voids an approval; 2026-11-20 wave-merge-queue phase 5 fixes, the merge train is gone (one queue per repo; a repo with no queue block merges nothing); wave-merge-queue phase 1 fixes, a moved identical change counts as the same diff; wave-merge-queue phase 1, judgements schema 13 and an approval pinned to the pull request's diff
+reviewed: 2026-11-27 still true, isolation/local.py split into modules (#1517), no reader-visible change; 2026-11-26 still true after landing-method (the merge method order and the push landing hold are the fr-triage skill's and fr-wave-driver's to say); 2026-11-25 the state lives in the host cache `~/.cache/fr/triage/<scope>/`, its own git repository; an older clone's `.fr/triage-state/<scope>/` moves there on first use, leaving a tombstone; a one-repo scope may name its state repo in `.fr/settings.yaml` (S1 R17-R20); 2026-11-25 still true after ci-economy (the queue settles stamp and generated conflicts, cancelled checks read pending; the fr-triage skill and fr-wave-driver say so); 2026-11-25 still true after batch merge-readiness phase 1 (facts schema 19 records whether the run cursor was read; the merge rule is fr-wave-driver's to say); 2026-11-25 plan overlap set of check (wave-plan-file-overlap); 2026-11-25 wave-queue-gaps phase 3 review, suggest also prints the overlapping pairs of one wave (never across repos); 2026-11-25 still true after ci-economy (the queue settles stamp and generated conflicts, cancelled checks read pending; the fr-triage skill and fr-wave-driver say so); 2026-11-24 still true after wave-queue-gaps phase 1 (judgements schema 14 reads every older stamp, so the example still loads; the hand-back changes are fr-wave-driver's to say); 2026-11-24 still true after batch closeout-truth (the close-out re-record, approval, session close and migration wait are the fr-triage skill's and fr-wave-driver's to say); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-23 pr-readiness-wait phase 1, every driver brief gains one sentence (the driver owns the PR's mergeability and CI, so the session runs no `fr pr settle` loop); still true; 2026-11-22 check lists ignored claims, obsolete batches and stale members; untrusted issues lose their titles, and an operator admits one with fr triage admit, since the label alone no longer admits (triage-hardening); gate names, runner status and timestamp refactors preserve this interface; 2026-11-20 batch train-truth R21 cancel of a never-dispatched batch needs no clone, R24 the driver's failure boundary, supervisor, drive status/log/failures, the Activity panel and the early red and conflict hand-backs; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth); 2026-11-19 a full PR list warns (may show not collected); Batches columns fold and the wave cutoff; Origins groups, state filter and merged PRs. 2026-11-18 one name per page (fr triage backlog writes backlog.html and issues.html, fr triage batches writes batches.html; render and board stay as aliases). 2026-11-17 the untrusted set of check, and the intake rule (batch triage-intake, facts schema 15 on top of main's 14); collect only reads the forge (it reports repos without approved-fr, and the first dispatch creates the label); scope retire settles closed issues. 2026-11-15 still true, the gate ledger now also reads archived run cursors (batch gate-truth); 2026-11-21 wave-merge-queue lens fixes, defer, requeue and queue-retry are named, a moved block voids an approval; 2026-11-20 wave-merge-queue phase 5 fixes, the merge train is gone (one queue per repo; a repo with no queue block merges nothing); wave-merge-queue phase 1 fixes, a moved identical change counts as the same diff; wave-merge-queue phase 1, judgements schema 13 and an approval pinned to the pull request's diff
 ---
 
 ## Why keep the judgement in a file, with an engine around it?
@@ -45,8 +45,8 @@ fr triage check   --repo example-org/example-repo
 `collect` reads the forge and writes `facts.json`. `check` prints the sets you act on. The
 important one is **unranked**: open issues with no judgement yet. You read each one and the
 code it names, then add an entry to `judgements.yaml`. It sits beside `facts.json` in the
-scope's state directory (`.fr/triage-state/example-org--example-repo/` in a clone; `collect`
-prints the path), and you create it on the first run:
+scope's state directory (`~/.cache/fr/triage/example-org--example-repo/`; `collect` prints
+the path), and you create it on the first run:
 
 ```yaml
 schema: 12
@@ -85,9 +85,11 @@ fr triage batch create merged-trust --repo example-org/example-repo --title "Sto
 
 ## Which files hold the state, and who writes them?
 
-Everything lives in the scope's state directory: `.fr/triage-state/<scope>/` in a clone,
-`~/.cache/fr/triage/<scope>/` outside one. A scope is `owner--repo` for `--repo`, or the
-owner for `--org`; `--repo A/B,C/D` is a group.
+Everything lives in the scope's state directory, `~/.cache/fr/triage/<scope>/` (`--dir`
+picks another). A scope is `owner--repo` for `--repo`, or the owner for `--org`;
+`--repo A/B,C/D` is a group. The directory is its own git repository. It holds the objects
+of the scope's state branch and the remote it pushes to, so fr syncs the state with no
+product clone. A repo's `.fr/` holds configuration only, never triage state.
 
 | File | Written by | Holds |
 |---|---|---|
@@ -99,6 +101,21 @@ Never write the facts yourself. fr does not commit the state by default; its dur
 is an orphan branch, `refs/heads/fr-triage/<scope-id>`, which fr fetches before reading and pushes after
 every change. `fr triage state export --to <dir>` and `import --from <dir>` copy it to and
 from a repo.
+
+The state branch lives in a repo that fr picks once per scope. A scope first collected from a
+stealth workspace uses its tracking repo. Otherwise a scope of one repo uses that repo, and fr
+asks for any other scope. A one-repo scope can name its own: `triage.state_repo:
+<owner>/<repo>` in that repo's `.fr/settings.yaml`, which then declares `schema: 2`. fr uses
+it only when the scope records no state repo yet. When the two differ, `fr triage check`
+lists the mismatch. The privacy guard still refuses to push a private issue to a public repo.
+
+**Upgrading from an older fr.** Older versions kept the state in a clone, under
+`.fr/triage-state/<scope>/`. The first fr command that uses the scope from that clone moves
+the state into the cache. It refuses while a live `drive.lock` names a running driver: stop
+the driver first. A cache that already held an older copy is set aside as `<scope>.pre-s1`.
+In the clone fr leaves a small tombstone file that names the new place. An older fr fails on
+it instead of quietly starting a second copy. After you upgrade, restart any running
+`fr triage batch drive` with the new fr, and run no older fr on that host.
 
 ## What does `check` tell you?
 

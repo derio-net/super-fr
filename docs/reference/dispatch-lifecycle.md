@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/item_state.py
   - packages/fr/src/fr/commands/apply_cmd.py
   - scripts/validate-plans.sh
-reviewed: 2026-11-27 still true, isolation/local.py split into modules (#1517), no reader-visible change; 2026-11-22 the ready-fr label description now names fr triage admit; the lifecycle is unchanged (triage-hardening). 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-19 a failed dedup lookup hands nothing over (#1499); the cncd symlink refusal (#1501) changes no label; 2026-11-17 still true after batch triage-intake (the new ready-fr label is an operator label of triage, not a dispatch label); 2026-11-15 no shipped tick caller; forge-off refusals checked against apply and undispatch; 2026-11-20 the two fr-queue labels (release, postmerge-done) are DevOps-stage words to the merge queue, not dispatch labels
+reviewed: 2026-11-27 still true, isolation/local.py split into modules (#1517), no reader-visible change; 2026-11-25 the plan profile moves to `.fr/plan-config.yaml`, and `fr repos sync` proposes it under quiet and stealth (S1 R9, p4-r9); 2026-11-22 the ready-fr label description now names fr triage admit; the lifecycle is unchanged (triage-hardening). 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-19 a failed dedup lookup hands nothing over (#1499); the cncd symlink refusal (#1501) changes no label; 2026-11-17 still true after batch triage-intake (the new ready-fr label is an operator label of triage, not a dispatch label); 2026-11-15 no shipped tick caller; forge-off refusals checked against apply and undispatch; 2026-11-20 the two fr-queue labels (release, postmerge-done) are DevOps-stage words to the merge queue, not dispatch labels
 ---
 
 # Dispatch labels and the per-repo plan profile
@@ -67,9 +67,12 @@ cannot reach.
 
 ## The optional plan profile
 
-A repo can add `docs/superpowers/plan-config.yaml` to set the plan filename pattern, the
+A repo can add `.fr/plan-config.yaml` to set the plan filename pattern, the
 required headers and the allowed status values. Only `scripts/validate-plans.sh` reads it.
 The script falls back to defaults when the file is absent, so a repo works without one.
+It still reads the older `docs/superpowers/plan-config.yaml` while the new file is absent.
+`fr repos sync` writes the new file; under the quiet and stealth placements it proposes it
+as a pull request to the configuration branch.
 
 To add the file to several repos that you already have checked out, with no clone:
 

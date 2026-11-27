@@ -20,6 +20,8 @@ _PLAIN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def _scalar(value: Any) -> str:
+    if value is None:
+        return "null"
     if isinstance(value, int):
         return str(value)
     return str(value) if _PLAIN.match(str(value)) else json.dumps(str(value))
@@ -33,7 +35,7 @@ def _allowed(name: str, field: FieldInfo) -> str | None:
         usable = PLACEHOLDERS if name == "with_issue" else PLACEHOLDERS - {"issue"}
         return "text using " + " ".join(f"{{{p}}}" for p in sorted(usable))
     if name == "schema_":
-        return "1"
+        return "1, 2 (2 is needed only by the triage section)"
     return None
 
 
@@ -63,20 +65,22 @@ QUIET_LIMITATION = (
 """R23's known limitation, stated in the file and by `fr settings init --quiet`."""
 
 QUIET_PROTECTION = (
-    "The policy keys below are read from this branch (R2), so whoever can push `fr` can "
-    "change them: give `fr` the same branch protection as the default branch."
+    "The policy keys below are read from `fr-config` (R2; S1 R5), so whoever can push it "
+    "can change them: give `fr-config` the same branch protection as the default branch."
 )
 
 
 def render_init(placement: str = "repo") -> str:
-    """The commented defaults file: `.fr/settings.yaml`, or (quiet) the root
-    `settings.yaml` of the `fr` branch, which says `placement: quiet` and nothing else."""
+    """The commented defaults file: `.fr/settings.yaml`, or (quiet) the switch, which
+    says `placement: quiet` and nothing else. fr writes the same bytes to two places
+    (`fr.config.space.write_settings`), so the prose names both."""
     if placement == "quiet":
         out = [
             "## fr settings for this repo's QUIET placement (spec "
             "2026-11-04-repo-feature-settings R2, R23).",
-            "## This is the root settings.yaml of the orphan `fr` branch, read from origin/fr:",
-            "## an edit has no effect until it is pushed there.",
+            "## This is .fr/settings.yaml on the orphan `fr-config` branch, read from",
+            "## origin/fr-config: an edit has no effect until it is pushed there. fr keeps the",
+            "## same bytes as the root settings.yaml of `fr` for older fr (S1 R6): edit both.",
             *(f"## {line}" for line in _wrap(QUIET_PROTECTION)),
             *(f"## {line}" for line in _wrap(QUIET_LIMITATION)),
             "## Every other key is commented out at its default; to change one, drop the single",
@@ -86,8 +90,9 @@ def render_init(placement: str = "repo") -> str:
         out = [
             "## fr settings for one target of a STEALTH tracking repo (spec "
             "2026-11-04-repo-feature-settings R2, R5, R24).",
-            "## This is <target-dir>/settings.yaml on the tracking branch, read from the",
-            "## tracking ref: an edit has no effect until it is pushed there.",
+            "## This is <target-dir>/.fr/settings.yaml on the tracking repo's <branch>-config,",
+            "## read from that ref: an edit has no effect until it is pushed there. fr keeps",
+            "## the same bytes as <target-dir>/settings.yaml on <branch> (S1 R6): edit both.",
             "## Stealth sets the forge keys itself (labels, comments and issues off, pr_body",
             "## minimal): they are shown at those values, and an explicit contrary value is",
             "## refused by `fr settings check` and `fr run start`.",

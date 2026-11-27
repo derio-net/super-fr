@@ -119,7 +119,7 @@ def test_debug_is_a_path_artifact_like_spec_and_plan() -> None:
 
 
 def test_the_wheel_copy_resolves_the_same_shape() -> None:
-    packaged = REPO_ROOT / "packages" / "fr" / "src" / "fr" / "workflows" / "fr-debugging.yaml"
+    packaged = REPO_ROOT / "packages/fr/src/fr/defaults/workflows/fr-debugging.yaml"
     plugin = SHIPPED_WORKFLOWS_DIR / "fr-debugging.yaml"
     assert packaged.read_bytes() == plugin.read_bytes()
 

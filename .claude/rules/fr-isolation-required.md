@@ -13,8 +13,13 @@ repo toplevel, checked by the marker's `mode`:
   stays open for `git switch <registered>`, and gc will not reap it).
 - under quiet or stealth, the placement's own write targets are allowed by
   structure: the repo's `fr` worktree (linked, at the path fr computes, on branch
-  `fr`, the switch quiet) and a stealth tracking clone a valid stealth workspace's
-  marker names. `fr settings paths --shell` gives the directories.
+  `fr`, the switch quiet), its `fr-config` worktree (the sibling on branch
+  `fr-config`, a tree of only `.fr/`: the repo's configuration), a stealth tracking
+  clone a valid stealth workspace's marker names, and that workspace's configuration
+  clone (`stealth--*-config`, a tree of only `<target-dir>/.fr/`). fr's own changes
+  there reach the configuration branch as a pull request that fr opens; only the
+  forge's rule on that branch stops a direct push. `fr settings paths --shell`
+  gives the directories.
 - `external` (preparer-adopted container) → toplevel match **plus** container
   evidence (`/.dockerenv`, `/run/.containerenv`, or `$KUBERNETES_SERVICE_HOST`),
   so a marker forged on a bare host or copied to the base clone never validates.
@@ -58,7 +63,9 @@ To work here:
 - Enter isolation — `fr isolation up --branch <branch>` (or run fr-goal /
   fr-brainstorming / fr-debugging) and edit in the worktree.
 - For base-clone paths that are operator-managed (data, caches, memory), list
-  them in `.fr-isolation-allow` at the repo root (`*` spans `/`).
+  them in `.fr/isolation-allow` (`.fr-isolation-allow` at the root while it is
+  absent; `*` spans `/`). No line exempts either allowlist file or
+  the `.fr-isolation` marker, under any name.
 - For a deliberate one-off base edit, set `FR_BASE_OK=1`.
 
 **Carve-out — `fr-phase-executor` must NOT get its own worktree.** The org

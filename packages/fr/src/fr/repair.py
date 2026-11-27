@@ -33,7 +33,7 @@ from pathlib import Path
 
 from fr import refs
 from fr._urls import is_cross_repo_spec
-from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
+from fr.artifacts.paths import kind_dir, space_for
 from fr.plan_config import strip_dead_keys
 from fr.refs import RefResolution
 
@@ -318,8 +318,8 @@ def repair_repo(
                 _repair_meta(meta_path, repo_root, out, write=write)
             except OSError as e:  # pragma: no cover
                 out.failures.append(f"{meta_path}: {e}")
-    if only_plans is None:
-        cfg = plan_config_path(repo_root)
+    cfg = repairable_plan_config(repo_root) if only_plans is None else None
+    if cfg is not None:
         try:
             _repair_plan_config(cfg, out, write=write)
         except OSError as e:  # pragma: no cover
@@ -328,10 +328,21 @@ def repair_repo(
 
 
 def plan_config_path(repo_root: Path) -> Path:
-    """The repo's `plan-config.yaml`: repository configuration, so the product
-    checkout's under every placement (`fr.artifacts.paths.REPO_CONFIG_KINDS`), never
-    the quiet or stealth feature root the plans and specs sit in."""
-    return Path(repo_root) / KIND_DIRS["plan-config"]
+    """The repo's `plan-config.yaml`: repository configuration, so `.fr/plan-config.yaml`
+    in the configuration space (or the old path while only that one exists), never the
+    quiet or stealth feature root the plans and specs sit in (spec
+    2026-11-19-event-driven-a-la-carte R9, R13)."""
+    from fr.config.space import located
+
+    return located(Path(repo_root), "plan-config")
+
+
+def repairable_plan_config(repo_root: Path) -> Path | None:
+    """`plan_config_path` when `fr repair` may rewrite it: in the product checkout. Under
+    quiet and stealth it lives on the configuration branch, where a change is a pull
+    request (spec 2026-11-19-event-driven-a-la-carte §B), so repair leaves it alone."""
+    cfg = plan_config_path(repo_root)
+    return cfg if cfg.resolve().is_relative_to(Path(repo_root).resolve()) else None
 
 
 def _repair_plan_config(cfg: Path, out: RepairResult, *, write: bool) -> None:

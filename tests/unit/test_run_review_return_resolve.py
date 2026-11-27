@@ -365,7 +365,7 @@ def test_every_shipped_review_phase_brief_carries_the_review_findings_rule() -> 
     from fr.commands.run_cmd import _build_member_brief
     from fr.workflow.model import parse_manifest
 
-    shipped = Path(__file__).parents[2] / "plugins" / "super-fr" / "workflows"
+    shipped = Path(__file__).parents[2] / "plugins" / "super-fr" / "defaults" / "workflows"
     for name in ("fr-goal", "fr-goal-light"):
         manifest = parse_manifest((shipped / f"{name}.yaml").read_text())
         group = next(s for s in manifest.steps if any(m.id == "review-phase" for m in s.steps))

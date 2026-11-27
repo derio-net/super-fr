@@ -1,0 +1,269 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-19-event-driven-a-la-carte
+repo: derio-net/super-fr
+rows:
+  - id: s1-config-root
+    capability: settings
+    acceptance: fr reads repo configuration from .fr/ in the run's configuration space
+      (the product checkout under repo, the fr-config branch under quiet, the tracking
+      repo's config branch under stealth) through one resolver, a feature branch cannot
+      change it under quiet or stealth, and fr says once per command when a product
+      checkout's own .fr/ is ignored
+    origin:
+    - spec:2026-11-19-event-driven-a-la-carte#R1
+    - spec:2026-11-19-event-driven-a-la-carte#R2
+    - spec:2026-11-19-event-driven-a-la-carte#R3
+    - spec:2026-11-19-event-driven-a-la-carte#R4
+    - spec:2026-11-19-event-driven-a-la-carte#R9
+    - spec:2026-11-19-event-driven-a-la-carte#R22
+    levels:
+      unit:
+      - super-fr:tests/unit/test_config_space.py
+      - super-fr:tests/unit/test_tripwire_config_space.py
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_config_homes
+    status: ci
+    notes: unit tests in CI (phases 1-6); candidate scenario tests/scenarios/config-homes.sh
+      runs in CI's scenario tier and is the deliver walk
+    verify: candidate
+    scenario: tests/scenarios/config-homes.sh
+  - id: s1-migration
+    capability: settings
+    acceptance: fr migrate artifacts --yes moves every old configuration path into its
+      configuration space (one commit within a checkout; configuration branch first,
+      then the product, under quiet and stealth), refuses a file present at both paths,
+      and until the owed release reads an unmigrated file with one notice
+    origin:
+    - spec:2026-11-19-event-driven-a-la-carte#R10
+    - spec:2026-11-19-event-driven-a-la-carte#R11
+    - spec:2026-11-19-event-driven-a-la-carte#R12
+    - spec:2026-11-19-event-driven-a-la-carte#R13
+    - spec:2026-11-19-event-driven-a-la-carte#R14
+    levels:
+      unit:
+      - super-fr:tests/unit/test_migration_config_kinds.py
+      - super-fr:tests/unit/test_config_move_verified.py
+      - super-fr:tests/unit/test_config_legacy_by_tip.py
+      - super-fr:tests/unit/test_config_stealth_keeps_product.py
+      - super-fr:tests/unit/test_config_profiles_v1_across.py
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_config_homes
+    status: ci
+    notes: unit tests in CI (phases 1-6); candidate scenario tests/scenarios/config-homes.sh
+      runs in CI's scenario tier and is the deliver walk
+    verify: candidate
+    scenario: tests/scenarios/config-homes.sh
+  - id: s1-switch-moved
+    capability: placement
+    acceptance: The quiet and stealth switch and settings are read from .fr/settings.yaml
+      on the configuration branch by fr and by the edit gate on every harness, the old
+      settings file is kept identical so older fr still reads the placement, two that
+      differ are refused, and the base-clone allowlist stays in the checkout it governs
+    origin:
+    - spec:2026-11-19-event-driven-a-la-carte#R5
+    - spec:2026-11-19-event-driven-a-la-carte#R6
+    - spec:2026-11-19-event-driven-a-la-carte#R8
+    - spec:2026-11-19-event-driven-a-la-carte#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_placement_quiet.py
+      - super-fr:tests/unit/test_settings_load.py
+      - super-fr:tests/unit/test_hooks_isolation_required.py
+      - super-fr:tests/unit/test_isolation_decision_core.py
+      - super-fr:tests/unit/test_config_change_pr.py
+      - super-fr:tests/unit/test_isolation_decision_cases.py
+      - super-fr:tests/unit/test_hermes_isolation_hook_edits.py
+      - super-fr:packages/fr-opencode-plugin/test/decision-cases.test.ts
+      - super-fr:packages/fr-opencode-plugin/test/marker.test.ts
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_config_homes
+    status: ci
+    notes: 'Edit gate on every harness: the shared decision cases run by the bash library
+      (test_isolation_decision_cases.py), the OpenCode plugin (decision-cases.test.ts,
+      marker.test.ts, CI opencode-plugin-test) and Hermes end to end (test_hermes_isolation_hook_edits.py);
+      plus the Python readers and the config-homes walk (l-tests-r2).'
+    verify: candidate
+    scenario: tests/scenarios/config-homes.sh
+  - id: s1-executable-config-protection
+    capability: placement
+    acceptance: Under quiet and stealth fr runs or gates on executable configuration
+      (candidate-install, triage.yaml commands, ops.yaml, ci.yaml gate_checks) only
+      when the forge enforces a pull-request rule on the configuration branch, and otherwise
+      refuses with the reason and the fix
+    origin:
+    - spec:2026-11-19-event-driven-a-la-carte#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_config_protection.py
+      - super-fr:tests/unit/test_config_protection_executors.py
+      - super-fr:tests/unit/test_config_degraded.py
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_config_homes
+    status: ci
+    notes: unit tests in CI (phases 1-6); candidate scenario tests/scenarios/config-homes.sh
+      runs in CI's scenario tier and is the deliver walk
+    verify: candidate
+    scenario: tests/scenarios/config-homes.sh
+  - id: s1-shipped-defaults
+    capability: workflows
+    acceptance: super-fr's default workflows, verification strategies and lenses are
+      resolved from one shipped defaults tree, a repo's .fr/workflows or .fr/verifications
+      entry of the same name wins, lenses keep .fr/lenses.yaml as their only override,
+      and one environment variable redirects the tree
+    origin:
+    - spec:2026-11-19-event-driven-a-la-carte#R15
+    - spec:2026-11-19-event-driven-a-la-carte#R16
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_shipped_defaults.py
+      - super-fr:tests/unit/test_shipped_defaults_resolve.py
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_config_homes
+    status: ci
+    notes: unit tests in CI (phases 1-6); candidate scenario tests/scenarios/config-homes.sh
+      runs in CI's scenario tier and is the deliver walk
+    verify: candidate
+    scenario: tests/scenarios/config-homes.sh
+  - id: s1-triage-state-home
+    capability: triage
+    acceptance: A triage scope keeps its working state in a host-cache git repository
+      that syncs its fr-triage branch with no product clone, moves an existing .fr/triage-state
+      safely (refused while a driver runs or when two copies differ), defaults its state
+      repo (stealth tracking repo, else the one repo, else asked), honours a repo's
+      triage.state_repo, and the privacy guard still refuses a private issue in a public
+      state repo
+    origin:
+    - spec:2026-11-19-event-driven-a-la-carte#R17
+    - spec:2026-11-19-event-driven-a-la-carte#R18
+    - spec:2026-11-19-event-driven-a-la-carte#R19
+    - spec:2026-11-19-event-driven-a-la-carte#R20
+    - spec:2026-11-19-event-driven-a-la-carte#R21
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_state_home.py
+      - super-fr:tests/unit/test_triage_state_repo_s1.py
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_config_homes
+    status: ci
+    notes: unit tests in CI (phases 1-6); candidate scenario tests/scenarios/config-homes.sh
+      runs in CI's scenario tier and is the deliver walk
+    verify: candidate
+    scenario: tests/scenarios/config-homes.sh
+amendments:
+  - row: workflow-shape-selection
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_shipped_workflows.py
+    why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
+      when the shipped defaults merged into one tree (phase 5)
+  - row: workflow-shape-selection
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_shipped_defaults.py#test_every_shipped_workflow_manifest_passes_check_workflow
+    why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
+      when the shipped defaults merged into one tree (phase 5)
+  - row: workflow-manifest-validated
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_shipped_workflows.py
+    why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
+      when the shipped defaults merged into one tree (phase 5)
+  - row: workflow-manifest-validated
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_shipped_defaults.py#test_every_shipped_workflow_manifest_passes_check_workflow
+    why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
+      when the shipped defaults merged into one tree (phase 5)
+  - row: goal-per-phase-review-loop
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_shipped_workflows.py
+    why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
+      when the shipped defaults merged into one tree (phase 5)
+  - row: goal-per-phase-review-loop
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_shipped_defaults.py#test_shipped_fr_goal_reviews_inside_the_phase_iteration
+    why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
+      when the shipped defaults merged into one tree (phase 5)
+  - row: fr-goal-independent-spec-review
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_shipped_workflows.py
+    why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
+      when the shipped defaults merged into one tree (phase 5)
+  - row: fr-goal-independent-spec-review
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_shipped_defaults.py#test_shipped_fr_goal_evidence_is_the_4_28_lists_plus_visual
+    why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
+      when the shipped defaults merged into one tree (phase 5)
+  - row: spec-contract-no-input-gates
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_shipped_workflows.py
+    why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
+      when the shipped defaults merged into one tree (phase 5)
+  - row: spec-contract-no-input-gates
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_shipped_defaults.py#test_shipped_fr_goal_evidence_is_the_4_28_lists_plus_visual
+    why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
+      when the shipped defaults merged into one tree (phase 5)
+  - row: fr-goal-review-gate-is-cursor-enforced
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_shipped_workflows.py
+    why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
+      when the shipped defaults merged into one tree (phase 5)
+  - row: fr-goal-review-gate-is-cursor-enforced
+    op: add-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_tripwire_shipped_defaults.py#test_shipped_fr_goal_runs_journal_check_between_implement_and_deliver
+    why: the shipped-workflow tripwire moved into test_tripwire_shipped_defaults.py
+      when the shipped defaults merged into one tree (phase 5)
+  - row: cloud-triage-state-ref
+    op: drop-level
+    base: 0
+    level: unit
+    ref: super-fr:tests/unit/test_triage_state_workspace.py#test_state_lives_in_the_workspace_and_is_excluded_through_the_common_dir
+    why: S1 R17 moved the state out of the workspace into the cache repository; the
+      two workspace tests were replaced by test_triage_state_home.py's
+  - row: cloud-triage-state-ref
+    op: drop-level
+    base: 1
+    level: unit
+    ref: super-fr:tests/unit/test_triage_state_workspace.py#test_the_home_cache_is_imported_once_and_left_in_place
+    why: S1 R17 moved the state out of the workspace into the cache repository; the
+      two workspace tests were replaced by test_triage_state_home.py's
+  - row: cloud-triage-state-ref
+    op: add-level
+    base: 2
+    level: unit
+    ref: super-fr:tests/unit/test_triage_state_home.py#test_the_state_dir_is_the_cache_and_its_first_use_makes_it_a_git_repo
+    why: S1 R17 moved the state out of the workspace into the cache repository; the
+      two workspace tests were replaced by test_triage_state_home.py's
+  - row: cloud-triage-state-ref
+    op: add-level
+    base: 3
+    level: unit
+    ref: super-fr:tests/unit/test_triage_state_home.py#test_a_clone_copy_moves_into_the_cache
+    why: S1 R17 moved the state out of the workspace into the cache repository; the
+      two workspace tests were replaced by test_triage_state_home.py's

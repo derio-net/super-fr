@@ -80,7 +80,12 @@ def test_pickup_carries_the_template_for_the_runs_unit(tmp_path: Path) -> None:
 
 
 _SHIPPED_MANIFEST = (
-    Path(__file__).resolve().parents[2] / "plugins" / "super-fr" / "workflows" / "fr-goal.yaml"
+    Path(__file__).resolve().parents[2]
+    / "plugins"
+    / "super-fr"
+    / "defaults"
+    / "workflows"
+    / "fr-goal.yaml"
 )
 
 

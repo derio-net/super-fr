@@ -948,8 +948,31 @@ class ChecksForge(Protocol):
 
 def required_names(client: ChecksForge, checkout: Checkout, repo: str, default: str) -> list[str]:
     """The checks that gate *default* (R7): `.fr/ci.yaml`'s `gate_checks` at
-    `origin/<default>`, else the base's `required_check_names`."""
-    declared = gate_checks_of(checkout.show(f"origin/{default}", ".fr/ci.yaml"))
+    `origin/<default>`, else the base's `required_check_names`. Under quiet and stealth
+    `ci.yaml` is the configuration branch's (`fr.config.space.at_default`); a space that
+    cannot be read raises `TriageError`, never falls back to the base's checks."""
+    from fr.config.protection import read_checked
+    from fr.config.space import config_space, rel
+    from fr.settings import SettingsError
+    from fr.triage.errors import TriageError
+
+    try:
+        space = config_space(checkout.path)
+        if space.ref is None:
+            text = checkout.show(f"origin/{default}", rel("ci"))
+        else:  # R7: gate_checks decide merges, so the configuration branch must be protected
+            # and read at its freshly fetched tip (review p3-r2)
+            space.at_default("ci")  # a missing configuration space refuses first
+            what = f"gate the merge queue on {rel('ci')}'s gate_checks"
+            # protected, and its freshly fetched tip (review p3-r2)
+            text = read_checked(space, client, "ci", what, guarded=lambda t: True)
+            if text is None:  # absent at the tip: still only a protected branch says so
+                from fr.config.protection import require_protected
+
+                require_protected(space, client, what)
+    except SettingsError as exc:
+        raise TriageError(f"{repo}: its {rel('ci')} cannot be read: {exc}") from exc
+    declared = gate_checks_of(text)
     return declared if declared is not None else list(client.required_check_names(repo, default))
 
 

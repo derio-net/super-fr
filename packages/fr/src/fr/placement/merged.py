@@ -477,7 +477,7 @@ def pushed_ref(feature_root: Path, placement: str) -> tuple[Path, str] | None:
     if not top:
         return None
     if placement == paths.QUIET:
-        return Path(top), paths.SWITCH_REF
+        return Path(top), paths.MEMORY_REF
     there = _Git(Path(top))
     upstream = there.out("rev-parse", "--symbolic-full-name", "@{upstream}")
     if upstream:

@@ -236,7 +236,7 @@ class TestMalformedCiDeclarationRefuses:
             root, monkeypatch, "set-status", "--id", "target", "--status", "ci", "--notes", "n"
         )
         assert result.exit_code != 0, result.output
-        assert "fr-profiles.yaml" in result.output
+        assert ".fr/profiles.yaml" in result.output
         assert matrix.read_text() == before
 
     def test_add_ci_refused(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -250,7 +250,7 @@ class TestMalformedCiDeclarationRefuses:
             "--acceptance", "A", "--status", "ci",
         )  # fmt: skip
         assert result.exit_code != 0
-        assert "fr-profiles.yaml" in result.output
+        assert ".fr/profiles.yaml" in result.output
 
 
 class TestFrOnlyScaffoldIsNotCi:

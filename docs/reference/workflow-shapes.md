@@ -7,8 +7,8 @@ covers:
   - packages/fr/src/fr/workflow/**
   - packages/fr/src/fr/run/**
   - packages/fr/src/fr/commands/run_cmd.py
-  - plugins/super-fr/workflows/*.yaml
-reviewed: 2026-11-25 the shipped fr-debugging shape (debug, review, deliver) and the debug artifact, a path that must exist (batch-merge-readiness R10, R11); 2026-11-25 still true after ci-economy (verify_ci reads a cancelled gate as pending and refuses a stranded one, no shape change); 2026-11-24 still true; resolves gain the design-shape and shape-file refusals and adopt moves the shape file, no step or shape changes (show-me-visuals); 2026-11-24 still true; cursor writes are atomic, a save refuses another command's newer cursor, and a cli step has a timeout and a bounded stored output (batch run-durability). 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-23 the deliver brief gains a `settle` line and the close-out brief a settle step after the housekeeping PR, no shape change (pr-readiness-wait R9, R10); deliver derives a `settle` witness last, exit 75 while the PR is not settled (pr-readiness-wait R8); 2026-11-21 still true; deliver's hand-off names fr ops gate --run for a devops-gated run, no shape change (gh#1614); 2026-11-19 still true; run_cmd gained the declared `tests ci` brief key and the advisory-log refusal, no shape change (local-suite-cost); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-19 explicit merge targets preserve existing run steps and evidence; target alignment applies to review, delivery and PR creation. 2026-11-18 still true; deliver's owed closing check now counts an issue URL only on the repo's forge host (owed-followups), no shape change. 2026-11-17 still true; visual.py asks git check-ignore through fr.git.is_ignored, and fr run adopt names a plan's run after its folder (batch-acceptance-edits). 2026-11-16 still true; run_cmd.py gained the deliver check that a discharged owed issue is closed by the PR body. 2026-11-15 the deliver-evidence fixes (stale fresh log, forge read, capture wrappers) change no shape, and closeout.py changed only the DevOps brief of a finished stage (batch gate-truth)
+  - plugins/super-fr/defaults/workflows/*.yaml
+reviewed: 2026-11-25 the shipped fr-debugging shape (debug, review, deliver) and the debug artifact, a path that must exist (batch-merge-readiness R10, R11); 2026-11-25 repo shapes move to `.fr/workflows/` in the configuration space, shipped shapes to `plugins/super-fr/defaults/workflows/`, `FR_SHIPPED_DEFAULTS_DIR` replaces the per-kind variable, and an unprotected quiet or stealth configuration branch's shape is ignored (S1 R7, R9, R15, R16); 2026-11-25 still true after ci-economy (verify_ci reads a cancelled gate as pending and refuses a stranded one, no shape change); 2026-11-24 still true; resolves gain the design-shape and shape-file refusals and adopt moves the shape file, no step or shape changes (show-me-visuals); 2026-11-24 still true; cursor writes are atomic, a save refuses another command's newer cursor, and a cli step has a timeout and a bounded stored output (batch run-durability). 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-23 the deliver brief gains a `settle` line and the close-out brief a settle step after the housekeeping PR, no shape change (pr-readiness-wait R9, R10); deliver derives a `settle` witness last, exit 75 while the PR is not settled (pr-readiness-wait R8); 2026-11-21 still true; deliver's hand-off names fr ops gate --run for a devops-gated run, no shape change (gh#1614); 2026-11-19 still true; run_cmd gained the declared `tests ci` brief key and the advisory-log refusal, no shape change (local-suite-cost); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-19 explicit merge targets preserve existing run steps and evidence; target alignment applies to review, delivery and PR creation. 2026-11-18 still true; deliver's owed closing check now counts an issue URL only on the repo's forge host (owed-followups), no shape change. 2026-11-17 still true; visual.py asks git check-ignore through fr.git.is_ignored, and fr run adopt names a plan's run after its folder (batch-acceptance-edits). 2026-11-16 still true; run_cmd.py gained the deliver check that a discharged owed issue is closed by the PR body. 2026-11-15 the deliver-evidence fixes (stale fresh log, forge read, capture wrappers) change no shape, and closeout.py changed only the DevOps brief of a finished stage (batch gate-truth)
 ---
 
 # Workflow shapes and the run cursor
@@ -19,7 +19,7 @@ unit that the shape works on as a whole (`run`, `phase` or `spec`).
 
 `/fr-goal` with no argument uses the shape named `fr-goal`. `/fr-goal fr-goal-light` picks
 another shape. The shapes super-fr ships are in
-[plugins/super-fr/workflows/](https://github.com/derio-net/super-fr/tree/main/plugins/super-fr/workflows).
+[plugins/super-fr/defaults/workflows/](https://github.com/derio-net/super-fr/tree/main/plugins/super-fr/defaults/workflows).
 
 `/fr-debugging` also has a shape, `fr-debugging`: `debug`, then `review`, then `deliver`. The
 `debug` step names its journal (`emitted: {debug: <path>}`, a file that must exist). The
@@ -83,12 +83,15 @@ cycles and unknown capabilities. CI runs it on every shipped shape.
 
 The first hit wins:
 
-1. `docs/superpowers/workflows/<name>.yaml` in the repo: your override, used whole.
-2. `$FR_SHIPPED_WORKFLOWS_DIR/<name>.yaml`, when that variable is set. This is the escape
-   hatch for tests and for harnesses that are not Claude Code.
-3. The copy inside the installed `fr` package.
+1. `.fr/workflows/<name>.yaml` in the repo's configuration space: your override, used whole.
+   That space is the product checkout under `repo`, or the `fr-config` branch under `quiet`.
+   Under `stealth` it is `<target-dir>/.fr/` on the tracking repo's `<branch>-config`.
+2. `$FR_SHIPPED_DEFAULTS_DIR/workflows/<name>.yaml`, when that variable is set. This is the
+   escape hatch for tests and for harnesses that are not Claude Code. The older
+   `$FR_SHIPPED_WORKFLOWS_DIR` still works and prints a notice that names the new variable.
+3. The copy inside the installed `fr` package, in `fr/defaults/workflows/`.
 4. The Claude Code plugin clone under
-   `~/.claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/workflows/`.
+   `~/.claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/defaults/workflows/`.
 
 The package copy outranks the plugin clone on purpose: it ships with the `fr` that runs the
 shape. So if you upgrade `fr` and do not run the installer again, you cannot be left on a
@@ -97,5 +100,12 @@ It is also why `fr run start fr-goal` works on a machine with no plugin clone at
 `fr workflow check --all` exits non-zero when no shape is found anywhere, because "nothing
 installed" is a broken installation, not a clean result.
 
-To change a shape for one repo, copy the shipped file to `docs/superpowers/workflows/` and
-edit it. Run `fr workflow check <name>` before you rely on it.
+To change a shape for one repo, copy the shipped file to `.fr/workflows/` and edit it. Run
+`fr workflow check <name>` before you rely on it. A repo that still has its override in
+`docs/superpowers/workflows/` keeps it until `fr migrate artifacts --yes` moves it, and each
+command prints a notice until then.
+
+Under `quiet` and `stealth`, a shape can run commands, so it is executable configuration.
+Then fr uses a repo shape only when the forge enforces a pull-request rule on the configuration
+branch. Otherwise fr uses the shipped shape of the same name and says why, once per command.
+[Isolation](../explainers/fr-isolation.md) explains the protection rule.

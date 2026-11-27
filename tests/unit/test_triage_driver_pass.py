@@ -21,7 +21,7 @@ from fr.cli import app
 from fr.commands import triage_batch_cmd, triage_cmd, triage_drive_cmd
 from fr.triage import batch_drive
 from fr.triage.lease import driver_identity, holder_of, lease_duration, load_lease, take_or_renew
-from fr.triage.model import Scope, load_judgements
+from fr.triage.model import Scope, legacy_state_dir, load_judgements
 from fr.triage.scope_config import scope_id
 from fr.triage.state_ref import StateRefConflict, StateRefPushRefused, ref_name
 from typer.testing import CliRunner
@@ -325,7 +325,8 @@ def test_a_fresh_workspace_restores_from_the_ref_renews_the_lease_and_pushes(
     (seeded / "scope-durable.yaml").write_text(f"state_repo: {REPO}\n")
     assert triage_cmd.push_now(SCOPE, seeded) is not None
     before = _ref(remote)
-    ws, fresh = _workspace(tmp_path, "b")
+    ws, _ = _workspace(tmp_path, "b")
+    fresh = legacy_state_dir(SCOPE)  # spec 2026-11-19 R17: the fresh host's state is its cache
 
     result = CliRunner().invoke(
         app,

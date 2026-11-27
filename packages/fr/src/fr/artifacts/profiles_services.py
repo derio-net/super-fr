@@ -181,23 +181,37 @@ def _drop_legacy_lines(text: str) -> str:
 def rewrite_to_services(path: Path) -> None:
     """Rewrite `path` from the version-1 shape to the version-2 one. Never
     touches the stamp, which is the runner's."""
+    from fr.artifacts.registry import read_verbatim
+
+    try:
+        bom, text = read_verbatim(path)
+    except (OSError, UnicodeDecodeError) as e:
+        raise _refuse(path, f"it cannot be read ({e})") from e
+    new_text = services_text(path, text)
+    if new_text is not None:
+        write_text_atomic(path, bom + new_text)
+
+
+def services_text(path: Path, text: str) -> str | None:
+    """*text* (the version-1 file at *path*, no BOM) rewritten to the version-2 shape, in
+    memory; None when it is wholly version 2 already. The stamp is not touched. Under quiet
+    and stealth the profiles relocation runs this on the COMMITTED bytes, so the 1 -> 2 and
+    2 -> 3 hops land on the configuration branch as one move (review p4-r4)."""
     from pydantic import ValidationError
 
-    from fr.artifacts.registry import read_verbatim
     from fr.services.legacy import ProfilesV1
     from fr.services.render import render_services
 
     try:
-        bom, text = read_verbatim(path)
         data: Any = yaml.safe_load(text)
-    except (OSError, UnicodeDecodeError, yaml.YAMLError) as e:
+    except yaml.YAMLError as e:
         raise _refuse(path, f"it cannot be read ({e})") from e
     if data is None:
         data = {}
     if not isinstance(data, dict):
         raise _refuse(path, "its top level is not a mapping")
     if _is_wholly_v2(data):
-        return
+        return None
     if any(key in data for key in ("forge", "ci", "tracking")):
         if any(key in data for key in _LEGACY_KEYS):
             raise _refuse(
@@ -229,7 +243,7 @@ def rewrite_to_services(path: Path) -> None:
         raise _refuse(path, f"{layout}: the rewritten text does not parse ({e})") from e
     if reread != expected:
         raise _refuse(path, f"{layout}: the rewritten text does not say what was intended")
-    write_text_atomic(path, bom + new_text)
+    return new_text
 
 
 PROFILES_SERVICES_MIGRATION = SchemaMigration(

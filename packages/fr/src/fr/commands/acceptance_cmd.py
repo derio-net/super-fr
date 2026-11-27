@@ -1356,7 +1356,7 @@ def init_cmd(
         if with_ci:
             err_console.print(
                 "[red]error:[/red] --with-ci contradicts the declared `ci: {type: none}` in "
-                ".devcontainer/fr-profiles.yaml — change it with `fr services` or drop the flag"
+                ".fr/profiles.yaml — change it with `fr services` or drop the flag"
             )
             raise typer.Exit(2)
     from fr.acceptance.ci import ci_none_reason

@@ -238,6 +238,8 @@ def _drifting(
 
     def read_file_at_ref(repo: str, path: str, ref: str) -> str:
         reads.append((repo, path, ref))
+        if ref not in texts:  # the quiet switch probe at `fr-config`, among others
+            raise RuntimeError(f"Not Found (HTTP 404): {repo}:{path}@{ref}")
         return texts[ref]
 
     world.read_file_at_ref = read_file_at_ref  # type: ignore[attr-defined]
@@ -363,7 +365,13 @@ def test_a_pr_carrying_another_runs_cursor_is_judged_by_its_own_branchs_cursor(
         other: "run: r-other\nbranch: feat/other\nfr_version: 5.17.1\n",
         own: _cursor("6.0.2"),
     }
-    world.read_file_at_ref = lambda repo, path, ref: texts[path]  # type: ignore[attr-defined]
+
+    def read_file_at_ref(repo: str, path: str, ref: str) -> str:
+        if path not in texts:  # the quiet switch probe at `fr-config`
+            raise RuntimeError(f"Not Found (HTTP 404): {repo}:{path}@{ref}")
+        return texts[path]
+
+    world.read_file_at_ref = read_file_at_ref  # type: ignore[attr-defined]
     outbox = tmp_path / "outbox.json"
 
     result = _pass(state, outbox, "--workspace", str(ws), "--state-repo", REPO)

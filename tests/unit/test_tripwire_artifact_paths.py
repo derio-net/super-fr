@@ -291,7 +291,7 @@ def test_the_detector_finds_concatenation_joins_and_a_bare_superpowers() -> None
 # constant built from one, in any module) for a placement-bound kind, and whose left side
 # is not the resolver's answer: a call to one of `_ROOT_CALLS`, or a name bound from one
 # (assigned, or iterated over) in the same module. Repo configuration kinds
-# (`fr.artifacts.paths.REPO_CONFIG_KINDS`) are read from the product checkout everywhere.
+# (`fr.artifacts.paths.CONFIG_KINDS`) are read from the configuration space everywhere.
 # A root that is ALREADY an artifact root by construction (an exported tree, the root an
 # artifact's own path names) says so with `paths.below(root, kind)`.
 
@@ -313,9 +313,9 @@ def _kind_keys(node: ast.AST) -> set[str]:
 
 
 def _bound_kinds(keys: set[str]) -> bool:
-    from fr.artifacts.paths import REPO_CONFIG_KINDS
+    from fr.artifacts.paths import CONFIG_KINDS
 
-    return any(k not in REPO_CONFIG_KINDS for k in keys)
+    return any(k not in CONFIG_KINDS for k in keys)
 
 
 def _bound_constants(trees: dict[str, ast.Module]) -> set[str]:

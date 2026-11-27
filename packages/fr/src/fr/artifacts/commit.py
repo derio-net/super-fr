@@ -470,7 +470,9 @@ def migration_commit_message(report: MigrationReport, *, fr_version: str) -> str
     for action in report.applied:
         groups.setdefault(_group_of(action), set()).add(action.path)
 
-    n = len(report.changed_paths)
+    # A move's destination is the same artifact as its source, counted once.
+    moved = {a.moved_to for a in report.applied if a.moved_to is not None}
+    n = len([p for p in report.changed_paths if p not in moved])
     noun = "artifact" if n == 1 else "artifacts"
     lines = [f"chore(fr): migrate {n} {noun} to fr {fr_version}", ""]
     for label, paths in groups.items():
@@ -506,11 +508,34 @@ def _without_ignored(repo_root: Path, paths: Sequence[Path]) -> tuple[Path, ...]
     return tuple(p for p in paths if str(p) not in ignored)
 
 
+def _staged_moves(repo_root: Path, report: MigrationReport) -> tuple[Path, ...]:
+    """`report.changed_paths`, less what a relocating step (S1 §D.3) must not stage here:
+    a destination outside this checkout (a cross-space hop committed and pushed it in the
+    configuration space already, R10) and both ends of the move of a file git never
+    tracked (the untracked allowlist is renamed, not committed)."""
+    top = Path(repo_root).resolve()
+    drop: set[Path] = set()
+    for action in report.applied:
+        dest = action.moved_to
+        if dest is None:
+            continue
+        if not dest.resolve().is_relative_to(top):
+            drop.add(dest)
+            if not action.removed:
+                drop.add(action.path)  # a kept source (stealth, R10 amended): unchanged here
+        source = action.path if action.path.is_absolute() else top / action.path
+        rel = source.resolve().relative_to(top).as_posix()
+        tracked = _git(repo_root, "ls-files", "--", rel)
+        if tracked.returncode == 0 and not tracked.stdout.strip():
+            drop.update({action.path, dest})
+    return tuple(p for p in report.changed_paths if p not in drop)
+
+
 def commit_migration(
     repo_root: Path, report: MigrationReport, *, fr_version: str | None = None
 ) -> CommitOutcome:
     """Commit exactly `report.changed_paths`, or explain why it did not."""
-    paths = _without_ignored(repo_root, report.changed_paths)
+    paths = _without_ignored(repo_root, _staged_moves(repo_root, report))
     if not paths:
         return CommitOutcome(committed=False, reason="nothing was migrated; nothing to commit")
     if fr_version is None:
@@ -636,7 +661,9 @@ def _quiet_product_artifacts(
     from fr.run.code_tree import FR_ARTIFACT_PREFIXES
     from fr.settings import SettingsError
 
-    inside = [p for p in paths if p not in elsewhere]
+    # A deletion puts nothing on the product branch: a moved configuration file (S1 R10)
+    # leaves the product in the product's migrate commit.
+    inside = [p for p in paths if p not in elsewhere and p.exists()]
     if not inside:
         return None
     rels = [p.resolve().relative_to(toplevel).as_posix() for p in inside]
