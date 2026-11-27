@@ -20,3 +20,14 @@ packages/fr/src/fr/commands/triage_queue_cmd.py queue_add_command looked up the 
 ### d-fix-1 · finding [fixed] · trust a batch PR by batch_pr's verdict; read any other PR from the same pool
 
 queue_add_command resolves the batch first: a batch PR (found by _batch_of, i.e. batch_pr, which trusts only same-repo PRs by allowed authors) skips the second distrust. Any other PR is read by the new _known_pr from issue prs + facts.prs + facts.batch_prs, preferring a record whose author and origin were read. Tests: test_a_batch_pr_known_only_through_its_member_issue_is_preapproved, test_a_linked_pr_that_is_no_batch_s_is_added, test_a_linked_fork_or_foreign_pr_is_still_refused.
+
+<!-- fr:journal kind=review scope=debug id=d-review-1 created=2026-11-27T20:09:11+00:00 -->
+### d-review-1 · review · independent review of the queue add trust fix: no findings
+
+A separate reviewer read triage_queue_cmd.py, its tests, the fragment and batch.py.
+No in-scope or out-of-scope findings (review-findings: []). Checked: a batch PR's
+trust comes from batch_pr (distrust + repo + dispatch-branch + of_dispatch); a fork
+or foreign PR on a batch branch falls to the ordinary path and is refused as itself;
+repo and number both filter _known_pr; an unread PR still refuses with re-collect;
+the head_ref fallback is unchanged. Noted, not a finding: two disagreeing records of
+one PR resolve first-seen, the same dedupe _branch_prs uses.
