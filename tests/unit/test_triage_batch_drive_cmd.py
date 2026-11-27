@@ -1108,6 +1108,33 @@ def test_no_closeout_before_the_release_commit(
     assert runner.dispatched == []
 
 
+@pytest.mark.parametrize("live", [False, True])
+def test_a_queue_landed_batch_is_closed_out_without_the_release_or_the_fallback(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, live: bool
+) -> None:
+    """R5 of spec 2026-11-27-queue-followups: the command's due list reads `queue_landed`,
+    so a live close-out tab of a queue-landed batch is asked about and recorded."""
+    from fr.triage.model import Scope
+    from fr.triage.scope_config import scope_id
+
+    _merged(world, tmp_path)
+    if live:
+        runner.live.add(f"{REPO}/run/closeout-b1")
+    _at_14(tmp_path)
+    land = {"kind": "queue_land", "at": (NOW - timedelta(minutes=2)).isoformat(),
+            "entries": [{"batch": "b1"}], "main": "m" * 40}  # fmt: skip
+    queue = {"repo": REPO, "wave": None, "base": "m" * 40,
+             "scope": scope_id(Scope(kind="repo", target=REPO)), "events": [land]}  # fmt: skip
+    path = tmp_path / "judgements.yaml"
+    path.write_text(path.read_text("utf-8") + yaml.safe_dump({"queues": [queue]}), "utf-8")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    if live:
+        assert runner.dispatched == [], out
+        assert _events(tmp_path, "b1") == ["dispatch", "closeout"]
+    else:
+        assert [i.id for i in runner.dispatched] == [COLLECTED], out
+
+
 def test_post_merge_then_one_closeout_through_the_runner(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
 ) -> None:

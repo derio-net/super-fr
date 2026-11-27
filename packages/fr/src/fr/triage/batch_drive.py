@@ -741,13 +741,30 @@ def _stale_closeout(batch: Batch, event: CloseoutEvent, snap: Snapshot) -> Actio
     )  # fmt: skip
 
 
-def closeout_due(*, released: bool, merged_at: datetime | None, now: datetime) -> bool:
+def closeout_due(
+    *, released: bool, merged_at: datetime | None, now: datetime, queued: bool = False
+) -> bool:
     """§B step 2: the release commit that follows the merge is on the base branch,
     or ten minutes passed since the merge with none. An unknown merge time is not
-    yet due (review rg-9): the caller supplies when it first saw the merge."""
-    if released:
+    yet due (review rg-9): the caller supplies when it first saw the merge.
+
+    *queued* (a `queue_land` of its repo names the batch) is due at once: the queue's hold
+    blocks any release until the drain, which waits for this close-out, so waiting for
+    one only costs the fallback (R5 of spec 2026-11-27-queue-followups). The same value
+    gates the repo's `post_merge`, which the queue's landing normally ran already."""
+    if released or queued:
         return True
     return merged_at is not None and now - merged_at >= CLOSEOUT_FALLBACK
+
+
+def _queue_landed_by_repo(snap: Snapshot) -> dict[str, frozenset[str]]:
+    """Per repo, the batches a `queue_land` record of that repo names (R5)."""
+    from fr.triage.wave_queue import queue_landed
+
+    repos = {r.repo for r in snap.queue_records}
+    return {
+        repo: queue_landed([r for r in snap.queue_records if r.repo == repo]) for repo in repos
+    }
 
 
 # ---------------------------------------------------------- close-out (§C)
@@ -1822,6 +1839,7 @@ def drive_pass(snap: Snapshot) -> Pass:
     # (repo, wave) -> the batches its collected close-out takes (R15: one per wave)
     collecting: dict[tuple[str, int | None], list[str]] = {}
     labelled: set[str] = set()  # issues an awaiting-live action already names this pass
+    queued = _queue_landed_by_repo(snap)
     for batch in snap.batches:
         if stages.get(batch.id) not in LANDED or batch.id in held_ids:
             continue
@@ -1848,6 +1866,7 @@ def drive_pass(snap: Snapshot) -> Pass:
             released=batch.id in snap.released,
             merged_at=snap.merged_at.get(batch.id),
             now=snap.now,
+            queued=batch.id in queued.get(snap.repos.get(batch.id, ""), frozenset()),
         )
         owed = not any(e.kind == "post_merge" for e in batch.events)
         item = closeout_item_id(snap.repos.get(batch.id, ""), batch.id)

@@ -1922,3 +1922,37 @@ def test_checks_verdict_reads_a_cancelled_required_check_as_pending() -> None:
     assert checks_verdict(required, {}, ci_none=False) == ("pending", ("test",))
     failing = [{"name": "test", "bucket": "cancel"}, {"name": "lint", "bucket": "fail"}]
     assert checks_verdict(failing, {}, ci_none=False) == ("failing", ("lint",))
+
+
+# ------------------------------------- queue follow-ups (spec 2026-11-27-queue-followups)
+
+_POST_MERGE = {"kind": "post_merge", "at": "2026-10-02T11:50:00Z"}
+
+
+def _landed_by_queue(*bids: str) -> Any:
+    from fr.triage.model import QueueRecord
+
+    return QueueRecord.model_validate({
+        "repo": REPO, "wave": 1, "scope": SID, "base": "base-sha",
+        "events": [{"kind": "queue_land", "at": "2026-10-02T11:59:00Z", "main": "main-sha",
+                    "entries": [{"batch": b} for b in bids]}],
+    })  # fmt: skip
+
+
+def test_closeout_due_queued_is_due_at_once() -> None:
+    """R5: a queue landing waits for no release and no fallback."""
+    from fr.triage.batch_drive import closeout_due
+
+    assert closeout_due(released=False, merged_at=NOW, now=NOW, queued=True)
+    assert not closeout_due(released=False, merged_at=NOW, now=NOW, queued=False)
+
+
+def test_drive_pass_queue_landed_batch_closes_out_without_fallback() -> None:
+    """R5: a batch a `queue_land` record of its repo names closes out a minute after."""
+    b = _merged("x", 1, events=[_POST_MERGE])
+    snap = _snap([b], {"x": "merged"}, merged_at={"x": NOW - timedelta(minutes=1)},
+                 queue_records=(_landed_by_queue("x"),), post_merge_repos=frozenset({REPO}))  # fmt: skip
+    assert ("closeout", "x") in _kinds(drive_pass(snap).actions)
+    plain = _snap([b], {"x": "merged"}, merged_at={"x": NOW - timedelta(minutes=1)},
+                  post_merge_repos=frozenset({REPO}))  # fmt: skip
+    assert ("closeout", "x") not in _kinds(drive_pass(plain).actions)

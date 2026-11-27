@@ -4637,7 +4637,8 @@ class _Driver:
                         continue
                     if shipped:
                         released.add(b.id)
-                    if closeout_due(released=b.id in released, merged_at=merged_at[b.id], now=now):
+                    if closeout_due(released=b.id in released, merged_at=merged_at[b.id],
+                                    now=now, queued=b.id in landed):  # fmt: skip
                         due.append(b)
                     continue
                 if event.archived is not None or not mine:
