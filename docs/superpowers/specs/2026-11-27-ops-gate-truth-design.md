@@ -319,3 +319,9 @@ settle.ci: report — batch ops-gate-truth: the wave driver owns this PR's CI
 - An authored `## Definition of Done` section. The operator chose a derived DoD only.
 - Committing each gate record as it is written (#1617's optional point). R3 commits them
   before a refresh, which removes the hazard the issue names.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-27-ops-gate-truth | `derio-net/super-fr` | `2026-11-27-ops-gate-truth` | — |

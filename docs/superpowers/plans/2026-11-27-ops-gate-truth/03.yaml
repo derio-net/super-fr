@@ -1,0 +1,98 @@
+schema_version: 2
+phase:
+  number: 3
+  title: A derived Definition of Done (R17-R20)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - run-definition-of-done
+  tier: standard
+  files:
+  - packages/fr/src/fr/run/dod.py
+  - packages/fr/src/fr/commands/dod_cmd.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/run/closeout.py
+  - packages/fr/src/fr/ops/gate.py
+  - tests/unit/*
+  - README.md
+  - docs/*.md
+  - docs/explainers/*.md
+  - docs/reference/*.md
+  estimate_lines: 650
+tasks:
+- number: 1
+  title: definition_of_done() (R17)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: tests/unit/test_run_dod.py on a fixture run: groups gate:devops / gate:tester (their gate_items, discharged ones included), manual phases (an unticked [manual] phase owed, a ticked one discharged), owed (an open owed entry of the spec or plan journal owed; a test-plan-step-* owed entry and an archive-written manual-phase owed entry NOT repeated there); `discharged` only when every item is; a run with no plan or no spec yields the groups it can and no crash. Red.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: implement fr/run/dod.py (`DodItem`, `DodGroup`, `DefinitionOfDone.discharged`, `definition_of_done(root, run)`) reusing `gate_items`, `run_exit(...).gates`, the plan's phases and `fr.journal.model` parsing; unreadable inputs raise a `DodError`. Green.
+- number: 2
+  title: '`fr run dod` (R18)'
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: tests/unit/test_dod_cmd.py with typer's CliRunner over `fr.cli.app`: `fr run dod <run>` prints each group and exits 0 when all discharged, 1 when owed; `--json` emits the groups; an unknown run or DodError exits 2; the command changes no file. Red.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: commands/dod_cmd.py defining `@run_app.command("dod")` (import run_app from commands.run_cmd), imported in cli.py right after the run_cmd import; run_cmd.py untouched. Run `uv run --no-project python scripts/sync-readme.py` to refresh README and docs/reference/cli.md. Green, plus tests/unit/test_tripwire_module_budget.py and test_tripwire_readme_sync.py.
+- number: 3
+  title: The pickup brief and the gate's final line (R19, R20)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: tests in tests/unit/test_run_closeout.py and tests/unit/test_ops_devops_brief.py: closeout_brief and the in-progress devops_brief end with a Definition of Done section; the finished devops_brief says complete and nothing left only when the DoD is discharged, else names each owed item; in tests/unit/test_ops_gate.py `run()` says "the DevOps stage is complete" only with a discharged DoD, otherwise "every stage ran; still owed:" plus each owed item (a held archive's manual phase included), on both the ran path and the every-stage-already-done path. Red.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: append the DoD text in run/closeout.py (closeout_brief, devops_brief both forms) and build it in ops/gate.py's `run()` on the ops workspace for its final line. Green.
+  - id: P3.T3.S3
+    text: |-
+      REFACTOR: one text renderer for the DoD shared by dod_cmd, closeout.py and gate.py; ruff format + check, mypy.
+- number: 4
+  title: Docs currency for the whole feature
+  steps:
+  - id: P3.T4.S1
+    text: |-
+      Document `fr run dod` and the honest final lines in docs/explainers/fr-devops-gate.md, docs/explainers/fr-exit-gates.md and docs/reference/workflow-shapes.md where they describe close-out; then run `uv run fr docs check --base origin/main` and, for every page it still names whose text stays true, bump its `reviewed:` with a one-line note naming this batch. Run `uv run fr docs check` (exit 0) and the brief's fast tier last: green.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,159 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Every gate walks the rows it verifies (R7-R16)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - closeout-outcome-walks-the-rows-a-step-names
+  - gate-pass-refuses-unwalked-gated-rows
+  - ops-gate-walks-and-reports-its-own-rows
+  - ops-gate-reports-a-held-archive
+  - self-review-flags-uncovered-gated-rows
+  tier: hard
+  files:
+  - packages/fr/src/fr/spec.py
+  - packages/fr/src/fr/acceptance/walks.py
+  - packages/fr/src/fr/triage/ledger.py
+  - packages/fr/src/fr/commands/closeout_cmd.py
+  - packages/fr/src/fr/commands/acceptance_cmd.py
+  - packages/fr/src/fr/commands/gate_cmd.py
+  - packages/fr/src/fr/ops/holds.py
+  - packages/fr/src/fr/ops/gate.py
+  - packages/fr/src/fr/plan_review/*
+  - plugins/super-fr/skills/*/SKILL.md
+  - .opencode/skills/*/SKILL.md
+  - .hermes/skills/fr/*/SKILL.md
+  - tests/unit/*
+  - docs/*.md
+  - docs/explainers/*.md
+  - docs/reference/*.md
+  estimate_lines: 1500
+tasks:
+- number: 1
+  title: 'The (rows: …) step pointer (R7)'
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in tests/unit/test_ops_testplan.py add tests of `fr.spec.test_plan_steps`: `[devops] (op: x) (rows: a, b) text` gives op x, rows ("a","b"), text "text"; `(rows: a) text` alone works; `(rows: a)` mid-text stays text; `(rows: )` and `(rows: a,,b)` stay text; Step equality includes rows. Red.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add `rows: tuple[str, ...] = ()` to `Step` (after `op`, keeping positional construction of existing callers valid) and `_ROWS_RE` beside `_POINTER_RE`, applied in `_step` after the op pointer. Green; run tests/unit/test_ops_testplan.py and the spec tests.
+- number: 2
+  title: One rule for a walked row; the shared close-command printer (R10, R9)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: in tests/unit/test_acceptance_walks.py test `row_walked`: status walked + latest walk (by `at`) pass → True; status walked + a later failing walk → False; status walk-owed with a passing walk → False. In the ledger tests (grep tests/unit for `fr.triage.ledger` / `GatedRow`), a gated row with status walked whose latest walk failed reads not walked. Red.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: add `row_walked` to fr.acceptance.walks (and `__all__`), use it in triage/ledger.py's GatedRow. Move `_print_close_commands` from commands/acceptance_cmd.py into fr.acceptance.walks as `close_commands(root, before_row) -> list[str]` (pure, returns lines) with acceptance_cmd printing them unchanged. Green, including the existing set-status --walk tests.
+- number: 3
+  title: closeout outcome walks the rows a step names (R8, R9)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: in tests/unit/test_closeout_outcome.py, on a fixture repo whose spec Test Plan has `[devops] (rows: r1) …` and rows r1 (verify live) citing it: `--ran --evidence E` writes in ONE commit the outcome entry and a walk on r1 (strategy live, harness operator, model human, evidence "Test Plan step 1: E") and moves r1 to walked; `--harness h --model m` override; a row naming harnesses [a, b] keeps its status and the output names b as owed; `--na`/`--owed` write no walk; `--supersede --ran` adds a second walk; an unknown row id, or a row whose strategy is none, refuses with nothing written; under `acceptance: off` (`.fr/settings.yaml`) the pointer is ignored and only the outcome is written; `--spec` form uses the spec slug as the feature; a row merged on the default ref is amended into the spec's fragment; the freed issue's close commands are printed. Red.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: add `--harness` (default operator) and `--model` (default human) to `fr closeout outcome`; build the AcceptanceItem walk items (strategy from `fr.verification.rows.spec_verification(...).strategy(row)`, refusing RESERVED) beside the journal items in the same `StepRecord`, `RecordTarget(feature=<spec slug>)`; status walked when `walk_verified` after the walk; print `close_commands`. Green.
+- number: 4
+  title: gate_items / gate_blockers and the tester pass (R10, R11)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: tests (tests/unit/test_ops_gate_pass.py and a new tests/unit/test_ops_holds_gate_items.py): `gate_items(root, run, "devops")` lists every op, devops step and devops row with discharged flags and reasons (no walk / failing latest walk / harnesses owed); `exclude_walks={row: {walk}}` turns a walked row owed; `gate_blockers` is the owed lines; `devops_blockers(...) == gate_blockers(..., "devops")`; `fr gate pass --gate tester --run R` refuses naming an unwalked tester row and an unrecorded tester step, and passes once both are closed; `--gate tester` with no resolvable run behaves as before (existing tests stay green). Red.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: implement `GateItem(what, discharged, why)`, `gate_items`, `gate_blockers` in ops/holds.py (rows from `run_exit(...).gated_rows` where `row_gates[id] == gate`, judged by `row_walked` over walks minus `exclude_walks`; under acceptance off no rows); keep `devops_blockers` as a wrapper; in commands/gate_cmd.py resolve the run for tester as for devops and refuse on `gate_blockers`. Green.
+- number: 5
+  title: The DevOps stage walks and reports its own rows; honest archive stage (R12-R15)
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      RED: tests in tests/unit/test_ops_gate.py: stage 5's probe path records `--harness fr-ops-probe --model op:<id>` on a step naming rows; after the steps stage 5 asks about each unwalked devops row that no `ran` step names (incl. one whose only step was `na`): `ran E` runs `fr acceptance set-status --id <row> --status walked --walk E --harness operator --model human --strategy live --notes … --feature <slug>` in the tree, `owed W` runs set-status `--status walk-owed --notes W --feature <slug>`; a walk the pinned PR head's fragment carries does not count as walked (it is asked about); stage 6 lists the devops gate's owed items before the pass and on a refused pass prints the set-status command per unwalked row; stage 7 reports tester rows and steps from `gate_items(..., "tester")` (the declared-run-gate case unchanged); stage 8 with a held archive (plan dir still present after `fr archive`) says `archive held` with the `held:` lines and its audit body says held, and still publishes the housekeeping PR. Red.
+  - id: P2.T5.S2
+    text: |-
+      GREEN: implement in ops/gate.py: `_head_walks(tree, head, spec_slug)` reading the feature fragment at the pinned head via `tree.show` and `fr.acceptance` parsing, passed as `exclude_walks`; the row question with `_ask_outcome(..., ("ran", "owed"))`; replace `_tester_owns` with `gate_items`; the stage-6 listing and recovery; the stage-8 held check (`(tree.path / plan_rel).is_dir()` after the archive, collecting the `held:` lines from its output). Green.
+- number: 6
+  title: Self-review warns about uncovered gated rows (R16)
+  steps:
+  - id: P2.T6.S1
+    text: |-
+      RED: tests in tests/unit/test_plan_self_review_verification.py: a devops row (run gate devops, row on the run strategy) with no `(rows:)` step of a devops step warns (severity warn, exit 0); a plan with ops promoting devops counts an untagged step as devops; an unknown `(rows: zz)` id warns; nothing under acceptance off, test_plan off, gates off, or for a cross-repo spec. Red.
+  - id: P2.T6.S2
+    text: |-
+      GREEN: add `_gated_row_coverage_issues` to plan_review/checks.py beside `_ops_gap_issues` (exit_for_spec plus the plan-ops promotion, `fr.ops.testplan.steps_gated` per gate) and call it from plan_review/__init__.py's self_review. Green.
+  - id: P2.T6.S3
+    text: |-
+      REFACTOR: dedupe the gate/row helpers between holds.py, gate.py and checks.py; ruff format + check, mypy.
+- number: 7
+  title: Docs and the skill for gate row walks
+  steps:
+  - id: P2.T7.S1
+    text: |-
+      Document the `(rows: …)` pointer, the walk identity, `row_walked`, the tester pass refusal and stage 5/6/7/8 behaviour in docs/explainers/fr-devops-gate.md, docs/explainers/fr-exit-gates.md, docs/ops.md and docs/reference/acceptance-matrix.md; mention the pointer in plugins/super-fr/skills/fr-devops-gate/SKILL.md (and in fr-plan's devops-gated-spec rule, which names the `(op:)` pointer); run `uv run --no-project python scripts/sync-opencode.py` and `uv run --no-project python scripts/sync-hermes.py`; bump `reviewed:` stamps. Run `uv run fr docs check` and the brief's fast tier last: green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T6.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T7.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
