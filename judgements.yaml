@@ -11277,6 +11277,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T17:50:31.644650Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -12356,6 +12363,8 @@ batches:
     pr: 1736
     head: 12af8744f9b96914c6bd578057126a839f5c7cb5
     patch_id: b773c4d801c0b6205241c8702c0a852d8e426443
+  - kind: post_merge
+    at: '2026-11-27T17:50:26.488644Z'
 - id: arch-shared-helpers
   title: '#1318: shared duplicate-key YAML detector, record placement and hermetic-git fixtures, small
     duplicate readers'
@@ -13981,6 +13990,11 @@ queues:
     patch_id: b773c4d801c0b6205241c8702c0a852d8e426443
     base: 0ba6b3c1ec74c5f2a9f583f87d9feeceee0fb50a
     parent: 0ba6b3c1ec74c5f2a9f583f87d9feeceee0fb50a
+  - kind: queue_land
+    at: '2026-11-27T17:49:46.496577Z'
+    main: 897eca5b528e287ec64c6cabd32dadf45c68e997
+    entries:
+    - batch: export-drift
 queue_requests:
 - kind: queue_add
   at: '2026-11-27T15:25:05.595235Z'
