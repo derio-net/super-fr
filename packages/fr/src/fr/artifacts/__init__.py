@@ -83,6 +83,7 @@ from fr.artifacts import journal_lens as _journal_lens  # noqa: F401  (isort: sk
 from fr.artifacts import ops_none as _ops_none  # noqa: F401  (isort: skip)
 from fr.artifacts import spec_test_plan_heading as _spec_test_plan_heading  # noqa: F401  (isort: skip)
 from fr.artifacts import fragment_design_name as _fragment_design_name  # noqa: F401  (isort: skip)
+from fr.artifacts import config_migration as _config_migration  # noqa: F401  (isort: skip)
 
 __all__ = [
     "ARTIFACT_KINDS",

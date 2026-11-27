@@ -196,3 +196,77 @@ def test_a_worktree_at_the_path_not_on_fr_is_refused(tmp_path: Path, _home: Path
     git(root, "worktree", "add", "-q", "-b", "other", str(path), "main")
     with pytest.raises(SettingsError, match="refs/heads/fr"):
         space_for(root)
+
+
+# --- S1 (spec 2026-11-19-event-driven-a-la-carte R5, R6, R13): the switch on fr-config -----
+
+
+def push_config_branch(root: Path, settings_text: str | None) -> None:
+    """An orphan `fr-config` branch on origin whose tree is `.fr/` (`.fr/settings.yaml`
+    holding *settings_text*); the local branch is deleted so only `origin/fr-config`
+    speaks."""
+    back = git(root, "symbolic-ref", "--short", "HEAD").strip()
+    git(root, "checkout", "-q", "--orphan", "fr-config")
+    git(root, "rm", "-rfq", ".")
+    (root / ".fr").mkdir(exist_ok=True)
+    if settings_text is not None:
+        (root / ".fr" / "settings.yaml").write_text(settings_text)
+    else:
+        (root / ".fr" / "ci.yaml").write_text("tests: local\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "fr-config")
+    git(root, "push", "-q", "origin", "fr-config")
+    git(root, "checkout", "-q", back)
+    git(root, "branch", "-q", "-D", "fr-config")
+
+
+def test_the_switch_on_fr_config_reads_as_quiet(tmp_path: Path) -> None:
+    from fr.placement.quiet import read_switch
+
+    root = make_repo(tmp_path)
+    push_config_branch(root, QUIET)
+    git(root, "checkout", "-q", "-b", "feat/q")
+    assert read_switch(root) is not None
+    eff = load_settings(root)
+    assert eff.settings.placement == "quiet"
+    assert eff.settings.forge.labels == "off"
+    assert eff.ref == "refs/remotes/origin/fr-config"
+    assert "origin/fr-config:.fr/settings.yaml" in eff.ref_note
+
+
+def test_the_old_switch_alone_still_reads_as_quiet(tmp_path: Path) -> None:
+    """R13: until the owed release, the root settings.yaml on `fr` is the fallback."""
+    root = quiet_repo(tmp_path)
+    eff = load_settings(root)
+    assert eff.settings.placement == "quiet"
+    assert eff.ref == "refs/remotes/origin/fr"
+    assert "origin/fr:settings.yaml" in eff.ref_note
+
+
+def test_an_fr_config_without_settings_falls_back_to_the_old_switch(tmp_path: Path) -> None:
+    root = quiet_repo(tmp_path)
+    push_config_branch(root, None)
+    assert load_settings(root).ref == "refs/remotes/origin/fr"
+
+
+def test_the_same_switch_in_both_places_reads_from_fr_config(tmp_path: Path) -> None:
+    root = quiet_repo(tmp_path)
+    push_config_branch(root, QUIET)
+    eff = load_settings(root)
+    assert eff.settings.placement == "quiet"
+    assert eff.ref == "refs/remotes/origin/fr-config"
+
+
+def test_two_switches_that_differ_refuse_naming_both(tmp_path: Path) -> None:
+    """R6: fr refuses to act when the two settings files differ."""
+    from fr.placement.quiet import read_switch
+
+    root = quiet_repo(tmp_path)
+    push_config_branch(root, QUIET + "git:\n  push: plain\n")
+    with pytest.raises(SettingsError) as caught:
+        read_switch(root)
+    message = str(caught.value)
+    assert "origin/fr-config:.fr/settings.yaml" in message
+    assert "origin/fr:settings.yaml" in message
+    with pytest.raises(SettingsError):
+        space_for(root)

@@ -1,0 +1,252 @@
+schema_version: 2
+run: 2026-11-26-feat-batch-arch-run-ledger
+captures:
+- host: h-92b362ac
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-11-27T09:58:57+00:00'
+  at:
+  - resolve:brainstorm
+  - deliver
+  sessions:
+  - session: 6e6722ab-f02b-4fa2-8efd-b25754ecc390
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 240
+        cache_write: 490264
+        cache_read: 19797648
+        output: 72064
+        usd: null
+        usd_source: none
+      claude-sonnet-5-5:
+        input: 146
+        cache_write: 556178
+        cache_read: 7238312
+        output: 27967
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 53
+      other:
+        usd: null
+        turns: 74
+      paperwork:
+        usd: null
+        turns: 55
+    steps:
+      (outside run):
+        usd: null
+        turns: 4
+        input: 10
+        cache_write: 104430
+        cache_read: 395250
+        output: 1237
+      brainstorm:
+        usd: null
+        turns: 21
+        input: 44
+        cache_write: 186134
+        cache_read: 3152607
+        output: 15473
+      plan:
+        usd: null
+        turns: 8
+        input: 18
+        cache_write: 19332
+        cache_read: 1482802
+        output: 9369
+      spec-plan-review:
+        usd: null
+        turns: 30
+        input: 62
+        cache_write: 122067
+        cache_read: 3727810
+        output: 23328
+      implement:
+        usd: null
+        turns: 77
+        input: 166
+        cache_write: 287918
+        cache_read: 11012628
+        output: 33401
+      lens-review:
+        usd: null
+        turns: 22
+        input: 48
+        cache_write: 196704
+        cache_read: 3441940
+        output: 10598
+      deliver:
+        usd: null
+        turns: 16
+        input: 38
+        cache_write: 129857
+        cache_read: 3822923
+        output: 6625
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 4
+          input: 10
+          cache_write: 104430
+          cache_read: 395250
+          output: 1237
+        brainstorm:
+          usd: null
+          turns: 21
+          input: 44
+          cache_write: 186134
+          cache_read: 3152607
+          output: 15473
+        plan:
+          usd: null
+          turns: 8
+          input: 18
+          cache_write: 19332
+          cache_read: 1482802
+          output: 9369
+        spec-plan-review:
+          usd: null
+          turns: 9
+          input: 20
+          cache_write: 19003
+          cache_read: 1821941
+          output: 8396
+        implement:
+          usd: null
+          turns: 22
+          input: 52
+          cache_write: 29256
+          cache_read: 5073715
+          output: 10953
+        lens-review:
+          usd: null
+          turns: 9
+          input: 22
+          cache_write: 14938
+          cache_read: 2257722
+          output: 5297
+        deliver:
+          usd: null
+          turns: 14
+          input: 32
+          cache_write: 14107
+          cache_read: 3707742
+          output: 6407
+      subagent:
+        spec-plan-review:
+          usd: null
+          turns: 21
+          input: 42
+          cache_write: 103064
+          cache_read: 1905869
+          output: 14932
+        implement:
+          usd: null
+          turns: 55
+          input: 114
+          cache_write: 258662
+          cache_read: 5938913
+          output: 22448
+        lens-review:
+          usd: null
+          turns: 13
+          input: 26
+          cache_write: 181766
+          cache_read: 1184218
+          output: 5301
+        deliver:
+          usd: null
+          turns: 2
+          input: 6
+          cache_write: 115750
+          cache_read: 115181
+          output: 218
+    units:
+      step/plan:
+        orchestrator:
+          usd: null
+          turns: 8
+          input: 18
+          cache_write: 19332
+          cache_read: 1482802
+          output: 9369
+      step/spec-plan-review:
+        orchestrator:
+          usd: null
+          turns: 9
+          input: 20
+          cache_write: 19003
+          cache_read: 1821941
+          output: 8396
+        agent:
+          usd: null
+          turns: 21
+          input: 42
+          cache_write: 103064
+          cache_read: 1905869
+          output: 14932
+      phase/1/implement-phase:
+        orchestrator:
+          usd: null
+          turns: 4
+          input: 10
+          cache_write: 6762
+          cache_read: 874448
+          output: 2335
+        executor:
+          usd: null
+          turns: 39
+          input: 80
+          cache_write: 124768
+          cache_read: 4113863
+          output: 15558
+      phase/1/review-phase:
+        orchestrator:
+          usd: null
+          turns: 18
+          input: 42
+          cache_write: 22494
+          cache_read: 4199267
+          output: 8618
+        reviewer:
+          usd: null
+          turns: 16
+          input: 34
+          cache_write: 133894
+          cache_read: 1825050
+          output: 6890
+      step/lens-review:
+        orchestrator:
+          usd: null
+          turns: 9
+          input: 22
+          cache_write: 14938
+          cache_read: 2257722
+          output: 5297
+      step/deliver:
+        orchestrator:
+          usd: null
+          turns: 14
+          input: 32
+          cache_write: 14107
+          cache_read: 3707742
+          output: 6407
+      (unattributed):
+        subagent:
+          usd: null
+          turns: 15
+          input: 32
+          cache_write: 297516
+          cache_read: 1299399
+          output: 5519
+    briefs:
+      step/spec-plan-review: 2071
+      phase/1/implement-phase: 3000
+      phase/1/review-phase: 5448
+      a4977ca28e4fb65df: 2478
+      a5541b9252a94d7d3: 2581

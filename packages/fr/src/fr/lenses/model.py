@@ -15,7 +15,11 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
-from fr.artifacts.structure import _StrictLoader
+from fr.config.space import rel
+from fr.yamlio import StrictLoader
+
+LENS_CONFIG = rel("lenses")
+"""The repo's lens config, `.fr/lenses.yaml` (`fr.config.space`)."""
 
 LENS_ID_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
@@ -126,7 +130,7 @@ def read_text(path: Path, source: str) -> str:
 
 def _load(text: str, source: str) -> Any:
     try:
-        return yaml.load(text, Loader=_StrictLoader)  # noqa: S506 - SafeLoader subclass
+        return yaml.load(text, Loader=StrictLoader)  # noqa: S506 - SafeLoader subclass
     except yaml.YAMLError as e:
         raise LensError(f"{source}: invalid YAML: {e}") from e
 
@@ -156,7 +160,7 @@ def parse_lens(text: str, source: str = "<lens>") -> Lens:
         raise LensError(f"{source}: invalid lens manifest — {_problems(e)}") from e
 
 
-def parse_config(text: str, source: str = ".fr/lenses.yaml") -> LensConfig:
+def parse_config(text: str, source: str = LENS_CONFIG) -> LensConfig:
     """Parse `.fr/lenses.yaml` (spec R2). An empty file is an empty config."""
     raw = _load(text, source)
     if raw is None:

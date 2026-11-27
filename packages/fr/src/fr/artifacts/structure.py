@@ -17,9 +17,9 @@ Three rules the functions obey:
 3. **Read only.** These run against files an operator has open. Nothing here
    writes, and nothing re-serialises.
 
-The YAML kinds are parsed with `_StrictLoader`, not `yaml.safe_load`: a
+The YAML kinds are parsed with `fr.yamlio.StrictLoader`, not `yaml.safe_load`: a
 duplicate key is the one corruption a schema check cannot see, because PyYAML
-resolves it before the model ever runs (see the class docstring).
+resolves it before the model ever runs (see that class's docstring).
 
 Imports of the heavier `fr` modules are deliberately *inside* the functions:
 `fr.artifacts.registry` is imported at CLI entry by the migration trigger,
@@ -30,10 +30,13 @@ with it.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
+
+from fr.yamlio import StrictLoader
 
 if TYPE_CHECKING:  # pragma: no cover — typing only, keeps the runtime
     # import of `fr.run.model` inside the function that needs it (see the
@@ -43,46 +46,11 @@ if TYPE_CHECKING:  # pragma: no cover — typing only, keeps the runtime
 # --- shared helpers ------------------------------------------------------
 
 
-class _StrictLoader(yaml.SafeLoader):
-    """`SafeLoader` that refuses a mapping with a repeated key.
-
-    PyYAML keeps the LAST occurrence and says nothing, which makes a duplicate
-    key a *silent drop* — the shape still validates, and everything the earlier
-    block declared is simply gone. This repo shipped exactly that: a row of
-    `docs/acceptance/matrix.yaml` carried `levels:` twice, so one of its two
-    test refs disappeared from the matrix, from the generated reports and from
-    `fr acceptance check`, with nothing anywhere reporting a problem.
-
-    Structure validation is the layer that can see it, because it is the only
-    one that reads the artifact as *text* rather than as whatever the parser
-    already decided it meant.
-    """
-
-    def construct_mapping(self, node: Any, deep: bool = False) -> dict[Any, Any]:
-        seen: set[Any] = set()
-        for key_node, _ in node.value:
-            # PyYAML ships no stubs for its constructor API, hence the cast.
-            key: Any = self.construct_object(key_node, deep=deep)  # type: ignore[no-untyped-call]
-            try:
-                duplicate = key in seen
-            except TypeError:  # pragma: no cover — an unhashable YAML key
-                continue
-            if duplicate:
-                raise yaml.constructor.ConstructorError(
-                    "while constructing a mapping",
-                    node.start_mark,
-                    f"found duplicate key {key!r}",
-                    key_node.start_mark,
-                )
-            seen.add(key)
-        return super().construct_mapping(node, deep=deep)
-
-
 def _load_mapping(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
     """`(mapping, problems)` — a non-mapping, unparseable, or duplicate-keyed
     file is a problem."""
     try:
-        data: Any = yaml.load(path.read_text(), Loader=_StrictLoader)  # noqa: S506
+        data: Any = yaml.load(path.read_text(), Loader=StrictLoader)  # noqa: S506
     except yaml.YAMLError as e:
         return None, [f"not valid YAML: {e}"]
     if data is None:
@@ -770,3 +738,93 @@ def validate_agents(path: Path) -> list[str]:
             f"`fr migrate artifacts --yes` (or `fr init agents`) to re-render it"
         )
     return problems
+
+
+# --- the moved configuration kinds (spec 2026-11-19-event-driven-a-la-carte S1 §D) ---------
+#
+# Each validator is the reader the file already has: what fr would refuse when reading it.
+
+
+def _reader_problems(path: Path, read: Callable[[Path], object]) -> list[str]:
+    try:
+        read(path)
+    except Exception as e:  # noqa: BLE001 — every reader's own refusal is the problem
+        return [str(e)]
+    return []
+
+
+def validate_workflow_config(path: Path) -> list[str]:
+    """A repo workflow manifest: `fr workflow check`'s parse and structural checks."""
+    from fr.workflow.check import check_workflow
+    from fr.workflow.model import parse_manifest
+
+    try:
+        manifest = parse_manifest(path.read_text())
+    except Exception as e:  # noqa: BLE001 — WorkflowError, or an unreadable file
+        return [str(e)]
+    return check_workflow(manifest, None)
+
+
+def validate_verification_config(path: Path) -> list[str]:
+    """A repo verification strategy: `fr verification check`'s parse and checks."""
+    from fr.verification.check import check_strategy
+    from fr.verification.model import parse_strategy
+
+    try:
+        manifest = parse_strategy(path.read_text(), str(path))
+    except Exception as e:  # noqa: BLE001 — VerificationError, or an unreadable file
+        return [str(e)]
+    return check_strategy(manifest)
+
+
+def validate_models_config(path: Path) -> list[str]:
+    from fr.models import load_models
+
+    return _reader_problems(path, load_models)
+
+
+def validate_trackers_config(path: Path) -> list[str]:
+    from fr.tracker.model import load_trackers
+
+    return _reader_problems(path, load_trackers)
+
+
+def validate_plan_config(path: Path) -> list[str]:
+    """The plan format: a YAML mapping (what `validate-plans.sh` and `fr repair` read)."""
+    return _load_mapping(path)[1]
+
+
+def validate_settings_location(path: Path) -> list[str]:
+    """The settings file at either location: the settings model (`fr.settings.load`)."""
+    from fr.settings.load import parse_settings_text
+
+    return _reader_problems(
+        path, lambda p: parse_settings_text(p.read_text(), source=str(p), servable=False)
+    )
+
+
+def validate_isolation_allow(path: Path) -> list[str]:
+    """The base-clone edit allowlist: one glob a line (`#` comments, blanks ignored)."""
+    import fnmatch
+
+    problems: list[str] = []
+    for n, line in enumerate(path.read_text().splitlines(), start=1):
+        glob = line.strip()
+        if not glob or glob.startswith("#"):
+            continue
+        if glob.count("[") != glob.count("]"):
+            problems.append(f"line {n}: `{glob}` has an unbalanced `[`")
+            continue
+        try:
+            re.compile(fnmatch.translate(glob))
+        except re.error as e:
+            problems.append(f"line {n}: `{glob}` is not a glob ({e})")
+    return problems
+
+
+def validate_quiet_config(path: Path) -> list[str]:
+    """A product `.fr/` file moved to `fr-config` (R11): its YAML parses to a mapping;
+    `candidate-install` (a program) is not YAML."""
+    if path.suffix != ".yaml":
+        return []
+    return _load_mapping(path)[1]

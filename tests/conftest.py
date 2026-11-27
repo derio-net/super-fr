@@ -51,6 +51,63 @@ def _operator_git_identity() -> dict[str, str]:
 OPERATOR_GIT_IDENTITY = _operator_git_identity()
 
 
+def _real_home() -> Path:
+    """The operator's home from the password database, never from `$HOME`, which a test (or
+    this suite) may have pointed elsewhere."""
+    import pwd
+
+    return Path(pwd.getpwuid(os.getuid()).pw_dir)
+
+
+REAL_TRIAGE_CACHE = _real_home() / ".cache" / "fr" / "triage"
+"""The operator's real triage cache (spec 2026-11-19 R17): no test may add an entry to it."""
+
+
+def _listing(path: Path) -> frozenset[str]:
+    try:
+        return frozenset(p.name for p in path.iterdir())
+    except OSError:
+        return frozenset()
+
+
+def new_cache_entries(before: frozenset[str], after: frozenset[str]) -> list[str]:
+    """What the suite added to a directory listed before and after it ran."""
+    return sorted(after - before)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _session_home_off_the_operators_machine(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[None]:
+    """`HOME` is a session sandbox for the whole run (review p6-r10), set in `os.environ`
+    before any test runs: an `fr` child a test starts inherits it, and a test's
+    `monkeypatch.undo()` restores this sandbox, never the operator's home. The per-test
+    `_home_off_the_operators_machine` still gives each test a fresh one, and a test that
+    needs a specific `HOME` still sets its own. At session end the operator's real triage
+    cache (`REAL_TRIAGE_CACHE`, read from the password database) must hold no entry it did
+    not hold at the start."""
+    before = _listing(REAL_TRIAGE_CACHE)
+    sandbox = home_sandbox(
+        tmp_path_factory.mktemp("session-home"), OPERATOR_GIT_IDENTITY, OPERATOR_HOME
+    )
+    saved = {k: os.environ.get(k) for k in sandbox}
+    os.environ.update(sandbox)
+    try:
+        yield
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+    added = new_cache_entries(before, _listing(REAL_TRIAGE_CACHE))
+    assert not added, (
+        f"the suite added {', '.join(added)} to the operator's {REAL_TRIAGE_CACHE}: a test "
+        "reached the real triage cache. Remove what it added only after checking it is the "
+        "suite's, not live triage state"
+    )
+
+
 @pytest.fixture
 def repo_root() -> Path:
     return REPO_ROOT
@@ -86,6 +143,19 @@ def _fresh_git_system_config_memo() -> None:
     from fr import git_cache
 
     git_cache._SYSTEM_MEMO.clear()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_protection_cache() -> None:
+    """`fr.config.protection` keeps a branch's protection answer for the command; a test's
+    fake forge must never meet an answer a previous test's forge gave."""
+    from fr.config.protection import forget
+    from fr.run.ci_evidence import _IGNORED_SAID as _CI_IGNORED_SAID
+    from fr.triage.collect import _IGNORED_SAID
+
+    forget()
+    _IGNORED_SAID.clear()
+    _CI_IGNORED_SAID.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -252,6 +322,40 @@ def _fixed_triage_host_id(monkeypatch: pytest.MonkeyPatch) -> None:
     id mints `~/.config/fr/host-id` in the real home. Tests of the minting itself
     delete it and point `HOME` at a tmp dir."""
     monkeypatch.setenv("FR_HOST_ID", "feedfacefeedface")
+
+
+def _main_checkout(root: Path) -> Path:
+    """The main checkout of the clone at *root* (the parent of its git common dir)."""
+    import subprocess
+
+    done = subprocess.run(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    return Path(done.stdout.strip()).parent if done.returncode == 0 else root
+
+
+_PROTECTED_CLONES = (REPO_ROOT, _main_checkout(REPO_ROOT))
+
+
+@pytest.fixture(autouse=True)
+def _never_move_this_checkouts_triage_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """The checkout under test and its main checkout are clones whose old triage state
+    (`.fr/triage-state/`) the S1 move must never take into a sandbox home (spec 2026-11-19
+    R18): a suite run from the operator's clone would otherwise move live state into a tmp
+    dir that is then deleted. Each test's shared move locks (`state_home.hold_shared`, held
+    for a process's life) are dropped after it, so the suite holds no file open per test."""
+    from fr.triage import state_home
+
+    monkeypatch.setattr(state_home, "PROTECTED_SOURCES", list(_PROTECTED_CLONES))
+    # ...and for every `fr` a test starts as a child process (lens review l-tests-r3).
+    monkeypatch.setenv(
+        state_home.PROTECTED_SOURCES_ENV, os.pathsep.join(str(p) for p in _PROTECTED_CLONES)
+    )
+    yield
+    state_home.release_shared()
 
 
 @pytest.fixture(autouse=True)

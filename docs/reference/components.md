@@ -7,7 +7,7 @@ covers:
   - packages/*/pyproject.toml
   - packages/fr-opencode-plugin/package.json
   - plugins/*/.claude-plugin/plugin.json
-reviewed: 2026-11-20 Python 3.14 is the floor, and uv downloads it when the host has none (ci-single-python). 2026-11-19 still true; the plugin lock overrides glob and minimatch, no component changes (batch hook-hardening). 2026-11-14 VK support removed; the fr-vk package and its MCP requirement are gone
+reviewed: 2026-11-25 the profile declarations are `.fr/profiles.yaml` (S1 R9); 2026-11-20 Python 3.14 is the floor, and uv downloads it when the host has none (ci-single-python). 2026-11-19 still true; the plugin lock overrides glob and minimatch, no component changes (batch hook-hardening). 2026-11-14 VK support removed; the fr-vk package and its MCP requirement are gone
 ---
 
 # Components and requirements
@@ -34,7 +34,7 @@ entry-point group. So to add a runner, you do not edit `fr-dispatch`.
   brainstorming, test-first and review skills.
 - Your repo's forge CLI, logged in: [`gh`](https://cli.github.com/) (the default),
   [`glab`](https://gitlab.com/gitlab-org/cli) or [`tea`](https://gitea.com/gitea/tea).
-  The `forge:` service in `.devcontainer/fr-profiles.yaml` selects the CLI. When that is
+  The `forge:` service in `.fr/profiles.yaml` selects the CLI. When that is
   absent, the git remote selects it.
 - Docker, for the default devcontainer isolation. A host without Docker can isolate with
   a worktree alone (`FR_ISOLATION_TARGET=worktree`).
@@ -46,7 +46,7 @@ entry-point group. So to add a runner, you do not edit `fr-dispatch`.
 
 ## Services
 
-`.devcontainer/fr-profiles.yaml` can declare three services: `forge:`, `ci:` and
+`.fr/profiles.yaml` can declare three services: `forge:`, `ci:` and
 `tracking:`, each with a `type` and optionally a `host`. `fr services` (add `--json` for
 machines) prints what fr resolved and from where. `fr init scaffold --ci ... --tracking ...`
 writes them.

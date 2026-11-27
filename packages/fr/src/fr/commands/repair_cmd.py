@@ -15,7 +15,7 @@ from rich.console import Console
 from fr.archive import GitStatusError, paths_dirty
 from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.commands.common import require_migrated_layout, resolve_repo_root
-from fr.repair import RepairResult, plan_config_path, repair_repo
+from fr.repair import RepairResult, repair_repo, repairable_plan_config
 
 console = Console()
 err_console = Console(stderr=True)
@@ -64,7 +64,8 @@ def repair_command(
     # clone, while `plan-config.yaml` (repo configuration) stays in this checkout.
     if yes:
         try:
-            dirty = paths_dirty(repo_root, sp, plan_config_path(repo_root))
+            cfg = repairable_plan_config(repo_root)
+            dirty = paths_dirty(repo_root, sp, *([cfg] if cfg is not None else []))
         except GitStatusError as e:
             err_console.print(f"refusing to repair: {e}", soft_wrap=True, markup=False)
             raise typer.Exit(2) from e

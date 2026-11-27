@@ -15,8 +15,8 @@ description: >
 One operator gate — a question round sized to the feature, rarely two — from goal to reviewed PR, driven by a **workflow
 shape** (spec §4.A, `2026-08-14-workflow-shapes-and-workitem-dispatch-design.md`): `fr run
 start <shape> --branch <b>` (defaults to `fr-goal`), then loop resolve-with-record (each `fr run resolve … --record` prints the next brief); `fr run advance <run-id>` is for starting, `cli` failures and recovery.
-**Shape lookup:** repo `docs/superpowers/workflows/<shape>.yaml` (overrides wholesale) →
-`$FR_SHIPPED_WORKFLOWS_DIR` → the `fr` wheel's own copy → the Claude Code marketplace clone, so
+**Shape lookup:** the repo's `.fr/workflows/<shape>.yaml` in its configuration space (the product under `repo`, the `fr-config` branch under quiet, `<branch>-config` under stealth; overrides wholesale, under quiet/stealth only while that branch is protected, else fr says why and uses the shipped one) →
+`$FR_SHIPPED_DEFAULTS_DIR/workflows/` → the `fr` wheel's own `defaults/` copy → the Claude Code marketplace clone, so
 shipped shapes resolve on a hermes pod or under OpenCode with no plugin installed. **`start` enters isolation itself** and writes the run inside that workspace — the
 first action, before anything else ("start with X" changes the first work item, never the
 first action); run every later command from the workspace it prints. **Bind the session** so the workspace is attributable, not `sessions=none`: pass `--session <id> --harness <h>` to `start` when your harness exposes its session id (a harness with a session-bind hook does it for you); otherwise `fr isolation attach --session <id> --branch <b> --harness <h>` binds it after the fact — traceability only, so a missing binding never blocks work. No devcontainer profile

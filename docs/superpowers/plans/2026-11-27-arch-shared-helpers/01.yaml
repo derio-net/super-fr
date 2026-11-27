@@ -1,0 +1,159 @@
+schema_version: 2
+phase:
+  number: 1
+  title: "Shared helpers from the #1318 review: strict YAML loader, timestamp readers, record placement, hermetic git (R1-R9)"
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  tier: standard
+  files:
+  - packages/fr/src/fr/yamlio.py
+  - packages/fr/src/fr/utc_time.py
+  - packages/fr/src/fr/artifacts/structure.py
+  - packages/fr/src/fr/harness/model.py
+  - packages/fr/src/fr/lenses/model.py
+  - packages/fr/src/fr/isolation/scaffold.py
+  - packages/fr/src/fr/commands/journal_cmd.py
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/usage/compare.py
+  - packages/fr/src/fr/usage/backfill.py
+  - packages/fr/src/fr/debt/engine.py
+  - packages/fr/src/fr/run/liveness.py
+  - packages/fr/src/fr/triage/claims.py
+  - tests/unit/*.py
+  - .claude/rules/artifact-versioning.md
+  - .opencode/instructions/artifact-versioning.md
+  - scripts/sync-opencode.py
+  - .changes/feat-batch-arch-shared-helpers.yaml
+  - docs/explainers/*.md
+  - docs/*.md
+  - docs/reference/*.md
+  estimate_lines: 650
+tasks:
+- number: 1
+  title: One strict YAML loader in fr.yamlio (R1-R3)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add tests/unit/test_yamlio_strict.py — fr.yamlio.StrictLoader refuses a repeated key with a ConstructorError whose problem is "found duplicate key 'a'" and whose marks are the mapping's and the key's; an unhashable key is skipped by the check; an AST scan finds `construct_mapping` defined only in packages/fr/src/fr/yamlio.py across packages/*/src/**/*.py; fr/yamlio.py imports only stdlib and yaml. Run `uv run pytest tests/unit/test_yamlio_strict.py -q --no-cov` and see it fail.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: add StrictLoader(yaml.SafeLoader) to fr/yamlio.py with the detector moved verbatim from artifacts/structure.py and a `duplicate_key(node, key_node, key) -> NoReturn` hook raising today's ConstructorError; remove structure._StrictLoader and load through StrictLoader; make harness/model._StrictLoader subclass StrictLoader overriding only duplicate_key (same HarnessError text); point lenses/model.py, isolation/scaffold.py and tests/unit/test_init_scaffold.py at fr.yamlio.StrictLoader. The new tests and tests/unit/test_harness_matrix.py, test_validate_artifacts.py, test_init_scaffold.py and the lens tests pass with their assertions unchanged.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: tidy the docstrings so the detector's reason lives once in fr.yamlio and harness's says why it only overrides the hook; ruff and mypy clean on the touched files.
+- number: 2
+  title: Timestamp readers and gate help (R6-R8)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: add tests/unit/test_journal_gate_help.py — find the `--gate` option object of `journal add` in typer.main.get_command(app) and assert its `.help` equals today's literal "--kind decision only: the gate role that owns it (developer|reviewer|tester|devops|owner|security)." and names every member of fr.gates.GATES (never the rendered --help, which rich wraps); add tests/unit/test_utc_time.py for fr.utc_time.parse_as_utc(value: object) (None, "" and a non-string such as 5 give None, garbage gives None, "...Z" gives UTC, naive gives UTC, an offset is kept); extend tests/unit/test_triage_timestamps.py's body scan so a second function with parse_as_utc's body outside fr/utc_time.py fails. Run them and see them fail.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: build the --gate help from get_args(Gate); _created_since reads through parse_aware (unknown still yes); _pr_time returns parse_aware(str(stamp) if stamp else None); add fr/utc_time.py with parse_as_utc; remove usage/compare._instant and debt/engine._parse in favour of it; backfill's _worth_reading uses it and still returns True on None; remove run/liveness._parse_instant (stalled_attempts calls parse_as_utc(attempt.dispatched)) and triage/claims._created (its caller calls parse_as_utc(comment.get("created_at"))). Existing collect, triage batch, usage compare, backfill, debt, liveness and claims tests pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: drop imports the removals left unused and check no test imports the removed private names (grep tests for `_instant`, `engine import _parse`, `_parse_instant` and `claims import _created`); ruff and mypy clean.
+- number: 3
+  title: Record placement helper (R4)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: add tests/unit/test_record_helpers.py — write_record(tmp, "x: 1\n") writes exactly those bytes to tmp/docs/superpowers/runs/r1.records/implement-phase__phase-1.yaml and returns it, and `stem=` changes the file name; an AST check over the eleven modules (test_migration_record_{contract,delegated,exit_gates, input_unconfirmed,questions,shape,status_split,visual}.py, test_record_acceptance_v8.py, test_record_amendments.py, test_record_lens.py) fails when one defines a function whose body holds both the string "r1.records" and a write_text call. See it fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: add tests/unit/record_helpers.py with write_record; in each of the eleven modules delete _record_file and call write_record(root, <the payload its default supplied>, stem=<when not the default>) at every call site. The eleven modules pass with their assertions unchanged.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: remove now-unused imports in the eleven modules; ruff clean.
+- number: 4
+  title: Hermetic git fixture (R5)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: add tests/unit/test_hermetic_git.py — apply_hermetic_git on a fresh MonkeyPatch sets GIT_CONFIG_GLOBAL=os.devnull and GIT_CONFIG_NOSYSTEM=1 and undo() restores the prior values (set and unset cases); an AST check that each of test_gatebackfill_{candidates,delivery,discharged,render}.py, test_merge_evidence.py and test_status_owed.py names "hermetic_git" in a usefixtures mark and has no setenv call naming either variable. See it fail.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: add tests/unit/hermetic_git.py (apply_hermetic_git plus a function-scoped, non-autouse fixture hermetic_git); in the six modules import it (noqa F401), declare pytestmark usefixtures (merging any existing pytestmark) and delete their copies; test_status_owed.py keeps an autouse _stub_archive_fetch fixture for its fr.archive._fetch stub; test_merge_evidence.stub_fetch replaces its own two setenv calls with apply_hermetic_git(monkeypatch), keeping its signature. The six modules pass, and so do the modules that import helpers from test_merge_evidence.py.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: remove unused `os` imports left behind; ruff clean.
+- number: 5
+  title: "Prose, docs currency, fragment and full checks (R9); not TDD-shaped: prose, mirrors and stamps only, with nothing to test-drive (the mirror tripwires and fr docs check are its tests)"
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Point .claude/rules/artifact-versioning.md at fr.yamlio.StrictLoader, update the comments in scripts/sync-opencode.py and tests/unit/test_opencode_agent_mirror.py, run `uv run --no-project python scripts/sync-opencode.py` and `scripts/sync-hermes.py`, and confirm `--check` passes for both.
+  - id: P1.T5.S2
+    text: |-
+      Add .changes/feat-batch-arch-shared-helpers.yaml (bump: patch, one-line summary); run `uv run fr docs check --base origin/main` and give each page it names a `reviewed` stamp "2026-11-27 still true; shared-helper refactor (batch arch-shared-helpers), no behaviour change" prepended to its existing note, until it exits 0.
+  - id: P1.T5.S3
+    text: |-
+      Run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, the mypy command from AGENTS.md and the repo's fast tier last; all clean.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-27T09:37:59+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-11-27T09:37:59+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-11-27T09:37:59+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-27T09:37:59+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-27T09:37:59+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-27T09:37:59+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-27T09:37:59+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-27T09:37:59+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-11-27T09:37:59+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-27T09:37:59+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-27T09:37:59+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-11-27T09:37:59+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-27T09:37:59+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-27T09:37:59+00:00'
+      note: null
+    P1.T5.S3:
+      state: x
+      ticked_at: '2026-11-27T09:37:59+00:00'
+      note: null
+  completion:
+    at: '2026-11-27T09:37:59+00:00'
+    note: null
+    observed_prs: []

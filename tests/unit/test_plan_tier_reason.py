@@ -19,7 +19,8 @@ import pytest
 from fr.journal.model import JournalEntry, append_journal_entry, journal_path
 from fr.parser import Plan
 from fr.parser import parse as parse_plan
-from fr.plan_ops import PhaseSpec, ReviewIssue, _tier_issues, create
+from fr.plan_ops import PhaseSpec, ReviewIssue, create
+from fr.plan_review.sizing import _tier_issues
 from fr.version_floor import CEILING_VERSION
 
 from tests.unit.test_plan_phase_sizing import PLAN, SPEC_REL, SPEC_SLUG, _repo

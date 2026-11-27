@@ -9,7 +9,7 @@ covers:
   - .hermes/config.snippet.yaml
   - plugins/super-fr/hooks/hermes/**
   - HERMES.md
-reviewed: 2026-11-19 still true; the push guard runs the resolved gh, no registration changes (batch hook-hardening). 2026-11-14 VK support removed; HERMES.md drops fr-vk from its package list and mypy line, which this page does not repeat
+reviewed: 2026-11-25 the allowlist is `.fr/isolation-allow`, and the hook reads the switch on `fr-config` first (S1 R5, R8); 2026-11-19 still true; the push guard runs the resolved gh, no registration changes (batch hook-hardening). 2026-11-14 VK support removed; HERMES.md drops fr-vk from its package list and mypy line, which this page does not repeat
 ---
 
 # Run super-fr under Hermes Agent
@@ -55,7 +55,8 @@ shell guard judges by the workspace marker, on every git or gh change.
 The guards gate edits (`write_file`, `patch`) and shell commands (`terminal`,
 `execute_code`: git and gh changes outside isolation, and pushes to a merged PR's branch). A
 first-turn hook shows open acceptance debt. The escapes are unchanged:
-`fr isolation up`, `.fr-isolation-allow`, and `FR_BASE_OK=1`. The
+`fr isolation up`, `.fr/isolation-allow` (the older `.fr-isolation-allow` while it is
+absent), and `FR_BASE_OK=1`. The
 [fr-isolation](../explainers/fr-isolation.md) explainer explains the rule.
 
 ## Models and phase dispatch

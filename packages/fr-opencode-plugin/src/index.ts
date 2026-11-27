@@ -79,7 +79,7 @@ import { createClaimHandler, sharedClaimed } from "./claim";
 import { resolveGit } from "./git";
 import { decideShell } from "./guard";
 import { createIdleHandler, runIdleLoop, sharedActedOn } from "./idle";
-import { matchesAllowlist, resolveMarker, warnIfFrUnresolved } from "./marker";
+import { matchesAllowlist, resolveMarker, switchDifferNote, warnIfFrUnresolved } from "./marker";
 import { createNagHandler, sharedServed } from "./nag";
 import { createPinHandler, type ShellCreateEvent } from "./pin";
 import { decidePush } from "./push";
@@ -213,7 +213,7 @@ async function gate(directory: string, event: GateEvent): Promise<void> {
       throw new Error(
         "fr-isolation: edit with an unresolvable patch target blocked — not inside an fr-isolation " +
           "workspace. Enter isolation (`fr isolation up --branch <branch>` / fr-goal) and edit in the worktree; " +
-          "or add the path to `.fr-isolation-allow`; or set FR_BASE_OK=1 for a deliberate " +
+          "or add the path to `.fr/isolation-allow`; or set FR_BASE_OK=1 for a deliberate " +
           "base-clone edit. See ~/.claude/rules/fr-isolation-required.md (#328)."
       );
     }
@@ -243,8 +243,10 @@ async function gate(directory: string, event: GateEvent): Promise<void> {
     }
     throw new Error(
       `fr-isolation: edit to \`${target}\` blocked — not inside an fr-isolation ` +
-        "workspace. Enter isolation (`fr isolation up --branch <branch>` / fr-goal) and edit in the " +
-        "worktree; or add the path to `.fr-isolation-allow`; or set FR_BASE_OK=1 for " +
+        "workspace." +
+        switchDifferNote(resolution.toplevel) +
+        " Enter isolation (`fr isolation up --branch <branch>` / fr-goal) and edit in the " +
+        "worktree; or add the path to `.fr/isolation-allow`; or set FR_BASE_OK=1 for " +
         "a deliberate base-clone edit. See ~/.claude/rules/fr-isolation-required.md (#328)."
     );
   }

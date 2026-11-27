@@ -107,8 +107,6 @@ def test_a_record_fixing_an_out_of_scope_finding_as_operator_is_verified(
 def test_a_crash_at_the_commit_restores_everything_and_a_retry_converges(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from fr.commands import run_cmd
-
     clean = _clean_apply(tmp_path)
     (tmp_path / "crash").mkdir()
     root = started_run(tmp_path / "crash")
@@ -120,7 +118,7 @@ def test_a_crash_at_the_commit_restores_everything_and_a_retry_converges(
         raise KeyboardInterrupt
 
     with monkeypatch.context() as m:
-        m.setattr(run_cmd, "commit_records", die)
+        m.setattr("fr.run.writes.commit_records", die)
         _crash(root, record)
 
     # Every byte — the cursor and the journal included — is back, record too.

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
@@ -10,6 +11,10 @@ if TYPE_CHECKING:
     from fr.parser import Plan
 
 __all__ = ["refactor_gaps"]
+
+_TASK_ID_RE = re.compile(r"p\d+\.t\d+")
+"""Task ids (`P<n>.T<m>`) inside journal justifications — matched casefolded,
+so `P1.T1`, `p1.t1` and a trailing comma all resolve; uppercased at use."""
 
 
 def refactor_gaps(plan: Plan, phase_n: int, also_justified: Iterable[str] = ()) -> list[str]:
@@ -26,8 +31,6 @@ def refactor_gaps(plan: Plan, phase_n: int, also_justified: Iterable[str] = ()) 
     names tasks justified by entries not on disk yet — the record being
     applied, whose journal is still in memory.
     """
-    from fr.plan_ops import _refactor_justifications
-
     phase = next((p for p in plan.phases if p.phase.number == phase_n), None)
     if phase is None or phase.phase.tag != "agentic":
         return []
@@ -42,3 +45,26 @@ def refactor_gaps(plan: Plan, phase_n: int, also_justified: Iterable[str] = ()) 
         if task_id not in justified:
             gaps.append(task_id)
     return gaps
+
+
+def _refactor_justifications(plan: Plan) -> set[str]:
+    """Task ids (`P<n>.T<m>`) with a recorded `no-refactor-because`
+    justification: a plan-scope discovery/decision whose title or body
+    carries both the marker and the id."""
+    from fr.plan_review.journal import journal_entries
+
+    root = plan.repo_root
+    if root is None:
+        return set()
+    # Read-resolve (active else archived), like the skeleton override: a
+    # justification outlives the plan it was logged against.
+    entries = journal_entries(root, "plan", plan.meta.plan)
+    found: set[str] = set()
+    for e in entries:
+        if e.kind not in ("discovery", "decision"):
+            continue
+        hay = f"{e.title}\n{e.body}".casefold()
+        if "no-refactor-because" not in hay:
+            continue
+        found.update(m.group(0).upper() for m in _TASK_ID_RE.finditer(hay))
+    return found

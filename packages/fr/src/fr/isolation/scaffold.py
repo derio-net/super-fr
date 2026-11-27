@@ -662,7 +662,8 @@ def _commit_profile(
     """
     from fr.agents import AGENT_NAMES, AGENTS_DIR
 
-    paths = [f".devcontainer/{profile}", ".devcontainer/fr-profiles.yaml"]
+    declaration = profiles_target(repo_root)[0].relative_to(repo_root).as_posix()
+    paths = [f".devcontainer/{profile}", declaration]
     if include_validator_wrapper:
         paths.append("scripts/validate-plans.sh")
     # The agents ride along unless the repo ignores them: one ignored path makes
@@ -739,6 +740,32 @@ def _git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["git", "-C", str(repo_root), *args], capture_output=True, text=True)
 
 
+def profiles_target(repo_root: Path) -> tuple[Path, int]:
+    """Where scaffold writes the profile declarations, and at which version: the
+    configuration space's `.fr/profiles.yaml` at the current version (spec
+    2026-11-19-event-driven-a-la-carte R9), or the old `.devcontainer/fr-profiles.yaml`,
+    kept at version 2, while only that one exists (R13: `fr migrate artifacts --yes` moves
+    it). Under quiet and stealth the declaration lives on the configuration branch, where
+    a change is a pull request (§E): scaffold does not propose one yet, so it refuses once
+    the branch holds the file, and until then writes the old product path, which the
+    migration carries there."""
+    from fr.artifacts.registry import artifact_kind
+    from fr.config.space import LEGACY_PROFILES
+    from fr.isolation.types import profiles_path
+
+    path = profiles_path(repo_root)
+    if not path.resolve().is_relative_to(Path(repo_root).resolve()):
+        if not path.exists():
+            return Path(repo_root) / LEGACY_PROFILES, 2
+        raise IsolationError(
+            f"the profile declarations live on the configuration branch ({path}); fr "
+            "init scaffold does not propose a change there yet: add the profile to "
+            ".fr/profiles.yaml on the configuration branch by a pull request"
+        )
+    legacy = path == Path(repo_root) / LEGACY_PROFILES
+    return path, 2 if legacy else artifact_kind("profiles").current_version
+
+
 def _prepare_profiles(
     repo_root: Path, backend: str | None, host: str | None, ci: str, tracking: str
 ) -> dict[str, dict[str, str]]:
@@ -753,21 +780,21 @@ def _prepare_profiles(
     from fr.services.init import resolve_init_services
     from fr.services.model import ServicesError
 
-    path = repo_root / ".devcontainer" / "fr-profiles.yaml"
+    path, at = profiles_target(repo_root)
     kind = artifact_kind("profiles")
     original: bytes | None = path.read_bytes() if path.is_file() else None
     migrated = False
     try:
         if original is not None:
             version = kind.read_version(path)
-            if version > kind.current_version:
+            if version > at:
                 raise IsolationError(
                     f"{path} is on version {version}, newer than this fr writes "
                     f"({kind.current_version}) — upgrade fr."
                 )
-            if version < kind.current_version:
+            if version < 2:
                 rewrite_to_services(path)
-                kind.write_version(path, kind.current_version)
+                kind.write_version(path, 2)
                 migrated = True
         existing = (yaml.safe_load(path.read_text()) if path.is_file() else None) or {}
         if migrated:
@@ -799,7 +826,7 @@ def _update_profiles_yaml(
     from fr.artifacts.registry import artifact_kind, read_verbatim
     from fr.services.render import SERVICE_ORDER, render_services
 
-    path = repo_root / ".devcontainer" / "fr-profiles.yaml"
+    path, at = profiles_target(repo_root)
     # Verbatim: `read_text` would turn CRLF into LF before the surgery saw it.
     bom, text = read_verbatim(path) if path.is_file() else ("", "")
     data = (yaml.safe_load(text) if text else {}) or {}
@@ -830,7 +857,7 @@ def _update_profiles_yaml(
     if newline != "\n":
         edited = edited.replace("\r\n", "\n").replace("\n", newline)
     path.write_text(bom + edited + render_services(services, newline=newline), newline="")
-    artifact_kind("profiles").write_version(path, artifact_kind("profiles").current_version)
+    artifact_kind("profiles").write_version(path, at)
 
 
 _TOP_LEVEL_KEY_RE = re.compile(r"^([A-Za-z_][\w-]*)[ \t]*:")
@@ -908,10 +935,10 @@ def _edit_profiles_text(
     out = newline.join(ln.rstrip("\r") for ln in lines) + newline
     # The strict loader refuses a duplicate key: `safe_load` keeps the last,
     # so an appended `dev:` beside an unmatched `"dev":` would read as intended.
-    from fr.artifacts.structure import _StrictLoader
+    from fr.yamlio import StrictLoader
 
     try:
-        reread = yaml.load(out, Loader=_StrictLoader) or {}  # noqa: S506
+        reread = yaml.load(out, Loader=StrictLoader) or {}  # noqa: S506
     except yaml.YAMLError:
         return None
     reread.pop("schema_version", None)

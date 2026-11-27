@@ -371,6 +371,15 @@ class FakeGhClient:
     def base_rules(self, repo: str, branch: str) -> BaseRules:
         return getattr(self, "rules", BaseRules())
 
+    def branch_rules(self, repo: str, branch: str) -> Any:
+        """`rules/branches/<b>` (R7): the reply a test set in `branch_rule_replies`, else no
+        rules; an exception there is raised."""
+        self.calls.append(("branch_rules", {"repo": repo, "branch": branch}))
+        reply = getattr(self, "branch_rule_replies", {}).get((repo, branch), [])
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
     def required_check_names(self, repo: str, base: str) -> list[str]:
         self.calls.append(("required_check_names", {"repo": repo, "base": base}))
         return sorted(self.required_names.get((repo, base), []))

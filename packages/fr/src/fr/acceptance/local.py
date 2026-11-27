@@ -16,7 +16,7 @@ from fr.acceptance.model import LEVELS, AcceptanceError, Row, same_repo, split_r
 PROMOTE = "promote to ci"
 UNSTAMPED = "unstamped"
 HEAD_UNREADABLE = "stale: HEAD unreadable"
-CI_UNKNOWN = "ci unknown: fix .devcontainer/fr-profiles.yaml (fr services)"
+CI_UNKNOWN = "ci unknown: fix .fr/profiles.yaml (fr services)"
 
 
 def level_ref_paths(row: Row) -> tuple[str, ...]:

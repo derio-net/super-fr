@@ -106,10 +106,10 @@ uv workspace monorepo, version lockstepped across every manifest (see
     out of the cursor — the v5/v6 shape is frozen as
     `fr.run.legacy.RunStateV6`); `deliver`'s derived
     `proportionality` evidence runs `fr plan proportionality`
-    (`fr/proportionality.py`). `plugins/super-fr/workflows/` ships
+    (`fr/proportionality.py`). `plugins/super-fr/defaults/workflows/` ships
     the manifests this resolves (`fr-goal.yaml`, the pipeline `/fr-goal`
     itself now narrates); a repo may override one wholesale under
-    `docs/superpowers/workflows/<name>.yaml`. Shipped manifests are NOT
+    `.fr/workflows/<name>.yaml`. Shipped manifests are NOT
     mirrored to OpenCode/Hermes like skills/rules are — `fr run` is a CLI
     surface every harness drives the same way, not a per-harness prompt.
     `fr-goal` and `fr-goal-light` run `lens-review` between `journal-check` and
@@ -156,11 +156,15 @@ uv workspace monorepo, version lockstepped across every manifest (see
     discipline. The split is forced: the OpenCode/Hermes mirrors copy only
     `SKILL.md`, so a script bundled beside a skill never reaches them — only
     the `fr` wheel reaches every harness. State lives in the scope's state
-    directory, the workspace's `.fr/triage-state/<scope>/` or
-    `$HOME/.cache/fr/triage/<scope>/` outside a clone (`owner--repo` or `owner`,
-    lowercased; `--dir` overrides; a scope with a state repo is synced with
-    `refs/heads/fr-triage/<scope-id>` by `triage_cmd.resolve_state_dir`, 2026-10-07
-    cloud-triage spec): `facts.json` (collect), `judgements.yaml` (the
+    directory, `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` or `owner`,
+    lowercased; `--dir` overrides), which is its own git repository, so it syncs
+    `refs/heads/fr-triage/<scope-id>` with no product clone (`triage_cmd.resolve_state_dir`,
+    2026-10-07 cloud-triage spec; 2026-11-19 S1 R17). `fr/triage/state_home.py` moves an
+    older clone's `.fr/triage-state/<scope>/` there on first use (R18: refused while a live
+    `drive.lock` names a driver, an older cache set aside as `<scope>.pre-s1`, a tombstone
+    file left for an fr below S1 to fail on; restart the driver after upgrading), and a
+    one-repo scope may name its state repo as `triage.state_repo` in `.fr/settings.yaml`
+    (`schema: 2`, R20): `facts.json` (collect), `judgements.yaml` (the
     agent's, shape in spec §3.D), the pages (`fr triage backlog` writes Backlog
     and Issues, `batches` the Batches page; one name each, read from
     `components.PAGES`, spec 2026-11-18-triage-pages-ux). It is never
@@ -329,6 +333,24 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`{kind: lens, lens: <id>, title: <why>}`; `apply.py` checks the lens is
     effective, assigns the id and stamps `step`/`phase`), migration
     `fr.artifacts.record_lens`, stamp only.
+  - **`fr/config`** (2026-11-19 spec, `event-driven-a-la-carte` S1) — where repo
+    configuration lives. `space.py`'s `config_space` is the ONE resolver of the
+    configuration space (`.fr/` in the product under `repo`, the orphan `fr-config` branch
+    under quiet, `<target-dir>/.fr/` on the tracking repo's `<branch>-config` under
+    stealth): a working directory, a ref for reads at a commit, and `located` (R13's
+    old-path fallback, decided under quiet/stealth by the configuration branch's fetched
+    tip); `tests/unit/test_tripwire_config_space.py` fails any other `.fr` path
+    construction. `protection.py` answers whether the forge enforces a pull-request rule
+    (one approving review that a later push cannot keep, no force-push, no deletion) on the
+    configuration branch, read
+    from `rules/branches/<b>`, cached per command; it cannot see bypass actors. `tip.py`
+    exports the fetched, reviewed tip to a private directory for a guarded program to run;
+    `degraded.py` is what an unprotected branch's workflows, strategies and `profiles.yaml`
+    degrade to; `change.py` opens the pull request for every change after creation
+    (`fr-config-change/<kind>-<hash>`); `migrate.py` is the moved-kinds table and the
+    cross-space move (configuration branch first, then the product). The old settings copy
+    is brought in step only by `fr settings sync` (preview, `--yes --expect <tip>`).
+    Operator-facing: `docs/explainers/fr-isolation.md`.
   - **`fr/docs`** (2026-11-11 spec, `docs-currency`) — pages must keep up with the code
     they cover. `.fr/docs.yaml` names the page globs (`pages:`, incl. `docs/explainers/*.md`,
     `docs/*.md`, `docs/reference/*.md`) and `must_cover:` (every skill needs a page);
@@ -346,9 +368,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`shipped_lens_dir`, `effective_lenses`: shipped not disabled, replacements applied, plus the
     repo's own from `.fr/lenses.yaml`; `review_lenses`: what a feature is reviewed under, where a
     lens of the default branch keeps the default branch's text) and `check.py` (`check_config`). Shipped manifests are
-    `plugins/super-fr/lenses/*.yaml` (NOT mirrored to OpenCode/Hermes, like verifications), with a
-    wheel copy in `packages/fr/src/fr/lens_manifests/` generated by `scripts/sync-lenses-data.py`
-    (`--check` verifies; `test_tripwire_shipped_lenses.py`). `rules.py` (path rules in force:
+    `plugins/super-fr/defaults/lenses/*.yaml` (NOT mirrored to OpenCode/Hermes, like verifications;
+    the one defaults tree, see "Shipped defaults" below). A repo has no lens directory:
+    `.fr/lenses.yaml` is its only lens override. `rules.py` (path rules in force:
     the default branch's `require:` together with the branch's, read like `.fr/ci.yaml`) and
     `accumulate.py` (`lens_set`, the ONE definition of a feature's lens set: `lens` entries in
     the run's spec and plan journals plus rule-required lenses for the files
@@ -631,20 +653,25 @@ tripwire will catch drift anyway:
 - `scripts/install.sh` must copy every canonical skill/rule to consumer
   machines; `test_install_copies_rules.py` / `test_install_copies_opencode_skills.py`
   fail if a shipped file isn't wired in.
-- **Shipped workflow manifests are a separate, NOT-mirrored category.**
-  `plugins/super-fr/workflows/*.yaml` (spec §4.A) has no OpenCode/Hermes
-  copy — `fr run` is a CLI surface every harness drives identically, so
-  there is nothing harness-specific to generate. It rides install.sh's
-  existing wholesale marketplace rsync (no per-file `cp`, unlike
-  skills/rules — see the comment above that rsync in `install.sh`);
-  `test_install_copies_workflows.py` / `test_install_sh.py::TestInstallWorkflows`
-  are its drift guards, and `test_tripwire_shipped_workflows.py` guards
-  every shipped manifest passing `fr workflow check`.
-- **Shipped verification strategies are the same NOT-mirrored category.**
-  `plugins/super-fr/verifications/*.yaml` has no OpenCode/Hermes copy (`fr
-  verification` is a CLI surface). The canonical set is the plugin directory; a
-  generated copy rides in the `fr` wheel and `test_tripwire_shipped_verifications.py`
-  guards both the copy and that every manifest passes `fr verification check`.
+- **Shipped defaults are a separate, NOT-mirrored category, with one home**
+  (spec `2026-11-19-event-driven-a-la-carte` R15, R16). `plugins/super-fr/defaults/`
+  holds `workflows/`, `verifications/` and `lenses/`; none has an OpenCode/Hermes
+  copy (`fr run`, `fr verification` and `fr lenses` are CLI surfaces every harness
+  drives identically). The wheel copy is `packages/fr/src/fr/defaults/<kind>/`,
+  written by `scripts/sync-defaults-data.py` (no flag writes and deletes stale
+  copies; `--check` exits 1 on drift) — never hand-edit it.
+  `tests/unit/test_tripwire_shipped_defaults.py` is the one guard: the tree holds
+  exactly the three kinds, the copy is byte-equal and importlib-reachable, every
+  workflow passes `check_workflow`, the four strategies keep their `when`/`driver`,
+  the four lenses exist. `fr._shipped` is the one resolver order for every kind:
+  repo `.fr/<kind>/<name>.yaml` (workflows and verifications only; under quiet/stealth
+  read through `fr.config.degraded`, which falls back to the shipped file),
+  `$FR_SHIPPED_DEFAULTS_DIR/<kind>/`, the per-kind `$FR_SHIPPED_{WORKFLOWS,VERIFICATIONS,LENSES}_DIR`
+  (kept until R14's release, with one notice per process), the wheel, the marketplace
+  clone's `plugins/super-fr/defaults/<kind>/`. The tree rides install.sh's
+  wholesale marketplace rsync (no per-file `cp`, unlike skills/rules — see the
+  comment above that rsync in `install.sh`); `test_install_copies_{workflows,verifications,lenses}.py`
+  and `test_install_sh.py::TestInstallWorkflows` are its drift guards.
 
 ## This repo dogfoods fr-isolation on itself
 
@@ -656,7 +683,7 @@ the OpenCode 2 plugin (`.opencode/plugins/fr-isolation-required.ts`, thin
 re-export of `packages/fr-opencode-plugin`) block file-writing tools
 outside a valid `.fr-isolation` workspace — editing this repo's own source is
 not exempt. Escapes, in preference order: enter isolation (`fr isolation up`),
-add an operator-managed path to `.fr-isolation-allow`, or set `FR_BASE_OK=1`
+add an operator-managed path to `.fr/isolation-allow`, or set `FR_BASE_OK=1`
 for one deliberate base-clone edit. Two docker-less modes now exist alongside
 the default devcontainer mode: **host-worktree** (`FR_ISOLATION_TARGET=worktree`
 — fr worktree in the host env, no profile) and **external** (a preparer-written
@@ -910,8 +937,8 @@ exists and how it's checked, not a restatement:
 - **import direction** (`tests/unit/test_import_direction.py`) — the package-boundary guard
   reads imports from the syntax tree (`ast`), so a comma list, an alias or a nested import is
   seen; dynamic imports and entry-point loading are not judged. An unparseable file fails it.
-- **module line budget** (2026-11-16, `tests/unit/test_tripwire_module_budget.py`) — the five
-  largest modules (`run_cmd.py`, `triage_batch_cmd.py`, `isolation/local.py`, `plan_ops.py`,
+- **module line budget** (2026-11-16, `tests/unit/test_tripwire_module_budget.py`) — five held
+  modules, the largest when it was added (`run_cmd.py`, `triage_batch_cmd.py`, `isolation/local.py`, `plan_ops.py`,
   `triage/batch_drive.py`) may not grow past their budget, and a budget may not sit more than 400
   lines above its module. When it fails, move the new code into the module the architecture report
   (`docs/superpowers/audits/2026-11-16-architecture-review.md`) names, or change the budget in the

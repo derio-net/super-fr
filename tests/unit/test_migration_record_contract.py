@@ -21,6 +21,8 @@ from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 from fr.record import legacy
 from fr.record.model import RECORD_SCHEMA_VERSION, RecordError, load_record, parse_record
 
+from tests.unit.record_helpers import write_record
+
 _V6_DELEGATED = """\
 schema_version: 6
 run: r1
@@ -60,13 +62,6 @@ ticks: [P1.T1.S1]
 """
 
 
-def _record_file(root: Path, text: str, stem: str) -> Path:
-    path = root / "docs" / "superpowers" / "runs" / "r1.records" / f"{stem}.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    return path
-
-
 def test_the_six_to_seven_hop_is_in_the_chain() -> None:
     """The chain's full span is `test_record_acceptance_v8`'s to pin."""
     chain = MIGRATIONS.chain("record", PRE_FRAMEWORK_VERSION)
@@ -75,7 +70,7 @@ def test_the_six_to_seven_hop_is_in_the_chain() -> None:
 
 
 def test_a_v6_record_carrying_delegated_migrates_with_the_key_dropped(tmp_path: Path) -> None:
-    path = _record_file(tmp_path, _V6_DELEGATED, "brainstorm")
+    path = write_record(tmp_path, _V6_DELEGATED, stem="brainstorm")
 
     report = run_migrations(tmp_path, dry_run=False)
 
@@ -88,8 +83,8 @@ def test_a_v6_record_carrying_delegated_migrates_with_the_key_dropped(tmp_path: 
 
 
 def test_a_v6_record_resolving_unconfirmed_is_left_byte_identical(tmp_path: Path) -> None:
-    stuck = _record_file(tmp_path, _V6_UNCONFIRMED, "spec-review")
-    healthy = _record_file(tmp_path, _V6_PLAIN, "implement-phase__phase-1")
+    stuck = write_record(tmp_path, _V6_UNCONFIRMED, stem="spec-review")
+    healthy = write_record(tmp_path, _V6_PLAIN, stem="implement-phase__phase-1")
     before = stuck.read_bytes()
 
     report = run_migrations(tmp_path, dry_run=False)
@@ -103,8 +98,8 @@ def test_a_v6_record_resolving_unconfirmed_is_left_byte_identical(tmp_path: Path
 def test_an_older_record_carrying_delegated_climbs_the_whole_chain(tmp_path: Path) -> None:
     """Hops 4 -> 5 and 5 -> 6 read through the FROZEN model: with the live one,
     a v5 record carrying `delegated` would be refused at its first hop."""
-    path = _record_file(
-        tmp_path, _V6_DELEGATED.replace("schema_version: 6", "schema_version: 5"), "brainstorm"
+    path = write_record(
+        tmp_path, _V6_DELEGATED.replace("schema_version: 6", "schema_version: 5"), stem="brainstorm"
     )
 
     report = run_migrations(tmp_path, dry_run=False)
@@ -116,7 +111,7 @@ def test_an_older_record_carrying_delegated_climbs_the_whole_chain(tmp_path: Pat
 def test_a_wholly_v7_body_under_a_v6_stamp_lets_the_runner_finish(tmp_path: Path) -> None:
     """The crash window: `fn` rewrote the body, the runner died before the
     stamp. The next run finds a v7 body under a v6 stamp and just stamps it."""
-    path = _record_file(tmp_path, _V6_PLAIN, "implement-phase__phase-1")
+    path = write_record(tmp_path, _V6_PLAIN, stem="implement-phase__phase-1")
 
     report = run_migrations(tmp_path, dry_run=False)
 

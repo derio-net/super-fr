@@ -22,6 +22,8 @@ from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 from fr.record.model import parse_record
 
+from tests.unit.record_helpers import write_record
+
 pytestmark = pytest.mark.own_artifacts
 
 _V1_RECORD = """\
@@ -31,15 +33,6 @@ item: phase/1
 outcome: done
 ticks: [P1.T1.S1]
 """
-
-
-def _record_file(
-    root: Path, text: str = _V1_RECORD, stem: str = "implement-phase__phase-1"
-) -> Path:
-    path = root / "docs" / "superpowers" / "runs" / "r1.records" / f"{stem}.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    return path
 
 
 def test_the_record_kind_moved_past_version_one() -> None:
@@ -63,7 +56,7 @@ def test_migrating_a_v1_record_stamps_it_and_rewrites_no_body(
 ) -> None:
     """p1-r3: every real in-flight v1 record came from the old template and
     carries `schema_version: 1`; the stamp-less file is the hand-written case."""
-    path = _record_file(tmp_path, ("schema_version: 1\n" if stamped else "") + _V1_RECORD)
+    path = write_record(tmp_path, ("schema_version: 1\n" if stamped else "") + _V1_RECORD)
     before = path.read_text()
 
     report = run_migrations(tmp_path, dry_run=False)
@@ -89,7 +82,7 @@ def test_migrating_a_v1_record_stamps_it_and_rewrites_no_body(
 
 
 def test_migrating_is_idempotent(tmp_path: Path) -> None:
-    path = _record_file(tmp_path)
+    path = write_record(tmp_path, _V1_RECORD)
     run_migrations(tmp_path, dry_run=False)
     once = path.read_text()
 
@@ -100,8 +93,8 @@ def test_migrating_is_idempotent(tmp_path: Path) -> None:
 
 
 def test_an_unreadable_v1_record_is_refused_and_left_untouched(tmp_path: Path) -> None:
-    broken = _record_file(tmp_path, "run: r1\nticks: [not-a-tick-id]\n", stem="deliver")
-    healthy = _record_file(tmp_path)
+    broken = write_record(tmp_path, "run: r1\nticks: [not-a-tick-id]\n", stem="deliver")
+    healthy = write_record(tmp_path, _V1_RECORD)
 
     before = broken.read_bytes()
 
@@ -117,7 +110,7 @@ def test_a_v1_record_that_is_not_yaml_is_refused_and_left_byte_identical(
 ) -> None:
     """p1-r2: truncated mid-edit — the stamp read fails before the guard runs,
     and nothing is written."""
-    broken = _record_file(
+    broken = write_record(
         tmp_path, "schema_version: 1\nrun: r1\nticks: [P1.T1.S1\n", stem="deliver"
     )
     before = broken.read_bytes()
@@ -131,7 +124,7 @@ def test_a_v1_record_that_is_not_yaml_is_refused_and_left_byte_identical(
 def test_an_empty_v1_record_is_stamped_like_parse_record_reads_it(tmp_path: Path) -> None:
     """p1-r4: `parse_record` reads an empty file as `{}`, a valid record; the
     guard must agree, or the file stays stale forever and blocks the CLI gate."""
-    path = _record_file(tmp_path, "# nothing yet\n")
+    path = write_record(tmp_path, "# nothing yet\n")
 
     report = run_migrations(tmp_path, dry_run=False)
 

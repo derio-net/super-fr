@@ -73,14 +73,14 @@ def ci_none_reason(root: Path, services: Any) -> str | None:
     if ci.type != "none":
         return None
     if ci.source == "declared":
-        return "this repo declares `ci: {type: none}` in .devcontainer/fr-profiles.yaml"
+        return "this repo declares `ci: {type: none}` in .fr/profiles.yaml"
     if ci.source == "legacy":
         from fr.services.detect import detect_ci
 
         if detect_ci(root, services.forge.type) == "fr-only":
             return (
                 "the only CI file found is fr's own acceptance scaffold, which does not count "
-                "as CI; declare `ci:` in .devcontainer/fr-profiles.yaml (see `fr services`)"
+                "as CI; declare `ci:` in .fr/profiles.yaml (see `fr services`)"
             )
     return None
 

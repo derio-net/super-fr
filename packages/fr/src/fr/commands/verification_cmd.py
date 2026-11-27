@@ -30,8 +30,8 @@ from fr.commands.common import resolve_repo_root
 from fr.verification.check import check_strategy
 from fr.verification.model import StrategyError
 from fr.verification.resolve import (
-    REPO_VERIFICATIONS_REL,
     list_strategies,
+    repo_verifications_dir,
     resolve_strategy,
     shipped_verification_dirs,
 )
@@ -73,7 +73,7 @@ def check_cmd(
         if not names:
             err_console.print("[red]no verification strategies found — nothing to validate.[/red]")
             err_console.print("Searched:")
-            for d in [repo_root / REPO_VERIFICATIONS_REL, *shipped_verification_dirs()]:
+            for d in [repo_verifications_dir(repo_root), *shipped_verification_dirs()]:
                 err_console.print(f"  {d}", soft_wrap=True)
             raise typer.Exit(2)
     elif name:

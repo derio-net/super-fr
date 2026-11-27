@@ -246,15 +246,27 @@ def test_reap_hazard_fetch_is_bounded_and_timeout_is_unverifiable(
     assert "could not be checked against origin/main" in hazard.detail
 
 
-def test_local_py_holds_no_forge_cli_argv() -> None:
+ISOLATION_MODULES = [
+    "fr.isolation.local",
+    "fr.isolation.reap",
+    "fr.isolation.runner",
+    "fr.isolation.branchrefs",
+    "fr.isolation.landing",
+]
+
+
+@pytest.mark.parametrize("module", ISOLATION_MODULES)
+def test_local_py_holds_no_forge_cli_argv(module: str) -> None:
     """The lookups run through the forge adapter (spec 2026-10-06-forge-remainder
     R3, Test Plan 7). R7's tripwire only sees `gh`, so this pins glab and tea
-    too: no list literal in local.py may start a forge CLI command."""
+    too: no list literal in local.py (or a module split out of it, #1517) may
+    start a forge CLI command."""
     import ast
+    import importlib
 
-    import fr.isolation.local as local
+    mod = importlib.import_module(module)
 
-    tree = ast.parse(Path(local.__file__).read_text(encoding="utf-8"))
+    tree = ast.parse(Path(mod.__file__).read_text(encoding="utf-8"))
     argvs = [
         node.lineno
         for node in ast.walk(tree)
@@ -263,4 +275,67 @@ def test_local_py_holds_no_forge_cli_argv() -> None:
         and isinstance(node.elts[0], ast.Constant)
         and node.elts[0].value in {"gh", "glab", "tea"}
     ]
-    assert argvs == [], f"forge CLI argv in local.py at lines {argvs}"
+    assert argvs == [], f"forge CLI argv in {module} at lines {argvs}"
+
+
+def _local_imports(source: str, package: str = "fr.isolation") -> list[int]:
+    """Lines of `source` (a module of `package`) that import `fr.isolation.local`,
+    absolute or relative (`from .local import x`, `from . import local`)."""
+    import ast
+
+    target = "fr.isolation.local"
+    offenders = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom):
+            if node.level:
+                parts = package.split(".")
+                base = ".".join(parts[: len(parts) - node.level + 1])
+                module = f"{base}.{node.module}" if node.module else base
+            else:
+                module = node.module or ""
+            names = {a.name for a in node.names}
+            if (
+                module == target
+                or module.startswith(f"{target}.")
+                or (f"{module}.local" == target and "local" in names)
+            ):
+                offenders.append(node.lineno)
+        elif isinstance(node, ast.Import):
+            offenders += [node.lineno for a in node.names if a.name == target]
+    return offenders
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from fr.isolation.local import X\n",
+        "from fr.isolation import local\n",
+        "import fr.isolation.local\n",
+        "import fr.isolation.local as L\n",
+        "from .local import X\n",
+        "from . import local\n",
+        "from .. import isolation\nfrom ..isolation.local import X\n",
+        "def f():\n    from .local import X\n",
+    ],
+)
+def test_local_imports_sees_every_import_form(source: str) -> None:
+    assert _local_imports(source) != []
+
+
+def test_local_imports_passes_sibling_imports() -> None:
+    assert (
+        _local_imports("from .reap import GcAction\nfrom fr.isolation.runner import Runner\n") == []
+    )
+
+
+@pytest.mark.parametrize(
+    "module",
+    ["fr.isolation.runner", "fr.isolation.reap", "fr.isolation.branchrefs", "fr.isolation.landing"],
+)
+def test_split_modules_never_import_local(module: str) -> None:
+    """R2 (#1517): the modules split out of local.py never import it back."""
+    import importlib
+
+    mod = importlib.import_module(module)
+    offenders = _local_imports(Path(mod.__file__).read_text(encoding="utf-8"))
+    assert not offenders, f"{module} imports fr.isolation.local at lines {offenders}"

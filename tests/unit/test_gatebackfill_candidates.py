@@ -21,13 +21,10 @@ from tests.unit.gatebackfill_fixtures import (
     row,
     write_matrix,
 )
+from tests.unit.hermetic_git import hermetic_git  # noqa: F401
 from tests.unit.test_merge_evidence import _write_plan
 
-
-@pytest.fixture(autouse=True)
-def _hermetic_git(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+pytestmark = pytest.mark.usefixtures("hermetic_git")
 
 
 def _collect(repo: Path, forge: FakeForge | None = None, **kw: object):  # type: ignore[no-untyped-def]

@@ -30,6 +30,7 @@ from tests.unit.gatebackfill_fixtures import (
     row,
     write_matrix,
 )
+from tests.unit.hermetic_git import apply_hermetic_git
 
 DONE = "row:r-done"  # walked
 OWED = "row:r-owed"  # walk-owed
@@ -87,8 +88,7 @@ class Env:
         self.fake.add_pr(REPO, 41, state="MERGED", head_ref="feat/x", labels=["gate:tester-passed"])
         monkeypatch.setattr(gate_cmd, "client_for_url", lambda url: self.fake)
         monkeypatch.setenv("HOME", str(tmp_path / "home"))
-        monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
-        monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+        apply_hermetic_git(monkeypatch)
         monkeypatch.chdir(root)
 
     def publish(self, msg: str = "work") -> None:

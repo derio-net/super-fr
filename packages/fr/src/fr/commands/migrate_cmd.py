@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import shlex
+from collections.abc import Iterable
 from pathlib import Path
 
 import typer
@@ -154,6 +156,14 @@ def artifacts_cmd(
             "not per file."
         ),
     ),
+    repropose: bool = typer.Option(
+        False,
+        "--repropose",
+        help=(
+            "Propose a configuration change again even though its pull request was closed "
+            "unmerged (quiet and stealth)."
+        ),
+    ),
 ) -> None:
     """Bring every live artifact up to the version this fr writes.
 
@@ -180,6 +190,10 @@ def artifacts_cmd(
     migration retires its kind (a retiring step rewrites the whole repository), is refused
     before anything is written; `--adopt` is not offered.
     """
+    if repropose:
+        from fr.config.change import REPROPOSE_ENV
+
+        os.environ[REPROPOSE_ENV] = "1"
     from fr.artifacts.atomic import migration_lock
     from fr.artifacts.commit import lock_path
     from fr.artifacts.runner import MigrationChainError, run_migrations
@@ -253,9 +267,15 @@ def artifacts_cmd(
             # contexts the automatic gate refuses — on `main`, on a detached
             # HEAD, in a pod — precisely because the operator asked; the
             # corollary is that they, not fr, decide when it lands in history.
+            inside, outside = _commit_paths(report.changed_paths, repo_root)
+            if outside:
+                # Under quiet and stealth a moved file's destination is the configuration
+                # checkout, which fr already committed and pushed (S1 R10).
+                typer.echo(
+                    "Already committed and pushed to the configuration branch: " + " ".join(outside)
+                )
             typer.echo("Commit them yourself when you are ready:")
-            rels = " ".join(_rel(p, repo_root) for p in report.changed_paths)
-            typer.echo(f"  git add -- {rels}")
+            typer.echo(f"  git add -- {' '.join(shlex.quote(r) for r in inside)}")
             typer.echo(
                 f"  git commit -m {shlex.quote(_migrate_subject(repo_root))}"
                 f" -m {shlex.quote(f'{FR_COMMIT_TRAILER}: migrate')}"
@@ -317,6 +337,22 @@ def _offer_adoption(repo_root: Path, *, adopt: bool, yes: bool) -> None:
 def _resolve(path: Path) -> Path:
     """A `--path` argument as an absolute path: relative ones are the caller's cwd's."""
     return path if path.is_absolute() else Path.cwd() / path
+
+
+def _commit_paths(paths: Iterable[Path], repo_root: Path) -> tuple[list[str], list[str]]:
+    """*paths* split into the product's own (relative to *repo_root*, for the printed
+    `git add`) and the rest, spelled whole: a `git add` naming a path outside the
+    checkout fails, so only the first may be printed in it."""
+    top = Path(repo_root).resolve()
+    inside: list[str] = []
+    outside: list[str] = []
+    for path in paths:
+        resolved = Path(path).resolve()
+        if resolved.is_relative_to(top):
+            inside.append(resolved.relative_to(top).as_posix())
+        else:
+            outside.append(str(path))
+    return inside, outside
 
 
 def _rel(path: Path, repo_root: Path) -> str:
