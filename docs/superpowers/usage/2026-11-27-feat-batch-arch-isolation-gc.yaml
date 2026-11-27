@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-27-feat-batch-arch-isolation-gc
+captures:
+- host: h-db5d01ad
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-11-27T14:26:21+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 2d54f5ec-727a-4324-8579-737989882420
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 56
+        cache_write: 165128
+        cache_read: 4199270
+        output: 15512
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 7
+      other:
+        usd: null
+        turns: 11
+      paperwork:
+        usd: null
+        turns: 9
+    steps:
+      (outside run):
+        usd: null
+        turns: 4
+        input: 8
+        cache_write: 106839
+        cache_read: 394727
+        output: 937
+      brainstorm:
+        usd: null
+        turns: 23
+        input: 48
+        cache_write: 58289
+        cache_read: 3804543
+        output: 14575
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 4
+          input: 8
+          cache_write: 106839
+          cache_read: 394727
+          output: 937
+        brainstorm:
+          usd: null
+          turns: 23
+          input: 48
+          cache_write: 58289
+          cache_read: 3804543
+          output: 14575

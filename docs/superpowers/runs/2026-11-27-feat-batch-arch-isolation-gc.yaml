@@ -1,16 +1,19 @@
 schema_version: 12
 run: 2026-11-27-feat-batch-arch-isolation-gc
-workflow: fr-goal@1
+workflow: fr-goal-light@1
 branch: feat/batch-arch-isolation-gc
 started: '2026-11-27T14:04:56+00:00'
-cursor: brainstorm
+cursor: plan
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-27T14:05:11+00:00'
-  spec-review:
-    state: pending
+    state: done
+    at: '2026-11-27T14:26:14+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-27-isolation-gc-sweeper-design.md
   plan:
+    state: pending
+  spec-plan-review:
     state: pending
   plan-review:
     state: pending
