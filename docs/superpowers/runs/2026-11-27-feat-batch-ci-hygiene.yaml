@@ -3,7 +3,7 @@ run: 2026-11-27-feat-batch-ci-hygiene
 workflow: fr-goal@1
 branch: feat/batch-ci-hygiene
 started: '2026-11-27T20:03:58+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -46,7 +46,11 @@ steps:
           returned: '2026-11-27T20:21:43+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-11-27T20:21:49+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
