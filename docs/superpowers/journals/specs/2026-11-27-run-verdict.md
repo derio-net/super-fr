@@ -191,3 +191,8 @@ One phase per slice, operator decision scope-all-six-slices.
 ### phase-split-2026-11-27-run-verdict-p4 · decision · ask: slice 4, briefs E to fr/run/brief.py (R6)
 
 One phase per slice, operator decision scope-all-six-slices.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-run-verdict-p5 created=2026-11-27T15:27:44+00:00 -->
+### phase-split-2026-11-27-run-verdict-p5 · decision · ask: slice 5, the remaining evidence verifiers D to fr/run/evidence/ (R7)
+
+One phase per slice; also review-size: about 2,400 lines.
