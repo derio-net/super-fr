@@ -1,0 +1,45 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-27-export-drift
+repo: derio-net/super-fr
+rows:
+  - id: export-drift-refused
+    capability: triage state export
+    acceptance: An export over a repo-side root whose durable files changed, were deleted
+      or were added since the last export (per its committed exported-files record)
+      writes nothing and names every drifted path and the targeted-import remedy; `fr
+      triage state export --force` overwrites them; every export writes the record.
+    origin:
+    - spec:2026-11-27-export-drift#R1
+    - spec:2026-11-27-export-drift#R2
+    - spec:2026-11-27-export-drift#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: export-drift-driver-need
+    capability: triage wave driver export
+    acceptance: The driver's per-wave export over drift pushes nothing and opens no
+      PR, and Needs you now shows an export-drift row naming the paths and the exact
+      import command until an export finds no drift.
+    origin:
+    - spec:2026-11-27-export-drift#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: targeted-import-only
+    capability: triage state import
+    acceptance: '`fr triage state import --only <path>` copies only the named files
+      or directories, even over a newer state copy, leaves every other state file alone,
+      and refuses a path naming no durable file before copying anything.'
+    origin:
+    - spec:2026-11-27-export-drift#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none

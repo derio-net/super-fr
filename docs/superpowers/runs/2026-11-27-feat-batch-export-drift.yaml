@@ -3,11 +3,14 @@ run: 2026-11-27-feat-batch-export-drift
 workflow: fr-goal@1
 branch: feat/batch-export-drift
 started: '2026-11-27T12:56:12+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-27T12:56:25+00:00'
+    state: done
+    at: '2026-11-27T14:43:35+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-27-export-drift-design.md
   spec-review:
     state: pending
   plan:
