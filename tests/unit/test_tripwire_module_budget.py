@@ -18,7 +18,7 @@ SRC = "packages/fr/src/fr/"
 MAX_HEADROOM = 400
 
 BUDGETS: dict[str, int] = {
-    f"{SRC}commands/run_cmd.py": 9120,  # show-me-visuals: three call sites of fr.shape
+    f"{SRC}commands/run_cmd.py": 8895,  # run-write-ledger (#1515): the write ledger moved to fr/run/writes.py
     # +25 each: batch closeout-truth (gh#1494/#1496/#1497/#1569) changes the close-out steps
     # these modules hold; the split they need is #1516 (hand-back and close-out leaves).
     # triage_batch_cmd.py +25 more (8225 -> 8250): landing-method (spec 2026-11-26 R2) adds

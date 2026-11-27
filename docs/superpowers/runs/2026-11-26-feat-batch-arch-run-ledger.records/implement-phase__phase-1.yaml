@@ -1,0 +1,11 @@
+schema_version: 12
+run: 2026-11-26-feat-batch-arch-run-ledger
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T2.S1, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2]
+refactor:
+  P1.T3: "the task is itself the move; run_cmd keeps thin alias imports and nothing else to clean"
+journal: []
+resolves: []
+evidence: {}
