@@ -13683,3 +13683,9 @@ queue_requests:
   pr: 1079
   by: YiannisDermitzakis
   preapproved: true
+- kind: queue_remove
+  at: '2026-11-27T16:03:13.445004Z'
+  repo: derio-net/super-fr
+  scope: s-f7ea4061
+  pr: 1107
+  by: YiannisDermitzakis
