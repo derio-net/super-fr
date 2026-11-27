@@ -238,6 +238,7 @@ def _pr_gate_cases() -> list[Case]:
         _case(
             "render-refused",
             "deliver_pr_gate",
+            "deliver_acceptance_gate",
             _pr_gate(render=_PrBodyRefused()),
             args,
         ),
@@ -245,6 +246,7 @@ def _pr_gate_cases() -> list[Case]:
         _case(
             "minimal-marker",
             "deliver_pr_gate",
+            "deliver_acceptance_gate",
             _pr_gate(live="body", pr_body="minimal", markers=["<!-- a -->", "<!-- b -->"]),
             args,
         ),
@@ -252,6 +254,7 @@ def _pr_gate_cases() -> list[Case]:
         _case(
             "shared-keyword",
             "deliver_pr_gate",
+            "deliver_acceptance_gate",
             _pr_gate(live=_all_sections() + "Closes #1 and #2\n"),
             args,
         ),
@@ -582,6 +585,7 @@ def test_the_moved_gates_print_the_captured_bytes(
             "warn_label_sync",
             "deliver_label_sync",
             "deliver_pr_gate",
+            "deliver_acceptance_gate",
         }:
             extra["warn"] = run_cmd._say
         if case.fn == "deliver_label_sync":
