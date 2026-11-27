@@ -171,6 +171,8 @@ plan_review  <-  plan_ops (re-export), plan_cmd, record/gates, run_cmd
 
 strategy: none
 gate: developer
+settle.conflicts: report — batch arch-plan-ops-split: the wave driver owns this PR's mergeability
+settle.ci: report — batch arch-plan-ops-split: the wave driver owns this PR's CI
 
 The change has no behaviour of its own: the existing suite, unchanged except for import
 lines and the one repointed patch, is the evidence, run by this PR's CI. No acceptance rows
