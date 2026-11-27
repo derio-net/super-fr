@@ -175,3 +175,9 @@ gate: developer
 The change has no behaviour of its own: the existing suite, unchanged except for import
 lines and the one repointed patch, is the evidence, run by this PR's CI. No acceptance rows
 are added.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-27-plan-ops-split | `derio-net/super-fr` | `2026-11-27-plan-ops-split` | — |
