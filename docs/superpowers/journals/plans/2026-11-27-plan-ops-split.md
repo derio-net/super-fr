@@ -60,3 +60,28 @@ the moves are verbatim and the one permitted body change (the merged journal rea
 ### no-refactor-p1-t5 · discovery · no-refactor-because P1.T5 (phase 1)
 
 a verbatim move of the rework section; bodies frozen by the spec's cut-and-paste rule
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-27T11:28:40+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · Docstrings still name fr.plan_ops for the moved sizing reader and rework writer (phase 1)
+
+requirements.py:15 listed fr.plan_ops as a phase-sizing reader; plan_ops.py:1-14 said rework writes happen there; _yaml.py:29 named plan_ops as the router.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-27T11:28:40+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · Reviewed-stamp note differs from R14's literal wording (phase 1)
+
+Pages carry "still true, import-only change (plan_ops split)"; R14 said "still true: import-only change".
+
+<!-- fr:journal kind=review scope=plan id=p1-review-r1 created=2026-11-27T11:28:40+00:00 phase=1 -->
+### p1-review-r1 · review · Phase 1 code review — verbatim moves, no cycle, two wording findings (phase 1)
+
+Independent reviewer compared every moved top-level body by ast against origin/main (byte-identical except the merged journal read), checked journal_entries against both old readers, import direction (fresh-interpreter sys.modules check), every monkeypatch target, R9 re-export identity, R10 callers, R11 test diffs, budget, docs check and fragment; ran 517 targeted tests green. Findings: p1-r1, p1-r2.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-27T11:28:40+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: Docstrings still name fr.plan_ops for the moved sizing reader and rework writer (phase 1)
+
+requirements.py, plan_ops.py and _yaml.py docstrings now name fr.plan_review, fr.plan_rework and fr._plan_io (3d771d421).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-27T11:28:40+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: Reviewed-stamp note differs from R14's literal wording (phase 1)
+
+The colon form breaks the page's YAML front matter (discovery logged by the executor), so the spec's R14 now states the comma form the pages carry (3d771d421).
