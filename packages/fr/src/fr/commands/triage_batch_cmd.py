@@ -143,6 +143,7 @@ from fr.triage.approval import (
     settle_entry_approval,
     settle_postmerge_done,
     settle_release,
+    view_waits,
 )
 from fr.triage.batch import (
     CLOSED_OUT,
@@ -296,7 +297,6 @@ from fr.triage.merge_stops import (
     record_stop,
 )
 from fr.triage.model import (
-    ApprovalEvent,
     ArchiveConflictEvent,
     Batch,
     BatchEvent,
@@ -4579,7 +4579,7 @@ class _Driver:
                 head = str(view.get("head_oid") or "")
                 approvals[e.batch.id], _ = judge_approval(
                     e.batch.events, e.pr.number, head, view.get("labels"),
-                    self._live_patch_ids(facts, repo, view),
+                    self._live_patch_ids(facts, repo, view), waits=view_waits(e.batch.events, view),
                 )  # fmt: skip
                 live[e.batch.id] = LivePr(
                     number=e.pr.number,
@@ -5595,23 +5595,22 @@ class _Driver:
         wrote = False
         voided: set[tuple[str, int]] = set()
         writer = event_writer(self.target, facts, read_errors=True)
-        repo_of = {b.id: r for b, r in ((b, repos.get(b.id)) for b in judgements.batches) if r}
 
         def record(batch_id: str, event: BatchEvent) -> None:
             nonlocal wrote
             writer(batch_id, event)
             wrote = True
-            if isinstance(event, ApprovalEvent) and event.voided_at is not None:
-                voided.add((repo_of[batch_id], event.pr))
 
         try:
             for repo, open_prs in sorted(by_repo.items()):
                 client = self.client(facts, repo)
                 ensure_approval_label(client, repo, _say, seen=self._label_seen)
+                removed: set[int] = set()  # queue-followups R1: an ended approval is not in it
                 settle_approvals(
                     client, record, repo, open_prs, _say, now=_now(),
-                    patch_id_of=self._patch_id_of(facts, repo), landed=landed,
+                    patch_id_of=self._patch_id_of(facts, repo), landed=landed, removed=removed,
                 )  # fmt: skip
+                voided |= {(repo, n) for n in removed}
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         return wrote, voided

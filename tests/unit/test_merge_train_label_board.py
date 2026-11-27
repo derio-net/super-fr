@@ -436,3 +436,19 @@ def test_a_cursor_the_driver_cannot_read_is_a_need_naming_its_remedy(labels: lis
 def test_an_unread_cursor_with_no_cause_is_no_need_the_driver_reads_it_again() -> None:
     f, jd = _one(labels=[], cursor=None, cursor_read="unread")
     assert not [n for n in needs_you(f, jd) if n.kind == "cursor-unread"]
+
+
+def test_a_green_pr_waiting_on_a_real_conflict_is_not_asked_for_approval() -> None:
+    """queue-followups R2: its conflict Need speaks for it."""
+    conflict = {"kind": "conflict", "at": "2026-10-01T12:00:00Z", "head": "sha-20",
+                "paths": ["a.py"], "delivered": "session"}  # fmt: skip
+    f, jd = _one(labels=[APPROVED_FR.name], events=[conflict], mergeable="CONFLICTING")
+    assert not [n for n in needs_you(f, jd) if n.kind == "approve-pr"]
+
+
+def test_an_ended_approval_asks_for_the_label_without_naming_a_push() -> None:
+    """queue-followups R1: the label was removed at the approved head; no push voided it."""
+    ended = {**_APPROVED, "at": "2026-10-01T13:00:00Z", "voided_at": "sha-old"}
+    f, jd = _one(labels=[], events=[_APPROVED, ended], head_oid="sha-old")
+    (need,) = [n for n in needs_you(f, jd) if n.kind == "approve-pr"]
+    assert need.text == "PR #20: approval ended (label removed): label it approved-fr to merge"
