@@ -17,9 +17,16 @@ rows:
     - spec:2026-11-27-export-drift#R1
     - spec:2026-11-27-export-drift#R2
     - spec:2026-11-27-export-drift#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_state_sync.py#test_an_export_over_a_repo_side_edit_is_refused_and_writes_nothing
+      - super-fr:tests/unit/test_triage_state_sync.py#test_force_overwrites_the_drifted_files_and_rewrites_the_record
+      - super-fr:tests/unit/test_triage_state_sync.py#test_a_bad_record_is_refused_and_force_rewrites_it
+      - super-fr:tests/unit/test_triage_state_sync.py#test_the_export_verb_refuses_drift_with_exit_2_until_force
+    status: ci
+    notes: unit tests pin the record, the refusal over changed, deleted and added files
+      with nothing written, the no-record bootstrap, symlinks skipped, a bad record
+      and --force
     verify: none
   - id: export-drift-driver-need
     capability: triage wave driver export
