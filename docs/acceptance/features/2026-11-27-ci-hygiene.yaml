@@ -26,6 +26,9 @@ rows:
       default token scope.
     origin:
     - spec:2026-11-27-ci-hygiene#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_lanes_workflow.py#test_ci_yml_default_token_is_read_only_contents
+      - super-fr:tests/unit/test_ci_lanes_workflow.py#test_every_workflow_declares_workflow_level_permissions
+    status: ci
+    notes: workflow-level permissions pinned; unit tests run in CI
