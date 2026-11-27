@@ -104,6 +104,7 @@ class FakeTree:
         self.head_files: dict[str, str] = {}  # what the PR head carries, by path
         self.merge_conflict: tuple[str, ...] = ()  # paths a merge_commit conflicts on
         self.on_merge: Any = None  # called on a clean merge: what the merge brings in
+        self.contains: set[str] = set()  # commits the ops branch already holds
 
     def snapshot_head(self) -> None:
         """Freeze the tree's current journals as what the PR head carries (p4-r2)."""
@@ -165,6 +166,9 @@ class FakeTree:
         self.calls.append(("rebase", (new_base, upstream)))
         if self.rebase_error:
             raise RuntimeError(self.rebase_error)
+
+    def is_ancestor(self, sha: str) -> bool:
+        return sha in self.contains
 
     def merge_commit(self, ref: str, message: str) -> str:
         self.calls.append(("merge", (ref, message)))
@@ -1608,13 +1612,28 @@ def test_a_refresh_at_stage_5_goes_back_to_stage_4_and_reapplies(ops_root: Path)
     assert len(_refresh_q(prompt)) == 1
 
 
-def test_a_test_plan_only_refresh_reopens_and_forgets_nothing(ops_root: Path) -> None:
+def test_a_test_plan_only_refresh_at_stage_5_reopens_and_forgets_nothing(ops_root: Path) -> None:
     spec = (ops_root / SPEC).read_text().replace("click the page", "click it twice")
     gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4, ops=None, spec=spec)
     gate_mod.stage_5(gate)
     assert len(_refresh_q(prompt)) == 1 and [k for k, _ in tree.calls if k == "merge"]
     assert _host(ops_root).reopened() == (frozenset(), frozenset())
     assert {1, 3, 4, 5} <= _host(ops_root).stages()
+
+
+@pytest.mark.parametrize("at", [6, 7])
+def test_a_test_plan_only_refresh_at_stage_6_or_7_goes_back_to_stage_5(
+    ops_root: Path, at: int
+) -> None:
+    """p1-r3: stage 5 walks the Test Plan, so a changed one is walked again."""
+    spec = (ops_root / SPEC).read_text().replace("walk the stage", "walk it twice")
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4, 5, *range(6, at), ops=None, spec=spec)
+    result = run(gate)
+    assert result.ok, result.why
+    assert result.ran == (5, 6, 7, 8)
+    assert _host(ops_root).reopened() == (frozenset(), frozenset())
+    assert not _post_applies(host)  # stage 4 is not forgotten: no op changed
+    assert any("walk it twice" in a for a in prompt.asked)  # stage 5 asked the new step
 
 
 def test_a_default_branch_without_the_plan_dir_is_refused(ops_root: Path) -> None:
@@ -1652,3 +1671,103 @@ def test_a_default_tip_that_is_no_sha_is_refused_before_any_diff(ops_root: Path)
     with pytest.raises(gate_mod.StageFailed) as exc:
         gate_mod.stage_4(gate)
     assert exc.value.code == 2 and not tree.calls and _refresh_q(prompt) == []
+
+
+# ------------------------------------------------------ phase 1 review (p1-r1 … p1-r5)
+
+
+def _close_pre_merge(ops_root: Path) -> None:
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+
+
+def _passed_label(gate: Gate) -> None:
+    gate.forge.pr["labels"] = [*gate.forge.pr["labels"], "gate:devops-passed"]  # type: ignore[attr-defined]
+
+
+def test_after_a_restart_an_existing_pass_holds_when_nothing_blocks_it(ops_root: Path) -> None:
+    """p1-r1: the label is trusted again only once the refreshed tree has no blocker."""
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4, 5, 6)
+    _passed_label(gate)
+    _close_pre_merge(ops_root)
+    record_op(ops_root, "p", op="post", result="done", phase="post-merge")
+    host.live["post"] = "DONE"
+    said: list[str] = []
+    gate.say = said.append
+    result = run(gate)
+    assert result.ok, result.why
+    assert result.ran == (4, 5, 6, 7, 8)
+    assert any("the existing pass still holds after the refresh" in line for line in said)
+    assert not [a for a in _gate_passes(tree) if a[a.index("--gate") + 1] == "devops"]
+
+
+def test_after_a_restart_an_existing_pass_with_a_blocker_fails_stage_6(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4, 5, 6)
+    _passed_label(gate)
+    record_op(ops_root, "p", op="post", result="done", phase="post-merge")
+    host.live["post"] = "DONE"
+    result = run(gate)
+    assert not result.ok and result.failed == 6
+    assert "op pre" in result.why and "predates the refresh" in result.why
+    assert "gate:devops-passed" in gate.forge.pr["labels"]  # type: ignore[attr-defined]
+    assert not [c for c in gate.forge.calls if c[0] == "labels" and c[1][2]]  # type: ignore[attr-defined]
+
+
+def test_an_entry_the_merge_brings_in_does_not_close_a_reopened_op(ops_root: Path) -> None:
+    """p1-r2: the default branch's own journal entries are not evidence recorded here."""
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    host.live["post"] = "DONE"
+    merge = tree.on_merge
+
+    def merge_with_an_entry() -> None:
+        merge()
+        record_op(ops_root, "p", op="post", result="done", phase="post-merge")
+
+    tree.on_merge = merge_with_an_entry
+    gate_mod.stage_4(gate)
+    assert _post_applies(host) == [["fr", "ops", "apply", "post", "--plan", PLAN, "--yes"]]
+
+
+def test_a_no_op_merge_that_still_differs_is_refused(ops_root: Path) -> None:
+    """p1-r5: the pinned commit is already in the ops branch, yet the ops differ."""
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4)
+    tree.contains = {TIP}
+    before = _host(ops_root).path.read_text()
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_5(gate)
+    assert f"still differs from main at {TIP[:12]} after merging it" in exc.value.why
+    assert "post" in exc.value.why and "resolve by hand" in exc.value.why
+    assert not tree.calls and _refresh_q(prompt) == []
+    assert _host(ops_root).path.read_text() == before
+
+
+def test_a_refresh_that_reopens_on_every_pass_stops_at_the_bound(ops_root: Path) -> None:
+    """p1-r4: MAX_RESTARTS bounds a default branch that never settles."""
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4)
+    tree.on_merge = None  # the merge never brings the change in: it drifts on every pass
+    result = run(gate)
+    assert not result.ok and result.failed == 5
+    assert "keeps moving" in result.why
+
+
+def test_a_push_that_fails_after_the_merge_is_retried_by_a_rerun(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    tree.push_error = "rejected"
+    with pytest.raises(gate_mod.StageFailed, match="cannot push"):
+        gate_mod.stage_4(gate)
+    assert 4 not in _host(ops_root).stages() and _host(ops_root).pushed() is None
+    tree.push_error = None
+    gate_mod.stage_4(gate)
+    assert [k for k, _ in tree.calls].count("push") == 2
+    assert 4 in _host(ops_root).stages() and _host(ops_root).pushed() == HEAD
+
+
+@pytest.mark.parametrize("at", [6, 7])
+def test_an_ops_refresh_at_stage_6_or_7_goes_back_to_stage_4(ops_root: Path, at: int) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4, 5, *range(6, at))
+    record_op(ops_root, "p", op="post", result="done", phase="post-merge")
+    host.live["post"] = "DONE"
+    result = run(gate)
+    assert result.ok, result.why
+    assert result.ran == (4, 5, 6, 7, 8)
+    assert _post_applies(host) == [["fr", "ops", "apply", "post", "--plan", PLAN, "--yes"]]

@@ -140,7 +140,8 @@ def _merge_by_hand(gate: Gate, tree: OpsTree, ref: str, paths: tuple[str, ...]) 
 def refresh(gate: Gate, tree: OpsTree, stage: int) -> None:
     """Bring the ops workspace up to date with the default branch before stage *stage* acts
     (R1–R6); says nothing when nothing moved. Raises `Restart` when a refresh after stage 4
-    reopened an op, so the run goes back to stage 4 and applies it again."""
+    reopened an op (back to stage 4, which applies it again), or after stage 5 changed only
+    the Test Plan (back to stage 5, which walks it again)."""
     import shutil
 
     from fr.artifacts.paths import KIND_DIRS
@@ -162,6 +163,13 @@ def refresh(gate: Gate, tree: OpsTree, stage: int) -> None:
         shutil.rmtree(scratch, ignore_errors=True)
     if not d.differs:
         return
+    if tree.is_ancestor(sha):  # merging it again changes nothing (review p1-r5)
+        plan = ["the Test Plan"] if d.test_plan else []
+        moved = ", ".join([*d.added, *d.removed, *d.changed, *plan])
+        raise StageFailed(
+            f"the ops workspace still differs from {gate.default} at {sha[:12]} after merging "
+            f"it ({moved}); resolve by hand in {tree.path}, then re-run `fr ops gate`"
+        )
     if not gate.prompt.confirm(_question(d, ref, t.ops_branch)):  # asked under --yes too (R2)
         raise StageFailed(f"bringing {t.ops_branch} up to date with {ref} declined; nothing done")
     try:
@@ -170,22 +178,31 @@ def refresh(gate: Gate, tree: OpsTree, stage: int) -> None:
         raise StageFailed(f"cannot commit the records on {t.ops_branch}: {exc}") from exc
     # Reopened before the merge, so a conflict merged by hand still re-applies them (R6).
     reopen = {*d.changed, *d.added}
+    before = _entry_ids(tree, t.slug)
     if reopen:
         ops, _ = gate.state.reopened()
-        gate.state.set_reopened(ops | reopen, _entry_ids(tree, t.slug))
-        if stage > 4:
-            gate.state.forget(4)
+        gate.state.set_reopened(ops | reopen, before)
+    back_to = 4 if reopen else 5 if d.test_plan else None  # stage 5 walks the Test Plan
+    if back_to is not None and stage > back_to:
+        gate.state.forget(back_to)
+    else:
+        back_to = None
     try:
         tree.merge_commit(sha, f"chore(ops): merge {ref} into {t.ops_branch}")
     except MergeConflict as exc:
         raise StageFailed(_merge_by_hand(gate, tree, sha, exc.paths)) from exc
     except Exception as exc:  # noqa: BLE001 — git's own words
         raise StageFailed(f"cannot merge {ref} into {t.ops_branch}: {exc}") from exc
+    if reopen:  # what the merge brought in is the default branch's, never recorded here
+        ops, _ = gate.state.reopened()
+        gate.state.set_reopened(ops, before | _entry_ids(tree, t.slug))
     try:
         gate.publish(tree)
     except Exception as exc:  # noqa: BLE001 — git's own words
         raise StageFailed(f"cannot push {t.ops_branch}: {exc}") from exc
     gate.say(f"{t.ops_branch} brought up to date with {ref}")
     gate.trust(tree)  # R4: the merged content, before any probe or apply
-    if reopen and stage > 4:
+    if back_to == 4:
         raise Restart(f"ops reopened ({', '.join(sorted(reopen))}); back to stage 4")
+    if back_to == 5:
+        raise Restart("the Test Plan changed; back to stage 5")

@@ -160,6 +160,11 @@ class OpsTree(Protocol):
 
     def rebase_onto(self, new_base: str, upstream: str) -> None: ...
 
+    def is_ancestor(self, sha: str) -> bool:
+        """Whether the commit *sha* is already in the ops branch (`git merge-base
+        --is-ancestor`): merging it again would change nothing (review p1-r5)."""
+        ...
+
     def merge_commit(self, sha: str, message: str) -> str:
         """Merge exactly the commit *sha* (a full object id, the one the refresh diffed and
         the operator confirmed; never a ref a later fetch could move, review p1-sec-r1) into
@@ -278,6 +283,8 @@ class GateState(Protocol):
 
     def forget(self, from_stage: int) -> None: ...
 
+    def forgotten(self) -> set[int]: ...
+
 
 class HostGateState:
     """The operator's own record of a run's DevOps stage (R15): the stages done and the PR
@@ -320,6 +327,7 @@ class HostGateState:
     def mark(self, n: int, *, head: str | None = None) -> None:
         data = self._data()
         data["stages"] = sorted(self.stages() | {n})
+        data["forgotten"] = sorted(self.forgotten() - {n})
         if head is not None:
             data["head"] = head
         self._write(data)
@@ -349,7 +357,15 @@ class HostGateState:
         stay, so the same run goes back to *from_stage* (R6)."""
         data = self._data()
         data["stages"] = sorted(n for n in self.stages() if n < from_stage)
+        dropped = set(range(from_stage, max(STAGE_BY_NUMBER) + 1))
+        data["forgotten"] = sorted(self.forgotten() | dropped)
         self._write(data)
+
+    def forgotten(self) -> set[int]:
+        """The stages a refresh forgot that have not been done again since (review p1-r1):
+        while stage 6 is one, a `gate:devops-passed` label on the PR predates the refresh."""
+        raw = self._data().get("forgotten") or []
+        return {n for n in raw if isinstance(n, int) and not isinstance(n, bool)}
 
     def _write(self, data: dict[str, Any]) -> None:
         from fr.ops.trust import _write_private
@@ -1217,6 +1233,9 @@ def stage_6(gate: Gate) -> None:
     _refresh(gate, 6)
     t = gate.target
     tree = gate.tree()
+    if _pass_labelled(gate.refreshed()):
+        _existing_pass(gate, tree)
+        return
     notes = f"DevOps stage of run {t.run.run}: ops and devops steps recorded on {t.ops_branch}"
     owed = tester_steps(gate, tree)
     if owed:
@@ -1230,6 +1249,26 @@ def stage_6(gate: Gate) -> None:
             f"`fr gate pass --gate devops --run {t.run.run}` exited {code}" + _recovery(gate, tree)
         )
     gate.finish(tree, 6, "gate:devops passed")
+
+
+def _existing_pass(gate: Gate, tree: OpsTree) -> None:
+    """The PR already carries `gate:devops-passed` from before a refresh (review p1-r1):
+    `fr gate pass` would only re-close trackers, so the blockers are read here, on the
+    refreshed workspace. The label is never removed by fr."""
+    from fr.ops.holds import devops_blockers
+    from fr.ops.load import OpsLoadError
+
+    try:
+        blockers = devops_blockers(tree.path, gate.target.run)
+    except OpsLoadError as exc:
+        raise StageFailed(f"the plan's ops cannot be read: {exc}") from exc
+    if blockers:
+        raise StageFailed(
+            f"PR #{gate.target.pr}'s gate:devops-passed predates the refresh, and the "
+            f"refreshed workspace is still held: {'; '.join(blockers)}" + _recovery(gate, tree)
+        )
+    gate.say("stage 6: the existing pass still holds after the refresh")
+    gate.finish(tree, 6, "gate:devops-passed still holds after the refresh")
 
 
 def _recovery(gate: Gate, tree: OpsTree) -> str:
@@ -1385,9 +1424,18 @@ def _merged(gate: Gate, recorded: set[int]) -> bool:
 
 
 def _passed(gate: Gate, recorded: set[int]) -> bool:
-    return 6 in recorded or "gate:devops-passed" in {
-        str(n) for n in gate.view().get("labels") or []
-    }
+    """Stage 6 is done by the host state, or by the PR's `gate:devops-passed` label, but
+    the label only while no refresh reopened an op or forgot stage 6 since (review p1-r1):
+    a pass from before the refresh is re-checked by stage 6 itself."""
+    if 6 in recorded:
+        return True
+    if gate.state.reopened()[0] or 6 in gate.state.forgotten():
+        return False
+    return _pass_labelled(gate)
+
+
+def _pass_labelled(gate: Gate) -> bool:
+    return "gate:devops-passed" in {str(n) for n in gate.view().get("labels") or []}
 
 
 STAGES: tuple[Stage, ...] = (
