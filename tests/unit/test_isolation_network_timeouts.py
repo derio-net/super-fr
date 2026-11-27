@@ -246,15 +246,21 @@ def test_reap_hazard_fetch_is_bounded_and_timeout_is_unverifiable(
     assert "could not be checked against origin/main" in hazard.detail
 
 
-def test_local_py_holds_no_forge_cli_argv() -> None:
+ISOLATION_MODULES = ["fr.isolation.local", "fr.isolation.runner"]
+
+
+@pytest.mark.parametrize("module", ISOLATION_MODULES)
+def test_local_py_holds_no_forge_cli_argv(module: str) -> None:
     """The lookups run through the forge adapter (spec 2026-10-06-forge-remainder
     R3, Test Plan 7). R7's tripwire only sees `gh`, so this pins glab and tea
-    too: no list literal in local.py may start a forge CLI command."""
+    too: no list literal in local.py (or a module split out of it, #1517) may
+    start a forge CLI command."""
     import ast
+    import importlib
 
-    import fr.isolation.local as local
+    mod = importlib.import_module(module)
 
-    tree = ast.parse(Path(local.__file__).read_text(encoding="utf-8"))
+    tree = ast.parse(Path(mod.__file__).read_text(encoding="utf-8"))
     argvs = [
         node.lineno
         for node in ast.walk(tree)
@@ -263,4 +269,4 @@ def test_local_py_holds_no_forge_cli_argv() -> None:
         and isinstance(node.elts[0], ast.Constant)
         and node.elts[0].value in {"gh", "glab", "tea"}
     ]
-    assert argvs == [], f"forge CLI argv in local.py at lines {argvs}"
+    assert argvs == [], f"forge CLI argv in {module} at lines {argvs}"

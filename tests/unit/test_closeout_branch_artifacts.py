@@ -11,11 +11,8 @@ import subprocess
 from pathlib import Path
 
 from fr.closeout import BranchArtifact, branch_artifacts
-from fr.isolation.local import (
-    branch_changed_paths,
-    branch_changes_present,
-    subprocess_runner,
-)
+from fr.isolation.local import branch_changed_paths, branch_changes_present
+from fr.isolation.runner import subprocess_runner
 
 
 def _git(root: Path, *args: str) -> None:

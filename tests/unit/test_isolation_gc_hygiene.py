@@ -20,7 +20,8 @@ from pathlib import Path
 import pytest
 from fr.isolation import sessions
 from fr.isolation.hostworktree import HostWorktreeTarget
-from fr.isolation.local import GcAction, subprocess_runner
+from fr.isolation.local import GcAction
+from fr.isolation.runner import subprocess_runner
 from fr.isolation.types import IsolationState, load_state, save_state
 
 from tests.unit.test_isolation import make_repo

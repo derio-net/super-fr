@@ -58,8 +58,8 @@ from fr.isolation.local import (
     branch_changes_present,
     recorded_start,
     resolve_branch_refs,
-    subprocess_runner,
 )
+from fr.isolation.runner import subprocess_runner
 from fr.isolation.types import IsolationError
 from fr.journal.model import JournalScope, archived_journal_path, journal_path
 from fr.parser import PlanSchemaError

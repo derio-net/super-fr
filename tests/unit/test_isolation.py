@@ -20,9 +20,8 @@ from fr.isolation.local import (
     ReapRefused,
     branch_changed_paths,
     branch_changes_present,
-    devcontainer_id,
-    subprocess_runner,
 )
+from fr.isolation.runner import devcontainer_id, subprocess_runner
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
@@ -2356,7 +2355,7 @@ def test_spawn_failure_does_not_break_flow(tmp_path: Path, monkeypatch: pytest.M
 def test_default_target_does_not_spawn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # The library default spawner is a no-op — a directly-constructed Target
     # (as in tests, and gc's own sibling teardowns) never forks a real sweep.
-    from fr.isolation.local import _noop_gc_spawn
+    from fr.isolation.runner import _noop_gc_spawn
 
     target = LocalWorktreeDevcontainerTarget(make_repo(tmp_path, ["dev"], default="dev"))
     assert target._gc_spawner is _noop_gc_spawn
