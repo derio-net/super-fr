@@ -27,7 +27,7 @@ from fr.triage.kanban import COLUMN_TITLES, COLUMNS, Board, Card, Column
 from fr.triage.waits import PARTIES, Party
 
 DWELL_FILE = "dwell.json"
-SCHEMA = 1
+SCHEMA: Literal[1] = 1
 CAP = 200
 """The intervals each batch keeps; the oldest goes first, and the batch is `truncated`."""
 
@@ -65,7 +65,7 @@ class Entry(_Strict):
 
 
 class Ledger(_Strict):
-    schema_: Literal[1] = Field(SCHEMA, alias="schema")
+    schema_: Literal[1] = Field(default=SCHEMA, alias="schema")
     batches: dict[str, Entry] = Field(default_factory=dict)
 
 

@@ -50,7 +50,7 @@ from fr.commands.triage_cmd import (
     warn_nav,
 )
 from fr.commands.triage_cmd import fail as _fail
-from fr.triage import gitseam, pacing_state
+from fr.triage import dwell, gitseam, pacing_state
 from fr.triage.batch import batch_item_id, batch_repo, batch_workflow, last_dispatch
 from fr.triage.batch_drive import (
     DEFAULT_WORKSPACE_PREFIX,
@@ -439,11 +439,17 @@ def write_board(
     ci_none: Collection[str] | None = None,
     now: datetime | None = None,
     checkouts: Mapping[str, Path | None] | None = None,
+    writer: bool | None = None,
 ) -> tuple[Path, int]:
     """Render the Batches page into the state directory *target* from the facts and
     judgements on disk now, with live session statuses, and remove the page's old-named
     file (triage-pages-ux R3). *now* is the render time and the idle clock (the wall clock when
-    None). Returns the path written and its card count."""
+    None). Returns the path written and its card count.
+
+    The dwell ledger (spec 2026-11-27-board-session-state R5) is observed at *now* on every
+    render and stored only by its one writer: *writer* True (the driver holding
+    `drive.lock`, or its supervisor), or None while no live driver holds the lock. False, or
+    None beside a live driver, observes in memory and leaves `dwell.json` alone."""
     _, facts, judgements = _load_state(scope, target, None)
     reads = read_sessions(judgements, facts, prefix=prefix, target=target, loader=loader)
     statuses, notes = reads.statuses, reads.notes
@@ -475,6 +481,12 @@ def write_board(
         overlaps=card_overlaps,
         background=reads.background,
     )  # fmt: skip
+    ledger, dwell_note = dwell.load(target)
+    if dwell_note is not None:
+        notes.append(dwell_note)
+    ledger = dwell.observe(ledger, board, rendered_at)
+    if writer or (writer is None and live_driver(target) is None):
+        dwell.store(target, ledger)
     html = render_board(
         board,
         scope_args=scope_args,
@@ -485,6 +497,7 @@ def write_board(
         banner=skew_banner(facts),
         present=pages_present(target, "batches"),
         activity=_activity_entries(target),
+        dwell=ledger,
     )
     out = target / page("batches").file
     write_text_atomic(out, html)

@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -339,6 +340,74 @@ def test_write_board_judges_idleness_by_the_wall_clock(
         r"idle, dispatched \d+ min ago, no PR as of \d{4}-\d\d-\d\d \d\d:\d\d UTC", card
     )
     assert 'class="card needs-you"' in card
+
+
+# ------------------------------------------- the dwell ledger's one writer (R5)
+
+T_DWELL = datetime(2026, 11, 27, 9, 0, tzinfo=UTC)
+
+
+def _dwell(tmp_path: Path) -> dict[str, Any]:
+    return json.loads((tmp_path / "dwell.json").read_text(encoding="utf-8"))
+
+
+def test_write_board_stores_the_ledger_when_no_live_driver_holds_the_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    entry = _dwell(tmp_path)["batches"]["b1"]
+    assert entry["column"] == "proposed" and entry["column_first_seen"] is True
+    _setup(tmp_path, _dispatch_event("b1"))
+    later = T_DWELL + timedelta(minutes=45)
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=later)
+    entry = _dwell(tmp_path)["batches"]["b1"]
+    assert entry["column"] == "running" and len(entry["intervals"]) == 1
+    assert 'class="dwell"' in _column(path.read_text(encoding="utf-8"), "running")
+
+
+def test_write_board_beside_a_live_driver_observes_in_memory_and_stores_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    monkeypatch.setattr(triage_kanban_cmd, "live_driver", lambda target: "pid 1, started x")
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    assert not (tmp_path / "dwell.json").exists()
+    card = _column(path.read_text(encoding="utf-8"), "proposed")
+    assert '<span class="dwell">in Proposed ≥0m · waits for queue ≥0m</span>' in card
+
+
+def test_write_board_as_the_driver_always_stores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    monkeypatch.setattr(triage_kanban_cmd, "live_driver", lambda target: "pid 1, started x")
+    write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL, writer=True)
+    assert set(_dwell(tmp_path)["batches"]) == {"b1"}
+
+
+def test_write_board_with_writer_false_never_stores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL, writer=False)
+    assert not (tmp_path / "dwell.json").exists()
+
+
+def test_an_unreadable_ledger_is_one_page_note_and_starts_over(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    (tmp_path / "dwell.json").write_text("{garbage", encoding="utf-8")
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    page = path.read_text(encoding="utf-8")
+    assert page.count("dwell.json: not usable") == 1
+    assert set(_dwell(tmp_path)["batches"]) == {"b1"}  # rewritten, not a crash
 
 
 # ---------------------------------------------------------------- --watch (R12)

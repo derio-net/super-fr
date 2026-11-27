@@ -28,7 +28,9 @@ from fr.triage.components import (
     stamp_text,
     when,
 )
+from fr.triage.dwell import Ledger, TimeRow, WaveTime, card_dwell, format_duration, wave_time
 from fr.triage.kanban import (
+    COLUMN_TITLES,
     NEEDS_YOU_COLUMNS,
     Board,
     BoardStatus,
@@ -107,6 +109,10 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
 .wait-you { color: var(--sev-1); border-color: var(--sev-1); font-weight: 600; }
 .wait-agent, .wait-background { color: var(--accent); border-color: var(--accent); }
 .wait-ci, .wait-queue, .wait-dependency { color: var(--muted); border-color: var(--line); }
+.dwell { display: block; margin-top: 2px; font-size: .74rem; color: var(--muted); }
+section.wave-time details { margin: 4px 0; }
+section.wave-time summary { cursor: pointer; }
+section.wave-time td.time { white-space: nowrap; }
 .wait-owners { display: block; font-size: .72rem; color: var(--muted); overflow-wrap: anywhere; }
 .owners { margin: 2px 0 6px; font-size: .78rem; color: var(--muted); }
 .owners span { display: block; overflow-wrap: anywhere; }
@@ -220,6 +226,8 @@ SCRIPT = """
   function applyCutoff() {
     var on = !cutoff || cutoff.getAttribute("aria-pressed") === "true";
     cards().forEach(function (c) { c.hidden = on && c.hasAttribute("data-cutoff-hidden"); });
+    Array.prototype.forEach.call(document.querySelectorAll("details.wave-time-block"),
+      function (b) { b.hidden = on && b.hasAttribute("data-cutoff-hidden"); });
     Array.prototype.forEach.call(document.querySelectorAll("section.col"), function (col) {
       var count = col.querySelector(".count");
       if (count) { count.textContent = String(col.querySelectorAll(".card:not([hidden])").length); }
@@ -534,6 +542,7 @@ def _card(
     hidden: bool = False,
     collected_at: str = "",
     owners: Mapping[str, tuple[str, ...]] | None = None,
+    dwell: str | None = None,
 ) -> str:
     bid = card.batch.id
     classes = "card needs-you" if card.needs_you else "card"
@@ -561,11 +570,12 @@ def _card(
     show = card.show_closeout_jump if front_closeout else card.show_jump
     jump = " " + _jump(bid, scope_args, closeout=front_closeout) if show else ""
     lead = _verdict(card.readiness) if card.readiness is not None else ""
+    dwell_line = "" if dwell is None else f'<span class="dwell">{esc(dwell)}</span>'
     summary = (
         f'<summary>{lead}<span class="mono">{esc(bid)}</span>'
         f'<span class="title">{esc(card.batch.title)}</span>'
         f'<span class="meta">{esc(" · ".join(meta))}</span>{pills}{jump}'
-        f'<span class="hint">{esc(card.hint)}</span></summary>'
+        f'<span class="hint">{esc(card.hint)}</span>{dwell_line}</summary>'
     )
     return (
         f'<details class="{classes}" id="card-{esc(bid)}" data-batch="{esc(bid)}" '
@@ -627,6 +637,61 @@ def _queue_section(board: Board) -> str:
     )
 
 
+def _time(seconds: float, at_least: bool) -> str:
+    return esc(("≥" if at_least else "") + format_duration(seconds))
+
+
+def _time_row(label: str, row: TimeRow) -> str:
+    longest = (
+        ""
+        if row.longest is None
+        else f"{esc(row.longest)} {_time(row.longest_seconds, row.longest_at_least)}"
+    )
+    return (
+        f'<tr><td>{esc(label)}</td><td class="time">{_time(row.seconds, row.at_least)}</td>'
+        f"<td>{longest}</td></tr>"
+    )
+
+
+def _wave_block(w: WaveTime, hidden: bool) -> str:
+    which = "no wave" if w.wave is None else f"wave {w.wave}"
+    rows = "".join(_time_row(COLUMN_TITLES[r.key], r) for r in w.columns)  # type: ignore[index]
+    rows += "".join(_time_row(f"waits for {r.key}", r) for r in w.parties)
+    table = (
+        '<table class="grid narrow"><thead><tr><th></th><th>total</th><th>longest (batch)</th>'
+        f"</tr></thead><tbody>{rows}</tbody></table>"
+        if rows
+        else '<p class="meta">No time measured outside Done.</p>'
+    )
+    count = len(w.batches)
+    return (
+        f'<details class="wave-time-block" data-wave="{"" if w.wave is None else w.wave}"'
+        f"{' data-cutoff-hidden' if hidden else ''}>"
+        f"<summary>{which} · {count} {noun(count, 'batch')}</summary>{table}</details>"
+    )
+
+
+def _wave_time_section(
+    ledger: Ledger | None, board: Board, rendered_at: datetime, hidden_waves: frozenset[str]
+) -> str:
+    """The "Time per wave" section (board-session-state R7): one block per wave, the batches
+    with no wave last; a wave the cutoff hides carries the same `data-cutoff-hidden`."""
+    if ledger is None:
+        return ""
+    waves = wave_time(ledger, board, rendered_at)
+    if not waves:
+        return ""
+    blocks = "".join(
+        _wave_block(w, w.wave is not None and str(w.wave) in hidden_waves) for w in waves
+    )
+    return (
+        '<section class="wave-time"><h2>Time per wave</h2>'
+        '<p class="meta">Time each wave\'s batches spent per column and per wait, as the board '
+        "saw it; ≥ marks time first seen already under way.</p>"
+        f"{blocks}</section>"
+    )
+
+
 def _gated_card(g: GatedCard, column: ColumnView) -> str:
     role = column.key.removeprefix("needs-")
     wait = _wait(Wait("you", cast(Role, role)), column.owners.get(g.repo, ()))
@@ -644,10 +709,12 @@ def _column(
     scope_args: Sequence[str],
     hidden_waves: frozenset[str] = frozenset(),
     collected_at: str = "",
+    dwell: Mapping[str, str] | None = None,
 ) -> str:
     cards = "".join(
         _card(c, scope_args, hidden=c.wave is not None and str(c.wave) in hidden_waves,
-              collected_at=collected_at, owners=column.owners)
+              collected_at=collected_at, owners=column.owners,
+              dwell=(dwell or {}).get(c.batch.id))
         for c in column.cards
     )  # fmt: skip
     cards += "".join(_gated_card(g, column) for g in column.gated)
@@ -686,14 +753,27 @@ def render_board(
     banner: str = "",
     present: Sequence[str] = ("batches",),
     activity: Sequence[str] = (),
+    dwell: Ledger | None = None,
 ) -> str:
     """The board page: same inputs, same bytes. *budget* is the drive's last recorded forge
     budget (quota-pacing R14): the footer says what it was and how old the facts are, so a
     board that stopped moving is told apart from a quiet one. None: no quota clause.
     *scope_args* are the `--repo`/`--org` (and `--dir`, when given) words the copied
     commands carry; *refresh* is the reload interval in seconds, 0 for none. *activity* is the
-    newest `drive.log` entries, newest first (batch-train-truth R23)."""
+    newest `drive.log` entries, newest first (batch-train-truth R23). *dwell* is the ledger
+    `write_board` observed at *rendered_at* (board-session-state R6, R7): each card's dwell
+    line and the "Time per wave" section; None renders neither."""
     hidden_waves = cutoff_hidden_waves((c for col in board.columns for c in col.cards), rendered_at)
+    lines = (
+        {}
+        if dwell is None
+        else {
+            c.batch.id: card_dwell(dwell.batches[c.batch.id], c, rendered_at)
+            for col in board.columns
+            for c in col.cards
+            if c.batch.id in dwell.batches
+        }
+    )
     if board.batch_count or board.gated_count:
         body = (
             '<div class="toolbar" role="toolbar" aria-label="Which waves to show">'
@@ -702,7 +782,8 @@ def render_board(
             "</div>"
             '<div class="board">'
             + "".join(
-                _column(c, scope_args, hidden_waves, board.collected_at) for c in board.columns
+                _column(c, scope_args, hidden_waves, board.collected_at, lines)
+                for c in board.columns
             )
             + "</div>"
         )
@@ -735,6 +816,7 @@ def render_board(
         f"{page_header('batches', present)}\n{banner}\n"
         f"{_held(board.held)}\n"
         f"{_queue_section(board)}\n"
+        f"{_wave_time_section(dwell, board, rendered_at, hidden_waves)}\n"
         f"{body}\n"
         f"{_activity(activity)}\n"
         f'<footer class="meta">{quota}Rendered by <code>fr triage batches</code> from facts.json '

@@ -85,6 +85,38 @@ def test_supervise_builds_the_childs_argv_through_the_interpreter(
     assert argv[1:5] == ["-P", "-m", "fr", "triage"] and argv[-2:] == ["--supervised-by", "4242"]
 
 
+def test_the_supervisors_refusal_render_is_the_dwell_ledgers_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """spec 2026-11-27-board-session-state R5: the supervisor renders after its child
+    stopped, in the driver's place, so it passes `writer=True`."""
+    import fr.triage.supervise as supervise_mod
+    from fr.commands import triage_kanban_cmd
+    from fr.triage.model import Scope
+
+    seen: list[Any] = []
+
+    def _spy(scope: Any, target: Path, **kw: Any) -> Any:
+        seen.append(kw.get("writer"))
+        return target / "batches.html", 0
+
+    class Fake:
+        def __init__(self, make_argv: Any, state_dir: Path, **kw: Any) -> None:
+            self.on_refusal = kw["on_refusal"]
+
+        def run(self) -> int:
+            self.on_refusal()
+            return 3
+
+    monkeypatch.setattr(triage_kanban_cmd, "write_board", _spy)
+    monkeypatch.setattr(triage_kanban_cmd, "publish", lambda *a, **k: None)
+    monkeypatch.setattr(supervise_mod, "Supervisor", Fake)
+    scope = Scope(kind="repo", target="example-org/widgets")
+    with pytest.raises(Exception):  # typer.Exit
+        triage_batch_cmd._supervise(["triage", "batch", "drive", "--yes"], tmp_path, scope)
+    assert seen == [True]
+
+
 # --------------------------------------------------- a supervised driver stops with its parent
 
 
