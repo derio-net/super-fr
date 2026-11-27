@@ -25,7 +25,8 @@ BUDGETS: dict[str, int] = {
     # `_landing_hold`, which must call the driver's `merge_ctx`; its pure part is in queue_exec.
     f"{SRC}commands/triage_batch_cmd.py": 8250,
     f"{SRC}isolation/local.py": 3200,
-    f"{SRC}plan_ops.py": 2600,
+    # #1518 split self-review, the spec table, rework and the refactor-gate read out.
+    f"{SRC}plan_ops.py": 700,
     f"{SRC}triage/batch_drive.py": 2275,
 }
 

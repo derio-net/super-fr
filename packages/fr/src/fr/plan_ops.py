@@ -12,6 +12,18 @@ Conventions:
   - `fr.plan.create` and `fr.plan.rework_create` additionally append
     a row to the spec's Implementation Plans table; the spec edit is
     staged in the same change so it lands in the same PR.
+
+Split out (spec 2026-11-27-plan-ops-split, #1518), and re-exported here:
+  - `PlanEditError` → `fr.plan_errors`;
+  - staging and YAML dumping (`worktree_of`, `_stage`, `_yaml_dump`) →
+    `fr._plan_io`;
+  - the spec's Implementation Plans table → `fr.spec_table`;
+  - rework (`rework_create`, `rework_add_origin`, `rework_list`,
+    `ReworkRecord`) → `fr.plan_rework`;
+  - the self-review (`self_review`, `ReviewIssue`, `OPS_FR_FLOOR` and every
+    sub-check) → the `fr.plan_review` package;
+  - the refactor-gate journal read (`_refactor_justifications`) →
+    `fr.record.gates`.
 """
 
 from __future__ import annotations
