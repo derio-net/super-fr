@@ -9,6 +9,8 @@ import pytest
 import yaml
 from fr.yamlio import StrictLoader
 
+pytestmark = pytest.mark.own_artifacts
+
 _ROOT = Path(__file__).resolve().parents[2]
 _YAMLIO = _ROOT / "packages" / "fr" / "src" / "fr" / "yamlio.py"
 
