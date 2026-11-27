@@ -1,0 +1,229 @@
+"""A failed close-out take-back reports both errors (spec closeout-state R1-R3, gh#1601)."""
+
+from fr.triage import drive_errors
+
+
+def test_the_fail_message_attribute_is_unchanged() -> None:
+    assert drive_errors.FAIL_MESSAGE == "fr_message"
+
+
+def test_fail_text_reads_each_kind_of_exception() -> None:
+    import typer
+    from fr.triage.drive_errors import fail_exit, fail_text
+
+    assert fail_text(fail_exit("boom")) == "boom"
+    assert fail_text(ValueError("x")) == "x"
+    bare = fail_text(typer.Exit(code=2))
+    assert bare and "2" in bare
+
+
+# ------------------------------------------------------- the two take-backs (R1-R3)
+
+from dataclasses import replace  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+import pytest  # noqa: E402
+from fr.commands import triage_batch_cmd  # noqa: E402
+from fr.triage.drive_errors import (  # noqa: E402
+    COLLECTED_TAKEBACK,
+    PER_BATCH_TAKEBACK,
+    fail_exit,
+    takeback_failed,
+)
+from fr.triage.errors import TriageError  # noqa: E402
+from fr.triage.model import load_judgements  # noqa: E402
+from fr.triage.privacy import VisibilityUnreadable  # noqa: E402
+
+from tests.unit.test_triage_batch_closeout_cmd import _landed as _world_landed  # noqa: E402
+from tests.unit.test_triage_batch_dispatch import FakeRunner  # noqa: E402
+from tests.unit.test_triage_batch_drive_cmd import (  # noqa: E402
+    DriveCheckout,
+    World,
+    _drive,
+    _lines,
+    _sandbox,  # noqa: F401 - the drive tests' autouse sandbox
+    checkout_fixture,  # noqa: F401 - registered as `checkout`
+    runner_fixture,  # noqa: F401 - registered as `runner`
+    world_fixture,  # noqa: F401 - registered as `world`
+)
+
+
+def _fail_takeback(monkeypatch: pytest.MonkeyPatch, make: object = TriageError) -> None:
+    """Every `save_closeouts` after the marker's own write raises `make("store moved")`."""
+    real = triage_batch_cmd.save_closeouts
+    seen: list[int] = []
+
+    def wrapped(path: Path, closeouts: list, *, read: list) -> object:
+        seen.append(1)
+        if len(seen) > 1:
+            raise make("store moved")  # type: ignore[operator]
+        return real(path, closeouts, read=read)
+
+    monkeypatch.setattr(triage_batch_cmd, "save_closeouts", wrapped)
+
+
+@pytest.mark.parametrize(
+    "make",
+    [TriageError, fail_exit, VisibilityUnreadable],
+    ids=["triage", "fail-exit", "visibility"],
+)
+def test_a_collected_start_whose_takeback_fails_reports_both_errors_once(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch, make: object,
+) -> None:  # fmt: skip
+    _world_landed(world, tmp_path, "b1")
+    checkout.released = True
+    runner.fail = RuntimeError("tab refused")
+    _fail_takeback(monkeypatch, make)
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    (line,) = _lines(out, "closeout")
+    assert "tab refused" in line and "store moved" in line
+    assert COLLECTED_TAKEBACK in line
+    assert "exited 2" not in line  # a `fail_exit`'s carried text, never its code
+    assert code == 1, out  # failed_write: --once exits 1, nothing escaped the action
+    assert "Traceback" not in out
+
+
+def _bare_driver() -> object:
+    driver = object.__new__(triage_batch_cmd._Driver)
+    driver.reported, driver.failed_write = set(), False
+    return driver
+
+
+def test_a_takeback_that_keeps_failing_is_said_once() -> None:
+    """The take-back's text has its own key: it is said once, then never re-said."""
+    driver = _bare_driver()
+    batch = type("B", (), {"id": "b1"})()
+    exc = RuntimeError("tab refused")
+    x = takeback_failed(TriageError("x"), COLLECTED_TAKEBACK)
+    y = takeback_failed(TriageError("y"), COLLECTED_TAKEBACK)
+
+    first = driver._dispatch_failed(batch, "m", exc, x)  # type: ignore[attr-defined]
+    second = driver._dispatch_failed(batch, "m", exc, y)  # type: ignore[attr-defined]
+
+    assert first.startswith("stopped: ") and first.endswith(x)
+    assert second.startswith("stopped again") and "failed too" not in second
+    assert driver.failed_write  # type: ignore[attr-defined]
+
+
+def test_a_takeback_that_first_fails_on_a_repeat_dispatch_failure_is_said() -> None:
+    driver = _bare_driver()
+    batch = type("B", (), {"id": "b1"})()
+    exc = RuntimeError("tab refused")
+    x = takeback_failed(TriageError("x"), PER_BATCH_TAKEBACK)
+
+    first = driver._dispatch_failed(batch, "m", exc, "")  # type: ignore[attr-defined]
+    second = driver._dispatch_failed(batch, "m", exc, x)  # type: ignore[attr-defined]
+    third = driver._dispatch_failed(batch, "m", exc, x)  # type: ignore[attr-defined]
+
+    assert first == "stopped: m"
+    assert second.startswith("stopped again") and second.endswith(x)
+    assert third.startswith("stopped again") and "failed too" not in third
+
+
+def test_a_takeback_that_first_fails_on_pass_two_is_said_on_pass_two(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """A real two-pass drive: pass 1's take-back works, pass 2's fails and is said."""
+    _world_landed(world, tmp_path, "b1")
+    checkout.released = True
+    runner.fail = RuntimeError("tab refused")
+    real = triage_batch_cmd.save_closeouts
+    seen: list[int] = []
+
+    def wrapped(path: Path, closeouts: list, *, read: list) -> object:
+        seen.append(1)
+        if len(seen) == 4:  # pass 1: marker, take-back; pass 2: marker, then the take-back
+            raise TriageError("store moved")
+        return real(path, closeouts, read=read)
+
+    monkeypatch.setattr(triage_batch_cmd, "save_closeouts", wrapped)
+    sleeps: list[float] = []
+
+    def stop_after_two(seconds: float) -> None:
+        sleeps.append(seconds)
+        if len(sleeps) == 2:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", stop_after_two)
+
+    _, out = _drive(tmp_path, "--yes", "--interval", "5")
+
+    first, second = _lines(out, "closeout")[:2]
+    assert "tab refused" in first and "taking back" not in first
+    assert second.startswith("closeout") and "stopped again" in second
+    assert "store moved" in second and COLLECTED_TAKEBACK in second
+
+
+def test_a_collected_start_whose_takeback_succeeds_is_unchanged(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    _world_landed(world, tmp_path, "b1")
+    checkout.released = True
+    runner.fail = RuntimeError("tab refused")
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    (line,) = _lines(out, "closeout")
+    assert "tab refused" in line and "taking back" not in line
+    assert load_judgements(tmp_path / "judgements.yaml").closeouts == []  # marker taken back
+
+
+def _per_batch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Plan the older, per-batch close-out (`recorded=False`, no members)."""
+    real = triage_batch_cmd.drive_pass
+
+    def plan(snap: object) -> object:
+        out = real(snap)
+        actions = [
+            replace(a, items=(), batch="b1", recorded=False) if a.kind == "closeout" else a
+            for a in out.actions
+        ]
+        return replace(out, actions=actions)
+
+    monkeypatch.setattr(triage_batch_cmd, "drive_pass", plan)
+
+
+def test_a_per_batch_start_whose_takeback_fails_reports_both_and_prints_no_error(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+) -> None:  # fmt: skip
+    _world_landed(world, tmp_path, "b1")
+    checkout.released = True
+    runner.fail = RuntimeError("tab refused")
+    _per_batch(monkeypatch)
+    real_save = triage_batch_cmd._save
+    seen: list[int] = []
+
+    def save(*a: object, **kw: object) -> None:
+        seen.append(1)
+        if len(seen) > 1:  # the start record's own write succeeded; the take-back fails
+            raise TriageError("store moved")
+        real_save(*a, **kw)
+
+    monkeypatch.setattr(triage_batch_cmd, "_save", save)
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    (line,) = _lines(out, "closeout")
+    assert "tab refused" in line and "store moved" in line
+    assert PER_BATCH_TAKEBACK in line
+    assert "error:" not in out and "error:" not in capsys.readouterr().err
+
+
+def test_a_per_batch_start_whose_takeback_succeeds_removes_the_event(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    _world_landed(world, tmp_path, "b1")
+    checkout.released = True
+    runner.fail = RuntimeError("tab refused")
+    _per_batch(monkeypatch)
+
+    _drive(tmp_path, "--once", "--yes")
+
+    (b,) = load_judgements(tmp_path / "judgements.yaml").batches
+    assert [e.kind for e in b.events] == ["dispatch"]
