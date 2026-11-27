@@ -577,7 +577,7 @@ def test_the_moved_gates_print_the_captured_bytes(
         }:
             extra["warn"] = run_cmd._say
         if case.fn == "deliver_label_sync":
-            extra["resume_hint"] = run_cmd._resolve_hint("r1", "deliver", None)
+            extra["resume_hint"] = run_cmd.resolve_hint("r1", "deliver", None)
         if case.fn == "local_stamp_plan":
             extra["today"] = "2026-11-14"
             extra["witness"] = lambda _r, _t: case.witness

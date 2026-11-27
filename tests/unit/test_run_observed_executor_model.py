@@ -190,13 +190,14 @@ def test_an_attempt_opened_before_bound_compares_against_its_model(
 ) -> None:
     """A cursor written before §D carries the binding in `model`; the
     observation is compared against it (the fallback), and replaces it."""
-    from fr.commands.run_cmd import _observed_model
+    from fr.commands.run_cmd import _say
+    from fr.run.brief import observed_model
     from fr.run.model import Attempt
 
     monkeypatch.setattr("fr.run.telemetry.subagent_model", lambda *_a: "claude-sonnet-5")
     old = Attempt(dispatched="t", agent="a1", agent_type="fr-phase-executor", model="claude-opus-5")
 
-    observed = _observed_model(old, "k")
+    observed = observed_model(old, "k", _say)
 
     assert observed.model == "claude-sonnet-5"
     assert observed.bound is None
@@ -206,7 +207,8 @@ def test_an_attempt_opened_before_bound_compares_against_its_model(
 def test_a_new_attempt_warns_against_bound_not_model(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from fr.commands.run_cmd import _observed_model
+    from fr.commands.run_cmd import _say
+    from fr.run.brief import observed_model
     from fr.run.model import Attempt
 
     monkeypatch.setattr("fr.run.telemetry.subagent_model", lambda *_a: "claude-sonnet-5")
@@ -218,7 +220,7 @@ def test_a_new_attempt_warns_against_bound_not_model(
         bound="claude-opus-5",
     )
 
-    observed = _observed_model(new, "k")
+    observed = observed_model(new, "k", _say)
 
     assert (observed.model, observed.tier, observed.bound) == (
         "claude-sonnet-5",
