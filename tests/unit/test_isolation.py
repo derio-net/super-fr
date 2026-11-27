@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fr.isolation.gc import GcSweeper
 from fr.isolation.hostworktree import HostWorktreeTarget
 from fr.isolation.landing import branch_changed_paths, branch_changes_present
 from fr.isolation.local import LocalWorktreeDevcontainerTarget
@@ -1725,7 +1726,7 @@ def test_gc_discovers_label_and_worktree_union(
     wt = up("feat/a")
     gone = tmp_path / "home" / ".cache" / "fr" / "worktrees" / "other" / "gone"
     runner.docker_labels = [("cA", str(wt)), ("cOrph", str(gone))]
-    recs = {r.worktree: r for r in target._discover_workspaces()}
+    recs = {r.worktree: r for r in GcSweeper(target)._discover_workspaces()}
     assert set(recs) == {wt, gone}
     assert recs[wt].container_id == "cA"
     assert recs[wt].state is not None and recs[wt].state.branch == "feat/a"
@@ -1773,7 +1774,7 @@ def test_gc_discovers_workspace_at_custom_path(
     custom = tmp_path / "elsewhere" / "wt"
     target.up(None, "feat/custom", path=custom)
 
-    recs = {r.worktree: r for r in target._discover_workspaces()}
+    recs = {r.worktree: r for r in GcSweeper(target)._discover_workspaces()}
     assert custom in recs
     assert recs[custom].state is not None and recs[custom].state.branch == "feat/custom"
 
@@ -1957,7 +1958,7 @@ def test_gc_dry_run_resolves_the_workspace_repos_default_branch(
     assert target_a._resolve_default_branch() == "trunk"
     assert target_b._resolve_default_branch() == "main"
 
-    action = target_a._reap_or_classify(str(st_b.worktree), st_b, "merged", dry_run=True)
+    action = GcSweeper(target_a)._reap_or_classify(str(st_b.worktree), st_b, "merged", dry_run=True)
 
     # Before the fix this fetched `origin/trunk` inside repo B's worktree,
     # failed, and previewed "would-skip" for a workspace the live sweep reaps.
@@ -2122,7 +2123,7 @@ def test_gc_corrupt_state_does_not_abort_discovery(
     repo, runner, target, up = _gc_env(tmp_path, monkeypatch)
     wt = up("feat/a")
     state_path(repo, "feat/a").write_text("{ not valid json")  # corrupt
-    recs = target._discover_workspaces()  # must not raise
+    recs = GcSweeper(target)._discover_workspaces()  # must not raise
     rec = next(r for r in recs if r.worktree == wt)
     assert rec.state is None  # degrades to no-state (warned, never blindly reaped)
 
@@ -2364,7 +2365,7 @@ def test_gc_second_concurrent_sweep_noops(tmp_path: Path, monkeypatch: pytest.Mo
         pr_by_branch={"feat/merged": '{"state": "MERGED", "url": "u"}'},
     )
     up("feat/merged")
-    held = target._acquire_gc_lock()  # simulate a concurrent sweep holding the lock
+    held = GcSweeper(target)._acquire_gc_lock()  # simulate a concurrent sweep holding the lock
     try:
         assert target.gc() == [], "a second concurrent sweep short-circuits"
         assert not any(c[0:2] == ["docker", "rm"] for c in runner.argv_for("docker"))
@@ -4298,7 +4299,7 @@ def test_merged_by_content_does_not_classify_unlanded_content_as_merged(
 
     st = load_state(repo, "feat/wip")
     assert st is not None
-    assert target._merged_by_content(st) is False
+    assert GcSweeper(target)._merged_by_content(st) is False
 
 
 def test_branch_changes_present_three_way_revert_of_a_pure_deletion_is_missing(
