@@ -1,0 +1,60 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-queue-followups
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T2.S1, P1.T2.S2, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T5.S1, P1.T5.S2, P1.T6.S1]
+refactor:
+  P1.T1: "a one-expression change (repo names lower-cased) with nothing around it to tidy"
+  P1.T2: "the classification is one small helper beside trial_conflicts; ruff format only dropped the except parentheses"
+  P1.T3: "tidied in T6: the per-repo queue-landed set became batch_drive.queue_landed_by_repo, shared with the pacer's deadline_repos"
+  P1.T4: "the blockers were first joined strings and split back; refactored to (id, why) tuples, and the key renamed wave_key after mypy caught a shadowed `key`"
+  P1.T5: "deadline_repos reuses queue_landed_by_repo, closeout_event, LANDED and parse_aware; nothing left duplicated"
+journal:
+  - kind: discovery
+    id: p1-cmd-due-list-feeds-existing-probe
+    phase: 1
+    title: "The command's close-out due list only decides which live close-out sessions are asked about"
+    body: |
+      `drive_pass` computes `due` itself from `snap.queue_records`, so a queue-landed batch is
+      started without the command's change. The command's `due` list (triage_batch_cmd ~:4640)
+      feeds `_existing`, `_collected_reads` and `closeout_waits`; its test therefore uses a live
+      close-out tab (recorded, not redispatched) to tell the two apart.
+  - kind: decision
+    id: p1-planned-at-uses-plan-clock
+    phase: 1
+    title: "planned_at is stamped with the clock `Pacer.plan` used, not the clock at record_summary"
+    body: |
+      `deadline_repos` reads the window (planned_at, now]. Stamping the later record_summary time
+      would drop a deadline that fell between the plan and its record. `Pacer.plan` keeps its
+      `now` in `_planning_at`, and `record_summary` stamps it (falling back to the clock).
+  - kind: decision
+    id: p1-wave-hold-only-when-collecting
+    phase: 1
+    title: "The R6 `held` action is emitted only for a wave that has a due member to collect"
+    body: |
+      A wave whose members are all not yet due starts nothing anyway; emitting `held` there would
+      add an action to every single-batch pass inside the fallback window (and break
+      test_no_closeout_before_the_release_commit_or_the_fallback). The held line names each
+      blocker as `<id> (not due|unverified|ledger unread)`. No existing assertion changed.
+  - kind: decision
+    id: p1-docs-updated
+    phase: 1
+    title: "fr-wave-driver.md describes the new close-out timing and the probe's classification"
+    body: |
+      The conflict-probe paragraph no longer says stamps and generated files count as conflicts;
+      the close-out step says a queue-landed batch is ready at once, the wave waits for every
+      member and names them, and a deadline wakes a quiet paced pass. Four other covering pages
+      got `reviewed` stamps (fr-triage, index, herdr-control-sessions, cli reference).
+  - kind: discovery
+    id: p1-fast-tier-selects-nearly-everything
+    phase: 1
+    title: "The --fr-scope fast tier selected about the whole suite for this phase and ran at ~17 tests/min here"
+    body: |
+      The changes reach batch_drive.py, triage_batch_cmd.py and docs/ (which selects every
+      own_artifacts test), so `--fr-scope origin/main -n 2` selected roughly the full suite; at host
+      load ~20 it ran ~290 tests in 17 minutes and was stopped. The touched test files and their
+      neighbours were run instead (18 files, 862 passed; advisory, like the fast tier); CI is this
+      repo's tests evidence.
+resolves: []
+evidence: {}
