@@ -62,98 +62,141 @@ new commands.
 R5. When the run's plan directory does not exist on `origin/<default>`, the stage fails and
 names the missing directory. It does not refresh.
 
-R6. A Test Plan step may name the acceptance rows it proves with a pointer
+R6. An op that a refresh found changed or added is reopened, until stage 4 completes again.
+Its closure recorded before the refresh no longer closes it: only its live status, or
+evidence recorded after the refresh, does. When the refresh ran at stage 5, 6 or 7, the host
+state forgets stages 4 and later, so the same run goes back to stage 4 and applies the
+reopened ops before anything later runs.
+
+R7. A Test Plan step may name the acceptance rows it proves with a pointer
 `(rows: <id>[, <id>…])`. The pointer comes after the optional gate tag and the optional
 `(op: <id>)` pointer, and is followed by whitespace. fr parses the pointer into the step's
 `rows` and removes it from the step's text. Anywhere else the same characters stay text.
 
-R7. `fr closeout outcome --ran --evidence <e>` on a step that names rows records, in the same
+R8. Under `acceptance: off` a `(rows: …)` pointer is parsed and ignored: no walk is written
+(R9), asked for (R13) or counted (R10), and self-review reports nothing (R16).
+
+R9. `fr closeout outcome --ran --evidence <e>` on a step that names rows records, in the same
 commit as the outcome, a passing walk on each named row. The walk's strategy is the row's
 effective strategy. Its harness is `operator` and its model is `human`, unless `--harness` or
-`--model` is given. Its evidence is `Test Plan step <n>: <e>`. A row the walk makes
-walk-verified moves to `walked`. Any other row keeps its status, and the command names the
-harnesses that row still owes. A row an earlier feature merged changes by amendment into the
-run's feature fragment. `--na` and `--owed` write no walk. `--supersede --ran` adds another
-walk. The command refuses, and writes nothing, when a named id is not a row that cites the
-run's spec, or when the row's effective strategy is `none`.
+`--model` is given. Stage 5 records the step of an op whose probe passed with harness
+`fr-ops-probe` and model `op:<id>`, because nobody walked it. The walk's evidence is
+`Test Plan step <n>: <e>`. A row whose walk makes it walk-verified moves to `walked`. Any other
+row keeps its status, and the command names the harnesses that row still owes. A row changes
+by amendment into the feature fragment of the spec. The spec is the run's, or the one
+`--spec` names, and its slug is the feature. When a walk frees an issue, the command prints
+that issue's close commands, as `fr acceptance set-status --walk` does. `--na` and `--owed`
+write no walk. `--supersede --ran` adds another walk. The command refuses, and writes nothing,
+when a named id is not a row that cites the spec, or when the row's effective strategy is
+`none`.
 
-R8. `fr.ops.holds.gate_blockers(repo_root, run, gate)`, for `gate` one of `tester` and
-`devops`, returns one line for each thing that holds that gate. These are: each plan op not
-closed by recorded evidence (devops only, as today); each Test Plan step whose effective gate
-is `gate` and that has no `ran` or `n/a` outcome; and each row whose effective gate is `gate`
-and that is not walk-verified in this checkout. A row's line says why: no walk, a failing
-latest walk, or the harnesses still owed. `devops_blockers` stays, and equals
-`gate_blockers(..., "devops")`.
+R10. `fr.acceptance.walks.row_walked(row)` is the one rule for a walked row: its status is
+`walked` and its latest walk (by `at`) passed. The driver's rows-walked pass
+(`fr.triage.ledger`) reads it, and so do the gate's blockers. `fr.ops.holds.gate_items(repo_root,
+run, gate, *, exclude_walks=…)`, for `gate` one of `tester` and `devops`, returns one item for
+each thing that gate owns, discharged or not, each with a one-line reason:
 
-R9. `fr gate pass --gate <g>` refuses while `gate_blockers` is not empty for the run it
+- each plan op, closed or not by recorded evidence (devops only, as today);
+- each Test Plan step whose effective gate is `gate`, with or without a `ran` or `n/a`
+  outcome;
+- each row whose effective gate is `gate`, walked or not by `row_walked`. A row's reason says
+  why: no walk, a failing latest walk, or the harnesses still owed.
+
+A walk named in `exclude_walks` (the DevOps stage passes the walks the pinned PR head carries)
+does not count. `gate_blockers` returns the lines of the owed items. `devops_blockers` stays,
+and equals `gate_blockers(..., "devops")`.
+
+R11. `fr gate pass --gate <g>` refuses while `gate_blockers` is not empty for the run it
 resolves, for both post-merge gates. The run is `--run <id>`, else the run whose branch is the
 PR's head ref, as `--gate devops` resolves it today. When no run resolves, `--gate tester`
 behaves as it does today.
 
-R10. Stage 5 also asks the operator about each devops-gated row that no devops step names
-and that is not walk-verified, after the steps: `ran <evidence>` or `owed <why>`. `ran`
-records a walk as R7 does (evidence: the answer). `owed` sets the row's status to `walk-owed`,
-with the reason in its note.
+R12. Inside the DevOps stage, a row walk the pinned PR head already carries never closes a
+row: the stage judges rows with those walks excluded, as it already excludes the step
+outcomes the head carries.
 
-R11. Stage 6 lists, before the pass, what the devops gate still owes by `gate_blockers`.
-When the pass is refused it prints, for each unwalked row, the command that records its walk
-in the ops workspace. Stage 7 reports the rows and steps the tester gate owes by the same
-function.
+R13. Stage 5 also asks the operator about each devops-gated row that is not walked (R10, R12)
+and that no devops step recorded `ran` names, after the steps. This covers a row no step
+names and a row whose naming steps were recorded `n/a`. The answer is `ran <evidence>` or
+`owed <why>`. `ran` records the walk with `fr acceptance set-status --walk` (harness
+`operator`, model `human`, the row's effective strategy, `--feature` the spec slug).
+`owed` sets the row's status to `walk-owed` through the same command, with the reason in its
+note.
 
-R12. Stage 8 reports `archived` only when the plan directory moved. When `fr archive` held
+R14. Stage 6 lists, before the pass, what the devops gate still owes by `gate_blockers`.
+When the pass is refused it prints, for each unwalked row, the R13 `set-status --walk`
+command to run in the ops workspace. Stage 7 reports the rows and steps the tester gate owes
+by the same function.
+
+R15. Stage 8 reports `archived` only when the plan directory moved. When `fr archive` held
 the plan, stage 8 reports `archive held` with each held reason `fr archive` printed, and its
 audit record says the same. The stage still publishes the housekeeping PR and completes.
 
-R13. `fr plan self-review` reports a finding for each row that cites the plan's spec, whose
-effective gate is `devops` or `tester`, and that no Test Plan step with the same effective
-gate names with `(rows: …)`. It also reports one for each `(rows: …)` id that names no row
-citing the spec. Under `acceptance: off` or `gates: off` it reports neither.
+R16. `fr plan self-review` warns (severity `warn`, never `error`) about each row that cites
+the plan's spec, whose effective gate is `devops` or `tester`, and that no Test Plan step
+with the same effective gate names with `(rows: …)`. It also warns about each `(rows: …)` id
+that names no row citing the spec. Effective gates include the `devops` that a plan with ops
+adds (`fr.verification.exit`'s promotion). It reports nothing under `acceptance: off`,
+`test_plan: off` or `gates: off`, or for a cross-repo spec.
 
-R14. `fr.run.dod.definition_of_done(repo_root, run)` derives a run's Definition of Done from
+R17. `fr.run.dod.definition_of_done(repo_root, run)` derives a run's Definition of Done from
 what the spec, plan and run already declare. Nothing is authored, and it is no artifact kind.
-For each post-merge gate in the run's effective gates it holds three groups: ops (devops
-only), Test Plan steps and rows. It also holds the plan's unticked `[manual]` phases and the
-open `owed` entries of the run's spec and plan journals. Each item is either discharged or
-owed, with a one-line reason.
+For each post-merge gate in the run's effective gates it holds that gate's `gate_items`. It
+also holds the plan's unticked `[manual]` phases and the open `owed` entries of the run's spec
+and plan journals. An `owed` entry already reported in another group is left out of the `owed`
+group: a Test Plan step's outcome, and a manual phase that `fr archive` wrote back. Each item
+is either discharged or owed, with a one-line reason.
 
-R15. `fr run dod <run-id> [--json]` prints the Definition of Done. It changes nothing. It
+R18. `fr run dod <run-id> [--json]` prints the Definition of Done. It changes nothing. It
 exits 0 when every item is discharged, 1 when an item is owed, and 2 when the run or its
-inputs cannot be read. It is registered from a module of its own, never in
-`commands/run_cmd.py`.
+inputs cannot be read. It is defined in `commands/dod_cmd.py`, never in
+`commands/run_cmd.py`. `cli.py` imports that module after `run_app`, which registers it.
 
-R16. The close-out brief that `fr pickup --run <id>` prints includes the Definition of Done.
+R19. The close-out brief `fr pickup --run <id>` prints includes the Definition of Done. That
+holds for `closeout_brief` and for both forms of `devops_brief` (in progress and finished).
+The finished `devops_brief` says the stage is complete and nothing is left only when every
+Definition of Done item is discharged. Otherwise it names each owed item.
 
-R17. When `fr ops gate` has run every stage, it says `the DevOps stage is complete` only when
-the Definition of Done's devops items are all discharged. Otherwise it says that every stage
-ran and lists each item that is still owed, from every group.
+R20. When `fr ops gate` has run every stage, and when a rerun finds every stage already done,
+it says the DevOps stage is complete only when every Definition of Done item is discharged.
+Otherwise it says every stage ran and lists each item still owed, from every group.
 
 ## Design shape
 
 ```text
 packages/fr/src/fr/
-  spec.py                    ~ Step gains `rows: tuple[str, ...]`; `(rows: …)` pointer   R6
+  spec.py                    ~ Step gains `rows: tuple[str, ...]`; `(rows: …)` pointer   R7
+  acceptance/walks.py        ~ row_walked(row): status walked + latest walk passed   R10
+                             ~ close-command printing moved here from acceptance_cmd R9
+  triage/ledger.py           ~ GatedRow.walked = row_walked(r)                       R10
   ops/
-    refresh.py               + drift(workspace, default tree) → ops added/removed/changed,
-                               test-plan changed; refresh(gate): confirm → commit records
-                               → merge origin/<default> → leased push → trust     R1–R5
-    gate.py                  ~ stages 4–7 call refresh first                      R1
-                             ~ stage 5 asks uncovered devops rows (ran|owed)      R10
-                             ~ stage 6/7 list gate_blockers; stage 6 recovery     R11
-                               prints row-walk commands
-                             ~ stage 8: plan dir still there → "archive held"     R12
-                             ~ run(): final line reads the DoD                    R17
-    holds.py                 ~ gate_blockers(root, run, gate); devops_blockers =  R8
-                               gate_blockers(…, "devops"); rows term
+    refresh.py               + drift(): ops added/removed/changed, test plan changed;
+                               refresh(): confirm → commit records → merge_commit
+                               → leased push → reopen changed ops → trust          R1–R6
+    gate.py                  ~ OpsTree port: merge_commit(ref, message)            R3
+                             ~ HostGateState: reopened ops + entry ids before the
+                               refresh; forget(from_stage)                         R6
+                             ~ apply_phase: a reopened op ignores old closures     R6
+                             ~ stages 4–7 call refresh first                       R1
+                             ~ stage 5 asks unwalked devops rows (ran|owed)        R13
+                             ~ stage 6/7 list gate_blockers; row-walk recovery     R14
+                             ~ head walks excluded inside the stage                R12
+                             ~ stage 8: plan dir still there → "archive held"      R15
+                             ~ run(): final line reads the DoD                     R20
+    holds.py                 ~ gate_items / gate_blockers(root, run, gate,
+                               exclude_walks); devops_blockers kept                R10
   commands/
-    closeout_cmd.py          ~ --ran on a step with rows → walk items in the same  R7
-                               record; --harness/--model (default operator/human)
-    gate_cmd.py              ~ pass refuses on gate_blockers for tester too        R9
-    dod_cmd.py               + `fr run dod <run-id> [--json]`, attached to run_app R15
+    ops_gate_cmd.py          ~ OpsWorkspace.merge_commit: fetch origin, merge,
+                               commit or abort_merge                               R3
+    closeout_cmd.py          ~ --ran on a step with rows → walk items in the same
+                               record; --harness/--model; close commands          R9
+    gate_cmd.py              ~ pass refuses on gate_blockers for tester too        R11
+    dod_cmd.py               + `fr run dod <run-id> [--json]` on run_app           R18
+  cli.py                     ~ import commands.dod_cmd after run_app               R18
   run/
-    dod.py                   + definition_of_done(root, run) → DoD                 R14
-    closeout.py              ~ closeout_brief appends the DoD                      R16
-  plan_review/checks.py      ~ gated-row coverage + unknown (rows:) ids            R13
-  triage/gitseam.py          ~ Worktree: merge commit / abort for the refresh      R3
+    dod.py                   + definition_of_done(root, run) → DoD                 R17
+    closeout.py              ~ closeout_brief and devops_brief show the DoD        R19
+  plan_review/checks.py      ~ warn: gated-row coverage, unknown (rows:) ids       R16
 ```
 
 ```text
@@ -166,12 +209,15 @@ stage N in 4..7 ──► drift?(ops, test plan) ── equal ──► act
         commit docs/ records ─► merge origin/<default> ── conflict ──► abort, fail, name paths
                          │ clean
                          ▼
-               leased push ─► trust (re-asks on change) ─► act
+     leased push ─► reopen changed ops (host state) ─► N > 4? forget stages ≥ 4, back to 4
+                         │
+                         ▼
+                 trust (re-asks on change) ─► act
 ```
 
 ## Design
 
-### A. The stale ops workspace (R1–R5)
+### A. The stale ops workspace (R1–R6)
 
 `fr/ops/refresh.py` holds two functions.
 
@@ -181,19 +227,28 @@ stage N in 4..7 ──► drift?(ops, test plan) ── equal ──► act
   the run's spec on both sides. The default side is a scratch tree from
   `GateHost.materialise(origin/<default>, …)` (the same paths `_head_paths` names), removed
   afterwards, as `_refuse_an_ops_gap` does. A plan directory that is absent on the default
-  side raises `StageFailed` (R5).
-- `refresh(gate, tree)`. Under `drift`'s answer it confirms (`gate.prompt.confirm`, always
-  asked), then `tree.commit_paths(["docs"], "chore(ops): <slug> gate records before refresh")`,
-  then `tree.merge_commit(origin/<default>, message)`. That is a new `OpsTree` port method,
-  implemented on `gitseam.Worktree` over its existing `merge` (no-commit, rerere off,
-  rename detection off) plus a commit or `merge --abort`. The function finishes with
-  `gate.publish(tree)` (leased) and `gate.trust(tree)`.
+  side raises `StageFailed` (R5). A side that cannot be read is a refusal, never "equal".
+- `refresh(gate, tree, stage)`. Under `drift`'s answer it confirms (`gate.prompt.confirm`,
+  always asked), then `tree.commit_paths(["docs"], …)`, then
+  `tree.merge_commit(f"origin/{default}", message)`. `merge_commit` is a new `OpsTree` port
+  method. `OpsWorkspace` (`commands/ops_gate_cmd.py`) implements it: `git fetch origin`, as
+  its `rebase_onto` does, then `gitseam.Worktree.merge` (no-commit, rerere off,
+  directory-rename detection off), then a commit, or `Worktree.abort_merge` and a
+  `StageFailed` naming the conflicted paths. Next come `gate.publish(tree)` (leased), the
+  reopening (R6) and `gate.trust(tree)`.
 
-Stages 4, 5, 6 and 7 call `refresh` first. Rows are left out of the comparison on purpose:
-the ops branch writes row walks (R7, R10) that the default branch does not hold yet, so a
-row comparison would always differ.
+R6 is persisted host-side, in `HostGateState`, as `reopened: {ops: [ids], before: [entry
+ids]}`: the changed and added op ids, and the plan-journal entry ids present at the refresh.
+`apply_phase` treats a reopened op as not closed by recorded evidence. Its live status still
+decides whether it runs. Its journal closure counts only for an entry not in `before`.
+Stage 4's completion clears `reopened`. A refresh at stage 5, 6 or 7 that reopened anything
+calls `state.forget(4)`, which drops stages 4 and later. `run()` reads `recorded()` before
+each stage, so the same invocation goes back to stage 4.
 
-### B. Rows a gate verifies (R6–R13)
+Rows are left out of the comparison on purpose: the ops branch writes row walks (R9, R13)
+that the default branch does not hold yet, so a row comparison would always differ.
+
+### B. Rows a gate verifies (R7–R16)
 
 The pointer grammar sits beside `_POINTER_RE` in `spec.py`: `(rows: a, b)`. Ids use the same
 character class as op ids, split on commas, and blanks are refused. Older fr reads the
@@ -201,30 +256,47 @@ pointer as part of the step's text, which is harmless.
 
 `closeout outcome` builds one `StepRecord`: the existing outcome `JournalItem`, plus one
 `AcceptanceItem(id, status, notes, walk=Walk(...))` for each named row. It goes through
-`engine.apply_record` with `RecordTarget(feature=<run's spec slug>)`, so a merged row is
-amended and one commit holds both. The status becomes `walked` when
-`fr.acceptance.walks.walk_verified` holds after the walk. Otherwise the existing status stays,
-and the note says which harnesses are still owed.
+`engine.apply_record` with `RecordTarget(feature=<spec slug>)`, so a merged row is amended and
+one commit holds both. The status becomes `walked` when `walk_verified` holds after the walk.
+Otherwise the existing status stays, and the note names the harnesses still owed. The
+issue-close printing (`_print_close_commands`) moves into `fr.acceptance.walks`, so both
+writers print the same thing. Stage 5's probe path passes `--harness fr-ops-probe --model
+op:<id>`.
 
-`gate_blockers` extends `devops_blockers` with a rows term, read from `run_exit(...)`:
-`gated_rows` filtered by `row_gates[id] == gate`, each judged with `walk_verified` and its
-latest walk. Stage 6 and stage 7 both read it. `_tester_owns` is replaced by it (the
-declared-run-gate check stays in stage 7).
+`row_walked` replaces the `r.status == "walked"` test in `fr.triage.ledger` and is used by
+`gate_items`. Every writer that sets `walked` (`set-status`, R9) already needs a passing walk
+(`walked_error`), so the one visible change is this: a row whose latest walk failed no
+longer counts as walked.
 
-`fr plan self-review` gains `_gated_row_coverage_issues`, which uses `steps_gated` with each
-gate on the plan's spec steps and the effective exit's rows.
+`gate_items` reads rows from `run_exit(...)`: `gated_rows` filtered by `row_gates[id] ==
+gate`. `exclude_walks` maps a row id to walks to ignore. Inside the DevOps stage those are
+the walks the pinned PR head's fold carries for the row (the fragment read with
+`tree.show(head, …)`, as `head_entry_ids` reads journals). `_tester_owns` is replaced by
+`gate_items(..., "tester")`; stage 7 keeps the declared-run-gate check.
 
-### C. Definition of Done (R14–R17)
+Stage 5's row question runs each answer through `tree.fr(["acceptance", "set-status", …])`.
+`ran` gives `--id <row> --status walked --walk "<answer>" --harness operator --model human
+--strategy <effective> --notes "walked in the DevOps stage of run <id>" --feature <slug>`, or
+`--status <current>` when the walk would not make the row walk-verified. `owed` gives
+`--status walk-owed --notes "<why>" --feature <slug>`.
 
-`fr/run/dod.py` returns
-`DefinitionOfDone(groups: tuple[DodGroup, ...])`. A group is
-`(name, items: tuple[DodItem(what, discharged: bool, why)])`. The groups are
-`gate:devops` / `gate:tester` (the ops, steps and rows of `gate_blockers`, discharged ones
-included), `manual phases` (the plan's unticked `[manual]` phases) and `owed` (open `owed`
-entries in the run's spec and plan journals). It runs no probe: like `gate_blockers`, it
-states what was recorded. `commands/dod_cmd.py` renders it as text or JSON.
-`run/closeout.py`'s `closeout_brief` appends the text form. `ops/gate.py`'s `run` builds it
-on the ops workspace for its final line.
+`fr plan self-review` gains `_gated_row_coverage_issues` in `plan_review/checks.py`, of
+severity `warn`, beside `_ops_gap_issues`. It uses `exit_for_spec` plus the same promotion
+`run_exit` applies (`devops` when `plan_has_ops`), and `steps_gated` for each gate. It has the
+same cross-repo exemption as its neighbours.
+
+### C. Definition of Done (R17–R20)
+
+`fr/run/dod.py` returns `DefinitionOfDone(groups: tuple[DodGroup, ...])`. A group is
+`(name, items: tuple[DodItem(what, discharged: bool, why)])`. The groups are `gate:devops` and
+`gate:tester` (their `gate_items`), `manual phases` (the plan's unticked `[manual]` phases)
+and `owed` (open `owed` entries of the run's spec and plan journals, minus the
+`test-plan-step-*` entries and the manual-phase entries `fr archive` writes back, which other
+groups already report). It runs no probe: it states what was recorded. `discharged` is true
+for the whole DoD only when every item is. `commands/dod_cmd.py` renders it as text or JSON.
+`run/closeout.py` appends the text form to `closeout_brief` and to both forms of
+`devops_brief`, and its finished form reads the DoD. `ops/gate.py`'s `run` builds the DoD on
+the ops workspace for its final line, on both the ran-stages path and the nothing-ran path.
 
 ## Verification
 
@@ -243,7 +315,7 @@ settle.ci: report — batch ops-gate-truth: the wave driver owns this PR's CI
 
 ## Out of scope
 
-- A tester-gate walker (#1310). It can reuse `gate_blockers` and the R7 walk path.
+- A tester-gate walker (#1310). It can reuse `gate_blockers` and the R9 walk path.
 - An authored `## Definition of Done` section. The operator chose a derived DoD only.
 - Committing each gate record as it is written (#1617's optional point). R3 commits them
   before a refresh, which removes the hazard the issue names.

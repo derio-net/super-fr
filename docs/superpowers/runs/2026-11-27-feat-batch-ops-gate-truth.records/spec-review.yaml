@@ -1,0 +1,216 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-ops-gate-truth
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: s-r1
+  review_scope: in
+  title: R16 puts the DoD in closeout_brief, but fr pickup --run prints devops_brief for a devops-gated
+    run
+  body: 'check: codebase/consistency
+
+    target: spec
+
+    evidence: pickup_cmd.py:85-88 branches to devops_brief when devops_gated; its finished form says nothing
+    is left (closeout.py:659-674).'
+- kind: finding
+  id: s-r2
+  review_scope: in
+  title: The OpsTree merge port is implemented by OpsWorkspace in ops_gate_cmd.py, not gitseam.Worktree
+  body: 'check: codebase/consistency
+
+    target: spec
+
+    evidence: OpsWorkspace (ops_gate_cmd.py:45) implements OpsTree; Worktree.merge disables directory-rename
+    detection only; abort_merge exists (gitseam.py:1310).'
+- kind: finding
+  id: s-r3
+  review_scope: in
+  title: R10/R11 have no mechanism for walking or owing a row no step names
+  body: 'check: codebase/consistency
+
+    target: spec
+
+    evidence: R7''s path is keyed to a step; set-status --walk needs harness/model/strategy (acceptance_cmd.py:592-599).'
+- kind: finding
+  id: s-r4
+  review_scope: in
+  title: Two definitions of a walked row (walk_verified vs status == walked in the driver)
+  body: 'check: codebase/consistency
+
+    target: spec
+
+    evidence: triage/ledger.py:150 reads status == walked; walk_verified ignores a later failing walk.'
+- kind: finding
+  id: s-r5
+  review_scope: in
+  title: A walk the PR carries closes a devops row inside the stage, while PR-carried step outcomes do
+    not
+  body: 'check: codebase/consistency
+
+    target: spec
+
+    evidence: stage 5 excludes outcomes at the pinned head (gate.py:1100-1107); rows had no such exclusion.'
+- kind: finding
+  id: s-r6
+  review_scope: in
+  title: 'Under acceptance: off, R7 refuses every --ran on a step that names rows'
+  body: 'check: codebase/consistency
+
+    target: spec
+
+    evidence: no row exists under acceptance off, so the unknown-id refusal would always fire.'
+- kind: finding
+  id: s-r7
+  review_scope: in
+  title: 'R13 has no severity and misses test_plan: off, cross-repo specs and the ops promotion'
+  body: 'check: codebase/consistency
+
+    target: spec
+
+    evidence: plan_review/checks.py severities; cross-repo exemption at 266/421; exit_for_spec lacks _promote.'
+- kind: finding
+  id: s-r8
+  review_scope: in
+  title: DoD discharged items cannot come from gate_blockers; owed items counted twice
+  body: 'check: codebase/consistency
+
+    target: spec
+
+    evidence: devops_blockers returns only holding lines (holds.py:79-101); owed steps and archive-written
+    manual phases are also owed entries.'
+- kind: finding
+  id: s-r9
+  review_scope: in
+  title: R17 still says complete over a held archive and leaves the nothing-ran line unspecified
+  body: 'check: codebase/consistency
+
+    target: spec
+
+    evidence: the live hold was a manual phase, a group outside devops; gate.py:1385 nothing-ran line.'
+- kind: finding
+  id: s-r10
+  review_scope: in
+  title: A changed op stage 4 already closed stays closed after the refresh
+  body: 'check: codebase/consistency
+
+    target: spec
+
+    evidence: recorded_close does not tie evidence to op content (evidence.py:83-95); apply_phase skips
+    closed ops; a refresh at 5-7 never returns to 4.'
+- kind: finding
+  id: s-r11
+  review_scope: in
+  title: R7's walk identity is wrong for probe-recorded steps and does not cover --spec
+  body: 'check: codebase/consistency
+
+    target: spec
+
+    evidence: _probe_step records ran with no question (gate.py:1074-1077); closeout outcome has a --spec
+    form.'
+- kind: finding
+  id: s-r12
+  review_scope: in
+  title: A row named only by a step recorded n/a is held and never asked about
+  body: 'check: codebase/consistency
+
+    target: spec
+
+    evidence: R7 writes no walk on n/a; R10 asked only about rows no step names.'
+- kind: finding
+  id: s-r13
+  review_scope: in
+  title: The R7 walk path does not print the issue-close commands set-status --walk prints
+  body: 'check: codebase/consistency
+
+    target: spec
+
+    evidence: acceptance_cmd.py:623-641 _print_close_commands; walks.py issues_now_closable.'
+- kind: finding
+  id: s-r14
+  review_scope: in
+  title: No run_app command is registered outside run_cmd.py; name where dod_cmd is imported
+  body: 'check: codebase/consistency
+
+    target: spec
+
+    evidence: every @run_app.command lives in run_cmd.py (budget 8895); cli.py:55 imports run_app.'
+- kind: review
+  id: spec-review
+  title: 'independent spec review: 14 findings, all in scope, all fixed in the spec'
+  body: Reviewer fr-spec-reviewer checked q1-q6 against the requirements (no contradiction) and every
+    named file/helper with path:line. 14 findings (s-r1..s-r14), all in scope; each fixed in the spec,
+    which now has R1-R20; row origins re-pointed by amendment.
+- kind: lens
+  lens: security
+  title: the refresh merges and re-trusts default-branch op content, and row walks inside the stage must
+    exclude PR-carried walks
+- kind: lens
+  lens: errors
+  title: new refusal paths (drift on an unreadable side, merge conflict/abort, fr run dod exit codes)
+    must fail closed, never read as nothing owed
+- kind: lens
+  lens: tests
+  title: fake-port tests of stages 4-8 must cover reruns, declines, conflicts, reopened ops and PR-carried
+    exclusions, not only the happy path
+resolves:
+- id: s-r1
+  state: fixed
+  body: R19 now names closeout_brief and both forms of devops_brief; the finished form says complete only
+    when the whole DoD is discharged.
+- id: s-r2
+  state: fixed
+  body: Design §A and the shape name OpsWorkspace.merge_commit (fetch origin, Worktree.merge, commit or
+    abort_merge) in commands/ops_gate_cmd.py; the wording says directory-rename detection.
+- id: s-r3
+  state: fixed
+  body: R13 and Design §B name the exact `fr acceptance set-status` invocations for ran and owed (harness
+    operator, model human, effective strategy, --feature); R14 prints the same command.
+- id: s-r4
+  state: fixed
+  body: R10 defines fr.acceptance.walks.row_walked (status walked and latest walk passed) as the one rule;
+    the driver's ledger and gate_items both read it.
+- id: s-r5
+  state: fixed
+  body: 'R12 plus gate_items'' exclude_walks: inside the DevOps stage walks the pinned PR head carries
+    never close a row.'
+- id: s-r6
+  state: fixed
+  body: 'R8: under acceptance: off the pointer is parsed and ignored; nothing is walked, asked, counted
+    or reported.'
+- id: s-r7
+  state: fixed
+  body: 'R16: severity warn; nothing under test_plan/gates/acceptance off or for a cross-repo spec; effective
+    gates include the plan-ops devops promotion.'
+- id: s-r8
+  state: fixed
+  body: R10 adds item-level gate_items (discharged or not) that gate_blockers and the DoD both derive
+    from; R17 drops owed entries another group already reports.
+- id: s-r9
+  state: fixed
+  body: 'R20: complete only when every DoD item, from every group, is discharged, on both the ran-stages
+    and the nothing-ran paths.'
+- id: s-r10
+  state: fixed
+  body: 'R6 and Design §A: changed/added ops are reopened host-side (old closures ignored, entry ids before
+    the refresh excluded); a refresh at stage 5-7 forgets stages >= 4 so the run returns to stage 4.'
+- id: s-r11
+  state: fixed
+  body: 'R9: a probe-recorded step walks with harness fr-ops-probe, model op:<id>; the feature is the
+    slug of the spec, the run''s or --spec''s.'
+- id: s-r12
+  state: fixed
+  body: R13 asks about each unwalked devops row that no ran step names, which covers n/a-only rows.
+- id: s-r13
+  state: fixed
+  body: R9 prints the close commands; Design §B moves the printer into fr.acceptance.walks so both writers
+    share it.
+- id: s-r14
+  state: fixed
+  body: 'R18 and the shape: cli.py imports commands.dod_cmd after run_app, which registers `fr run dod`.'
+acceptance: []
+evidence:
+  review: spec-review
+  reviewer: afa077a32230e4e7e
+
