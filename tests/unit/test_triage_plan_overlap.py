@@ -336,10 +336,17 @@ def test_only_dispatched_and_pr_open_batches_are_read() -> None:
 
 
 def test_a_batch_of_an_unknown_repo_is_not_compared() -> None:
+    """Under a truncated repo list the batch is still open, its repo merely unseen; a repo
+    absent from a complete list is `left-scope`, closed out and so never compared."""
+    from fr.triage.model import Truncation
+
     f, jd = two_overlapping()
-    foreign = f.model_copy(update={"repos": ["o/elsewhere"]})
+    cut = Truncation(source="repos", target="o", limit=100)
+    foreign = f.model_copy(update={"repos": ["o/elsewhere"], "warnings": [cut]})
     report = plan_overlap_report(jd, foreign, clones({}))
     assert report.unread == (("b1", "repo of batch unknown"), ("b2", "repo of batch unknown"))
+    gone = f.model_copy(update={"repos": ["o/elsewhere"]})
+    assert plan_overlap_report(jd, gone, clones({})).unread == ()
 
 
 def test_a_str_from_the_source_factory_is_the_reason() -> None:

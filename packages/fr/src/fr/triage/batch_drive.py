@@ -1262,16 +1262,17 @@ def closeout_event(batch: Batch) -> CloseoutEvent | None:
 
 def finished_waves(batches: Iterable[Batch], stages: Mapping[str, str]) -> frozenset[str]:
     """The wave keys (`str(batch.wave)`) whose every batch is terminal: derived stage
-    `cancelled`, `abandoned` or `obsolete`, or a close-out event whose `archived` is set.
-    *stages* maps batch id to its derived stage. A batch with no wave never makes one, and a
-    wave with a batch that is not terminal (a merged one still owed its archive, say) is not
-    finished. The board, the history page and the driver all read this one predicate."""
+    `cancelled`, `abandoned`, `obsolete` or `left-scope`, or a close-out event whose
+    `archived` is set. *stages* maps batch id to its derived stage. A batch with no wave never
+    makes one, and a wave with a batch that is not terminal (a merged one still owed its
+    archive, say) is not finished. The board, the history page and the driver all read this
+    one predicate."""
     wave_ok: dict[str, bool] = {}
     for b in batches:
         if b.wave is None:
             continue
         event = closeout_event(b)
-        terminal = stages.get(b.id) in {"cancelled", "abandoned", "obsolete"} or (
+        terminal = stages.get(b.id) in {"cancelled", "abandoned", "obsolete", "left-scope"} or (
             event is not None and event.archived is not None
         )
         key = str(b.wave)
@@ -1812,7 +1813,12 @@ def drive_pass(snap: Snapshot) -> Pass:
         if not members:
             continue
         held_ids.add(batch.id)
-        if batch in chosen and stages.get(batch.id) not in ("cancelled", "abandoned", "obsolete"):
+        if batch in chosen and stages.get(batch.id) not in (
+            "cancelled",
+            "abandoned",
+            "obsolete",
+            "left-scope",
+        ):
             held_by.append((batch.id, tuple(sorted({c.signer for _, c in members}))))
             detail = "; ".join(held_line(k, c, snap.now) for k, c in members)
             actions.append(Action("held", batch.id, detail))

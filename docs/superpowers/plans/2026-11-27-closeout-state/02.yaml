@@ -1,0 +1,146 @@
+schema_version: 2
+phase:
+  number: 2
+  title: A batch whose repo left the scope is left-scope and retired with cancel --orphaned
+    (R4-R9)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - batch-left-scope-stage
+  - batch-left-scope-cancel
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/batch.py
+  - packages/fr/src/fr/triage/claims.py
+  - packages/fr/src/fr/triage/claim_sync.py
+  - packages/fr/src/fr/triage/wave_queue.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/triage/lanes.py
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/triage/history.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_kanban_cmd.py
+  - docs/explainers/fr-triage.md
+  - docs/**/*.md
+  - tests/unit/*.py
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: The left_scope predicate and the stage (R4)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: new `tests/unit/test_triage_left_scope.py` (build Facts/Batch the way `tests/unit/test_triage_batch*.py` does): `left_scope` is true when the batch's repo is not in `facts.repos` and no warning has `source == "repos"`, false when such a warning exists, false when the repo is present. `derive_batch_stage` gives `left-scope` for a dispatched batch, a merged-and-archived batch and a never-dispatched batch whose repo is missing; `cancelled` when the last lifecycle event is a cancel; today's stage when the repo list was truncated; the old stage again once the repo is back in `facts.repos`. `is_open` is false for `left-scope`.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: in `packages/fr/src/fr/triage/batch.py`, add `left-scope` to `BatchStage`, `BATCH_STAGES` and `CLOSED_OUT`; add `left_scope(batch, facts) -> bool`; reorder `derive_batch_stage` to: cancel → `cancelled`; `left_scope` → `left-scope`; no events → obsolete/proposed; then the PR table. Tests green; run the existing batch-stage tests (`uv run pytest tests/unit -q --no-cov -k "stage or batch"`) and fix any closed-set test that enumerates `BATCH_STAGES`.
+- number: 2
+  title: Claims, waves and the pass leave it alone (R5)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests: `owed_claims` owes nothing for a `left-scope` batch with a wave and `claim_sync.plan_sync` plans no op (no refresh, no release) for its members; `wave_queue.is_terminal` / `wave_landings_done` treat it as terminal and `finished_waves` counts a wave of merged + `left-scope` batches finished; `views.preselected_wave` skips it as live; `views.cancelled_waves` counts it delivered; `drive_pass` plans no action of any kind for it (held filter included).
+  - id: P2.T2.S2
+    text: |-
+      GREEN: `claims.py`: `owed_claims` skips a `left-scope` stage (and `releasing` stays false for it); `wave_queue.TERMINAL_STAGES` gains `left-scope`; the literal sets in `batch_drive.drive_pass`'s held filter and `views.preselected_wave` gain it; leave `cancelled_waves`' exclusion set as is. Tests green.
+- number: 3
+  title: The board and batch list (R6)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: in the kanban tests (`tests/unit/test_triage_kanban.py` / `test_triage_kanban_render.py` fixtures): a dispatched batch and a never-dispatched batch whose repo is missing are in the `done` column (`column_of`, and `lanes.lane_of` gives no Needs-you lane); `pill_of` is `repo left this scope`; the Done card's fallback hint is the same text; the card is terminal; the rendered HTML has no Jump command for it and carries `bstage-left-scope`; `render.py` and `history.py` CSS hold a `.pill.bstage-left-scope` rule. `batch list` with facts prints `repo left this scope` on the batch's row and does not without facts.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: `kanban.py`: `_COLUMN_OF_STAGE["left-scope"] = "done"`; `column_of` reads the stage before its `not batch.events` branch for `left-scope`; `lanes.lane_of` likewise; `_TERMINAL_STAGES` gains it; `pill_of` reads a `_PILL_TEXT` mapping defaulting to the stage name; `PILL_STAGES` gains it; `show_jump` false for it. `render.py`/`history.py`: the CSS rule beside the other stage pills. `triage_batch_cmd.batch_list_command`: append `  repo left this scope` when facts are present and `left_scope` holds. Tests green.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR: ruff format/check over the touched triage modules; keep `_PILL_TEXT` the one place pill text lives.
+- number: 4
+  title: drive asks for no departed checkout (R5)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: test `build_driver` in an org scope whose `facts.json` lacks a waved batch's repo, with no `--checkout` for it: it builds (no `give --checkout` refusal) and the departed repo is not in the driver's checkout map; with the repo present and no clone known, it still refuses as today; with no `facts.json`, behaviour is unchanged.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: in `build_driver` (`triage_batch_cmd.py`, near the `names = {_batch_slug(...)}` line), load `facts.json` from `target` when it exists (the same loader `_load_state` uses) and leave out of `names` each chosen batch `left_scope` holds. Tests green.
+- number: 5
+  title: focus refuses and cancel --orphaned retires (R7, R8)
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      RED: CLI tests through typer's CliRunner against a state dir whose facts lack the batch's repo (fixtures of `tests/unit/test_triage_kanban_focus.py` and the batch-cancel tests): `batch focus <id>` exits 2 with a message containing `left this scope` and `fr triage batch cancel <id> --orphaned`; `batch cancel <id>` (no flag) exits 2 naming `--orphaned`; `batch cancel <id> --orphaned` prints `nothing on the forge is withdrawn` and writes nothing; with `--yes` it appends one cancel event and makes no forge client call (assert `make_client` is not called); the batch then derives `cancelled`; `--orphaned` on a batch whose repo is present exits 2.
+  - id: P2.T5.S2
+    text: |-
+      GREEN: `batch_cancel_command`: add `--orphaned` (help: "Retire a batch whose repo left this scope: only the cancel event, nothing on the forge."); the left-scope checks before the CLOSED_OUT and batch_repo refusals; with the flag, print `cancel batch <id> (left-scope)`, `  repo <name> left this scope: nothing on the forge is withdrawn`, `  append a cancel event to judgements.yaml`, and with `--yes` append the cancel event through `_write`. `batch_focus_command` (`triage_kanban_cmd.py`): the R7 refusal before the batch_repo check. Tests green.
+- number: 6
+  title: Docs and generated surfaces (R9)
+  steps:
+  - id: P2.T6.S1
+    text: |-
+      Update `docs/explainers/fr-triage.md`: name the `left-scope` stage (repo no longer in the scope's facts, not a truncated list; shown in Done; closed out) and `fr triage batch cancel <id> --orphaned`; bump its `reviewed` stamp with a note. For every other page `uv run fr docs check --base origin/main` reports, edit it if a claim changed or bump its `reviewed` stamp. Run `uv run --no-project python scripts/sync-readme.py --check` (regenerate without `--check` if it fails) and `uv run fr docs check --base origin/main` — exit 0.
+  - id: P2.T6.S2
+    text: |-
+      Run the fast tier `uv run pytest --fr-scope -n 2 -q --no-cov` last, after the final code commit; ruff check, ruff format and mypy on `packages/fr/src` green.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-27T13:14:37+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-27T13:14:37+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-27T13:14:37+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-27T13:14:37+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-27T13:14:37+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-27T13:14:37+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-11-27T13:14:37+00:00'
+      note: null
+    P2.T4.S1:
+      state: x
+      ticked_at: '2026-11-27T13:14:37+00:00'
+      note: null
+    P2.T4.S2:
+      state: x
+      ticked_at: '2026-11-27T13:14:37+00:00'
+      note: null
+    P2.T5.S1:
+      state: x
+      ticked_at: '2026-11-27T13:14:37+00:00'
+      note: null
+    P2.T5.S2:
+      state: x
+      ticked_at: '2026-11-27T13:14:37+00:00'
+      note: null
+    P2.T6.S1:
+      state: x
+      ticked_at: '2026-11-27T13:14:37+00:00'
+      note: null
+    P2.T6.S2:
+      state: x
+      ticked_at: '2026-11-27T13:14:37+00:00'
+      note: null
+  completion:
+    at: '2026-11-27T13:14:37+00:00'
+    note: null
+    observed_prs: []

@@ -1671,6 +1671,7 @@ def apply_record(
         )
 
     from fr.commands import run_cmd
+    from fr.run.writes import ResolveGuard
 
     assert record.step is not None and record.outcome is not None
     state_value = "done" if record.outcome == "done" else "failed"
@@ -1681,7 +1682,7 @@ def apply_record(
     # the cursor and the usage capture included, is remembered before it moves,
     # and restored on ANY exit unless a commit already landed — a restore after
     # a commit would leave a tree that disagrees with HEAD.
-    guard = run_cmd.ResolveGuard()
+    guard = ResolveGuard()
     record_bytes: bytes | None = None
     tracked_record = False
     if record_file is not None and record_file.is_file():
