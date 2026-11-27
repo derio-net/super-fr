@@ -73,9 +73,7 @@ def _steps_of(root: Path, spec_rel: str | None, side: str) -> list[Step] | None:
         raise StageFailed(f"the Test Plan on {side} cannot be read: {exc}", code=2) from exc
 
 
-def drift(
-    workspace_root: Path, default_root: Path, plan_rel: str, spec_rel: str | None
-) -> Drift:
+def drift(workspace_root: Path, default_root: Path, plan_rel: str, spec_rel: str | None) -> Drift:
     """The ops and the Test Plan of the ops workspace against the default branch (R1). A
     plan directory the default branch lacks is a refusal (R5), as is a side that cannot be
     read: unknown is never "equal"."""
@@ -105,8 +103,8 @@ def closure_exclusions(state: GateState, at_head: set[str]) -> Callable[[str], s
 
 
 def _question(d: Drift, ref: str, branch: str) -> str:
-    moved = [f"{what}: {', '.join(ids)}" for what, ids in
-             (("added", d.added), ("removed", d.removed), ("changed", d.changed)) if ids]  # fmt: skip
+    kinds = (("added", d.added), ("removed", d.removed), ("changed", d.changed))
+    moved = [f"{what}: {', '.join(ids)}" for what, ids in kinds if ids]
     if d.test_plan:
         moved.append("Test Plan changed")
     return (

@@ -1496,8 +1496,13 @@ FIXED_OPS = OPS.replace("phase: post-merge, check: 'false', apply: 'true',",
 NEW_OP = "  - {id: extra, summary: n, phase: pre-merge, check: 'false', apply: 'true'}\n"
 
 
-def _drifted(ops_root: Path, *stages: int, ops: str | None = FIXED_OPS, spec: str | None = None,
-             confirms: Sequence[bool] = ()) -> tuple[Gate, FakeHost, FakeTree, FakePrompt]:  # fmt: skip
+def _drifted(
+    ops_root: Path,
+    *stages: int,
+    ops: str | None = FIXED_OPS,
+    spec: str | None = None,
+    confirms: Sequence[bool] = (),
+) -> tuple[Gate, FakeHost, FakeTree, FakePrompt]:
     """A run with *stages* recorded whose default branch moved since stage 3: its ops
     (*ops*) and/or its Test Plan (*spec*). A clean merge brings the change in."""
     _record_stages(ops_root, *stages)
@@ -1568,7 +1573,9 @@ def test_the_confirmation_names_every_op_and_a_changed_test_plan(ops_root: Path)
     spec = (ops_root / SPEC).read_text().replace("walk the stage", "walk it twice")
     ops = FIXED_OPS.replace("  - id: mut\n", NEW_OP + "  - id: mut\n").replace(
         "  - {id: pre, summary: create the thing, phase: pre-merge, check: 'false', "
-        "apply: 'true'}\n", "")
+        "apply: 'true'}\n",
+        "",
+    )
     gate, host, tree, prompt = _drifted(ops_root, 1, 3, ops=ops, spec=spec)
     gate_mod.stage_4(gate)
     (q,) = _refresh_q(prompt)
