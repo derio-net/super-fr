@@ -12,8 +12,10 @@ from pathlib import Path
 import pytest
 from click.exceptions import Exit
 from fr.commands import run_cmd
+from fr.run.evidence.walk import verify_walk, walk_obligation
 from fr.run.model import load_run_state
 from fr.run.unobserved import take_unobserved
+from fr.run.verdict import Verdict
 from fr.workflow.model import Step
 
 from tests.unit.test_verification_walk import RUN, SPEC, _git, _home, _logs, _repo, _walk
@@ -68,7 +70,10 @@ def test_a_passing_log_on_head_covering_every_owed_row_is_accepted(
 @pytest.fixture(autouse=True)
 def _no_tests_offer(monkeypatch: pytest.MonkeyPatch) -> None:
     """These tests exercise `walk`; `tests` is another witness with its own tests."""
-    monkeypatch.setattr(run_cmd, "_verify_tests_log", lambda key, log, root, *, opened: "t@0")
+    # The name `_verified_evidence` reads (fr.run.evidence.suite.verify_tests_log, imported).
+    monkeypatch.setattr(
+        run_cmd, "_verify_tests_log", lambda key, log, root, *, opened: Verdict("t@0")
+    )
 
 
 def test_a_stale_code_tree_is_refused_naming_it(
@@ -226,8 +231,9 @@ def _session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str) -> N
 
 def _gate(root: Path, log: Path, *, opened: str | None = _OPENED) -> str:
     state = load_run_state(root, RUN)
-    owed = run_cmd._walk_obligation("step/deliver", root, state)
-    return run_cmd._verify_walk("step/deliver", str(log), root, state, owed, opened=opened)
+    with run_cmd._refusals():
+        owed = walk_obligation("step/deliver", root, state)
+    return run_cmd._witness(verify_walk("step/deliver", str(log), root, state, owed, opened=opened))
 
 
 def test_a_forged_log_no_command_of_yours_walked_is_refused(
@@ -298,10 +304,13 @@ def test_a_tilde_path_is_expanded_before_it_is_judged_relative(
     _forged(root, _home)
     _session(tmp_path, monkeypatch, "fr verification walk --run w1 --model m")
     state = load_run_state(root, RUN)
-    owed = run_cmd._walk_obligation("step/deliver", root, state)
+    with run_cmd._refusals():
+        owed = walk_obligation("step/deliver", root, state)
 
-    got = run_cmd._verify_walk(
-        "step/deliver", f"~/.cache/fr/walks/{RUN}/forged.log", root, state, owed, opened=_OPENED
+    got = run_cmd._witness(
+        verify_walk(
+            "step/deliver", f"~/.cache/fr/walks/{RUN}/forged.log", root, state, owed, opened=_OPENED
+        )
     )
 
     assert got.startswith("forged.log@")

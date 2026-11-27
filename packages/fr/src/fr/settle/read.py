@@ -114,7 +114,7 @@ def read_verdict(
         head = str(view.get("head_oid") or "") or target.local_head(repo_root)
         return unsupported_verdict(modes, backend=e.backend, op=e.op, head=head)
     except HostRefusedError as e:
-        # A host trust refusal does not answer on a retry (run_cmd._ci_tests_witness).
+        # A host trust refusal does not answer on a retry (fr.run.evidence.ci.ci_tests_witness).
         raise SettleRefused(f"the forge refused the host: {e}") from e
     except FORGE_ERRORS as e:
         if forge_error_kind(e) in TRANSIENT_FORGE_KINDS:

@@ -326,7 +326,7 @@ def test_a_pending_set_status_amendment_is_stamped_in_place(
 
 
 def test_only_a_local_suite_log_or_a_reuse_can_stamp(tmp_path: Path) -> None:
-    from fr.commands.run_cmd import _local_stamp_witness
+    from fr.run.evidence.suite import local_stamp_witness
 
     root = tmp_path
     git_init = ["init", "-q", str(root)]
@@ -334,12 +334,12 @@ def test_only_a_local_suite_log_or_a_reuse_can_stamp(tmp_path: Path) -> None:
 
     subprocess.run(["git", *git_init], check=True)
     for refused in (None, "ci", "ci:abc+def;tree=0123", "unobserved"):
-        assert isinstance(_local_stamp_witness(root, refused), str), refused
-    assert _local_stamp_witness(root, "reused:phase/1/x:p.log@0123456789ab;tree=feed") == (
+        assert isinstance(local_stamp_witness(root, refused), str), refused
+    assert local_stamp_witness(root, "reused:phase/1/x:p.log@0123456789ab;tree=feed") == (
         "reused:phase/1/x:p.log@0123456789ab",
         "feed",
     )
-    assert isinstance(_local_stamp_witness(root, "reused:phase/1/x:p.log@0123456789ab"), str)
+    assert isinstance(local_stamp_witness(root, "reused:phase/1/x:p.log@0123456789ab"), str)
 
 
 # --- quiet placement --------------------------------------------------------------------
@@ -355,7 +355,7 @@ def test_under_quiet_the_fragment_is_written_in_the_artifact_root(
     monkeypatch.setenv("HOME", str(home))
     from fr.acceptance.fold import clear_fold_cache
     from fr.artifacts.paths import KIND_DIRS, artifact_root
-    from fr.commands import run_cmd
+    from fr.run.evidence.suite import local_stamp_witness
 
     from tests.unit.test_placement_quiet import quiet_repo
 
@@ -395,7 +395,7 @@ def test_under_quiet_the_fragment_is_written_in_the_artifact_root(
         "spec",
         "suite.log@0123456789ab",
         today="2026-11-14",
-        witness=run_cmd._local_stamp_witness,
+        witness=local_stamp_witness,
     )
 
     assert plan is not None and [p for p, _ in plan.files] == [frag] and plan.rows == ("q-1",)
@@ -426,7 +426,7 @@ def test_a_fragment_with_no_local_row_never_folds(
     """Review p2-r1: deliver with no `local` row behaves exactly as before; the plan
     returns before the fold, so no fold failure can refuse it in the stamp's name."""
     from fr.acceptance import fold as fold_mod
-    from fr.commands import run_cmd
+    from fr.run.evidence.suite import local_stamp_witness
 
     root = _at_deliver(tmp_path)
     out = fr(
@@ -451,7 +451,7 @@ def test_a_fragment_with_no_local_row_never_folds(
             "spec",
             "suite.log",
             today="2026-11-14",
-            witness=run_cmd._local_stamp_witness,
+            witness=local_stamp_witness,
         )
         is None
     )

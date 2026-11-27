@@ -1,8 +1,10 @@
-"""The derived delivery witnesses: proportionality and docs (spec 2026-11-27-run-verdict R7).
+"""The derived witnesses: proportionality, docs, visual and single-phase (spec
+2026-11-27-run-verdict R7).
 
-Moved from `fr.commands.run_cmd` in slice 1. Both diff against one base,
-`witness_base`'s; each returns a `Verdict[str]`, its refusal lines exactly the lines the
-old command printed, and `run_cmd`'s `derive` settles it inside its `try`.
+Moved from `fr.commands.run_cmd`: proportionality and docs in slice 1, visual and
+single-phase in slice 5. Proportionality and docs diff against one base, `witness_base`'s.
+Each returns a `Verdict[str]`, its refusal lines exactly the lines the old command
+printed, and `run_cmd`'s `derive` settles it inside its `try`.
 
 Engine code: no `typer`, no `rich` but `rich.markup`, no `fr.commands`
 (`tests/unit/test_run_writes_layering.py`).
@@ -11,15 +13,24 @@ Engine code: no `typer`, no `rich` but `rich.markup`, no `fr.commands`
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Sequence
+import os
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rich.markup import escape
 
 from fr.artifacts.paths import emitted_path
+from fr.run.adopt import AdoptError, plan_phase_tags
+from fr.run.evidence import refusal
 from fr.run.model import RunState
 from fr.run.steps import emitted_plan
+from fr.run.unobserved import note_unobserved
 from fr.run.verdict import RunRefusal, Say, Verdict, Warn
+from fr.workflow.model import Step
+
+if TYPE_CHECKING:
+    from fr.record.model import VisualEvidence
 
 
 def proportionality_witness(key: str, repo_root: Path, state: RunState) -> Verdict[str]:
@@ -37,12 +48,9 @@ def proportionality_witness(key: str, repo_root: Path, state: RunState) -> Verdi
     if plan_rel is None:
         return Verdict(
             None,
-            refusal=(
-                Say(
-                    f"[red]{key}: cannot derive proportionality evidence — no plan recorded "
-                    "yet (resolve the step that emits `plan` first)[/red]",
-                    soft_wrap=True,
-                ),
+            refusal=refusal(
+                f"[red]{key}: cannot derive proportionality evidence — no plan recorded "
+                "yet (resolve the step that emits `plan` first)[/red]"
             ),
         )
     try:
@@ -50,12 +58,9 @@ def proportionality_witness(key: str, repo_root: Path, state: RunState) -> Verdi
     except PlanSchemaError as e:
         return Verdict(
             None,
-            refusal=(
-                Say(
-                    f"[red]{key}: cannot derive proportionality evidence — plan {plan_rel} "
-                    f"does not parse: {escape(str(e))}[/red]",
-                    soft_wrap=True,
-                ),
+            refusal=refusal(
+                f"[red]{key}: cannot derive proportionality evidence — plan {plan_rel} "
+                f"does not parse: {escape(str(e))}[/red]"
             ),
         )
     warnings: list[Say] = []
@@ -210,6 +215,106 @@ def proportionality_base(repo_root: Path) -> tuple[str | None, str | None]:
     return None, (
         "no remote default branch, no isolation start commit, and no local default branch"
     )
+
+
+def visual_witness(
+    key: str,
+    repo_root: Path,
+    state: RunState,
+    step: Step,
+    *,
+    phase: int | None,
+    entries: tuple[VisualEvidence, ...] | None,
+    holder: str | None,
+    reviewer: str | None,
+    since: str | None,
+    dispatched_as: str | None = None,
+) -> Verdict[str]:
+    """The derived `visual` witness — or a refusal. A thin call into
+    `fr.run.visual`, which owns every rule and every refusal's wording."""
+    from fr.record.model import records_dir
+    from fr.requirements import run_spec
+    from fr.run.visual import VisualRefusedError, derive_visual, owed_for_unit, role_for
+
+    try:
+        owed = owed_for_unit(
+            repo_root, plan_rel=emitted_plan(state), phase=phase, spec_rel=run_spec(state)
+        )
+        derived = derive_visual(
+            owed,
+            entries,
+            role=role_for(step.evidence, phase),
+            since=since,
+            holder=holder,
+            reviewer=reviewer,
+            repo_root=repo_root,
+            records_dir=records_dir(repo_root, state.run),
+            env=os.environ,
+            dispatched_as=dispatched_as,
+            claim_hint=(
+                f"fr run claim {state.run} --step {step.id}"
+                + (f" --item phase/{phase}" if phase is not None else "")
+                + " --agent <id>"
+            ),
+        )
+    except VisualRefusedError as e:
+        return Verdict(None, refusal=derived_refusal_lines(key, e.lines))
+    if not derived.unobserved:
+        return Verdict(derived.witness)
+    note_unobserved("visual")
+    warning = Say(
+        f"[yellow]{key}: could not verify that the screenshots were opened — "
+        f"{derived.why}; recorded as checked on disk, unverified "
+        "(evidence: unobserved=visual).[/yellow]",
+        soft_wrap=True,
+    )
+    return Verdict(derived.witness, warnings=(warning,))
+
+
+def single_phase_witness(
+    key: str, repo_root: Path, state: RunState, emitted: Mapping[str, str]
+) -> Verdict[str]:
+    """`phase <n>` — the light shape's one agentic phase — or a refusal.
+
+    2026-09-29-fr-goal-light-path §A (R2): a structural rule checked when the
+    plan is authored, not a hope that it stays small. `[manual]` phases are
+    allowed (they are not work a subagent runs); anything but exactly one
+    agentic phase is refused, naming the phases and the two ways forward.
+    Fail-closed on a plan fr cannot read.
+    """
+    plan_rel = emitted.get("plan") or emitted_plan(state)
+    if plan_rel is None:
+        return Verdict(
+            None,
+            refusal=refusal(
+                f"[red]{key}: cannot derive single-phase evidence — no plan recorded "
+                "(pass --emitted plan=<plan-dir>)[/red]"
+            ),
+        )
+    try:
+        tags = plan_phase_tags(repo_root, plan_rel)
+    except AdoptError as e:
+        return Verdict(
+            None,
+            refusal=refusal(
+                f"[red]{key}: cannot derive single-phase evidence — {escape(str(e))}[/red]"
+            ),
+        )
+    agentic = sorted(n for n, tag in tags.items() if tag != "manual")
+    if len(agentic) != 1:
+        ids = ", ".join(str(n) for n in agentic) or "none"
+        return Verdict(
+            None,
+            refusal=(
+                Say(
+                    f"{key}: single-phase: the light shape takes one agentic phase; this plan "
+                    f"has {len(agentic)} ({ids}). Merge them, or start a new run on fr-goal.",
+                    markup=False,
+                    soft_wrap=True,
+                ),
+            ),
+        )
+    return Verdict(f"phase {agentic[0]}")
 
 
 def derived_refusal_lines(key: str, lines: Sequence[str]) -> tuple[Say, ...]:

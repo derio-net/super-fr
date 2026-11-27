@@ -21,10 +21,8 @@ from __future__ import annotations
 
 import contextlib
 import datetime as _dt
-import functools
 import json
 import os
-import re
 from collections.abc import Callable, Iterator, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -59,16 +57,10 @@ from fr.journal.model import (
     JournalParseError,
     JournalScope,
     append_journal_entry,
-    effective_finding_states,
     journal_now,
     journal_path,
-    journal_stamp_as_utc,
     parse_journal,
-    phase_finding_states,
-    resolve_journal_read_path,
-    reviews_phase,
     spec_journal_slug,
-    unauthorized_fixes,
 )
 from fr.models import (
     REPO_MODELS_REL,
@@ -81,9 +73,8 @@ from fr.models import (
 )
 from fr.run import deliver, units
 from fr.run import liveness as _liveness
-from fr.run.adopt import MANUAL_ITEM, AdoptError, Superseded, adopt_run, plan_phase_tags
+from fr.run.adopt import MANUAL_ITEM, AdoptError, Superseded, adopt_run
 from fr.run.brief import (
-    PHASE_EXECUTOR_AGENT,
     PHASE_TIER_SENTINEL,
     already_running_refusal,
     binding_health,
@@ -109,10 +100,9 @@ from fr.run.brief import (
     template_context,
 )
 from fr.run.cli_step import run_step
-from fr.run.debug_journal import debug_slug, require_debug_slug
+from fr.run.debug_journal import debug_slug
 from fr.run.historical import (
     HISTORICAL_REVIEWER,
-    findings_witness,
     historical_reviews,
     historical_sentence,
 )
@@ -151,16 +141,41 @@ from fr.shape import shown_path
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from fr.lenses.accumulate import LensSet
     from fr.record.model import QuestionRounds, VisualEvidence
-    from fr.run.observed import ChildDispatch
     from fr.run.telemetry import Round
-    from fr.verification.walk import WalkOwed
 from fr.artifacts.paths import KIND_DIRS, artifact_root, emitted_path
-from fr.run.evidence.derived import derived_refusal_lines as _derived_refusal_lines
+from fr.run.evidence.ci import ci_tests_witness as _ci_tests_witness
 from fr.run.evidence.derived import docs_witness as _docs_witness
 from fr.run.evidence.derived import proportionality_witness as _proportionality_witness
+from fr.run.evidence.derived import single_phase_witness as _single_phase_witness
+from fr.run.evidence.derived import visual_witness as _visual_witness
+from fr.run.evidence.emitted import parse_emitted as _parse_emitted
+from fr.run.evidence.journals import closed_findings_witness as _closed_findings_witness
+from fr.run.evidence.journals import review_journal_entries as _review_journal_entries
+from fr.run.evidence.journals import verify_review_entry as _verify_review_entry
 from fr.run.evidence.lenses import lens_set_or_refuse
+from fr.run.evidence.lenses import lenses_witness as _lenses_witness
+from fr.run.evidence.lenses import owed_on as _owed_on
+from fr.run.evidence.lenses import verify_lens_reviewers as _verify_lens_reviewers
+from fr.run.evidence.owed import debt_phrase as _debt_phrase
+from fr.run.evidence.owed import unevidenced_units as _unevidenced_units
+from fr.run.evidence.review import check_returned_findings as _check_returned_findings
+from fr.run.evidence.review import refuse_unboundable_historical as _refuse_unboundable_historical
+from fr.run.evidence.review import verify_historical_bound as _verify_historical_bound
+from fr.run.evidence.review import verify_reviewer as _verify_reviewer
+from fr.run.evidence.suite import TESTS_CI, TESTS_REUSE
+from fr.run.evidence.suite import local_stamp_witness as _local_stamp_witness
+from fr.run.evidence.suite import reuse_tests_witness as _reuse_tests_witness
+from fr.run.evidence.suite import verify_phase_tests_log as _verify_phase_tests_log
+from fr.run.evidence.suite import verify_tests_log as _verify_tests_log
+from fr.run.evidence.target import PHASE_EVIDENCE as _PHASE_EVIDENCE
+from fr.run.evidence.target import VERIFIABLE_EVIDENCE as _VERIFIABLE_EVIDENCE
+from fr.run.evidence.target import evidence_hint as _evidence_hint
+from fr.run.evidence.target import evidence_target as _evidence_target
+from fr.run.evidence.target import parse_evidence as _parse_evidence
+from fr.run.evidence.target import reviews_the_feature as _reviews_the_feature
+from fr.run.evidence.walk import verify_walk as _verify_walk
+from fr.run.evidence.walk import walk_obligation as _walk_obligation
 from fr.run.provenance import cleared_gates, gates
 from fr.run.reshape import ReshapeError, diff_ids, reshape
 from fr.run.steps import complete_step as _complete_step
@@ -175,7 +190,6 @@ from fr.run.steps import manual_items as _manual_items
 from fr.run.steps import phase_tier as _phase_tier
 from fr.run.steps import rebind_shape as _rebind_shape
 from fr.run.steps import rebound as _rebound
-from fr.run.steps import resolve_manifest_checked_schema as _resolve_manifest_checked_schema
 from fr.run.steps import resolve_manifest_for_read as _read_manifest
 from fr.run.steps import resolve_manifest_for_state as _resolve_manifest_for_state
 from fr.run.steps import step_by_id as _step_by_id
@@ -185,12 +199,11 @@ from fr.run.units import UnitAttempt
 from fr.run.unobserved import UNOBSERVED as _UNOBSERVED
 from fr.run.unobserved import note_unobserved as _note_unobserved
 from fr.run.unobserved import take_unobserved as _take_unobserved
-from fr.run.unobserved import why_tests_unobservable as _why_tests_unobservable
 from fr.run.unobserved import why_unobservable as _why_unobservable
 from fr.run.verdict import RunRefusal, Say, Verdict
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
 from fr.types import PHASE_TIERS
-from fr.workflow.artifacts import DERIVED_EVIDENCE, REPO_TRACKED_ARTIFACTS, emitted_artifacts
+from fr.workflow.artifacts import DERIVED_EVIDENCE, emitted_artifacts
 from fr.workflow.check import check_workflow
 from fr.workflow.model import Step, WorkflowError, WorkflowManifest
 from fr.workflow.resolve import resolve_workflow
@@ -230,6 +243,14 @@ def _settle[T](verdict: Verdict[T]) -> T | None:
             _say(line)
         raise typer.Exit(verdict.exit_code)
     return verdict.witness
+
+
+def _witness(verdict: Verdict[str]) -> str:
+    """`_settle` for a verifier whose witness the resolve stores: a verdict that does not
+    refuse carries one."""
+    found = _settle(verdict)
+    assert found is not None
+    return found
 
 
 @contextlib.contextmanager
@@ -801,406 +822,6 @@ def _refuse_missing_emits(
     raise typer.Exit(2)
 
 
-def _parse_emitted(pairs: list[str], repo_root: Path, step: Step | None = None) -> dict[str, str]:
-    """`--emitted name=path` pairs, validated and made repo-relative.
-
-    **The normalization is the point** (review r5-b2). `emitted.plan` is the
-    key `archive.find_run_for_plan` and `run.adopt.adoptable_plans` match a
-    run to its plan by, and both compare against a repo-relative posix path.
-    A stored ABSOLUTE path matches neither — verified live: it made `fr run
-    adopt` create a SECOND run for a plan that already had one, and would
-    have left the first behind at `fr archive`. Both are silent no-ops, which
-    spec §4.B calls out as worse than failing. And an absolute path is what
-    an agent following SKILL.md's `--emitted plan=<path>` produces routinely.
-
-    Only `REPO_TRACKED_ARTIFACTS` (`spec`, `plan`) are path-normalised: `pr`
-    is a URL, `report` and `journal:*` have no repo path, and rewriting those
-    would be nonsense.
-
-    Five further rules, each closing a way to record a wrong thing quietly
-    (review r5-e2):
-
-    1. **Split on the FIRST `=` only.** A path may contain `=`; splitting on
-       the last, or on all, silently truncates it.
-    2. **Neither half may be empty.** `plan=` records the repo root as the
-       plan; `=x` records an artifact with no name.
-    3. **The name must be one the step declares it `emits`.** An artifact the
-       manifest never mentions is a shape/agent mismatch — the agent emitted
-       something the workflow does not know about, or misspelled the name it
-       does — and storing it means the run carries a key nothing will ever
-       read. The refusal names the step's declared emits.
-    4. **No duplicate names in one call.** `--emitted plan=a --emitted plan=b`
-       silently kept `b`.
-    5. **A repo-tracked artifact must EXIST.** An agent reporting a spec that
-       is not on disk is precisely the silent-wrong-state case the run cursor
-       exists to prevent.
-    """
-    result: dict[str, str] = {}
-    for pair in pairs:
-        name, sep, value = pair.partition("=")  # partition splits on the FIRST `=`
-        if not sep:
-            raise RunStateError(f"--emitted must be 'name=path', got {pair!r}")
-        name = name.strip()
-        if not name:
-            raise RunStateError(f"--emitted has an empty artifact name: {pair!r}")
-        if not value.strip():
-            raise RunStateError(f"--emitted {name}= has an empty value")
-        if name in result:
-            raise RunStateError(
-                f"--emitted {name}= given twice ({result[name]!r} then {value!r}) — "
-                "one artifact, one value"
-            )
-        if step is not None and name not in step.emits:
-            emits = ", ".join(sorted(step.emits)) or "(nothing)"
-            raise RunStateError(
-                f"step {step.id!r} does not emit {name!r}; it declares: {emits}. "
-                "Either the workflow shape is missing an `emits:` entry or the "
-                "artifact name is misspelled."
-            )
-        result[name] = _repo_relative_artifact(name, value.strip(), repo_root)
-    return result
-
-
-def _repo_relative_artifact(name: str, value: str, repo_root: Path) -> str:
-    if name not in REPO_TRACKED_ARTIFACTS:
-        return value
-    from fr.artifacts.paths import REPO, feature_root, space_for
-
-    # The artifact root, not the product checkout: under quiet or stealth the spec and
-    # plan live in the `fr` worktree or the tracking clone (R1), and a run records them
-    # relative to that root, the same layout as under `repo`. Readers resolve them back
-    # through `fr.artifacts.paths.emitted_path`.
-    space = space_for(repo_root)
-    base = feature_root(space)
-    raw = Path(value)
-    if raw.is_absolute():
-        candidates = [raw]
-    else:
-        # The logical spelling (`<kind dir>/<file>` below the feature root) first; off
-        # `repo`, also the same path spelled from the `fr` worktree or tracking root
-        # (`features/<id>/...`).
-        candidates = [base / raw]
-        if space.placement != REPO:
-            candidates.append(space.root / raw)
-    # `resolve()` on BOTH sides (review r5-e2): an fr worktree lives under
-    # `~/.cache`, which on macOS is reached through `/private/var/...` — so a
-    # resolved artifact path and an unresolved repo root have no common
-    # prefix and `relative_to` raises on a file that is plainly inside.
-    resolved_root = base.resolve()
-    inside: list[Path] = []
-    for target in candidates:
-        try:
-            inside.append(target.resolve().relative_to(resolved_root))
-        except ValueError:
-            continue
-    real_inside = [r for r in inside if (resolved_root / r).exists()]
-    if not real_inside and any(t.exists() for t in candidates):
-        inside = []  # it exists, but only outside the root: say that, not "missing"
-    if not inside:
-        if space.placement == REPO:
-            where, hint = "the repo", "a run records repo-relative artifact paths"
-        else:
-            where = f"this feature's {space.placement} artifact root"
-            hint = "a run records paths below it; `fr settings paths` names its directories"
-        raise RunStateError(
-            f"--emitted {name}={value!r} is outside {where} ({resolved_root}) — {hint}"
-        )
-    rel = real_inside[0] if real_inside else inside[0]
-    if not (resolved_root / rel).exists():
-        raise RunStateError(
-            f"--emitted {name}={value!r} does not exist ({resolved_root / rel}). "
-            "A run records artifacts that were actually written; recording one "
-            "that is not there is the silent-wrong-state this cursor exists to "
-            "prevent."
-        )
-    return rel.as_posix()
-
-
-# ------------------------------------------------------------------ evidence
-#
-# Spec 2026-09-20-unit-record-unification §4.E. The line this draws is §3's:
-# an obligation's SATISFACTION is control, its CONTENT is journal. The cursor
-# records THAT the review happened and WHERE the evidence is — a journal entry
-# id — exactly as `emitted` records that a spec exists and where, without
-# containing the spec. It never copies a finding.
-
-
-# The obligations fr can check, and the subset it checks BY ITSELF. A derived
-# obligation is never offered on the command line: one satisfied by passing a
-# flag is satisfied by anyone who can type the flag, and `findings` exists
-# precisely because "the review's findings were dealt with" was prose until
-# something other than the agent's word could witness it.
-_VERIFIABLE_EVIDENCE = (
-    "review",
-    "reviewer",
-    "findings",
-    "tests",
-    "proportionality",
-    "docs",
-    "visual",
-    "single-phase",
-    "walk",
-    "lenses",
-    "settle",
-)
-# `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
-# `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
-# `docs` (2026-11-11-docs-currency R9) is its sibling: fr runs the `fr docs
-# check` gate in process against the same base, refuses on findings, and
-# stores `<merge-base>:<sha256>` of the pages it found current (`none` in a
-# repo with no `.fr/docs.yaml`).
-_DERIVED_EVIDENCE = DERIVED_EVIDENCE
-# `single-phase` (2026-09-29-fr-goal-light-path §A, R2) is the light shape's
-# `plan` witness: the emitted plan has exactly one phase that is not `[manual]`.
-# `visual` (2026-09-28-ui-visual-evidence §C) is derived from the step record's
-# `visual:` section and the witness transcript; the rules live in `fr.run.visual`.
-# Evidence ABOUT A REVIEWED JOURNAL — a phase of the plan journal, or the spec
-# journal (2026-09-24 spec §E) — verified against an `_EvidenceTarget`. A flat
-# `step/<id>` unit with no target (`_evidence_target`) refuses them rather than
-# recording them unchecked. `tests` is not one: it is delivery's evidence, on
-# the flat `deliver` unit (debug journal C5).
-_PHASE_EVIDENCE = frozenset({"review", "reviewer", "findings", "lenses"})
-# OFFERED evidence (2026-09-29-fr-goal-light-path §D, R6): a name a unit of a
-# `for_each: phase` group member may carry WITHOUT its step declaring it, and
-# that is never counted missing there. `tests` is the phase holder's own suite
-# log, which `deliver` may later reuse (`tests: reuse`) while the code tree it
-# covered is unchanged. Where a step DECLARES it (`deliver`) it stays mandatory
-# exactly as before; the shipped manifests do not change.
-_OFFERED_EVIDENCE = frozenset({"tests", "walk"})
-# `walk` (2026-10-06-verification-strategies §C, R11) is `deliver`'s witness of
-# the pre-merge strategy: a log `fr verification walk` wrote, on HEAD's code
-# tree. It is owed only when the run's spec gives the run or a row an
-# agent-driven pre-merge strategy (`fr.verification.walk.walk_owed`); when it is
-# not, omitting it or saying `walk=none` is accepted.
-_DERIVED_FROM = {
-    "findings": "from the reviewed journal: every finding filed against the phase "
-    "(plan journal) or the spec (spec journal) must be fixed, refuted, deferred or "
-    "out of scope",
-    "proportionality": "by running `fr plan proportionality` on the run's plan and "
-    "hashing the report at its merge-base",
-    "docs": "by running `fr docs check` against the same base as `proportionality`: every "
-    "page covering a path the branch changed must change too",
-    "visual": "from the step record's `visual:` section — every owed row's screenshots "
-    "cover its named states and interactions, and the witness transcript shows each "
-    "one opened since the unit opened",
-    "single-phase": "from the plan this step emits: exactly one phase that is not `[manual]`",
-    "lenses": "from the feature's lens set at this resolve and each lens reviewer's return: "
-    "per lens, the changed files it examined and the findings it raised (`none` for an "
-    "empty set)",
-    "settle": "from the PR's conflict and CI states under `git.settle` (fr.settle.witness)",
-}
-
-
-@dataclass(frozen=True)
-class _EvidenceTarget:
-    """The journal a review unit's evidence is verified against.
-
-    `review-phase` reviews a PHASE of the plan journal (`scope="plan"`,
-    `phase=N`); `spec-review` reviews the run's spec, in its spec journal
-    (`scope="spec"`, no phase); `lens-review` reviews the whole FEATURE, in the
-    plan journal with no phase (`feature=True`, spec 2026-11-12-review-lenses
-    §3.C). One value, passed through every rule, so the review steps cannot
-    drift into several spellings of "reviewed".
-    """
-
-    scope: Literal["plan", "spec", "debug"]
-    phase: int | None
-    feature: bool = False
-
-    @property
-    def subject(self) -> str:
-        if self.feature:
-            return "the feature"
-        fallback = "the fix" if self.scope == "debug" else "the spec"
-        return f"phase {self.phase}" if self.phase is not None else fallback
-
-
-def _evidence_target(step: Step, phase: int | None) -> _EvidenceTarget | None:
-    """Which journal `step`'s review evidence names — or `None` when fr can
-    locate none. A phase unit reviews its phase; a flat step reviews the spec
-    journal only when the manifest says it writes it (`emits: [journal:spec]`),
-    the debug journal likewise (`journal:debug`), and the whole feature only when
-    it is the lens review: it writes the plan journal AND declares `lenses`.
-    Anything else has nothing to check an id against, and fr says so."""
-    if phase is not None:
-        return _EvidenceTarget("plan", phase)
-    for scope in ("spec", "debug"):
-        if f"journal:{scope}" in step.emits:
-            return _EvidenceTarget(scope, None)
-    if "journal:plan" in step.emits and "lenses" in step.evidence:
-        return _EvidenceTarget("plan", None, feature=True)
-    return None
-
-
-def _reviews_the_feature(target: _EvidenceTarget | None) -> bool:
-    """Whether the unit is a review of the whole feature (the lens review). Only
-    a step declaring `lenses` gets that target (`_evidence_target`)."""
-    return target is not None and target.feature
-
-
-def _ci_configured(repo_root: Path | None) -> bool:
-    """Whether `fr services` names a CI for *repo_root* (lenient: a hint never
-    refuses). Spec 2026-10-07-cloud-triage §I step 6, p2-r8."""
-    if repo_root is None:
-        return False
-    from fr.services.resolve import resolve_services
-
-    return resolve_services(repo_root, lenient=True).ci.type != "none"
-
-
-def _evidence_hint(name: str, target: _EvidenceTarget | None, repo_root: Path | None = None) -> str:
-    if name == "walk":
-        return (
-            "<path-to-walk-log>, the log `fr verification walk --run <run> --model <m>` "
-            "wrote on this code tree"
-        )
-    if name == "tests":
-        log = (
-            "<path-to-log>, naming the output file of the full suite you ran "
-            "yourself, in this session, during this unit"
-        )
-        if _ci_configured(repo_root):
-            log += (
-                " — or --evidence tests=ci, naming this branch's CI on the pushed "
-                "head (fr reads its gate checks on the open PR)"
-            )
-        return log
-    assert target is not None  # phase-scoped evidence without a target is refused first
-    if name == "review":
-        when = "" if target.phase is not None else ", created after this step opened"
-        kind = "global `kind=review`" if target.feature else "`kind=review`"
-        return (
-            f"<journal-entry-id>, naming the {kind} {target.scope}-journal entry "
-            f"recorded for {target.subject}{when}"
-        )
-    if target.feature:
-        return (
-            "<lens>=<agent-id>,<lens>=<agent-id>, one per lens in the feature's set "
-            "(`fr lenses status`), each the id a dispatched reviewer's dispatch returned"
-        )
-    not_impl = f", not {target.subject}'s implementer" if target.phase is not None else ""
-    return (
-        f"<agent-id>, naming the dispatched reviewer subagent (a separate context{not_impl}) "
-        "by the id its dispatch returned"
-    )
-
-
-def _parse_evidence(pairs: list[str], step: Step, *, phase_unit: bool = False) -> dict[str, str]:
-    """`--evidence name=journal-entry-id` pairs, validated against `step`.
-
-    Same five-rule shape as `_parse_emitted` and for the same reasons — split
-    on the FIRST `=`, neither half empty, no duplicate name, and the name must
-    be one the STEP declares. That last rule is what stops evidence becoming
-    decoration: a name the shape never asked for is verified against nothing,
-    so recording it would put an unverified id on the cursor under a heading
-    that reads as proof.
-
-    `phase_unit` (the unit is a `for_each: phase` group member) admits an
-    `_OFFERED_EVIDENCE` name the step does not declare — still verified, by
-    `_verified_evidence`, before anything reaches the cursor.
-    """
-    result: dict[str, str] = {}
-    for pair in pairs:
-        name, sep, value = pair.partition("=")
-        if not sep:
-            raise RunStateError(f"--evidence must be 'name=journal-entry-id', got {pair!r}")
-        name = name.strip()
-        if not name:
-            raise RunStateError(f"--evidence has an empty obligation name: {pair!r}")
-        if not value.strip():
-            raise RunStateError(f"--evidence {name}= has an empty value")
-        if name in result:
-            raise RunStateError(
-                f"--evidence {name}= given twice ({result[name]!r} then {value.strip()!r}) — "
-                "one obligation, one entry"
-            )
-        if phase_unit and name in _OFFERED_EVIDENCE and name not in step.evidence:
-            result[name] = value.strip()
-            continue
-        if not step.evidence:
-            raise RunStateError(
-                f"step {step.id!r} declares no evidence, so --evidence {name}= "
-                "would record an id nothing verified"
-            )
-        if name not in step.evidence:
-            declared = ", ".join(sorted(step.evidence))
-            raise RunStateError(
-                f"step {step.id!r} does not require {name!r} evidence; it declares: {declared}"
-            )
-        if name in _DERIVED_EVIDENCE:
-            raise RunStateError(
-                f"--evidence {name}= is not yours to pass — fr derives {name!r} itself "
-                f"when the unit resolves `done` ({_DERIVED_FROM[name]}), and records "
-                "what it saw"
-            )
-        result[name] = value.strip()
-    return result
-
-
-def _plan_journal_entries(repo_root: Path, state: RunState) -> tuple[str, list[JournalEntry]]:
-    """`(slug, entries)` of this run's PLAN journal. Raises `RunStateError`
-    when the run has not recorded a plan yet, which is fail-closed: a gate that
-    cannot read its source does not know whether it passed."""
-    slug, _path = _plan_journal_path(state, repo_root)
-    return _journal_entries(repo_root, "plan", slug, "--phase <n> ")
-
-
-def _plan_journal_path(state: RunState, repo_root: Path) -> tuple[str, Path]:
-    plan_rel = _emitted_plan(state)
-    if plan_rel is None:
-        raise RunStateError(
-            "cannot verify evidence — no plan recorded yet (resolve the step "
-            "that emits `plan` first)"
-        )
-    slug = Path(plan_rel).name
-    return slug, resolve_journal_read_path(repo_root, "plan", slug)
-
-
-def _review_journal_entries(
-    repo_root: Path, state: RunState, target: _EvidenceTarget
-) -> tuple[str, list[JournalEntry]]:
-    """`(slug, entries)` of the journal `target` names — the plan journal, or
-    the spec journal of the spec this run emitted. Fail-closed like the plan
-    one: no spec recorded is a refusal, not an empty journal."""
-    if target.feature:
-        # The lens review: a plan journal that does not exist holds no lens finding
-        # and no review, exactly as `lens_set` reads it (no lens added).
-        slug, path = _plan_journal_path(state, repo_root)
-        if not path.exists():
-            return slug, []
-    if target.scope == "plan":
-        return _plan_journal_entries(repo_root, state)
-    if target.scope == "debug":
-        return _journal_entries(repo_root, "debug", require_debug_slug(state), "")
-    from fr.requirements import run_spec
-
-    spec_rel = run_spec(state)
-    if spec_rel is None:
-        raise RunStateError(
-            "cannot verify evidence — no spec recorded yet (resolve the step "
-            "that emits `spec` first)"
-        )
-    return _journal_entries(repo_root, "spec", spec_journal_slug(Path(spec_rel).stem), "")
-
-
-def _journal_entries(
-    repo_root: Path, scope: Literal["plan", "spec", "debug"], slug: str, phase_flag: str
-) -> tuple[str, list[JournalEntry]]:
-    path = resolve_journal_read_path(repo_root, scope, slug)
-    if not path.exists():
-        raise RunStateError(
-            f"cannot verify evidence — the {scope} journal {path} does not exist. "
-            f"Record the review first: fr journal add --scope {scope} --slug {slug} "
-            f"--kind review {phase_flag}..."
-        )
-    try:
-        return slug, parse_journal(path.read_text())
-    except (JournalParseError, OSError) as e:
-        raise RunStateError(
-            f"cannot verify evidence — {scope} journal {path} is unreadable: {e}"
-        ) from e
-
-
 def _verified_evidence(
     repo_root: Path,
     state: RunState,
@@ -1249,8 +870,8 @@ def _verified_evidence(
     checked.
     """
     if not step.evidence and not offered:
-        # `_parse_evidence` already refused an offered name the step does not
-        # declare — bar `_OFFERED_EVIDENCE` on a phase unit — so this is the
+        # `parse_evidence` already refused an offered name the step does not
+        # declare — bar `OFFERED_EVIDENCE` on a phase unit — so this is the
         # ordinary, unchanged path every pre-existing shape takes.
         return {}
     if state_value != "done" and not offered:
@@ -1297,13 +918,14 @@ def _verified_evidence(
             lenses = lens_set_or_refuse(key, repo_root, state)
     walk_owed = None
     if "walk" in offered or (state_value == "done" and "walk" in step.evidence):
-        walk_owed = _walk_obligation(key, repo_root, state)
+        with _refusals():
+            walk_owed = _walk_obligation(key, repo_root, state)
     missing = (
         [
             n
             for n in _owed_on(step, lenses)
             if n not in offered
-            and n not in _DERIVED_EVIDENCE
+            and n not in DERIVED_EVIDENCE
             and not (n == "walk" and walk_owed is not None and not walk_owed.owed)
         ]
         if state_value == "done"
@@ -1348,43 +970,58 @@ def _verified_evidence(
     historical = offered.get("reviewer") == HISTORICAL_REVIEWER
     if historical:
         assert target is not None  # phase-scoped, refused above otherwise
-        _refuse_unboundable_historical(key, target, offered)
+        with _refusals():
+            _refuse_unboundable_historical(key, target, offered)
     reviewers: dict[str, str] | None = None
     if "reviewer" in offered and not historical and lenses is not None:
         assert target is not None
-        reviewers = _verify_lens_reviewers(
-            key, offered["reviewer"], state, lenses, repo_root, target=target, opened=since
-        )
+        with _refusals():
+            reviewers = _verify_lens_reviewers(
+                key,
+                offered["reviewer"],
+                state,
+                lenses,
+                repo_root,
+                target=target,
+                opened=since,
+                warn=_say,
+            )
     elif "reviewer" in offered and not historical:
         assert target is not None  # phase-scoped, refused above otherwise
-        _verify_reviewer(
-            key,
-            offered["reviewer"],
-            state,
-            target=target,
-            opened=since,
-            expected_agent=step.agent if target.phase is None else None,
-        )
+        with _refusals():
+            _verify_reviewer(
+                key,
+                offered["reviewer"],
+                state,
+                target=target,
+                opened=since,
+                expected_agent=step.agent if target.phase is None else None,
+                warn=_say,
+            )
     # `tests: ci` first: the phase-log branch below would read it as a path.
     if "tests" in offered and offered["tests"] == TESTS_CI:
-        verified["tests"] = _ci_tests_witness(key, repo_root, done=state_value == "done")
+        verified["tests"] = _witness(_ci_tests_witness(key, repo_root, done=state_value == "done"))
     elif "tests" in offered and phase is not None:
-        verified["tests"] = _verify_phase_tests_log(
-            key,
-            offered["tests"],
-            repo_root,
-            opened=opened,
-            holder=holder or (attempt.agent if attempt is not None else None),
-            record_tree=state_value == "done",
+        verified["tests"] = _witness(
+            _verify_phase_tests_log(
+                key,
+                offered["tests"],
+                repo_root,
+                opened=opened,
+                holder=holder or (attempt.agent if attempt is not None else None),
+                record_tree=state_value == "done",
+            )
         )
     elif "tests" in offered and offered["tests"] == TESTS_REUSE:
-        verified["tests"] = _reuse_tests_witness(key, repo_root, state)
+        verified["tests"] = _witness(_reuse_tests_witness(key, repo_root, state))
     elif "tests" in offered:
-        verified["tests"] = _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
+        verified["tests"] = _witness(
+            _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
+        )
     if "walk" in offered:
         assert walk_owed is not None
-        verified["walk"] = _verify_walk(
-            key, offered["walk"], repo_root, state, walk_owed, opened=opened
+        verified["walk"] = _witness(
+            _verify_walk(key, offered["walk"], repo_root, state, walk_owed, opened=opened)
         )
     # Every DERIVED witness is evaluated, and every refusal printed, before the
     # resolve is refused (gh#768): one environmental blocker (no fetchable
@@ -1417,7 +1054,7 @@ def _verified_evidence(
     if state_value == "done" and "single-phase" in step.evidence:
         derive(
             "single-phase",
-            lambda: _single_phase_witness(key, repo_root, state, emitted or {}),
+            lambda: _settle(_single_phase_witness(key, repo_root, state, emitted or {})),
         )
     derives = state_value == "done" and "findings" in step.evidence
     review_journal: tuple[str, list[JournalEntry]] | None = None
@@ -1431,27 +1068,35 @@ def _verified_evidence(
     if "review" in offered:
         assert review_journal is not None and target is not None
         slug, entries = review_journal
-        _verify_review_entry(
-            key, offered["review"], slug=slug, entries=entries, target=target, since=since
-        )
-        if historical:
-            _verify_historical_bound(
-                key, repo_root, state, target=target, entry_id=offered["review"], entries=entries
+        with _refusals():
+            _verify_review_entry(
+                key, offered["review"], slug=slug, entries=entries, target=target, since=since
             )
+            if historical:
+                _verify_historical_bound(
+                    key,
+                    repo_root,
+                    state,
+                    target=target,
+                    entry_id=offered["review"],
+                    entries=entries,
+                )
     if state_value == "done" and "visual" in step.evidence:
         derive(
             "visual",
-            lambda: _visual_witness(
-                key,
-                repo_root,
-                state,
-                step,
-                phase=phase,
-                entries=visual,
-                holder=holder or (attempt.agent if attempt is not None else None),
-                reviewer=offered.get("reviewer"),
-                since=since or (state.steps[step.id].at if step.id in state.steps else None),
-                dispatched_as=attempt.agent_type if attempt is not None else None,
+            lambda: _settle(
+                _visual_witness(
+                    key,
+                    repo_root,
+                    state,
+                    step,
+                    phase=phase,
+                    entries=visual,
+                    holder=holder or (attempt.agent if attempt is not None else None),
+                    reviewer=offered.get("reviewer"),
+                    since=since or (state.steps[step.id].at if step.id in state.steps else None),
+                    dispatched_as=attempt.agent_type if attempt is not None else None,
+                )
             ),
         )
     if derives:
@@ -1461,14 +1106,15 @@ def _verified_evidence(
         # A historical review has no dispatch in this cursor, so no return to read.
         returned_phase = target.phase if "reviewer" in step.evidence and not historical else None
 
-        def findings_witness() -> str:
+        def findings_witness() -> str | None:
             if returned_phase is not None:
                 # R7: only a step that names a dispatched reviewer has a return
                 # that could owe a review-findings block.
-                _check_returned_findings(
-                    key, entries, returned_phase, since, offered.get("reviewer")
-                )
-            return _closed_findings_witness(key, slug, entries, findings_target)
+                with _refusals():
+                    _check_returned_findings(
+                        key, entries, returned_phase, since, offered.get("reviewer"), warn=_say
+                    )
+            return _settle(_closed_findings_witness(key, slug, entries, findings_target))
 
         derive("findings", findings_witness)
     if state_value == "done" and lenses is not None and "lenses" in step.evidence:
@@ -1476,7 +1122,9 @@ def _verified_evidence(
         lens_entries = review_journal[1]
         derive(
             "lenses",
-            lambda: _lenses_witness(key, repo_root, lenses, lens_entries, reviewers, since),
+            lambda: _settle(
+                _lenses_witness(key, repo_root, lenses, lens_entries, reviewers, since)
+            ),
         )
     if len(refused) > 1:
         err_console.print(
@@ -1487,1590 +1135,6 @@ def _verified_evidence(
     if refused:
         raise typer.Exit(2)
     return verified
-
-
-def _refuse_unboundable_historical(
-    key: str, target: _EvidenceTarget, offered: Mapping[str, str]
-) -> None:
-    """`reviewer=historical` where no bound can apply — or return. A flat unit
-    (spec-review) is refused: its review must postdate the step, and adoption
-    never leaves it open. A phase unit must name the `review` entry the bound
-    is checked against."""
-    if target.phase is None:
-        err_console.print(
-            f"[red]{key}: refused — reviewer={HISTORICAL_REVIEWER} is accepted only on a "
-            "phase review unit; a spec review must be done by a reviewer dispatched after "
-            "the step opened.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if "review" not in offered:
-        err_console.print(
-            f"[red]{key}: refused — reviewer={HISTORICAL_REVIEWER} needs --evidence "
-            "review=<entry-id>, the journal review it stands on.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-
-
-def _verify_historical_bound(
-    key: str,
-    repo_root: Path,
-    state: RunState,
-    *,
-    target: _EvidenceTarget,
-    entry_id: str,
-    entries: list[JournalEntry],
-) -> None:
-    """The review entry `entry_id` meets spec §D's bound for `target`'s phase
-    — or exit 2 naming the clause it fails."""
-    from fr.run.historical import historical_review_refusal
-    from fr.run.visual import VisualRefusedError, owed_for_unit
-
-    assert target.phase is not None
-    entry = next(e for e in entries if e.id == entry_id)  # `_verify_review_entry` found it
-    try:
-        owed = owed_for_unit(
-            repo_root, plan_rel=_emitted_plan(state), phase=target.phase, spec_rel=None
-        )
-    except VisualRefusedError as e:
-        _derived_refusal(key, e.lines)
-    attempt = units.last_attempt(state, key)
-    refusal = historical_review_refusal(
-        state,
-        target.phase,
-        entry,
-        owes_visual=bool(owed),
-        review_key=key,
-        review_dispatched=attempt.dispatched if attempt is not None else None,
-    )
-    if refusal is not None:
-        err_console.print(
-            f"[red]{key}: refused — reviewer={HISTORICAL_REVIEWER}: {escape(refusal)}.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-
-
-def _visual_witness(
-    key: str,
-    repo_root: Path,
-    state: RunState,
-    step: Step,
-    *,
-    phase: int | None,
-    entries: tuple[VisualEvidence, ...] | None,
-    holder: str | None,
-    reviewer: str | None,
-    since: str | None,
-    dispatched_as: str | None = None,
-) -> str:
-    """The derived `visual` witness — or exit 2. A thin call into
-    `fr.run.visual`, which owns every rule and every refusal's wording."""
-    from fr.record.model import records_dir
-    from fr.requirements import run_spec
-    from fr.run.visual import VisualRefusedError, derive_visual, owed_for_unit, role_for
-
-    try:
-        owed = owed_for_unit(
-            repo_root, plan_rel=_emitted_plan(state), phase=phase, spec_rel=run_spec(state)
-        )
-        derived = derive_visual(
-            owed,
-            entries,
-            role=role_for(step.evidence, phase),
-            since=since,
-            holder=holder,
-            reviewer=reviewer,
-            repo_root=repo_root,
-            records_dir=records_dir(repo_root, state.run),
-            env=os.environ,
-            dispatched_as=dispatched_as,
-            claim_hint=(
-                f"fr run claim {state.run} --step {step.id}"
-                + (f" --item phase/{phase}" if phase is not None else "")
-                + " --agent <id>"
-            ),
-        )
-    except VisualRefusedError as e:
-        _derived_refusal(key, e.lines)
-    if derived.unobserved:
-        _note_unobserved("visual")
-        err_console.print(
-            f"[yellow]{key}: could not verify that the screenshots were opened — "
-            f"{derived.why}; recorded as checked on disk, unverified "
-            "(evidence: unobserved=visual).[/yellow]",
-            soft_wrap=True,
-        )
-    return derived.witness
-
-
-def _single_phase_witness(
-    key: str, repo_root: Path, state: RunState, emitted: Mapping[str, str]
-) -> str:
-    """`phase <n>` — the light shape's one agentic phase — or exit 2.
-
-    2026-09-29-fr-goal-light-path §A (R2): a structural rule checked when the
-    plan is authored, not a hope that it stays small. `[manual]` phases are
-    allowed (they are not work a subagent runs); anything but exactly one
-    agentic phase is refused, naming the phases and the two ways forward.
-    Fail-closed on a plan fr cannot read.
-    """
-    plan_rel = emitted.get("plan") or _emitted_plan(state)
-    if plan_rel is None:
-        err_console.print(
-            f"[red]{key}: cannot derive single-phase evidence — no plan recorded "
-            "(pass --emitted plan=<plan-dir>)[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    try:
-        tags = plan_phase_tags(repo_root, plan_rel)
-    except AdoptError as e:
-        err_console.print(
-            f"[red]{key}: cannot derive single-phase evidence — {escape(str(e))}[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    agentic = sorted(n for n, tag in tags.items() if tag != "manual")
-    if len(agentic) != 1:
-        ids = ", ".join(str(n) for n in agentic) or "none"
-        err_console.print(
-            f"{key}: single-phase: the light shape takes one agentic phase; this plan "
-            f"has {len(agentic)} ({ids}). Merge them, or start a new run on fr-goal.",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    return f"phase {agentic[0]}"
-
-
-def _derived_refusal(key: str, lines: list[str]) -> NoReturn:
-    """Print a derived witness's refusal (`fr.run.evidence.derived`'s lines) and exit 2."""
-    for line in _derived_refusal_lines(key, lines):
-        _say(line)
-    raise typer.Exit(2)
-
-
-def _verify_reviewer(
-    key: str,
-    agent_id: str,
-    state: RunState,
-    *,
-    target: _EvidenceTarget,
-    opened: str | None,
-    expected_agent: str | None = None,
-) -> None:
-    """`agent_id` is a SEPARATE context that reviewed this phase — or exit 2.
-
-    2026-09-21 debug journal C6 (operator decision: separate-context review).
-    The `review=<entry-id>` gate proved an entry EXISTS; on the #497 run the
-    orchestrator typed that entry itself, reviewing nothing — #430 one layer
-    down. So a review also names the subagent that did it, and fr checks two
-    things: it is not the agent that IMPLEMENTED this phase (a context marking
-    its own work), and — where the transcript is readable — this session really
-    dispatched it after the review unit opened. Unobservable: warned, recorded
-    as claimed, never silently.
-
-    A spec review (`target.phase is None`, 2026-09-24 spec §E) has no
-    implementer to exclude — the spec's author is the orchestrator, which has
-    no agent id and so can never pass the dispatch check. Dispatches are read
-    through `fr.run.observed` — Claude Code's transcript, OpenCode's child
-    sessions (once the super-fr plugin exports the run session); on Hermes, or
-    wherever the session cannot be read, the id is recorded as claimed.
-    When the step names its reviewer (`expected_agent`, spec-review's
-    `super-fr:fr-spec-reviewer`), an observed dispatch of any OTHER agent type
-    is refused (review p4-f2) — every spelling `agent_name` folds matches.
-    """
-
-    phase = target.phase
-    # The review unit's own holders are reviewers by construction: a reviewer
-    # that claims the unit it reviews is not an implementer, and counting it
-    # here would refuse the very reviewer the step dispatched.
-    implementers = (
-        {
-            a.agent
-            for record in state.steps.values()
-            for unit_key in (record.units or {})
-            if unit_key.startswith(f"phase/{phase}/") and unit_key != key
-            for a in units.attempts(record, unit_key)
-            if a.agent_type is not None and a.agent is not None
-        }
-        if phase is not None
-        else set()
-    )
-    if agent_id in implementers:
-        err_console.print(
-            f"[red]{key}: --evidence reviewer={agent_id} is the agent that IMPLEMENTED phase "
-            f"{phase} — a review must come from a separate context, not the one whose work "
-            "it judges. Dispatch a reviewer subagent and name its id.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    # Through the session protocol (spec 2026-10-02-opencode-observe-2 §A):
-    # the dispatch named by the id, among those since the review opened.
-    dispatched = _dispatches_since(opened)
-    observed: ChildDispatch | Literal[False] | None = (
-        None
-        if dispatched is None
-        else next((d for d in dispatched if d.agent_id == agent_id), False)
-    )
-    if observed and _same_agent(observed.agent_type, PHASE_EXECUTOR_AGENT):
-        # Review r1-11: a phase executor is an IMPLEMENTER by construction —
-        # any phase's — so it is never the separate context a review needs.
-        err_console.print(
-            f"[red]{key}: --evidence reviewer={agent_id} is a {PHASE_EXECUTOR_AGENT} "
-            "dispatch — an implementer, not a reviewer. Dispatch a reviewer subagent.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if (
-        observed
-        and expected_agent is not None
-        and not _same_agent(observed.agent_type, expected_agent)
-    ):
-        err_console.print(
-            f"[red]{key}: --evidence reviewer={agent_id} is a {observed.agent_type!r} "
-            f"dispatch — this step's reviewer is {expected_agent}. Dispatch that agent "
-            "and name its id.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if observed is False:
-        err_console.print(
-            f"[red]{key}: --evidence reviewer={agent_id} names no subagent this session "
-            f"dispatched since the review opened at {opened}. The review must be done by "
-            "a dispatched reviewer (a separate context), and named by the id its dispatch "
-            "returned.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if observed is None:
-        _note_unobserved("reviewer")
-        err_console.print(
-            f"[yellow]{key}: could not verify reviewer {agent_id!r} — "
-            f"{_why_unobservable('subagent dispatches')}; recorded as claimed, unverified "
-            "(evidence: unobserved=reviewer).[/yellow]",
-            soft_wrap=True,
-        )
-
-
-def _same_agent(observed: str | None, expected: str) -> bool:
-    """`observed` is `expected`, in any spelling `fr.run.observed.agent_name`
-    folds: plugin-qualified or bare (`super-fr:fr-spec-reviewer` /
-    `fr-spec-reviewer`), and OpenCode's tiered name (`fr-spec-reviewer-hard`)."""
-    from fr.run.observed import agent_name
-
-    if observed is None:
-        return False
-    return agent_name(observed) == agent_name(expected)
-
-
-def _check_returned_findings(
-    key: str,
-    entries: list[JournalEntry],
-    phase: int,
-    since: str | None,
-    reviewer: str | None,
-) -> None:
-    """Every finding a phase reviewer RETURNED is a plan-journal finding
-    against `phase` with the reviewer's own scope tag — or exit 2 (spec
-    2026-10-02-opencode-observe-2 §E, R7).
-
-    A child dispatched since the review opened is a reviewer of this unit when
-    it is the one the record names (`reviewer`), or when its return carries a
-    ```review-findings fence; each owes a well-formed block (`none` when it
-    raised nothing). Any other child — a helper dispatched while receiving the
-    review — owes nothing. The journal may hold MORE findings than the blocks
-    (the orchestrator's own), never fewer. Where fr cannot read the session, or
-    the named reviewer's return, the check is noted `unobserved=reviewer-return`
-    and warned, never silently skipped."""
-    from fr.run.review_return import ReviewFindingsBlockError, parse_review_findings
-
-    dispatched = _dispatches_since(since)
-    if dispatched is None:
-        _return_unobserved(key, "the phase reviewers", _why_unobservable("subagent returns"))
-        return
-    problems: list[str] = []
-    returned: dict[str, tuple[str, str]] = {}  # id -> (scope, reviewer)
-    for d in dispatched:
-        named = reviewer is not None and d.agent_id == reviewer
-        if d.returned is None:
-            if named:
-                _return_unobserved(key, f"reviewer {d.agent_id}", "its return is not readable yet")
-            continue
-        try:
-            rows = parse_review_findings(d.returned)
-        except ReviewFindingsBlockError as e:
-            problems.append(f"{d.agent_id}: {e}")
-            continue
-        if rows is None:
-            if named:
-                problems.append(
-                    f"reviewer {d.agent_id} returned no review-findings block — its return "
-                    "must end with one (`none` when it raised nothing)"
-                )
-            continue
-        for fid, scope, _summary in rows:
-            if fid in returned:
-                problems.append(
-                    f"{fid} is returned by both {returned[fid][1]} and {d.agent_id} — "
-                    "give each reviewer its own letter (p<N>a-r<k>, p<N>b-r<k>)"
-                )
-                continue
-            returned[fid] = (scope, d.agent_id)
-    # Phase N OR LATER (review p2-r3): the manifest files a finding that
-    # belongs to a later phase against THAT phase, where it gates that review.
-    journaled = {
-        e.id: e
-        for e in entries
-        if e.kind == "finding" and e.resolves is None and e.phase is not None and e.phase >= phase
-    }
-    missing = [fid for fid in returned if fid not in journaled]
-    if missing:
-        problems.append(
-            f"returned finding(s) not in the plan journal against phase {phase} or later: "
-            + ", ".join(f"{fid} (reviewer {returned[fid][1]})" for fid in missing)
-            + " — journal each under its id with the reviewer's tag "
-            "(`fr journal add --kind finding --id <id> --review-scope in|out ...`)"
-        )
-    for fid, (scope, by) in returned.items():
-        entry = journaled.get(fid)
-        if entry is not None and entry.review_scope != scope:
-            problems.append(
-                f"{fid} is journaled with review_scope {entry.review_scope} but {by} "
-                f"tagged it {scope} — keep the reviewer's tag; reclassify by resolving it "
-                "out-of-scope"
-            )
-    if problems:
-        _return_refusal(
-            key,
-            problems,
-            "Journal every returned finding under its id with the reviewer's tag, or "
-            "re-dispatch a reviewer whose return is malformed; never edit a return.",
-        )
-
-
-def _dispatches_since(since: str | None) -> list[ChildDispatch] | None:
-    """The subagents this session dispatched since `since`, or None where fr cannot
-    read the session. The one dispatch walk the reviewer check and both
-    reviewer-return checks read."""
-    from fr.run.observed import observed_session
-    from fr.run.telemetry import parse_timestamp
-
-    start = parse_timestamp(since) if since is not None else None
-    view = observed_session(os.environ) if start is not None else None
-    return view.dispatches(start) if view is not None and start is not None else None
-
-
-def _owed_on(step: Step, lenses: LensSet | None) -> list[str]:
-    """What `step` owes: its evidence, less `review`/`reviewer` on a lens review
-    whose set is empty (R11, `fr.lenses.review.owed_evidence`)."""
-    from fr.lenses.review import owed_evidence
-
-    return owed_evidence(step.evidence, lenses.ids) if lenses is not None else list(step.evidence)
-
-
-def _lens_lines(repo_root: Path, lenses: LensSet, lens_id: str) -> list[str]:
-    """What a refusal over `lens_id` prints (R10): its title, instruction text, why
-    it is in the set, and the return rule: the brief for the reviewer still owed."""
-    from fr.lenses.review import lens_review_rule, why_line
-
-    entry = next(e for e in lenses.lenses if e.lens == lens_id)
-    found = lenses.definitions.get(lens_id)
-    lines = [f"lens {lens_id}" + (f": {found.title}" if found is not None else "")]
-    lines.append(f"  in the set because: {why_line(entry)}")
-    if found is not None:
-        lines.extend(f"  {line}" for line in found.brief.strip().splitlines())
-    lines.extend(f"  {line}" for line in lens_review_rule(lens_id).splitlines())
-    return lines
-
-
-def _verify_lens_reviewers(
-    key: str,
-    value: str,
-    state: RunState,
-    lenses: LensSet,
-    repo_root: Path,
-    *,
-    target: _EvidenceTarget,
-    opened: str | None,
-) -> dict[str, str]:
-    """The lens review's `reviewer` map, `<lens>=<dispatch-id>,...`, checked
-    against the set computed at this resolve — or exit 2 (R10). Each id is then
-    verified as a phase reviewer's is (`_verify_reviewer`)."""
-    hint = (
-        "on the lens review, --evidence reviewer= is a map, one <lens>=<dispatch-id> per "
-        "lens in the feature's set, comma-separated"
-    )
-    named: dict[str, str] = {}
-    problems: list[str] = []
-    for pair in value.split(","):
-        lens_id, sep, agent = (part.strip() for part in pair.partition("="))
-        if not sep or not lens_id or not agent:
-            problems.append(f"{pair.strip()!r} is not <lens>=<dispatch-id>: {hint}")
-            continue
-        if lens_id in named:
-            problems.append(f"lens {lens_id} is named twice")
-            continue
-        named[lens_id] = agent
-    unknown = [lid for lid in named if lid not in lenses.ids]
-    if unknown:
-        problems.append(
-            f"{', '.join(unknown)} not in this feature's lens set ({', '.join(lenses.ids)})"
-            if lenses.ids
-            else f"{', '.join(unknown)} not in this feature's lens set, which is empty"
-        )
-    by_agent: dict[str, list[str]] = {}
-    for lens_id, agent in named.items():
-        by_agent.setdefault(agent, []).append(lens_id)
-    for agent, lens_ids in by_agent.items():
-        if len(lens_ids) > 1:
-            problems.append(
-                f"{agent} is named for two lenses ({', '.join(lens_ids)}) — one reviewer "
-                "per lens, each given only its own lens"
-            )
-    owed = [lid for lid in lenses.ids if lid not in named]
-    lines = [f"- {p}" for p in problems]
-    for lens_id in owed:
-        lines.append(f"- lens {lens_id} has no reviewer named for it; dispatch one with:")
-        lines.extend(f"    {line}" for line in _lens_lines(repo_root, lenses, lens_id))
-    if lines:
-        _derived_refusal(
-            key, ["refused — the lens reviewers named do not cover the lens set:", *lines]
-        )
-    for agent in named.values():
-        _verify_reviewer(key, agent, state, target=target, opened=opened)
-    return named
-
-
-def _lenses_witness(
-    key: str,
-    repo_root: Path,
-    lenses: LensSet,
-    entries: list[JournalEntry],
-    reviewers: Mapping[str, str] | None,
-    since: str | None,
-) -> str:
-    """The derived `lenses` evidence (R11): per lens the number of changed files its
-    reviewer examined, or `unobserved`, and the findings it raised —
-    `security=2:l-security-r1;tests=5:none` — or `none` for an empty set."""
-    if not lenses.lenses:
-        return "none"
-    assert reviewers is not None  # owed while the set is non-empty, so verified above
-    seen = _check_lens_returns(key, repo_root, lenses, entries, reviewers, since)
-    return ";".join(
-        f"{lens_id}={count}:{','.join(ids) or 'none'}" for lens_id, (count, ids) in seen.items()
-    )
-
-
-def _check_lens_returns(
-    key: str,
-    repo_root: Path,
-    lenses: LensSet,
-    entries: list[JournalEntry],
-    reviewers: Mapping[str, str],
-    since: str | None,
-) -> dict[str, tuple[str, list[str]]]:
-    """Each lens reviewer's return matches its lens, the feature's diff and the
-    plan journal — or exit 2 (R9, R10). Per lens, `(files examined | unobserved,
-    finding ids)`; where a return cannot be read the ids come from the journal and
-    the check is noted `unobserved=reviewer-return`."""
-    from fr.lenses.review import (
-        LENS_ID_HINT,
-        ReviewLensBlockError,
-        lens_finding_ids,
-        parse_review_lens,
-    )
-    from fr.run.review_return import ReviewFindingsBlockError, parse_review_findings
-
-    journaled = {
-        e.id: e
-        for e in entries
-        if e.kind == "finding" and e.resolves is None and _is_lens_finding(e.id)
-    }
-    dispatched = _dispatches_since(since)
-    if dispatched is None:
-        _return_unobserved(key, "the lens reviewers", _why_unobservable("subagent returns"))
-    changed = set(lenses.changed) if lenses.changed is not None else None
-    seen: dict[str, tuple[str, list[str]]] = {}
-    problems: dict[str, list[str]] = {}
-    for lens_id in lenses.ids:
-        agent = reviewers[lens_id]
-        mine = lens_finding_ids(lens_id)
-        d = next((c for c in dispatched or () if c.agent_id == agent), None)
-        if d is None or d.returned is None:
-            if dispatched is not None:
-                _return_unobserved(key, f"reviewer {agent}", "its return is not readable yet")
-            seen[lens_id] = ("unobserved", [fid for fid in journaled if mine.match(fid)])
-            continue
-        mine_problems = problems.setdefault(lens_id, [])
-        try:
-            block = parse_review_lens(d.returned)
-        except ReviewLensBlockError as e:
-            mine_problems.append(f"{agent}: {e}")
-            block = None
-        else:
-            if block is None:
-                mine_problems.append(
-                    f"reviewer {agent} returned no review-lens block — its return must end "
-                    f"with one naming lens {lens_id} and the changed files it examined"
-                )
-        if block is not None and block[0] != lens_id:
-            mine_problems.append(
-                f"reviewer {agent} was named for lens {lens_id}, and its review-lens block "
-                f"names lens {block[0]}"
-            )
-        elif block is not None and changed is not None:
-            outside = [f for f in block[1] if f not in changed]
-            if outside:
-                mine_problems.append(
-                    f"reviewer {agent} examined {', '.join(outside)}, which the feature "
-                    "did not change — name the changed files you read"
-                )
-        elif block is not None:
-            missing = [f for f in block[1] if f not in _tracked_files(repo_root)]
-            if missing:
-                mine_problems.append(
-                    f"reviewer {agent} examined {', '.join(missing)}, which is not a "
-                    "tracked file of this checkout"
-                )
-        try:
-            rows = parse_review_findings(
-                d.returned,
-                id_re=lens_finding_ids(lens_id),
-                id_hint=f"{LENS_ID_HINT} for lens {lens_id} (l-{lens_id}-r<k>)",
-            )
-        except ReviewFindingsBlockError as e:
-            mine_problems.append(f"{agent}: {e}")
-            rows = None
-        else:
-            if rows is None:
-                mine_problems.append(
-                    f"reviewer {agent} returned no review-findings block — its return must "
-                    "end with one (`none` when it raised nothing)"
-                )
-        ids = [fid for fid, _scope, _summary in rows or ()]
-        absent = [fid for fid in ids if fid not in journaled]
-        if absent:
-            mine_problems.append(
-                f"returned finding(s) not in the plan journal: {', '.join(absent)} (reviewer "
-                f"{agent}) — journal each under its id with the reviewer's tag, global "
-                "(`fr journal add --kind finding --id <id> --global --review-scope in|out ...`)"
-            )
-        for fid, scope, _summary in rows or ():
-            entry = journaled.get(fid)
-            if entry is not None and entry.review_scope != scope:
-                mine_problems.append(
-                    f"{fid} is journaled with review_scope {entry.review_scope} but {agent} "
-                    f"tagged it {scope} — keep the reviewer's tag; reclassify by resolving it "
-                    "out-of-scope"
-                )
-        count = str(len(block[1])) if block is not None else "0"
-        seen[lens_id] = (count, ids)
-    if any(problems.values()):
-        lines: list[str] = []
-        for lens_id, found in problems.items():
-            if not found:
-                continue
-            lines.extend(f"- {p}" for p in found)
-            lines.extend(f"    {line}" for line in _lens_lines(repo_root, lenses, lens_id))
-        _return_refusal(
-            key,
-            lines,
-            "Journal every returned finding under its id with the reviewer's tag, or "
-            "re-dispatch a lens reviewer whose return is malformed; never edit a return.",
-            who="the lens reviewers",
-            bulleted=True,
-        )
-    return seen
-
-
-@functools.cache
-def _tracked_files(repo_root: Path) -> frozenset[str]:
-    """The paths git tracks in this checkout: what a lens reviewer may name where
-    there is no remote and so no diff (review l-security-r2: `is_file()` accepted
-    `../` paths and untracked files)."""
-    from fr.git import git_answer
-
-    listed = git_answer(repo_root, "ls-files", "-z")
-    return frozenset(listed.stdout.split("\0")) - {""} if listed.returncode == 0 else frozenset()
-
-
-def _return_unobserved(key: str, who: str, why: str) -> None:
-    """A reviewer-return check skipped: warned and noted, never silent (§E)."""
-    _note_unobserved("reviewer-return")
-    err_console.print(
-        f"[yellow]{key}: could not read what {who} returned — {why}; the record is "
-        "taken as claimed (evidence: unobserved=reviewer-return).[/yellow]",
-        soft_wrap=True,
-    )
-
-
-def _return_refusal(
-    key: str,
-    problems: list[str],
-    remedy: str,
-    *,
-    who: str = "the phase reviewers",
-    bulleted: bool = False,
-) -> NoReturn:
-    """THE refusal of the reviewer-return checks (spec
-    2026-10-02-opencode-observe-2 §E, 2026-11-12-review-lenses R10): the unit
-    (its step and phase), every problem — each naming its reviewer and ids — on
-    its own line, then what to do; exit 2. `bulleted` lines arrive formatted."""
-    _derived_refusal(
-        key,
-        [
-            f"refused — the review record does not match what {who} returned:",
-            *(problems if bulleted else [f"- {p}" for p in problems]),
-            remedy,
-        ],
-    )
-
-
-def _wrote_before(
-    log: Path, opened: str | None, modified: _dt.datetime, slack: _dt.timedelta
-) -> bool:
-    """Did a command of the orchestrator's that wrote `log` start BEFORE the unit
-    opened, end after it, and write the bytes on disk? Only chooses the
-    refusal's wording (gh#765)."""
-    from fr.run.telemetry import orchestrator_wrote_since, parse_timestamp
-
-    opened_at = parse_timestamp(opened)
-    earlier = orchestrator_wrote_since(os.environ, log, "1970-01-01T00:00:00+00:00")
-    return opened_at is not None and any(
-        e >= opened_at and s - slack <= modified <= e + slack for s, e in earlier or ()
-    )
-
-
-def _walk_obligation(key: str, repo_root: Path, state: RunState) -> WalkOwed:
-    """What walk `deliver` owes for this run (§C), or exit 2.
-
-    Fail-closed: a section, matrix or strategy fr cannot read means fr cannot
-    tell whether a walk is owed, and a gate that cannot decide does not pass.
-    R10: an owed row that names no scenario is refused BY ID, before anything is
-    asked of the log.
-    """
-    from fr.acceptance.model import AcceptanceError
-    from fr.requirements import load_spec_matrix
-    from fr.verification.model import StrategyError
-    from fr.verification.rows import run_verification
-    from fr.verification.spec_section import SectionError
-    from fr.verification.walk import WalkOwed, walk_owed
-
-    try:
-        spec_rel, verification = run_verification(repo_root, state)
-        if spec_rel is None:
-            return WalkOwed()
-        matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
-        owed = walk_owed(matrix, spec_ref, verification, repo_root)
-    except (AcceptanceError, SectionError, StrategyError, OSError) as e:
-        err_console.print(
-            f"[red]{key}: cannot tell whether a pre-merge walk is owed — {escape(str(e))}[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    unscripted = [r.id for r in owed.rows if not r.scenario]
-    if unscripted:
-        err_console.print(
-            f"[red]{key}: refused — row {unscripted[0]!r} has an agent-driven pre-merge "
-            "strategy and names no `scenario` (set it with `fr acceptance set-status "
-            "--scenario`).[/red]",
-            soft_wrap=True,
-        )
-        for other in unscripted[1:]:
-            err_console.print(f"  also unscripted: {other}", markup=False)
-        raise typer.Exit(2)
-    return owed
-
-
-def _verify_walk(
-    key: str, value: str, repo_root: Path, state: RunState, owed: WalkOwed, *, opened: str | None
-) -> str:
-    """`value` is `none` (accepted only when no walk is owed) or a log
-    `fr verification walk` wrote on HEAD's code tree, every step passing and
-    every owed row covered — or exit 2 naming the cause. Returns the witness,
-    `<log>@<sha256[:12]>`.
-
-    Attributed as `tests=` is (review p3-r1): the header is the log's own
-    claim, so it must also sit in this run's walk dir and — where the
-    transcript is readable — have been written inside the run window of a
-    command of YOURS that ran `fr verification walk --run <run>` since this
-    unit opened. Unobservable: recorded `unobserved=walk`, never silent.
-    """
-    from fr.run.code_tree import code_tree, dirty_code_paths
-    from fr.verification.model import StrategyError
-    from fr.verification.resolve import strategy_identity
-    from fr.verification.walk import WalkError, check_walk_log, parse_walk_log, walk_log_dir
-
-    if value == "none":
-        if owed.owed:
-            wanted = [r.id for r in owed.rows] or [owed.run_strategy or "?"]
-            err_console.print(
-                f"[red]{key}: --evidence walk=none — a pre-merge walk is owed "
-                f"({', '.join(wanted)}); run `fr verification walk` and name its log.[/red]",
-                soft_wrap=True,
-            )
-            raise typer.Exit(2)
-        return "none"
-    given = Path(value).expanduser()
-    named = given if given.is_absolute() else repo_root / given
-    # The REAL path, symlinks followed, must sit in this run's walk dir, and
-    # the name itself must be a regular file — a link placed there is not a
-    # log the walk wrote (security review of p3-r1).
-    path = Path(os.path.realpath(named))
-    # `$HOME` may itself sit behind a link (macOS `/var`); the run's own dir
-    # may not — it is compared unresolved under the resolved walks root.
-    directory = Path(os.path.realpath(walk_log_dir(state.run).parent)) / state.run
-    if named.is_symlink():
-        err_console.print(
-            f"[red]{key}: --evidence walk={value} is a symlink — name the log "
-            f"`fr verification walk --run {state.run}` wrote.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if not path.is_relative_to(directory) or not path.is_file():
-        err_console.print(
-            f"[red]{key}: --evidence walk={value} is not a regular file in {directory} — "
-            f"name the log `fr verification walk --run {state.run}` wrote.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    try:
-        data = path.read_bytes()
-        log = parse_walk_log(data.decode())
-        problems = check_walk_log(
-            log,
-            owed,
-            code_tree(repo_root),
-            run=state.run,
-            manifest=strategy_identity(log.strategy, repo_root),
-        )
-        dirty = dirty_code_paths(repo_root)
-        modified = _dt.datetime.fromtimestamp(path.stat().st_mtime, tz=_dt.UTC)
-    except (OSError, UnicodeDecodeError, WalkError, GitUnavailableError, StrategyError) as e:
-        err_console.print(
-            f"[red]{key}: --evidence walk={value}: {escape(str(e))}[/red]", soft_wrap=True
-        )
-        raise typer.Exit(2) from e
-    if dirty:
-        problems.append(f"uncommitted code since the walk ({dirty[0]}...)")
-    problems += _walk_provenance(key, state.run, modified, opened=opened)
-    if problems:
-        err_console.print(f"[red]{key}: --evidence walk={value} is refused:[/red]", soft_wrap=True)
-        for problem in problems:
-            err_console.print(f"  - {problem}", markup=False, soft_wrap=True)
-        raise typer.Exit(2)
-    return _log_witness(path, data, repo_root)
-
-
-def _walk_provenance(
-    key: str, run: str, modified: _dt.datetime, *, opened: str | None
-) -> list[str]:
-    """Why the walk log, modified at `modified`, is not one a command of
-    yours wrote during this unit (empty when it is) — only a command that is
-    exactly the walk counts (`walks_run`). Unobservable:
-    `unobserved=walk`, warned — and a log older than the unit is still
-    refused."""
-    from fr.run.observed import walks_run
-    from fr.run.telemetry import orchestrator_ran_since, parse_timestamp
-
-    windows = (
-        orchestrator_ran_since(os.environ, lambda command: walks_run(command, run), opened)
-        if opened
-        else None
-    )
-    # One second of slack either side, as `tests=` (review r1-1).
-    slack = _dt.timedelta(seconds=1)
-    if windows is not None:
-        if any(s - slack <= modified <= e + slack for s, e in windows):
-            return []
-        why = (
-            "no command of yours ran it"
-            if not windows
-            else "its bytes were not written by the command of yours that ran it"
-        )
-        return [
-            f"{why} — `fr verification walk --run {run}` must run in this session since "
-            f"this unit opened at {opened}, and write the log you name"
-        ]
-    opened_at = parse_timestamp(opened)
-    if opened_at is not None and modified < opened_at - slack:
-        return [f"the log predates this unit (opened {opened}) — walk again"]
-    _note_unobserved("walk")
-    err_console.print(
-        f"[yellow]{key}: could not verify who ran the walk — "
-        f"{_why_unobservable('commands')}; recorded unverified "
-        "(evidence: unobserved=walk).[/yellow]",
-        soft_wrap=True,
-    )
-    return []
-
-
-def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None) -> str:
-    """`log` is a suite the ORCHESTRATOR ran during this unit — or exit 2.
-    Returns the recorded witness, `<path>@<sha256[:12]>`.
-
-    2026-09-21 debug journal C5: `deliver` resolved `done` 28 seconds after it
-    opened with nothing but a PR url, and the PR said "verified locally" on the
-    executor's word. Now the unit names the log of a suite run during delivery:
-    it must exist and be non-empty, and — where the transcript is readable — a
-    main-thread `Bash` call naming it must have run to completion since the unit
-    opened. Unobservable: the file must at least be newer than the unit, and it
-    says it could not verify who ran it.
-    """
-    from fr.run.telemetry import orchestrator_wrote_since, parse_timestamp
-
-    path, data = _read_suite_log(key, log, repo_root)
-    modified = _dt.datetime.fromtimestamp(path.stat().st_mtime, tz=_dt.UTC)
-    windows = orchestrator_wrote_since(os.environ, path, opened) if opened else None
-    # One second of slack either side: the cursor stamps at second precision,
-    # and a filesystem's mtime may round (review r1-1).
-    slack = _dt.timedelta(seconds=1)
-    if windows is not None and not any(s - slack <= modified <= e + slack for s, e in windows):
-        if not windows and _wrote_before(path, opened, modified, slack):
-            # gh#765: the suite shared one call with the `fr run advance` that
-            # opened this unit, so that call predates it. Still refused — the
-            # suite must run during delivery — but "nobody wrote it" misled.
-            err_console.print(
-                f"[red]{key}: --evidence tests={log}: the command of yours that wrote it "
-                f"was issued before this unit opened at {opened} (in the same call as "
-                "the `fr run advance` that opened it?). Run the suite again as its own "
-                "command, now that the unit is open, and name that log.[/red]",
-                soft_wrap=True,
-            )
-            raise typer.Exit(2)
-        why = (
-            "no command of YOURS wrote it (a `>`, `>>` or `tee` naming it)"
-            if not windows
-            else "its bytes were not written by the command of yours that names it"
-        )
-        err_console.print(
-            f"[red]{key}: --evidence tests={log}: {why} since this unit opened at "
-            f"{opened}. A subagent's report is not verification — run the suite in this "
-            "session, writing its output to the log you name. A backgrounded suite "
-            "counts once its task-notification reports it completed (Claude Code), or "
-            "once a later command of yours prints the log's exit=0 line (OpenCode's "
-            "detached form, gh#719).[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if windows is None:
-        opened_at = parse_timestamp(opened)
-        if opened_at is not None and modified < opened_at:
-            err_console.print(
-                f"[red]{key}: --evidence tests={log} predates this unit (opened {opened}) — "
-                "it is not a run of the code being delivered.[/red]",
-                soft_wrap=True,
-            )
-            raise typer.Exit(2)
-        _note_unobserved("tests")
-        err_console.print(
-            f"[yellow]{key}: could not verify who ran {log} — {_why_tests_unobservable()}; "
-            "recorded as a fresh log, unverified (evidence: unobserved=tests).[/yellow]",
-            soft_wrap=True,
-        )
-    _refuse_stale_suite_log(key, log, path, repo_root)
-    return _log_witness(path, data, repo_root)
-
-
-def _refuse_stale_suite_log(key: str, log: str, path: Path, repo_root: Path) -> None:
-    """Exit 2 when a code path changed after the suite log was written
-    (`fr.run.code_tree.newest_code_mtime`, the phase log's freshness rule).
-
-    gh#1454: `deliver` checked who wrote its fresh log and when, never the code it
-    ran on, so code edited and committed after the suite read as covered by it
-    (and a `local` stamp recorded HEAD's tree for a run that never saw it). A
-    commit moves no mtime, but the edit before it does, and so does a checkout."""
-    from fr.run.code_tree import default_merge_base, newest_code_mtime
-
-    try:
-        newest = newest_code_mtime(repo_root, default_merge_base(repo_root), ignore=[path])
-    except GitUnavailableError as e:
-        err_console.print(
-            f"[red]{key}: --evidence tests={log}: cannot tell which code it covers — "
-            f"{escape(str(e))}[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    if newest is not None and newest[0] > path.stat().st_mtime:
-        err_console.print(
-            f"[red]{key}: --evidence tests={log} is stale — {newest[1]} changed after "
-            "the log was written, so the suite did not run the code being delivered. "
-            "Run the full suite again and name the new log.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-
-
-def _read_suite_log(key: str, log: str, repo_root: Path) -> tuple[Path, bytes]:
-    """`(resolved path, bytes)` of a named suite log — or exit 2 when it sits
-    in a run's records dir or is missing or empty. The checks every `tests=`
-    log meets, whoever wrote it (`deliver`'s and a phase unit's alike)."""
-    from fr.record.model import RECORDS_SUFFIX
-
-    path = (Path(log) if Path(log).is_absolute() else repo_root / log).resolve()
-    try:
-        rel_parts = path.relative_to(repo_root.resolve()).parts
-    except ValueError:
-        rel_parts = ()
-    if rel_parts[:3] == Path(KIND_DIRS["run"]).parts and (
-        len(rel_parts) > 4 and rel_parts[3].endswith(RECORDS_SUFFIX)
-    ):
-        # gh#638: `<run>.records/` holds step records and fr's pr-body render,
-        # and fr empties it; a log written there got committed and reached
-        # `main` with nothing to remove it.
-        err_console.print(
-            f"[red]{key}: --evidence tests={log} is inside a run's records dir, which "
-            "holds step records only and is emptied by fr. Write the suite log outside "
-            "the repo (e.g. $TMPDIR/full-suite.log) and name that path.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    try:
-        data = path.read_bytes()
-    except OSError:
-        data = b""
-    if not data:
-        err_console.print(
-            f"[red]{key}: --evidence tests={log} is missing or empty — run the full suite "
-            "yourself, write its output to a file, and name that file.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    from fr.run.ci_evidence import ADVISORY_LINE, is_advisory_log
-
-    if is_advisory_log(data):
-        # Spec 2026-11-19-local-suite-cost R7: a narrowed pytest session (the fast
-        # tier, `-m`/`-k`, explicit paths, --lf/--sw) marks itself advisory. It is
-        # not the whole suite, so it is no `tests` evidence, and a phase log refused
-        # here is never a witness `tests: reuse` could carry into `deliver`.
-        err_console.print(
-            f"[red]{key}: --evidence tests={log} holds the line `{ADVISORY_LINE}`: it is "
-            "not the whole suite. A session prints it when it ran with --fr-scope, a "
-            "non-empty -m or -k (the default local run's -m 'not scenario' included), "
-            "explicit paths or from a subdirectory, --lf, --sw, --ignore/--ignore-glob/"
-            "--deselect, -x/--maxfail, -o testpaths= or --collect-only; the line before "
-            "it in the log, `fr-scope: advisory because ...`, names which. Run the full "
-            'suite with `pytest -m ""` into a log and name that file, or offer '
-            "`tests: ci`.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    return path, data
-
-
-def _log_witness(path: Path, data: bytes, repo_root: Path) -> str:
-    """`<shown>@<sha256[:12]>`. Review r1-8: the witness lands in a git-tracked
-    cursor, so it names the log repo-relative, or by basename when it lives
-    outside the repo — never an absolute path carrying someone's home
-    directory."""
-    import hashlib
-
-    try:
-        shown = str(path.relative_to(repo_root.resolve()))
-    except ValueError:
-        shown = path.name
-    return f"{shown}@{hashlib.sha256(data).hexdigest()[:12]}"
-
-
-def _phase_log_windows(
-    path: Path, opened: str | None, holder: str | None
-) -> list[tuple[_dt.datetime, _dt.datetime]] | str | Literal[False] | None:
-    """The run windows of the holder's commands that wrote `path` — read
-    through `fr.run.observed` from the holder's own session: the claimed
-    agent's child (a Claude Code subagent transcript, an OpenCode child
-    session), or the run session itself when the unit ran inline (no holder).
-
-    `False` when this session dispatched no agent `holder` (a bogus or foreign
-    id: refused, never unobserved); a `str` reason when nothing can be read —
-    including Hermes, which has no session reader (spec
-    2026-09-29-fr-goal-light-path §D, §E; 2026-10-02-opencode-observe-2 §A)."""
-    from fr.run.observed import observed_session
-    from fr.run.telemetry import parse_timestamp
-
-    try:
-        harness = detect_harness(os.environ)
-    except HarnessError:
-        harness = None
-    if harness == "hermes":
-        return f"fr has no child-session reader for {harness}, so a phase log is not witnessed"
-    view = observed_session(os.environ)
-    start = parse_timestamp(opened)
-    if view is None or start is None:
-        return _why_unobservable("commands") if view is None else "the unit has no opening stamp"
-    found = view.child(holder) if holder is not None else view
-    if found is None:
-        return f"the session {view.session} could not be read"
-    if found is False:
-        return False
-    windows = found.wrote_windows(path, start)
-    if windows is None:
-        return f"the holder's session {found.session} could not be read"
-    return windows
-
-
-TESTS_REUSE = "reuse"
-"""`deliver`'s `tests: reuse` — the most recent phase suite log stands in for a
-fresh run while the code tree it covered is unchanged (spec
-2026-09-29-fr-goal-light-path §D, R6)."""
-_TREE_SEP = ";tree="
-REUSED_PREFIX = "reused:"
-TESTS_CI = "ci"
-"""`tests: ci` — the forge's CI on the pushed head stands in for a local suite
-log (spec 2026-10-07-cloud-triage R22, §I; `fr.run.ci_evidence`)."""
-
-
-def _ci_tests_witness(key: str, repo_root: Path, *, done: bool) -> str:
-    """`tests: ci`: on a `done` resolve the `verify_ci` witness, else the bare
-    claim (a failed unit vouches for no tree, and asks no forge). A pending gate
-    exits `CI_PENDING_EXIT` and a refusal exits 2, both before any write.
-
-    gh#1395: a failed forge read (`FORGE_ERRORS`: a timeout, an EOF, a 5xx) exits
-    `CI_PENDING_EXIT` too, in one line naming it — never a traceback and exit 1,
-    which fr-goal reads as "the record applied and a chained step failed". A host
-    trust refusal does not answer on a retry, so it exits 2."""
-    from fr.ghclient import HostRefusedError
-    from fr.hostclient import FORGE_ERRORS
-    from fr.run import ci_evidence
-
-    if not done:
-        return TESTS_CI
-    try:
-        return ci_evidence.verify_ci(repo_root)
-    except HostRefusedError as e:
-        err_console.print(
-            f"[red]{key}: tests: ci — the forge refused the host: {escape(str(e))}. "
-            "Nothing was recorded.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    except FORGE_ERRORS as e:
-        stderr = str(getattr(e, "stderr", "") or "")
-        detail = " ".join(f"{e} {stderr if stderr not in str(e) else ''}".split())
-        err_console.print(
-            f"[yellow]{key}: tests: ci — could not read CI from the forge ({escape(detail)}). "
-            "Nothing was recorded: resolve again.[/yellow]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(ci_evidence.CI_PENDING_EXIT) from e
-    except ci_evidence.CiPending as e:
-        err_console.print(
-            f"[yellow]{key}: tests: ci — {escape(str(e))}. Nothing was recorded: "
-            "resolve again when CI finishes.[/yellow]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(ci_evidence.CI_PENDING_EXIT) from e
-    except ci_evidence.CiEvidenceRefused as e:
-        err_console.print(f"[red]{key}: {escape(str(e))}[/red]", soft_wrap=True)
-        raise typer.Exit(2) from e
-
-
-def _latest_tests_witness(state: RunState) -> tuple[str, str] | None:
-    """`(unit key, witness)` of the most recently resolved `done` unit whose
-    `tests` evidence carries a code tree (a phase unit's,
-    `_verify_phase_tests_log`), or `None`. "Most recently" is the unit's last
-    attempt's `returned`; a unit with none sorts first, and a tie goes to the
-    later unit in cursor order."""
-    best: tuple[str, int, str, str] | None = None
-    seq = 0
-    for record in state.steps.values():
-        for key, unit in (record.units or {}).items():
-            seq += 1
-            witness = (unit.evidence or {}).get("tests", "")
-            if _TREE_SEP not in witness or witness.startswith(REUSED_PREFIX):
-                continue
-            # Review r2-3: only a unit that is `done` NOW vouches for its tree
-            # — a failed one, or one re-dispatched since, does not.
-            if (unit.state or record.state) != "done":
-                continue
-            returned = unit.attempts[-1].returned if unit.attempts else None
-            candidate = (returned or "", seq, key, witness)
-            if best is None or candidate[:2] > best[:2]:
-                best = candidate
-    return (best[2], best[3]) if best is not None else None
-
-
-def _reuse_tests_witness(key: str, repo_root: Path, state: RunState) -> str:
-    """`reused:<unit>:<witness>` when HEAD's code tree equals the tree of the
-    most recently resolved unit carrying a suite log and no code path is
-    uncommitted — or exit 2 with the fresh-run instruction."""
-    from fr.run.code_tree import code_paths_since_tree, code_tree, dirty_code_paths
-    from fr.run.telemetry import UNOBSERVED
-
-    latest = _latest_tests_witness(state)
-    if latest is None:
-        err_console.print(
-            f"[red]{key}: tests: reuse — no phase unit recorded a suite log "
-            "(`evidence: {tests: <log>}` on an implement-phase or review-phase record); "
-            "run the full suite yourself into a log and name it.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    unit, witness = latest
-    recorded = witness.rpartition(_TREE_SEP)[2]
-    own_log = _own_log_path(repo_root, witness.rpartition(_TREE_SEP)[0])
-    try:
-        dirty = [p for p in dirty_code_paths(repo_root) if p != own_log]
-        same = code_tree(repo_root) == recorded and not dirty
-        changed = None if same else code_paths_since_tree(repo_root, recorded)
-        if changed is not None:
-            changed = [p for p in changed if p != own_log]
-    except GitUnavailableError as e:
-        err_console.print(
-            f"[red]{key}: tests: reuse — cannot compute the code tree: {escape(str(e))}[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    if not same:
-        if changed:
-            n = len(changed)
-            what = f"{n} path{'' if n == 1 else 's'}, e.g. {changed[0]}"
-        else:
-            what = "its commit is not in HEAD's recent history"
-        err_console.print(
-            f"[red]{key}: tests: reuse — the code tree changed since {unit} ({what}); "
-            "run the full suite yourself into a log and name it.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if "tests" in _unit_evidence(state, unit).get(UNOBSERVED, "").split(","):
-        # Review r2-4: a reuse is no better verified than the log it reuses.
-        _note_unobserved("tests")
-        err_console.print(
-            f"[yellow]{key}: {unit}'s suite log was recorded unverified "
-            "(evidence: unobserved=tests), so this reuse is unverified too.[/yellow]",
-            soft_wrap=True,
-        )
-    return f"{REUSED_PREFIX}{unit}:{witness}"
-
-
-_FRESH_LOG_WITNESS = re.compile(r"^[^;]+@[0-9a-f]{12}$")
-"""A fresh `tests=<log>` witness, `<shown>@<sha256[:12]>` (`_log_witness`)."""
-
-
-def _local_stamp_witness(repo_root: Path, tests: str | None) -> tuple[str, str] | str:
-    """`(log, tree)` a `local` stamp records for `deliver`'s verified `tests` witness, or
-    why that witness cannot earn one (spec 2026-11-14-acceptance-local-status R4).
-
-    A `reused:` witness (`_reuse_tests_witness`) carries the tree its phase log covered.
-    A fresh log (`_verify_tests_log`, observed or `unobserved=tests`) covers HEAD's code
-    tree only when no code path is uncommitted. Anything else (`tests: ci`, no witness)
-    is no local run of the suite."""
-    from fr.run.code_tree import code_tree, dirty_code_paths
-
-    if tests is not None and tests.startswith(REUSED_PREFIX):
-        log, sep, tree = tests.rpartition(_TREE_SEP)
-        if not sep or not tree:
-            return f"tests: {tests} names no code tree"
-        return log, tree
-    if tests is None or not _FRESH_LOG_WITNESS.match(tests):
-        shown = "none" if tests is None else tests
-        return (
-            f"tests: {shown} is not a local suite log — a `local` row is earned by a "
-            "fresh suite log or a `tests: reuse` of a phase's"
-        )
-    try:
-        own = _own_log_path(repo_root, tests)
-        dirty = [p for p in dirty_code_paths(repo_root) if p != own]
-        tree = code_tree(repo_root)
-    except GitUnavailableError as e:
-        return f"cannot compute the code tree: {e}"
-    if dirty:
-        n = len(dirty)
-        return (
-            f"{n} code path{'' if n == 1 else 's'} uncommitted (e.g. {dirty[0]}), so the "
-            "suite log does not cover HEAD — commit, run the suite again and name the new log"
-        )
-    return tests, tree
-
-
-def _unit_evidence(state: RunState, key: str) -> dict[str, str]:
-    """`key`'s evidence, from whichever step holds that unit (`{}` if none)."""
-    for record in state.steps.values():
-        unit = (record.units or {}).get(key)
-        if unit is not None:
-            return dict(unit.evidence or {})
-    return {}
-
-
-def _own_log_path(repo_root: Path, log_witness: str) -> str | None:
-    """The repo-relative path of the log `log_witness` (`<shown>@<sha[:12]>`)
-    names, when that file is in the worktree with exactly those bytes — so an
-    untracked suite log does not read as uncommitted code (review r2-5). A
-    same-named file with other bytes is not the log, and stays dirty."""
-    import hashlib
-
-    shown, _, digest = log_witness.rpartition("@")
-    if not shown or not digest:
-        return None
-    path = repo_root / shown
-    try:
-        data = path.read_bytes() if path.is_file() else None
-    except OSError:
-        return None
-    if data is None or hashlib.sha256(data).hexdigest()[:12] != digest:
-        return None
-    return Path(shown).as_posix()
-
-
-def _verify_phase_tests_log(
-    key: str,
-    log: str,
-    repo_root: Path,
-    *,
-    opened: str | None,
-    holder: str | None,
-    record_tree: bool = True,
-) -> str:
-    """A phase unit's own suite log (spec 2026-09-29-fr-goal-light-path §D,
-    R6) — or exit 2. Returns `<shown>@<sha256[:12]>;tree=<code-tree>`.
-
-    1. **Writer** — `_verify_tests_log`'s rules, read from the HOLDER's
-       transcript (`_phase_log_windows`); unreadable records `unobserved=tests`.
-    2. **Freshness** — the log is no older than any tracked code path, any
-       directory holding one, or the directory a code path was deleted or
-       renamed out of since the merge-base (`fr.run.code_tree.newest_code_mtime`).
-    3. **Witness** — the code tree of HEAD. Computed here, before the record's
-       own commit, and equal to the tree after it: that commit writes only fr's
-       artifact trees, which the code tree excludes by definition. HEAD's tree
-       is what the suite ran only when nothing is uncommitted, so a dirty code
-       path (the log itself aside) is refused (review r2-1).
-
-    `record_tree=False` (a resolve that is not `done`, review r2-3) checks the
-    writer only and returns `<shown>@<sha256[:12]>` — a failed phase vouches
-    for no tree, so there is no tree to record and nothing to keep fresh.
-    """
-    from fr.run.code_tree import (
-        code_tree,
-        default_merge_base,
-        dirty_code_paths,
-        newest_code_mtime,
-    )
-    from fr.run.telemetry import parse_timestamp
-
-    path, data = _read_suite_log(key, log, repo_root)
-    modified = _dt.datetime.fromtimestamp(path.stat().st_mtime, tz=_dt.UTC)
-    windows = _phase_log_windows(path, opened, holder)
-    if windows is False:
-        err_console.print(
-            f"[red]{key}: --evidence tests={log}: this session dispatched no agent "
-            f"{holder!r}, so the unit's holder cannot be the one who ran the suite. "
-            "Name the agent id the executor's dispatch returned.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    slack = _dt.timedelta(seconds=1)
-    if isinstance(windows, list):
-        if not any(s - slack <= modified <= e + slack for s, e in windows):
-            why = (
-                "no command of the unit's holder wrote it (a `>`, `>>` or `tee` naming it)"
-                if not windows
-                else "its bytes were not written by the holder's command that names it"
-            )
-            err_console.print(
-                f"[red]{key}: --evidence tests={log}: {why} since this unit opened at "
-                f"{opened}. Name the log the phase's own full-suite run wrote, or leave "
-                "`tests` out of the record.[/red]",
-                soft_wrap=True,
-            )
-            raise typer.Exit(2)
-    else:
-        opened_at = parse_timestamp(opened)
-        if opened_at is not None and modified < opened_at:
-            err_console.print(
-                f"[red]{key}: --evidence tests={log} predates this unit (opened {opened}) — "
-                "it is not a run of this phase's code.[/red]",
-                soft_wrap=True,
-            )
-            raise typer.Exit(2)
-        _note_unobserved("tests")
-        err_console.print(
-            f"[yellow]{key}: could not verify who ran {log} — {windows}; recorded "
-            "unverified (evidence: unobserved=tests).[/yellow]",
-            soft_wrap=True,
-        )
-    if not record_tree:
-        return _log_witness(path, data, repo_root)
-    try:
-        own = _own_log_path(repo_root, _log_witness(path, data, repo_root))
-        dirty = [p for p in dirty_code_paths(repo_root) if p != own]
-        newest = newest_code_mtime(repo_root, default_merge_base(repo_root), ignore=[path])
-        tree = code_tree(repo_root)
-    except GitUnavailableError as e:
-        err_console.print(
-            f"[red]{key}: --evidence tests={log}: cannot compute the code tree it "
-            f"covers — {escape(str(e))}[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    if dirty:
-        n = len(dirty)
-        err_console.print(
-            f"[red]{key}: --evidence tests={log}: {n} code path{'' if n == 1 else 's'} "
-            f"uncommitted (e.g. {dirty[0]}) — the witness is HEAD's tree, which is not "
-            "what the suite ran. Commit your code before recording the suite log, then "
-            "run the full suite again and name the new log.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if newest is not None and newest[0] > path.stat().st_mtime:
-        err_console.print(
-            f"[red]{key}: --evidence tests={log} is stale — {newest[1]} changed after "
-            "the log was written, so the suite did not run the code being recorded. "
-            "Run the full suite again and name the new log.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    return f"{_log_witness(path, data, repo_root)}{_TREE_SEP}{tree}"
-
-
-def _verify_review_entry(
-    key: str,
-    entry_id: str,
-    *,
-    slug: str,
-    entries: list[JournalEntry],
-    target: _EvidenceTarget,
-    since: str | None,
-) -> None:
-    """`entry_id` is a `kind=review` entry for `target` — or `typer.Exit(2)`.
-
-    A phase: the entry carries `phase=N` (`reviews_phase`, the one rule). The
-    spec: the entry was created at or after the step opened (`since`) — a
-    review recorded before spec-review began is not a review OF it.
-    """
-    from fr.run.telemetry import parse_timestamp
-
-    scope = target.scope
-    found = next((e for e in entries if e.id == entry_id), None)
-    phase_flag = (
-        f"--phase {target.phase} "
-        if target.phase is not None
-        else ("--global " if target.feature else "")
-    )
-    if found is None:
-        err_console.print(
-            f"[red]{key}: --evidence review={entry_id} names no entry in the {scope} "
-            f"journal for {slug}[/red]",
-            soft_wrap=True,
-        )
-        err_console.print(
-            f"  fr journal add --scope {scope} --slug {slug} --kind review {phase_flag}"
-            f'--title "{target.subject} review" '
-            "--body \"<findings raised, by id; or 'no findings'>\"",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if target.phase is not None:
-        if not reviews_phase(found, target.phase):
-            err_console.print(
-                f"[red]{key}: --evidence review={entry_id} is a {found.kind!r} entry"
-                + (f" for phase {found.phase}" if found.phase is not None else " with no phase")
-                + f" — evidence must be a `kind=review` entry carrying `phase={target.phase}`, "
-                "the same rule `fr journal check --require-reviews` applies[/red]",
-                soft_wrap=True,
-            )
-            raise typer.Exit(2)
-        return
-    if target.feature and (found.kind != "review" or found.phase is not None):
-        err_console.print(
-            f"[red]{key}: --evidence review={entry_id} is a {found.kind!r} entry"
-            + (f" for phase {found.phase}" if found.phase is not None else "")
-            + " — the lens review's evidence is a global `kind=review` plan-journal entry "
-            "(no phase)[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if found.kind != "review":
-        err_console.print(
-            f"[red]{key}: --evidence review={entry_id} is a {found.kind!r} entry — evidence "
-            "must be a `kind=review` spec-journal entry[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    created = parse_timestamp(journal_stamp_as_utc(found.created))
-    opened = parse_timestamp(since) if since else None
-    if created is None or opened is None or created < opened.replace(microsecond=0):
-        began = "this step opened" if target.feature else "spec-review began"
-        err_console.print(
-            f"[red]{key}: --evidence review={entry_id} was created {found.created}, "
-            f"before this step opened at {since} — a review recorded before {began} "
-            "is not a review of it. Record the reviewer's findings, then a new "
-            "`kind=review` entry.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-
-
-def _target_finding_states(entries: list[JournalEntry], target: _EvidenceTarget) -> dict[str, str]:
-    """Every finding filed against `target` -> its effective state. A phase:
-    `phase_finding_states`. The spec: every finding in its journal (a spec
-    journal has no phases), through the SAME fold `fr journal check` reads."""
-    if target.phase is not None:
-        return dict(phase_finding_states(entries, target.phase))
-    states = effective_finding_states(entries)
-    return {
-        e.id: states[e.id]
-        for e in entries
-        if e.kind == "finding"
-        and e.resolves is None
-        and e.id in states
-        and (not target.feature or _is_lens_finding(e.id))
-    }
-
-
-def _is_lens_finding(fid: str) -> bool:
-    """A lens review's finding (`l-<lens>-r<k>`): the only plan findings the
-    feature target gates (spec 2026-11-12-review-lenses §3.C)."""
-    from fr.lenses.review import LENS_FINDING_ID_RE
-
-    return LENS_FINDING_ID_RE.match(fid) is not None
-
-
-def _closed_findings_witness(
-    key: str, slug: str, entries: list[JournalEntry], target: _EvidenceTarget
-) -> str:
-    """The `findings` evidence for `target` — or `typer.Exit(2)` while any
-    finding filed against it is still open.
-
-    This is `superpowers:receiving-code-review`'s OUTCOME, which is the only
-    part of "was the review received properly" fr can observe: every finding
-    the review raised ends `fixed` or `refuted`, never dropped. It is the check
-    `journal-check` already made once, before `deliver` — moved to the moment a
-    finding is cheapest to act on, while the phase that caused it is still the
-    one in hand.
-
-    The value is the WITNESS, not a token: the ids fr saw closed, in the order
-    they were raised, or `none`. A finding that genuinely belongs to a later
-    phase is filed against THAT phase, and gates that phase's review instead.
-    """
-    subject, scope = target.subject, target.scope
-    states = _target_finding_states(entries, target)
-    still_open = [fid for fid, st in states.items() if st == "open"]
-    # The operator guard `fr journal check` applies (spec 2026-09-24 §A), read
-    # from the same fold: an out-of-scope finding fixed without the operator.
-    unauthorized = [fid for fid in unauthorized_fixes(entries) if fid in states]
-    if unauthorized:
-        err_console.print(
-            f"[red]{key}: refused — {len(unauthorized)} unauthorized fix(es) against "
-            f"{subject}: {', '.join(unauthorized)} — moved from out-of-scope to fixed without "
-            "`answered_by=operator`. Ask the operator, then:[/red]",
-            soft_wrap=True,
-        )
-        for fid in unauthorized:
-            err_console.print(
-                f"  fr journal resolve --scope {scope} --slug {slug} --id {fid} --state fixed "
-                '--answered-by operator --note "<what the operator decided>"',
-                markup=False,
-                soft_wrap=True,
-            )
-        raise typer.Exit(2)
-    if not still_open:
-        return findings_witness(states)
-    err_console.print(
-        f"[red]{key}: refused — {len(still_open)} finding(s) filed against {subject} "
-        f"are still open: {', '.join(still_open)}.[/red]",
-        soft_wrap=True,
-    )
-    err_console.print(
-        "  A review is received, not just requested "
-        "(`superpowers:receiving-code-review`): verify each finding, then fix it with "
-        "a test or refute it with reasoning — never drop it. Close each one:",
-        soft_wrap=True,
-    )
-    for fid in still_open:
-        err_console.print(
-            f"  fr journal resolve --scope {scope} --slug {slug} --id {fid} --state fixed "
-            '--note "<what changed, and the test that pins it>"',
-            markup=False,
-            soft_wrap=True,
-        )
-    later = (
-        f" One that belongs to a later phase is filed against that phase, not {subject}."
-        if target.phase is not None
-        else ""
-    )
-    err_console.print(
-        "  (or `--state refuted` with the reasoning, when the finding is wrong; "
-        "`--state out-of-scope` when this change did not cause it)."
-        f"{later} `--state failed` needs no evidence.",
-        soft_wrap=True,
-    )
-    raise typer.Exit(2)
-
-
-def _evidence_owed(manifest: WorkflowManifest) -> dict[str, tuple[Step, ...]]:
-    """`{top-level step id: (every step under it that declares evidence,)}`.
-
-    A group's members are the realistic case (`implement`'s `review-phase`);
-    a flat step declaring evidence is included so a report can never go quiet
-    about a shape that asks for something it never got.
-    """
-    owed: dict[str, tuple[Step, ...]] = {}
-    for step in manifest.steps:
-        candidates = step.steps or (step,)
-        declaring = tuple(s for s in candidates if s.evidence)
-        if declaring:
-            owed[step.id] = declaring
-    return owed
-
-
-def _unevidenced_units(repo_root: Path, state: RunState) -> dict[tuple[str, str], tuple[str, ...]]:
-    """`{(step id, unit key): obligations it lacks}` for every unit that is
-    `done` under a step which declares evidence it does not carry — spec
-    §4.E's visible debt. Per OBLIGATION, because a shape can grow one: a unit
-    resolved with `review=` before `findings` existed owes `findings` and
-    nothing else, and saying "unevidenced" of it would be as wrong as silence.
-
-    **Never a failure, and never an exit code.** These are reviews resolved
-    before the gate existed; the migration cannot invent evidence for them and
-    does not try. An obligation cannot be enforced backwards in time — doing
-    so would fail every in-flight run on the day the plugin updates.
-
-    Fail-SOFT on a manifest it cannot resolve (drifted, renamed, deleted):
-    this is a report line, and a report that turns `fr run check` into an
-    error is a worse outcome than a report that is silent. The exit code of
-    every caller is unchanged either way.
-    """
-    try:
-        # Schema-checked only: a step-list drift does not make "which units owe
-        # evidence" unanswerable, and the caller (`status`/`check`) warns about
-        # the drift itself (spec 2026-10-05-run-upgrade-midflight §B).
-        manifest = _resolve_manifest_checked_schema(repo_root, state)
-    except RunStateError, WorkflowError, AdoptError, OSError:
-        return {}
-    out: dict[tuple[str, str], tuple[str, ...]] = {}
-    for step_id, declaring in _evidence_owed(manifest).items():
-        record = state.steps.get(step_id)
-        if record is None:
-            continue
-        for member in declaring:
-            suffix = f"step/{member.id}" if member.id == step_id else f"/{member.id}"
-            for key in units.unit_keys(record):
-                matches = key == suffix if member.id == step_id else key.endswith(suffix)
-                unit_state = record.state if member.id == step_id else units.unit_state(record, key)
-                if not matches or unit_state != "done":
-                    continue
-                held = units.evidence_of(record, key)
-                if held.get("reviewer") == HISTORICAL_REVIEWER:
-                    # R9: reviewed before this cursor existed — reported as
-                    # such by the caller, never as debt.
-                    continue
-                lacking = tuple(name for name in member.evidence if name not in held)
-                if lacking:
-                    out[(step_id, key)] = lacking
-    return out
-
-
-def _debt_phrase(record: StepRecord, key: str, lacking: tuple[str, ...]) -> str:
-    """How one unit's evidence debt reads — ONE spelling for `status` and
-    `check`. A unit with no evidence at all keeps the sentence it always had."""
-    if not units.evidence_of(record, key):
-        return "unevidenced (predates the evidence gate)"
-    return f"unevidenced: {', '.join(lacking)} (predates that obligation)"
 
 
 def _run_journal(repo_root: Path, state: RunState) -> tuple[JournalScope, str] | None:

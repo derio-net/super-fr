@@ -38,7 +38,8 @@ entries set per row — the record is applied before the gates read the fold, so
 sets wins over any fragment edit, and a refusal over that row has to say so."""
 
 LocalWitness = Callable[[Path, str | None], "tuple[str, str] | str"]
-"""`run_cmd._local_stamp_witness`: `(log, tree)` a `local` stamp records, or why there is none."""
+"""`fr.run.evidence.suite.local_stamp_witness`: `(log, tree)` a `local` stamp records, or
+why there is none."""
 
 
 def repo_relative(repo_root: Path, value: str) -> str:

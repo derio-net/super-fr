@@ -7,3 +7,12 @@ refuses raises `fr.run.verdict.RunRefusal`. `fr.commands.run_cmd` prints both.
 Engine code: no `typer`, no `rich` but `rich.markup`, no `fr.commands`
 (`tests/unit/test_run_writes_layering.py`).
 """
+
+from __future__ import annotations
+
+from fr.run.verdict import Say
+
+
+def refusal(text: str) -> tuple[Say, ...]:
+    """One soft-wrapped markup line: the shape most evidence refusals print."""
+    return (Say(text, soft_wrap=True),)

@@ -113,8 +113,8 @@ uv workspace monorepo, version lockstepped across every manifest (see
     mirrored to OpenCode/Hermes like skills/rules are — `fr run` is a CLI
     surface every harness drives the same way, not a per-harness prompt.
     `fr-goal` and `fr-goal-light` run `lens-review` between `journal-check` and
-    `deliver` (spec `2026-11-12-review-lenses` §3.C): `_evidence_target` has a
-    third, FEATURE-level target (a flat step emitting `journal:plan`: the plan
+    `deliver` (spec `2026-11-12-review-lenses` §3.C):
+    `fr.run.evidence.target.evidence_target` has a third, FEATURE-level target (a flat step emitting `journal:plan`: the plan
     journal, no phase, `feature=True`), which reads `reviewer` as a
     `<lens>=<dispatch-id>` map over `lens_set` recomputed at resolve, gates
     only `l-<lens>-r<k>` findings, and derives `lenses` (per lens, files

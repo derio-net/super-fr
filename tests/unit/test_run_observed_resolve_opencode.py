@@ -97,7 +97,7 @@ def test_an_invented_reviewer_id_is_refused_at_the_phase_review_on_opencode(
     tmp_path: Path,
 ) -> None:
     """#816 at the phase review: R6 routes both review steps through
-    `_verify_reviewer`, so the invented id is refused here too."""
+    `verify_reviewer`, so the invented id is refused here too."""
     repo, shipped, opened = _at_the_review(tmp_path)
     db = _shifted_to(tmp_path, opened)
 
@@ -183,7 +183,7 @@ def test_a_child_session_binds_and_compares_as_the_run_session() -> None:
 
 
 def test_every_agent_type_comparison_folds_the_opencode_tier() -> None:
-    from fr.commands.run_cmd import _same_agent as run_same
+    from fr.run.evidence.review import same_agent as run_same
     from fr.run.visual import _same_agent as visual_same
 
     for same in (run_same, visual_same):
