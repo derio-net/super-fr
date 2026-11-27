@@ -1,0 +1,35 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-arch-run-verdict
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+- kind: finding
+  id: p3-r1
+  phase: 3
+  review_scope: in
+  title: test_run_verdict_deliver.py keeps a dead sym/_ALIASES shim that existed to drive run_cmd's pre-move functions; call deliver directly
+  body: tests/unit/test_run_verdict_deliver.py:27-41. Fix - drop _ALIASES and sym, look names up on the moved module directly.
+- kind: finding
+  id: p3-r2
+  phase: 3
+  review_scope: out
+  title: tests/unit/test_deliver_local_stamp.py:508 docstring still names removed _deliver_exit_guard (cosmetic)
+  body: Only the docstring is stale; the body patches deliver.deliver_exit_guard.
+- kind: review
+  id: review-p3-1
+  phase: 3
+  title: phase 3 reviewed by an independent reviewer; 1 in-scope finding fixed, 1 out-of-scope note
+  body: |
+    Reviewer confirmed byte identity of every moved Say (style="red" refusals, markup lines, warn-routed warnings), _resolve_body's gate order, RECORD_ROWS name and set/reset, the held-stdout flush after a refusal, record/apply.py untouched, layering, no dead names or re-exports, patches at the lookup site, fixtures captured before the move, the stay-in-run_cmd decisions, the needed fr-show-me example edit with both mirror generators in sync, budget +20, docs current. Findings p3-r1 (dead name fallback in the capture test, fixed) and p3-r2 (stale docstring, out of scope).
+resolves:
+- id: p3-r1
+  state: fixed
+  body: Removed _ALIASES and sym in 07ba9b646; the module parameter stays as the one injection point every case uses. 67 tests pass.
+- id: p3-r2
+  state: out-of-scope
+  body: Cosmetic docstring only; the reviewer tagged it out of scope. The docstring was updated in passing in 07ba9b646 to name fr.run.deliver.deliver_exit_guard.
+evidence:
+  review: review-p3-1
+  reviewer: ada0deb3c91279b06
+  model: claude-opus-5-5
