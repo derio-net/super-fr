@@ -1,5 +1,5 @@
 schema: 14
-ranked_at: 2026-11-26
+ranked_at: 2026-11-27
 tiers:
 - n: 1
   title: Work can be lost
@@ -3951,6 +3951,33 @@ issues:
     verified: false
     detail: About 20 test sites still set the old `FR_SHIPPED_*_DIR` variables after S1 moved shipped-asset homes; they exercise a retired knob.
     note: 'Batches with #1701 and the S1 leftovers (#1699, #1697); wait for #1696 to merge.'
+  super-fr#1698:
+    tier: 4
+    theme: run-contracts
+    cx: S
+    severity: med
+    kind: defect
+    verified: false
+    detail: 'Owed S1 acceptance: old configuration paths must be refused with a pointer to the new home.'
+    note: 'S1 follow-up; batches with #1699-#1701.'
+  super-fr#1730:
+    tier: 4
+    theme: run-contracts
+    cx: L
+    severity: med
+    kind: feature
+    verified: true
+    detail: 'S5 of epic #1652: the Orchestrator Station (independent, resilient, Opus-or-better, resourceful) and Stations that learn with repo-level memory. Needs S4 (#1656).'
+    note: 'Feature group with the epic; spec after S4.'
+  super-fr#1731:
+    tier: 3
+    theme: triage-board
+    cx: M
+    severity: med
+    kind: feature
+    verified: true
+    detail: 'Batches page: session state within the existing columns (who waits for whom), an owner per Needs-you lane, and time per column and state. Builds on `fr_herdr.restart.has_background_work`; columns stay decided by `lanes.lane_of`.'
+    note: 'Works without Stations; helps orchestrating today.'
   super-fr#1699:
     tier: 4
     theme: run-contracts
@@ -5506,6 +5533,10 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:41:09.419973Z'
     reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#667
 - id: cursor-model
   title: The cursor records the model an attempt ran on, not its tier binding
   ids:
@@ -8191,6 +8222,13 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:40:29.487957Z'
     reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1086
+    - super-fr#1082
+    - super-fr#1065
+    - super-fr#1066
 - id: batch-finish-labels
   title: 'A finished batch cleans up after itself: drop fr:in-progress at release, and batch merge skips
     only the held batch'
@@ -8207,6 +8245,11 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:40:38.699841Z'
     reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1085
+    - super-fr#1076
 - id: adopt-fixes
   title: 'batch adopt: adopt a session on the default branch, show what --list needs, and add --hold'
   ids:
@@ -8221,6 +8264,12 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:40:50.504628Z'
     reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1081
+    - super-fr#1069
+    - super-fr#1071
 - id: models-hardening
   title: 'fr models: a corrupt models.yaml is refused, not a crash, and dead-binding reasons read clean'
   ids:
@@ -8233,6 +8282,11 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:41:00.461487Z'
     reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1055
+    - super-fr#1057
 - id: merge-queue
   title: 'Merge race: require an up-to-date or merge-queued main, release bot bypass, the driver enqueues
     where a queue is required'
@@ -8248,6 +8302,10 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:41:18.731317Z'
     reason: 'Obsolete: never dispatched, and every member was closed by other work (super-fr#1561).'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1062
 - id: claims-pr-authors
   title: 'Claims trust across hosts: a driving account outside pr_authors and the repo''s members is still
     recognised'
@@ -8261,6 +8319,10 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:41:45.917118Z'
     reason: 'Re-judged 2026-11-19: its issue is parked or moved to batch triage-hardening.'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1075
 - id: adopt-multi-repo
   title: 'batch adopt: a session spanning several repos'
   ids:
@@ -8274,6 +8336,10 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:41:27.493030Z'
     reason: 'Re-judged 2026-11-19: its issue is parked or moved to batch triage-hardening.'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1070
 - id: issue-from-transcript
   title: 'triage: open an issue from an ad-hoc session''s transcript'
   ids:
@@ -8285,6 +8351,10 @@ batches:
   - kind: cancel
     at: '2026-11-19T09:41:36.092148Z'
     reason: 'Re-judged 2026-11-19: its issue is parked or moved to batch triage-hardening.'
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1072
 - id: suite-health
   title: Green, unthrottled local suite
   ids:
@@ -9071,6 +9141,1835 @@ batches:
     archived: 0
   - kind: closeout
     at: '2026-11-26T17:32:51.141469Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T17:33:35.643520Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T18:01:28.976092Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T18:03:57.771804Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T18:09:27.118192Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T18:11:51.524184Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T18:26:34.023457Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-26T18:31:50.153550Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T18:31:51.605202Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T18:48:10.242337Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T18:50:32.598100Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T19:04:39.675192Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T19:07:02.102042Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T19:21:14.213661Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T19:23:36.496294Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T19:37:49.497684Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T19:40:12.739710Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T19:54:22.340687Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T19:56:44.768173Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T20:11:17.659838Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T20:13:40.347007Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T20:27:52.801416Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T20:30:15.928821Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T20:44:28.323827Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T20:46:51.311327Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T21:01:00.800054Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T21:03:27.177657Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T21:17:37.255327Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T21:19:58.987117Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T21:34:05.849444Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T21:36:28.584270Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T21:50:44.081645Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T21:53:36.834364Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T21:57:13.444154Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-26T22:01:44.188958Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T22:01:45.708322Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T22:05:15.405533Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-26T22:08:43.628657Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T22:08:45.119160Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T22:25:01.408898Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T22:27:24.060740Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T22:41:29.716109Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T22:43:51.944234Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T22:57:58.488076Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T23:00:20.298025Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T23:14:21.459175Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T23:16:43.773475Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T23:30:44.580343Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T23:33:06.567443Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-26T23:47:07.415248Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T23:49:29.207430Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T00:03:33.487126Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T00:05:55.664883Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T00:20:16.700661Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T00:22:40.745535Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T00:37:12.827623Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T00:40:21.068420Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T00:40:22.538349Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T00:56:35.422279Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T00:58:56.905738Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T01:13:00.847700Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T01:15:25.345600Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T01:29:21.915943Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T01:31:43.320060Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T01:45:39.833060Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T01:48:01.540204Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T02:02:09.067882Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T02:04:31.333092Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T02:18:32.614698Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T02:20:53.940344Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T02:34:53.917048Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T02:37:15.179489Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T02:51:14.059415Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T02:53:35.394632Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T03:07:36.962777Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T03:09:58.126411Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T03:23:58.284656Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T03:26:21.709360Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T03:40:23.327938Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T03:42:45.664608Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T03:57:29.081153Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T04:01:09.742129Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T04:01:11.245543Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T04:05:22.629009Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T04:08:49.633902Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T04:08:51.267559Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T04:11:56.052642Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T04:14:17.265740Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T04:31:04.987233Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T04:33:26.745061Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T04:47:33.926504Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T04:49:55.628553Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T05:03:53.650537Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T05:06:15.300709Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T05:20:16.254517Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T05:22:37.179388Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T05:36:37.115879Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T05:38:59.316061Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T05:52:59.214146Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T05:55:21.248651Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T06:09:20.953537Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T06:11:42.495174Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T06:25:43.308802Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T06:28:05.056543Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T06:42:36.831005Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T06:45:50.038492Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T06:45:51.580874Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T06:48:56.845351Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T06:51:19.272682Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T07:05:22.252881Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T07:07:44.540939Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T07:21:45.159311Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T07:24:06.883501Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T07:38:08.040302Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T07:40:30.220163Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T07:54:30.212417Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T07:56:53.179855Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T08:11:00.649678Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T08:13:24.620201Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T08:27:42.975696Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T08:30:07.346258Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T08:44:23.504836Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T08:46:46.934267Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T09:01:04.995871Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T09:04:29.521814Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T09:04:31.143417Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T09:07:59.413626Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T09:11:34.797970Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T09:11:37.005671Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T09:15:24.606433Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T09:19:25.608250Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T09:19:28.071065Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T09:29:02.625259Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T09:33:32.602597Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T09:33:36.487076Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T09:37:54.264657Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T09:42:40.171171Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T09:42:45.826486Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T09:47:55.761574Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T09:51:46.462466Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T09:51:48.941586Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T09:55:26.197288Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T09:59:39.038101Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T09:59:40.711686Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T10:08:19.020427Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T10:12:30.189859Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T10:12:44.573611Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T10:16:15.974698Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T10:19:49.401938Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T10:19:52.524303Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T10:25:45.128710Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T10:29:24.202475Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T10:29:31.886510Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T10:32:59.593765Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T10:36:47.622780Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T10:36:50.270997Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T10:40:17.395795Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T10:43:59.274796Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T10:44:02.264094Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T10:47:26.872990Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T10:50:56.520998Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T10:50:59.143272Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T10:59:48.525629Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T11:03:26.177923Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T11:04:08.373346Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T11:07:34.525834Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T11:11:09.896006Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T11:11:41.547781Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T11:13:36.984732Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T11:17:19.571244Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T11:17:21.648066Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T11:20:52.220262Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T11:24:26.074590Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T11:24:28.228517Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T11:27:58.761816Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T11:31:51.788702Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T11:31:56.747291Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T11:35:25.976711Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T11:39:03.825627Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T11:39:06.431183Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T11:56:17.111375Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T11:58:45.986563Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T12:09:40.589644Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T12:13:17.366544Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T12:13:19.967823Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T12:28:14.742727Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T12:31:57.276326Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T12:31:59.763508Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T12:35:43.754900Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T12:38:12.993084Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T12:45:22.770136Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T12:50:25.774636Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T12:50:36.194370Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T12:54:31.828896Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T12:59:00.916533Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T12:59:06.129403Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T13:02:54.672237Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T13:05:52.502358Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T13:05:55.986752Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T13:09:43.385494Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T13:13:24.062669Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T13:13:26.250459Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T13:16:58.602307Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T13:20:36.991747Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T13:20:39.135762Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T13:24:24.982252Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T13:28:05.737791Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T13:28:11.170952Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T13:31:39.960062Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T13:35:22.719855Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T13:35:26.499377Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T13:39:27.187333Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T13:44:29.633607Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T13:44:34.297774Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T13:48:26.890112Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T13:52:05.239040Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T13:52:11.822407Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T13:55:53.675874Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T13:59:42.569576Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T13:59:48.250360Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T14:03:44.206783Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T14:08:03.205781Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T14:08:36.591929Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T14:13:25.253694Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T14:16:01.101274Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T14:28:58.758670Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T14:32:50.540293Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T14:32:55.138555Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T14:36:43.945508Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T14:40:41.770568Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T14:40:43.556443Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T14:44:30.624861Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T14:47:03.927720Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T14:47:05.856609Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T14:50:58.652108Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T14:54:48.181651Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T14:54:50.065278Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T14:58:42.533977Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T15:02:52.366969Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T15:03:20.409983Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T15:07:07.345452Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T15:11:08.831598Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T15:11:19.595876Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T15:15:20.503823Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T15:19:04.356604Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T15:19:11.963849Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T15:23:06.113548Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: closeout
+    at: '2026-11-27T15:27:13.765345Z'
     runner: herdr
     handle: w3N:p3
     run: 2026-11-18-feat-batch-consumer-delivery
@@ -9965,6 +11864,21 @@ batches:
     handle: derio-net/super-fr/run/batch-merge-readiness
   - kind: post_merge
     at: '2026-11-26T17:33:12.675829Z'
+  - kind: claims_released
+    at: '2026-11-26T17:33:35.643520Z'
+    keys:
+    - super-fr#1578
+    - super-fr#1581
+  - kind: closeout
+    at: '2026-11-26T18:01:30.388911Z'
+    runner: hand
+    handle: archived
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T18:03:57.771804Z'
+    keys:
+    - super-fr#1578
+    - super-fr#1581
 - id: consumer-followups
   title: 'Consumer-delivery follow-ups: plugin-dir judgement, Gitea job token, tea login error'
   ids:
@@ -10056,6 +11970,17 @@ batches:
     runner: herdr
     handle: w38:p1D
     branch: feat/batch-landing-method
+  - kind: closeout
+    at: '2026-11-26T18:01:31.802078Z'
+    runner: hand
+    handle: archived
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-26T18:28:34.514520Z'
+    keys:
+    - super-fr#1603
+    - super-fr#1702
+    - super-fr#1705
 - id: queue-followups
   title: 'Queue follow-ups: approval revive, conflict probe, close-out wait, case-insensitive repo names'
   ids:
@@ -10067,17 +11992,42 @@ batches:
   wave: 25
   after:
   - landing-method
+  events:
+  - kind: dispatch
+    at: '2026-11-27T13:39:36.780907Z'
+    runner: herdr
+    handle: w3V:p7
+    branch: feat/batch-queue-followups
 - id: closeout-state
   title: Close-outs and batches never stuck as started or Running
   ids:
   - super-fr#1601
   - super-fr#1626
   wave: 25
+  events:
+  - kind: dispatch
+    at: '2026-11-27T11:03:36.256801Z'
+    runner: herdr
+    handle: w3V:p5
+    branch: feat/batch-closeout-state
+  - kind: claims_released
+    at: '2026-11-27T15:03:20.409983Z'
+    keys:
+    - super-fr#1601
+    - super-fr#1626
+  - kind: post_merge
+    at: '2026-11-27T15:15:49.091116Z'
 - id: export-drift
   title: Triage export refuses to overwrite a repo-side edit; targeted import
   ids:
   - super-fr#1667
   wave: 25
+  events:
+  - kind: dispatch
+    at: '2026-11-27T12:54:42.544761Z'
+    runner: herdr
+    handle: w3V:p6
+    branch: feat/batch-export-drift
 - id: arch-shared-helpers
   title: '#1318: shared duplicate-key YAML detector, record placement and hermetic-git fixtures, small
     duplicate readers'
@@ -10088,21 +12038,141 @@ batches:
   - super-fr#1523
   rationale: '#1318 cheap shared-helper slices; no giant module touched.'
   wave: 25
+  events:
+  - kind: dispatch
+    at: '2026-11-26T18:27:44.659581Z'
+    runner: herdr
+    handle: w3V:p4
+    branch: feat/batch-arch-shared-helpers
+  - kind: red_handback
+    at: '2026-11-27T10:08:17.367937Z'
+    pr: 1722
+    head: 5c779e0352d0cde7b2ccbbf52251db646b9ebea3
+    checks:
+    - ci-ok
+    delivered: none
+  - kind: conflict
+    at: '2026-11-27T10:12:42.434777Z'
+    head: 7014bd9de4119c09b1c4ab31fe8dbb2ae5f906c1
+    paths:
+    - docs/explainers/fr-isolation.md
+    - docs/explainers/fr-triage.md
+    - docs/explainers/fr-wave-driver.md
+    - docs/herdr-control-sessions.md
+    - docs/reference/workflow-shapes.md
+    - docs/review-lenses.md
+    - packages/fr/src/fr/lenses/model.py
+    delivered: held
+  - kind: conflict
+    at: '2026-11-27T11:03:32.375182Z'
+    head: 6d9653b2a8225b1dfaf43a0a3e9bb46eabf209fd
+    paths:
+    - docs/explainers/fr-isolation.md
+    - docs/explainers/fr-triage.md
+    - docs/herdr-control-sessions.md
+    - docs/reference/cli.md
+    delivered: session
+    handle: derio-net/super-fr/run/batch-arch-shared-helpers
+  - kind: claims_released
+    at: '2026-11-27T12:50:36.194370Z'
+    keys:
+    - super-fr#1512
+    - super-fr#1513
+    - super-fr#1514
+    - super-fr#1523
+  - kind: post_merge
+    at: '2026-11-27T13:03:26.281610Z'
 - id: arch-run-ledger
   title: '#1318: move the write ledger out of run_cmd.py into fr/run/writes.py'
   ids:
   - super-fr#1515
   wave: 25
+  events:
+  - kind: dispatch
+    at: '2026-11-26T18:27:21.114102Z'
+    runner: herdr
+    handle: w3V:p3
+    branch: feat/batch-arch-run-ledger
+  - kind: conflict
+    at: '2026-11-27T10:08:30.332652Z'
+    head: 07f7151351526d64fe5609a06fd17730b7905d24
+    paths:
+    - docs/reference/workflow-shapes.md
+    delivered: held
+  - kind: conflict
+    at: '2026-11-27T12:54:38.273647Z'
+    head: 89f3b7ebe4c6c2b0cc9b3dfc54d810bc09053a23
+    paths:
+    - docs/reference/cli.md
+    - docs/reference/workflow-shapes.md
+    delivered: held
+  - kind: claims_released
+    at: '2026-11-27T13:59:48.250360Z'
+    keys:
+    - super-fr#1515
+  - kind: post_merge
+    at: '2026-11-27T14:08:30.064713Z'
 - id: arch-isolation-split
   title: '#1318: split the free functions out of isolation/local.py'
   ids:
   - super-fr#1517
   wave: 25
+  events:
+  - kind: dispatch
+    at: '2026-11-26T18:26:37.426257Z'
+    runner: herdr
+    handle: w3V:p1
+    branch: feat/batch-arch-isolation-split
+  - kind: claims_released
+    at: '2026-11-27T11:04:08.373346Z'
+    keys:
+    - super-fr#1517
+  - kind: post_merge
+    at: '2026-11-27T11:11:39.086773Z'
 - id: arch-plan-ops-split
   title: '#1318: split self-review, the spec table and the refactor-gate read out of plan_ops.py'
   ids:
   - super-fr#1518
   wave: 25
+  events:
+  - kind: dispatch
+    at: '2026-11-26T18:27:00.164006Z'
+    runner: herdr
+    handle: w3V:p2
+    branch: feat/batch-arch-plan-ops-split
+  - kind: conflict
+    at: '2026-11-27T11:35:30.588976Z'
+    head: e32ccb491013a63dbe5855cfdc8b3ccf294cc151
+    paths:
+    - docs/explainers/fr-dispatch.md
+    - docs/reference/cli.md
+    - docs/reference/dispatch-lifecycle.md
+    - docs/reference/workflow-shapes.md
+    - tests/unit/test_tripwire_module_budget.py
+    delivered: held
+  - kind: conflict
+    at: '2026-11-27T12:09:44.825709Z'
+    head: a987a53d246ba18e876e0851cab6b6b9c14bfcf9
+    paths:
+    - docs/explainers/fr-dispatch.md
+    - docs/reference/cli.md
+    - docs/reference/dispatch-lifecycle.md
+    - docs/reference/workflow-shapes.md
+    - tests/unit/test_tripwire_module_budget.py
+    delivered: held
+  - kind: conflict
+    at: '2026-11-27T12:50:32.569906Z'
+    head: d4ecf14cffb3105e1be76b7bc765ebd561d2564b
+    paths:
+    - docs/reference/cli.md
+    - docs/reference/workflow-shapes.md
+    delivered: held
+  - kind: claims_released
+    at: '2026-11-27T13:40:36.430493Z'
+    keys:
+    - super-fr#1518
+  - kind: post_merge
+    at: '2026-11-27T13:48:57.424885Z'
 - id: triage-privacy
   title: 'Triage privacy: outsider text never reaches worker sessions or the state ref unfenced'
   ids:
@@ -10152,6 +12222,12 @@ batches:
   wave: 26
   after:
   - arch-run-ledger
+  events:
+  - kind: dispatch
+    at: '2026-11-27T15:02:55.887355Z'
+    runner: herdr
+    handle: w3X:p2
+    branch: feat/batch-arch-run-verdict
 - id: arch-isolation-gc
   title: '#1318: isolation/local.py garbage collection moves to a collaborator'
   ids:
@@ -10159,6 +12235,12 @@ batches:
   wave: 26
   after:
   - arch-isolation-split
+  events:
+  - kind: dispatch
+    at: '2026-11-27T14:03:47.791977Z'
+    runner: herdr
+    handle: w3X:p1
+    branch: feat/batch-arch-isolation-gc
 - id: arch-triage-ports
   title: '#1318: the triage driver takes every command-layer effect through one ports object'
   ids:
@@ -10198,6 +12280,30 @@ batches:
   - super-fr#1604
   - super-fr#1607
   wave: 27
+- id: s2-alacarte-settings
+  title: 'S2: à la carte .fr/settings.yaml'
+  ids:
+  - super-fr#1654
+  rationale: 'Epic #1652 sub-project S2; its only dependency, S1, merged in #1696.'
+  wave: 26
+  bump: minor
+- id: board-session-state
+  title: 'Batches page: session state, lane owners, time per column'
+  ids:
+  - super-fr#1731
+  rationale: 'Operator-requested: shows who each session waits for, and where waves lose time; needed
+    to orchestrate waves now.'
+  wave: 26
+  bump: minor
+- id: s1-followups
+  title: 'S1 follow-ups: refuse old paths, config-branch executables, test sites, import-time home'
+  ids:
+  - super-fr#1698
+  - super-fr#1699
+  - super-fr#1700
+  - super-fr#1701
+  rationale: Leftovers filed by S1 (#1696), all in its configuration code.
+  wave: 26
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
@@ -10459,6 +12565,7 @@ features:
   - super-fr#1656
   - super-fr#1657
   - super-fr#1651
+  - super-fr#1730
   why: 'Epic #1652: configuration homes (S1), à la carte settings (S2), every flow a workflow (S3), stations and the Router (S4); #1657 makes split tracking structural; #1651 cncd retirement.'
   start: '/fr-brainstorming #1653 (S1), from branch feat/event-driven-a-la-carte'
 exports:
@@ -10593,6 +12700,12 @@ exports:
   at: '2026-11-25T10:16:16.465160Z'
   pr: 1685
   head: 95ff894e31fa07a7d6023dd84941669cd19e6568
+  merged: true
+- wave: '20'
+  repo: derio-net/super-fr
+  at: '2026-11-26T17:33:33.731671Z'
+  pr: 1718
+  head: b0ca528cb2605655df8a4ca095ac5939880139e1
   merged: true
 closeouts:
 - repo: derio-net/super-fr
@@ -11221,6 +13334,7 @@ closeouts:
   handle: w3T:p5
   planned:
   - merge-readiness
+  closed: true
 queues:
 - repo: derio-net/super-fr
   wave: 22
@@ -11482,3 +13596,18 @@ queues:
   - kind: queue_cleared
     at: '2026-11-25T20:55:27.918282Z'
     detail: the release cleared the hold
+queue_requests:
+- kind: queue_add
+  at: '2026-11-27T15:25:05.595235Z'
+  repo: derio-net/super-fr
+  scope: s-f7ea4061
+  pr: 1107
+  by: YiannisDermitzakis
+  preapproved: true
+- kind: queue_add
+  at: '2026-11-27T15:25:16.574375Z'
+  repo: derio-net/super-fr
+  scope: s-f7ea4061
+  pr: 1079
+  by: YiannisDermitzakis
+  preapproved: true

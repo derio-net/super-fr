@@ -10,7 +10,7 @@ subsystems:
     then_ref: v4.14.3
     themes: [step-records]
   - name: skills & agents
-    path: ["plugins/super-fr/skills/*", "plugins/super-fr/agents/*", "plugins/super-fr/defaults/*"]
+    path: ["plugins/super-fr/skills/*", "plugins/super-fr/agents/*", "plugins/super-fr/workflows/*"]
     then_ref: v4.14.3
     themes: [plan-sizing, opencode-dispatch, output-tone, filing, documentation]
   - name: usage & audit
