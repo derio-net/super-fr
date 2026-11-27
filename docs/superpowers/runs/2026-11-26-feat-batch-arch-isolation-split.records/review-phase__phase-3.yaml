@@ -1,0 +1,22 @@
+schema_version: 12
+run: 2026-11-26-feat-batch-arch-isolation-split
+step: review-phase
+item: phase/3
+outcome: done
+journal:
+  - kind: finding
+    id: p3-r1
+    phase: 4
+    review_scope: in
+    title: "fr docs check stale: docs/reference/dispatch-lifecycle.md covers fr_herdr/runner.py (edited at :118) but its reviewed stamp is not bumped"
+    body: "Belongs to phase 4: plan step P4.T2.S2 moves the reviewed stamp of every covered page the branch edits (spec R8). Filed against phase 4 so its review gates it."
+  - kind: review
+    id: review-p3-1
+    phase: 3
+    title: "phase 3 review (branchrefs.py move): 1 finding (p3-r1, filed against phase 4)"
+    body: "Dispatched reviewer confirmed byte-identical bodies, imports (no fr.isolation.local), all callers migrated incl. gitseam lazy import and fr_herdr/runner.py, no monkeypatch left patching nothing, guard entry and budget 2650 for 2614 lines; ruff/mypy clean, 123 targeted tests pass."
+resolves: []
+evidence:
+  review: review-p3-1
+  reviewer: a772cb691f818c37d
+  model: claude-opus-5-5
