@@ -30,3 +30,31 @@ unobserved.py is a verbatim move and the adapter is the spec's three functions; 
 ### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
 
 a move that must keep its bytes; the one structural change (derive accepting str | None and asserting the settled witness) was needed for mypy in the green step, and record/apply.py now imports emitted_plan from fr.run.steps instead of run_cmd
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-27T17:15:24+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · test_run_verdict_derived.py keeps a never-called Case.old/_old capture driver naming run_cmd._witness_base (gone) and the now-Verdict-returning aliases (phase 1)
+
+tests/unit/test_run_verdict_derived.py:128-169 and every _old(...) in _cases(); dead and misleading. Fix - drop the field and helper, name the capture commit in the docstring.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-27T17:15:24+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · row run-engine-cli-free moved to ci while its acceptance says one allowance and the layering test still permits the temporary adopt.py one (phase 1)
+
+docs/acceptance/features/2026-11-27-run-verdict.yaml; tests/unit/test_run_writes_layering.py:96-99 allows adopt.py until phase 2. Fix - name the temporary allowance in the row's notes.
+
+<!-- fr:journal kind=review scope=plan id=review-p1-1 created=2026-11-27T17:15:24+00:00 phase=1 -->
+### review-p1-1 · review · phase 1 reviewed by an independent reviewer; 2 findings, both in scope, both fixed (phase 1)
+
+Reviewer checked byte identity of every moved Say against the pre-move prints, derive's gh#768 accumulation, _refusals' cause, unobserved.py, the layering test (per-file package, rich.markup both spellings, both old test names kept), the re-pointed patches, fixtures captured before the move (b39ef3751 before f53d3542f), budget, fragment and stamps. Findings p1-r1 (dead pre-move driver in the capture test) and p1-r2 (row note did not name the temporary adopt.py allowance), both fixed.
+
+<!-- fr:journal kind=lens scope=plan id=lens-tests-1 created=2026-11-27T17:15:24+00:00 phase=1 lens=tests step=review-phase -->
+### lens-tests-1 · lens · each later slice's fixtures must be captured before its move, with no capture driver left behind as dead code (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-27T17:15:24+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: test_run_verdict_derived.py keeps a never-called Case.old/_old capture driver naming run_cmd._witness_base (gone) and the now-Verdict-returning aliases (phase 1)
+
+Removed Case.old and _old; the docstring names capture commit b39ef3751 (test commit after the review). 13 tests pass.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-27T17:15:24+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: row run-engine-cli-free moved to ci while its acceptance says one allowance and the layering test still permits the temporary adopt.py one (phase 1)
+
+set-status --notes on run-engine-cli-free names the temporary adopt.py allowance that slice 2 removes.
