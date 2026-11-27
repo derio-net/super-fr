@@ -92,6 +92,15 @@ is true now, not from what it remembers. In order, a pass:
    branch rewritten. If git cannot read the diff in one pass, the approval is held for that
    pass and the label stays.
 
+    Your label is the approval, so taking it off ends the approval. The driver records
+    that and writes nothing to the pull request. To approve again, add the label again.
+    If you add the label while the pull request has a conflict the queue cannot resolve,
+    the driver waits: it keeps the label, records nothing, and says so once. When the
+    conflict is fixed, it records your approval at the new head, so you do not need to
+    approve a second time. Each time the driver removes the label itself, it writes one
+    comment on the pull request that says why and what to do next. It writes it once per
+    head, and not at all when the repo turns comments off.
+
     The queue never changes a pull request's branch. It builds each ready pull request on
     the base branch and on the ones ahead of it, tests that combination on a branch of its
     own, and lands the longest green run with one atomic push. The collected close-out, an
