@@ -30,3 +30,9 @@ the matrix; the UV_PYTHON and permissions tests read workflow-level keys only (j
 satisfy them; `on:` quirk handled); no ci.yml job loses a permission it uses; level refs resolve.
 Raised none. Orchestrator ran sync-opencode.py --check and sync-hermes.py --check: clean.
 Notes below threshold: tests glob *.yml only (spec says *.yml); .test_durations keeps one deleted id (harmless).
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-27T20:44:38+00:00 -->
+### lens-review-1 · review · lens review: docs-accuracy and security, no findings
+
+docs-accuracy: both touched pages (fr-progress explainer, docs-currency stamp) true of the code; shape file matches the diff.
+security: no ci.yml job without its own block uses a token beyond contents: read (no gh, GH_TOKEN, secrets or REST; artifacts/cache use the runtime token); the retirement removes a pull-requests: write job and a runtime pip install from a tag; UV_PYTHON pins widen nothing.
