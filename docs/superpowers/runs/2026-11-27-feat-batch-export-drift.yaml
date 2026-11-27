@@ -62,6 +62,7 @@ steps:
         state: running
         attempts:
         - dispatched: '2026-11-27T14:52:03+00:00'
+          agent: a917102cd70269050
           agent_type: super-fr:fr-phase-executor
           harness: claude-code
           tier: standard
