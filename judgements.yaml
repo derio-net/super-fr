@@ -10743,6 +10743,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T14:03:44.206783Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -11988,6 +11995,12 @@ batches:
   wave: 26
   after:
   - arch-isolation-split
+  events:
+  - kind: dispatch
+    at: '2026-11-27T14:03:47.791977Z'
+    runner: herdr
+    handle: w3X:p1
+    branch: feat/batch-arch-isolation-gc
 - id: arch-triage-ports
   title: '#1318: the triage driver takes every command-layer effect through one ports object'
   ids:
