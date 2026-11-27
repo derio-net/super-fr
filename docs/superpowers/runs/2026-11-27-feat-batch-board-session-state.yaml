@@ -89,7 +89,7 @@ steps:
           visual: batch-card-waits-for:2:7663dfd5d45a,batch-lane-owners:1:81c5f0888a69
           findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5
       phase/2/implement-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-27T20:45:37+00:00'
           agent: ab78d61fd4c760532
@@ -99,6 +99,10 @@ steps:
           tier: hard
           bound: claude-opus-5-5
           session: 164db869-0dd1-4fdb-8624-054c412af9ff
+          returned: '2026-11-27T21:05:30+00:00'
+          outcome: done
+        evidence:
+          visual: batch-card-dwell-line:2:4e6d9e381b13,batch-wave-time-summary:4:2e55cb7502ce
   journal-check:
     state: pending
   lens-review:
