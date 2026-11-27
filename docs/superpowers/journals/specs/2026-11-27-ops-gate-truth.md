@@ -112,3 +112,211 @@ A (operator): yes; `gate_blockers(root, run, gate)` serves both; with no run tes
 
 Q: how is this run verified, and does it add rows?
 A (operator): `strategy: none`, `gate: developer`, batch settle report lines; one row per requirement group verified by unit tests in CI; no Test Plan.
+
+<!-- fr:journal kind=finding scope=spec id=s-r1 created=2026-11-27T22:01:12+00:00 state=open review_scope=in -->
+### s-r1 · finding [open] (reviewer: in scope) · R16 puts the DoD in closeout_brief, but fr pickup --run prints devops_brief for a devops-gated run
+
+check: codebase/consistency
+target: spec
+evidence: pickup_cmd.py:85-88 branches to devops_brief when devops_gated; its finished form says nothing is left (closeout.py:659-674).
+
+<!-- fr:journal kind=finding scope=spec id=s-r2 created=2026-11-27T22:01:12+00:00 state=open review_scope=in -->
+### s-r2 · finding [open] (reviewer: in scope) · The OpsTree merge port is implemented by OpsWorkspace in ops_gate_cmd.py, not gitseam.Worktree
+
+check: codebase/consistency
+target: spec
+evidence: OpsWorkspace (ops_gate_cmd.py:45) implements OpsTree; Worktree.merge disables directory-rename detection only; abort_merge exists (gitseam.py:1310).
+
+<!-- fr:journal kind=finding scope=spec id=s-r3 created=2026-11-27T22:01:12+00:00 state=open review_scope=in -->
+### s-r3 · finding [open] (reviewer: in scope) · R10/R11 have no mechanism for walking or owing a row no step names
+
+check: codebase/consistency
+target: spec
+evidence: R7's path is keyed to a step; set-status --walk needs harness/model/strategy (acceptance_cmd.py:592-599).
+
+<!-- fr:journal kind=finding scope=spec id=s-r4 created=2026-11-27T22:01:12+00:00 state=open review_scope=in -->
+### s-r4 · finding [open] (reviewer: in scope) · Two definitions of a walked row (walk_verified vs status == walked in the driver)
+
+check: codebase/consistency
+target: spec
+evidence: triage/ledger.py:150 reads status == walked; walk_verified ignores a later failing walk.
+
+<!-- fr:journal kind=finding scope=spec id=s-r5 created=2026-11-27T22:01:12+00:00 state=open review_scope=in -->
+### s-r5 · finding [open] (reviewer: in scope) · A walk the PR carries closes a devops row inside the stage, while PR-carried step outcomes do not
+
+check: codebase/consistency
+target: spec
+evidence: stage 5 excludes outcomes at the pinned head (gate.py:1100-1107); rows had no such exclusion.
+
+<!-- fr:journal kind=finding scope=spec id=s-r6 created=2026-11-27T22:01:12+00:00 state=open review_scope=in -->
+### s-r6 · finding [open] (reviewer: in scope) · Under acceptance: off, R7 refuses every --ran on a step that names rows
+
+check: codebase/consistency
+target: spec
+evidence: no row exists under acceptance off, so the unknown-id refusal would always fire.
+
+<!-- fr:journal kind=finding scope=spec id=s-r7 created=2026-11-27T22:01:12+00:00 state=open review_scope=in -->
+### s-r7 · finding [open] (reviewer: in scope) · R13 has no severity and misses test_plan: off, cross-repo specs and the ops promotion
+
+check: codebase/consistency
+target: spec
+evidence: plan_review/checks.py severities; cross-repo exemption at 266/421; exit_for_spec lacks _promote.
+
+<!-- fr:journal kind=finding scope=spec id=s-r8 created=2026-11-27T22:01:12+00:00 state=open review_scope=in -->
+### s-r8 · finding [open] (reviewer: in scope) · DoD discharged items cannot come from gate_blockers; owed items counted twice
+
+check: codebase/consistency
+target: spec
+evidence: devops_blockers returns only holding lines (holds.py:79-101); owed steps and archive-written manual phases are also owed entries.
+
+<!-- fr:journal kind=finding scope=spec id=s-r9 created=2026-11-27T22:01:12+00:00 state=open review_scope=in -->
+### s-r9 · finding [open] (reviewer: in scope) · R17 still says complete over a held archive and leaves the nothing-ran line unspecified
+
+check: codebase/consistency
+target: spec
+evidence: the live hold was a manual phase, a group outside devops; gate.py:1385 nothing-ran line.
+
+<!-- fr:journal kind=finding scope=spec id=s-r10 created=2026-11-27T22:01:12+00:00 state=open review_scope=in -->
+### s-r10 · finding [open] (reviewer: in scope) · A changed op stage 4 already closed stays closed after the refresh
+
+check: codebase/consistency
+target: spec
+evidence: recorded_close does not tie evidence to op content (evidence.py:83-95); apply_phase skips closed ops; a refresh at 5-7 never returns to 4.
+
+<!-- fr:journal kind=finding scope=spec id=s-r11 created=2026-11-27T22:01:12+00:00 state=open review_scope=in -->
+### s-r11 · finding [open] (reviewer: in scope) · R7's walk identity is wrong for probe-recorded steps and does not cover --spec
+
+check: codebase/consistency
+target: spec
+evidence: _probe_step records ran with no question (gate.py:1074-1077); closeout outcome has a --spec form.
+
+<!-- fr:journal kind=finding scope=spec id=s-r12 created=2026-11-27T22:01:12+00:00 state=open review_scope=in -->
+### s-r12 · finding [open] (reviewer: in scope) · A row named only by a step recorded n/a is held and never asked about
+
+check: codebase/consistency
+target: spec
+evidence: R7 writes no walk on n/a; R10 asked only about rows no step names.
+
+<!-- fr:journal kind=finding scope=spec id=s-r13 created=2026-11-27T22:01:12+00:00 state=open review_scope=in -->
+### s-r13 · finding [open] (reviewer: in scope) · The R7 walk path does not print the issue-close commands set-status --walk prints
+
+check: codebase/consistency
+target: spec
+evidence: acceptance_cmd.py:623-641 _print_close_commands; walks.py issues_now_closable.
+
+<!-- fr:journal kind=finding scope=spec id=s-r14 created=2026-11-27T22:01:12+00:00 state=open review_scope=in -->
+### s-r14 · finding [open] (reviewer: in scope) · No run_app command is registered outside run_cmd.py; name where dod_cmd is imported
+
+check: codebase/consistency
+target: spec
+evidence: every @run_app.command lives in run_cmd.py (budget 8895); cli.py:55 imports run_app.
+
+<!-- fr:journal kind=review scope=spec id=spec-review created=2026-11-27T22:01:12+00:00 -->
+### spec-review · review · independent spec review: 14 findings, all in scope, all fixed in the spec
+
+Reviewer fr-spec-reviewer checked q1-q6 against the requirements (no contradiction) and every named file/helper with path:line. 14 findings (s-r1..s-r14), all in scope; each fixed in the spec, which now has R1-R20; row origins re-pointed by amendment.
+
+<!-- fr:journal kind=lens scope=spec id=lens-security-1 created=2026-11-27T22:01:12+00:00 lens=security step=spec-review -->
+### lens-security-1 · lens · the refresh merges and re-trusts default-branch op content, and row walks inside the stage must exclude PR-carried walks
+
+<!-- fr:journal kind=lens scope=spec id=lens-errors-1 created=2026-11-27T22:01:12+00:00 lens=errors step=spec-review -->
+### lens-errors-1 · lens · new refusal paths (drift on an unreadable side, merge conflict/abort, fr run dod exit codes) must fail closed, never read as nothing owed
+
+<!-- fr:journal kind=lens scope=spec id=lens-tests-1 created=2026-11-27T22:01:12+00:00 lens=tests step=spec-review -->
+### lens-tests-1 · lens · fake-port tests of stages 4-8 must cover reruns, declines, conflicts, reopened ops and PR-carried exclusions, not only the happy path
+
+<!-- fr:journal kind=finding scope=spec id=s-r1-resolved created=2026-11-27T22:01:12+00:00 state=fixed resolves=s-r1 -->
+### s-r1-resolved · finding [fixed] · resolves s-r1: R16 puts the DoD in closeout_brief, but fr pickup --run prints devops_brief for a devops-gated run
+
+R19 now names closeout_brief and both forms of devops_brief; the finished form says complete only when the whole DoD is discharged.
+
+<!-- fr:journal kind=finding scope=spec id=s-r2-resolved created=2026-11-27T22:01:12+00:00 state=fixed resolves=s-r2 -->
+### s-r2-resolved · finding [fixed] · resolves s-r2: The OpsTree merge port is implemented by OpsWorkspace in ops_gate_cmd.py, not gitseam.Worktree
+
+Design §A and the shape name OpsWorkspace.merge_commit (fetch origin, Worktree.merge, commit or abort_merge) in commands/ops_gate_cmd.py; the wording says directory-rename detection.
+
+<!-- fr:journal kind=finding scope=spec id=s-r3-resolved created=2026-11-27T22:01:12+00:00 state=fixed resolves=s-r3 -->
+### s-r3-resolved · finding [fixed] · resolves s-r3: R10/R11 have no mechanism for walking or owing a row no step names
+
+R13 and Design §B name the exact `fr acceptance set-status` invocations for ran and owed (harness operator, model human, effective strategy, --feature); R14 prints the same command.
+
+<!-- fr:journal kind=finding scope=spec id=s-r4-resolved created=2026-11-27T22:01:12+00:00 state=fixed resolves=s-r4 -->
+### s-r4-resolved · finding [fixed] · resolves s-r4: Two definitions of a walked row (walk_verified vs status == walked in the driver)
+
+R10 defines fr.acceptance.walks.row_walked (status walked and latest walk passed) as the one rule; the driver's ledger and gate_items both read it.
+
+<!-- fr:journal kind=finding scope=spec id=s-r5-resolved created=2026-11-27T22:01:12+00:00 state=fixed resolves=s-r5 -->
+### s-r5-resolved · finding [fixed] · resolves s-r5: A walk the PR carries closes a devops row inside the stage, while PR-carried step outcomes do not
+
+R12 plus gate_items' exclude_walks: inside the DevOps stage walks the pinned PR head carries never close a row.
+
+<!-- fr:journal kind=finding scope=spec id=s-r6-resolved created=2026-11-27T22:01:12+00:00 state=fixed resolves=s-r6 -->
+### s-r6-resolved · finding [fixed] · resolves s-r6: Under acceptance: off, R7 refuses every --ran on a step that names rows
+
+R8: under acceptance: off the pointer is parsed and ignored; nothing is walked, asked, counted or reported.
+
+<!-- fr:journal kind=finding scope=spec id=s-r7-resolved created=2026-11-27T22:01:12+00:00 state=fixed resolves=s-r7 -->
+### s-r7-resolved · finding [fixed] · resolves s-r7: R13 has no severity and misses test_plan: off, cross-repo specs and the ops promotion
+
+R16: severity warn; nothing under test_plan/gates/acceptance off or for a cross-repo spec; effective gates include the plan-ops devops promotion.
+
+<!-- fr:journal kind=finding scope=spec id=s-r8-resolved created=2026-11-27T22:01:12+00:00 state=fixed resolves=s-r8 -->
+### s-r8-resolved · finding [fixed] · resolves s-r8: DoD discharged items cannot come from gate_blockers; owed items counted twice
+
+R10 adds item-level gate_items (discharged or not) that gate_blockers and the DoD both derive from; R17 drops owed entries another group already reports.
+
+<!-- fr:journal kind=finding scope=spec id=s-r9-resolved created=2026-11-27T22:01:12+00:00 state=fixed resolves=s-r9 -->
+### s-r9-resolved · finding [fixed] · resolves s-r9: R17 still says complete over a held archive and leaves the nothing-ran line unspecified
+
+R20: complete only when every DoD item, from every group, is discharged, on both the ran-stages and the nothing-ran paths.
+
+<!-- fr:journal kind=finding scope=spec id=s-r10-resolved created=2026-11-27T22:01:12+00:00 state=fixed resolves=s-r10 -->
+### s-r10-resolved · finding [fixed] · resolves s-r10: A changed op stage 4 already closed stays closed after the refresh
+
+R6 and Design §A: changed/added ops are reopened host-side (old closures ignored, entry ids before the refresh excluded); a refresh at stage 5-7 forgets stages >= 4 so the run returns to stage 4.
+
+<!-- fr:journal kind=finding scope=spec id=s-r11-resolved created=2026-11-27T22:01:12+00:00 state=fixed resolves=s-r11 -->
+### s-r11-resolved · finding [fixed] · resolves s-r11: R7's walk identity is wrong for probe-recorded steps and does not cover --spec
+
+R9: a probe-recorded step walks with harness fr-ops-probe, model op:<id>; the feature is the slug of the spec, the run's or --spec's.
+
+<!-- fr:journal kind=finding scope=spec id=s-r12-resolved created=2026-11-27T22:01:12+00:00 state=fixed resolves=s-r12 -->
+### s-r12-resolved · finding [fixed] · resolves s-r12: A row named only by a step recorded n/a is held and never asked about
+
+R13 asks about each unwalked devops row that no ran step names, which covers n/a-only rows.
+
+<!-- fr:journal kind=finding scope=spec id=s-r13-resolved created=2026-11-27T22:01:12+00:00 state=fixed resolves=s-r13 -->
+### s-r13-resolved · finding [fixed] · resolves s-r13: The R7 walk path does not print the issue-close commands set-status --walk prints
+
+R9 prints the close commands; Design §B moves the printer into fr.acceptance.walks so both writers share it.
+
+<!-- fr:journal kind=finding scope=spec id=s-r14-resolved created=2026-11-27T22:01:12+00:00 state=fixed resolves=s-r14 -->
+### s-r14-resolved · finding [fixed] · resolves s-r14: No run_app command is registered outside run_cmd.py; name where dod_cmd is imported
+
+R18 and the shape: cli.py imports commands.dod_cmd after run_app, which registers `fr run dod`.
+
+<!-- fr:journal kind=decision scope=spec id=exit-baseline created=2026-11-27T22:01:13+00:00 -->
+### exit-baseline · decision · exit when spec-review resolved
+
+The exit when spec-review resolved; `fr verification set` and `deliver` compare against it.
+
+```yaml
+row_gates:
+  closeout-outcome-walks-the-rows-a-step-names: none
+  gate-pass-refuses-unwalked-gated-rows: none
+  ops-gate-refreshes-a-stale-ops-workspace: none
+  ops-gate-reports-a-held-archive: none
+  ops-gate-walks-and-reports-its-own-rows: none
+  run-definition-of-done: none
+  self-review-flags-uncovered-gated-rows: none
+row_kinds:
+  closeout-outcome-walks-the-rows-a-step-names: none
+  gate-pass-refuses-unwalked-gated-rows: none
+  ops-gate-refreshes-a-stale-ops-workspace: none
+  ops-gate-reports-a-held-archive: none
+  ops-gate-walks-and-reports-its-own-rows: none
+  run-definition-of-done: none
+  self-review-flags-uncovered-gated-rows: none
+run_gate: developer
+run_kind: none
+```
