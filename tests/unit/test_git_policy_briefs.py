@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fr.commands.pickup_cmd import _commit_template_lines
-from fr.commands.run_cmd import commit_templates_brief
+from fr.run.brief import commit_templates_brief
 
 from tests.unit.settings_repo import git, land_on_main, make_repo
 
