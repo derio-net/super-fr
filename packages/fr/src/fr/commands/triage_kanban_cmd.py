@@ -274,6 +274,9 @@ class SessionReads:
     statuses: dict[str, BoardStatus]
     notes: list[str]
     session_notes: dict[str, str]
+    # Item ids whose session is idle with background work (`SessionActivity`, spec
+    # 2026-11-27-board-session-state R3); empty from a runner that cannot say
+    background: frozenset[str] = frozenset()
 
 
 def session_statuses(
@@ -311,11 +314,12 @@ def read_sessions(
         return SessionReads({}, [], {})
     if importlib.util.find_spec("fr_dispatch") is None:
         return SessionReads({}, ["fr-dispatch is not installed; session status is unavailable"], {})
-    from fr_dispatch.protocols import SessionInspector, SessionNotes
+    from fr_dispatch.protocols import SessionActivity, SessionInspector, SessionNotes
 
     statuses: dict[str, BoardStatus] = {}
     notes: list[str] = []
     said: dict[str, str] = {}
+    background: set[str] = set()
     for name, probes in sorted(by_runner.items()):
         runner, reason = try_load(name, loader)
         if runner is None:
@@ -351,7 +355,12 @@ def read_sessions(
             continue
         for key, value in found.items():
             statuses[key] = value if value in _STATUSES else "unknown"
-    return SessionReads(statuses, notes, said)
+        if not notes_only and isinstance(runner, SessionActivity):
+            try:
+                background |= set(runner.session_background(probes))
+            except Exception as exc:  # noqa: BLE001 - no background is a lost hint, never a failed render
+                notes.append(f"runner `{name}` could not read background work: {one_line(exc)}")
+    return SessionReads(statuses, notes, said, frozenset(background))
 
 
 def local_ci_none(facts: Facts) -> frozenset[str]:
@@ -452,6 +461,7 @@ def write_board(
         ci_none=local_ci_none(facts) if ci_none is None else ci_none,
         scope_args=scope_args,
         overlaps=card_overlaps,
+        background=reads.background,
     )  # fmt: skip
     html = render_board(
         board,
