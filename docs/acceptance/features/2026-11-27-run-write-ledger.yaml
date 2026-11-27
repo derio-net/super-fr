@@ -15,9 +15,13 @@ rows:
     origin:
     - spec:2026-11-27-run-write-ledger#R1
     - spec:2026-11-27-run-write-ledger#R2
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_writes_layering.py#test_the_real_write_ledger_imports_no_cli_layer
+      - super-fr:tests/unit/test_run_writes_layering.py#test_the_helper_reports_planted_cli_imports_and_accepts_clean_ones
+    status: ci
+    notes: writes.py imports no typer, rich or fr.commands; guarded by the layering
+      test
     verify: none
   - id: run-cursor-conflict-refusal-kept
     capability: run cursor durability
