@@ -1,0 +1,26 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-board-session-state
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T5.S1, P1.T5.S2, P1.T5.S3]
+refactor:
+  P1.T2: "wait_of is one small pure function written straight from the table; nothing to clean"
+  P1.T3: "the protocol and the runner method are new and minimal, sharing the existing _list_tabs/_status_of helpers"
+  P1.T4: "LaneOwners and the column owners are new, minimal code beside existing models"
+journal:
+  - {kind: discovery, id: p1-wrap, phase: 1, title: "The wait pill overflowed a narrow card", body: "The first render put the long pill 'waits for you · reviewer (@a, @b)' on white-space: nowrap, so it overflowed the card at desktop width and clipped at 390px. The wait pills now wrap (overflow-wrap: anywhere); re-shot after the fix."}
+  - {kind: discovery, id: p1-collapsed-owners, phase: 1, title: "Empty Needs-you columns hide their owner line", body: "A collapsed (empty) column is a vertical strip, so its owners line is hidden with the column body. owner: unassigned shows once a lane holds a card."}
+  - {kind: discovery, id: p1-headless-width, phase: 1, title: "Headless Chrome clips the right edge at 390px", body: "The 390 px screenshots clip the right edge of the page: headless Chrome's minimum window is wider than 390, and the existing page layout (not this change) is wider than the viewport. The wait pills wrap inside the visible cards."}
+visual:
+  - row: batch-card-waits-for
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/164db869-0dd1-4fdb-8624-054c412af9ff/scratchpad/render_vis.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/164db869-0dd1-4fdb-8624-054c412af9ff/scratchpad/vis/waits-1400x1700.png, shows: [wait-you-reviewer, wait-agent, wait-background, wait-ci, wait-queue, wait-dependency, terminal-no-wait]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/164db869-0dd1-4fdb-8624-054c412af9ff/scratchpad/vis/waits-390x2600.png, shows: [wait-you-reviewer, wait-agent, wait-background, wait-ci, wait-queue, wait-dependency, terminal-no-wait, phone-width-long-ids]}
+  - row: batch-lane-owners
+    script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/164db869-0dd1-4fdb-8624-054c412af9ff/scratchpad/render_vis.py
+    shots:
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/164db869-0dd1-4fdb-8624-054c412af9ff/scratchpad/vis/waits-1400x1700.png, shows: [owners-named, owner-unassigned, lane-card-owners]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/164db869-0dd1-4fdb-8624-054c412af9ff/scratchpad/vis/owners-two-1400x1700.png, shows: [owners-per-repo, lane-card-owners]}
+      - {path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/164db869-0dd1-4fdb-8624-054c412af9ff/scratchpad/vis/owners-two-390x2600.png, shows: [owners-per-repo, owner-unassigned]}
