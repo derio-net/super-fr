@@ -379,6 +379,22 @@ def test_generated_and_version_files_from_the_repo_config_are_ignored() -> None:
     assert report.overlaps[0].paths == ("r.py",)
 
 
+def test_the_report_pairs_two_spellings_of_one_repo(monkeypatch: Any) -> None:
+    """R8 of spec 2026-11-27-queue-followups, review p1-r3: the report groups by the
+    lower-cased repo, so `overlaps`' case-insensitive compare is reached, and the repo's
+    generated globs still apply."""
+    import fr.triage.plan_overlap as po
+
+    upper = REPO.upper()
+    monkeypatch.setattr(po, "batch_repo", lambda b, f: REPO if b.id == "b1" else upper)
+    b1 = batch("b1", [1], wave=1, events=[dispatch("b1")])
+    b2 = batch("b2", [2], wave=2, events=[dispatch("b2")])
+    f, jd = state([b1, b2], config={REPO: {"generated": ["gen/*"]}})
+    src = both_plans(["gen/a", "x.py"], ["gen/a", "x.py"])
+    report = plan_overlap_report(jd, f, lambda repo: src)
+    assert [(o.a, o.b, o.paths) for o in report.overlaps] == [("b1", "b2", ("x.py",))]
+
+
 def test_an_after_chain_through_a_merged_batch_suppresses_the_pair() -> None:
     merged_pr = pr(50, "feat/batch-c", state="MERGED", merged_at="2026-10-01T12:00:00Z")
     b1 = batch("b1", [1], events=[dispatch("b1")], after=["c"])

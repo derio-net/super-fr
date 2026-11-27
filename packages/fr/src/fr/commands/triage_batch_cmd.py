@@ -243,6 +243,7 @@ from fr.triage.batch_drive import (
     is_archived,
     is_finished,
     marker_of,
+    queue_landed_by_repo,
     settle,
     summary_line,
     unfinished_waves,
@@ -4549,6 +4550,7 @@ class _Driver:
         ids = {b.id for b in chosen}
         stages = {b.id: derive_batch_stage(b, facts) for b in judgements.batches}
         landed = queue_landed(judgements.queues)  # the queue's: merged, read OPEN or not
+        queued = queue_landed_by_repo(judgements.queues)  # R5: due at once, per repo
         queue = tuple(
             e
             for e in pr_open_queue(judgements.batches, facts, judgements.issues, landed=landed)
@@ -4637,8 +4639,8 @@ class _Driver:
                         continue
                     if shipped:
                         released.add(b.id)
-                    if closeout_due(released=b.id in released, merged_at=merged_at[b.id],
-                                    now=now, queued=b.id in landed):  # fmt: skip
+                    if closeout_due(released=b.id in released, merged_at=merged_at[b.id], now=now,
+                                    queued=b.id in queued.get(repo, frozenset())):  # fmt: skip
                         due.append(b)
                     continue
                 if event.archived is not None or not mine:

@@ -137,7 +137,10 @@ class Pacer:
             probes=sum(len(p) for p in probes.values()),
             full=full,
             closing=probe.closing_repos(facts, judgements),
-            deadline=probe.deadline_repos(facts, judgements, self.state.planned_at, now),
+            # the board starts no close-out and stamps no `planned_at` (review p1-r1)
+            deadline=set()
+            if board
+            else probe.deadline_repos(facts, judgements, self.state.planned_at, now),
         )
         self._planning_at = now
         if facts is None:  # nothing to carry from: the collect reads every repo (p2-r5)

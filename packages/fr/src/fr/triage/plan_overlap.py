@@ -258,9 +258,10 @@ def plan_overlap_report(
             continue
         entries.append(Entry(batch.id, repo, batch.wave, _before(batch.id, after), read.paths))
     found: list[Overlap] = []
-    for repo in sorted({e.repo for e in entries}):
-        mine = [e for e in entries if e.repo == repo]
-        found.extend(overlaps(mine, ignore=_ignore_globs(facts, repo)))
+    for repo in sorted({e.repo.lower() for e in entries}):  # R8: one repo, any spelling
+        mine = [e for e in entries if e.repo.lower() == repo]
+        ignore = [g for r in sorted({e.repo for e in mine}) for g in _ignore_globs(facts, r)]
+        found.extend(overlaps(mine, ignore=ignore))
     return OverlapReport(tuple(found), tuple(unread))
 
 

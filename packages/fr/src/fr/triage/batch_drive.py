@@ -1692,6 +1692,21 @@ def wave_landings_done(snap: Snapshot, repo: str, wave: int | None) -> bool:
     )
 
 
+def _can_hold_wave(batch: Batch, snap: Snapshot) -> bool:
+    """R6 of spec 2026-11-27-queue-followups: whether *batch* may hold its wave's collected
+    close-out. A batch with no wave stands alone (`wave_landings_done`); one held by the
+    verb (`closeout_hold`), gated, or with a close-out of its own (a hand-opened PR, a live
+    per-batch tab) never holds the rest (review p1-r2, p1-r5)."""
+    item = closeout_item_id(snap.repos.get(batch.id, ""), batch.id)
+    return (
+        _wave_of(batch) is not None
+        and closeout_hold(batch) is None
+        and not is_gated(batch, snap)
+        and batch.id not in snap.adopted
+        and item not in snap.existing
+    )
+
+
 def queue_snapshot(
     snap: Snapshot,
     repo: str,
@@ -1854,7 +1869,7 @@ def drive_pass(snap: Snapshot) -> Pass:
         wave_key = (snap.repos.get(batch.id, ""), _wave_of(batch))
         if batch.id in snap.unverified:
             closing += driven_now
-            if driven_now:
+            if driven_now and _can_hold_wave(batch, snap):
                 blocking.setdefault(wave_key, []).append((batch.id, "unverified"))
             continue
         # A close-out the driver did not start is recorded once, as an event: every
@@ -1891,7 +1906,8 @@ def drive_pass(snap: Snapshot) -> Pass:
             post_planned.add(batch.id)
         if batch.id in snap.ledger_unknown:  # p4-r1: unknown is not ungated
             closing += 1
-            blocking.setdefault(wave_key, []).append((batch.id, "ledger unread"))
+            if _can_hold_wave(batch, snap):
+                blocking.setdefault(wave_key, []).append((batch.id, "ledger unread"))
             actions.append(Action("ledger-unread", batch.id, "its merged PR's labels were not "
                                   "read, so whether a gate holds it is unknown; no close-out "
                                   "until they are"))  # fmt: skip
@@ -1920,7 +1936,7 @@ def drive_pass(snap: Snapshot) -> Pass:
                                   pr=hand.number))  # fmt: skip
             continue
         if not due:
-            if closeout_hold(batch) is None:
+            if _can_hold_wave(batch, snap):
                 blocking.setdefault(wave_key, []).append((batch.id, "not due"))
             continue
         if item in snap.existing:  # a per-batch close-out started before R15: recorded
