@@ -11453,6 +11453,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T19:27:39.904312Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -14475,6 +14482,16 @@ queues:
   - kind: queue_drain
     at: '2026-11-27T19:08:45.472919Z'
     main: 1df11448cb4dad546b6d45664c6c60d0b411e1a1
+  - kind: queue_cleared
+    at: '2026-11-27T19:27:30.914703Z'
+    detail: the release cleared the hold
+- repo: derio-net/super-fr
+  wave: 26
+  scope: s-f7ea4061
+  base: 25718a9931b72666391205c8cd829a449c0f4081
+  events:
+  - kind: queue_open
+    at: '2026-11-27T19:27:34.015089Z'
 queue_requests:
 - kind: queue_add
   at: '2026-11-27T15:25:05.595235Z'
