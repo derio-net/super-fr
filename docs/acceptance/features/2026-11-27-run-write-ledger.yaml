@@ -1,0 +1,39 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-27-run-write-ledger
+repo: derio-net/super-fr
+rows:
+  - id: run-write-ledger-cli-free
+    capability: run write ledger
+    acceptance: The run write ledger lives in fr/run/writes.py, which imports no CLI
+      framework, console library or command module, and CI fails a planted import of
+      any of them
+    origin:
+    - spec:2026-11-27-run-write-ledger#R1
+    - spec:2026-11-27-run-write-ledger#R2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_writes_layering.py#test_the_real_write_ledger_imports_no_cli_layer
+      - super-fr:tests/unit/test_run_writes_layering.py#test_the_helper_reports_planted_cli_imports_and_accepts_clean_ones
+    status: ci
+    notes: writes.py imports no typer, rich or fr.commands; guarded by the layering
+      test
+    verify: none
+  - id: run-cursor-conflict-refusal-kept
+    capability: run cursor durability
+    acceptance: After the ledger moves, a run command whose cursor another command changed
+      on disk still refuses with exit 2, writes nothing and keeps the other write
+    origin:
+    - spec:2026-11-27-run-write-ledger#R3
+    - spec:2026-11-27-run-write-ledger#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_durability.py#test_the_cli_refuses_a_lost_update_with_exit_2_and_keeps_the_other_write
+    status: ci
+    notes: the CLI wrapper still refuses a lost cursor update with exit 2 after the
+      ledger move
+    verify: none

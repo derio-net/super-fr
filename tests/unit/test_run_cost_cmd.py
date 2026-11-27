@@ -342,13 +342,13 @@ def test_the_archive_capture_adds_no_ambient_session(
 def test_a_step_resolve_capture_still_adds_its_own_session(
     tmp_path: Path, unrelated_session: str
 ) -> None:
-    from fr.commands.run_cmd import _capture_usage
+    from fr.run.writes import capture_usage
     from fr.usage.file import load_usage
 
     state = _run_with_attempt_session(None)
     save_run_state(tmp_path, state)
 
-    _capture_usage(tmp_path, state, "resolve:brainstorm")
+    capture_usage(tmp_path, state, "resolve:brainstorm")
 
     usage = load_usage(usage_path(tmp_path, RUN))
     assert usage is not None

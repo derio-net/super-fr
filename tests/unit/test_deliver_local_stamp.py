@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 import yaml
 from fr.run.model import load_run_state
+from fr.run.writes import RUN_WRITES, RunWrites
 
 from tests.unit.record_support import (
     RUN,
@@ -392,13 +393,13 @@ def test_under_quiet_the_fragment_is_written_in_the_artifact_root(
 
     assert plan is not None and [p for p, _ in plan.files] == [frag] and plan.rows == ("q-1",)
     assert not (root / KIND_DIRS["acceptance-fragment"]).exists()
-    writes = run_cmd._RunWrites(verb="resolve")
-    token = run_cmd._RUN_WRITES.set(writes)
+    writes = RunWrites(verb="resolve")
+    token = RUN_WRITES.set(writes)
     try:
         run_cmd._deliver_local_stamp_write(root, plan)
         outcome = writes.commit()
     finally:
-        run_cmd._RUN_WRITES.reset(token)
+        RUN_WRITES.reset(token)
     assert outcome is not None and outcome.committed, outcome
     assert git(froot, "status", "--porcelain", "--", ".").strip() == ""
     assert frag.name in git(froot, "show", "--name-only", "--format=", "HEAD")
