@@ -1,0 +1,82 @@
+schema_version: 2
+phase:
+  number: 1
+  title: A failed close-out take-back reports both errors (R1-R3)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - closeout-takeback-both-errors
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/triage/drive_errors.py
+  - tests/unit/*.py
+  - .changes/feat-batch-closeout-state.yaml
+  estimate_lines: 220
+tasks:
+- number: 1
+  title: Smoke
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Smoke: add the change fragment `.changes/feat-batch-closeout-state.yaml` (`bump: patch`, summary: "triage: a failed close-out take-back no longer hides the dispatch error, and a batch whose repo left the scope shows as left-scope and is retired with `batch cancel --orphaned`"). Create `tests/unit/test_triage_closeout_takeback.py` with one test that imports `fr.triage.drive_errors` and asserts `FAIL_MESSAGE == "fr_message"`. Run `uv run pytest tests/unit/test_triage_closeout_takeback.py -q --no-cov` — green.
+- number: 2
+  title: fail_text reads a _fail exit's message
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in `tests/unit/test_triage_closeout_takeback.py`, assert `fail_text(fail_exit("boom"))` is `"boom"`, `fail_text(ValueError("x"))` is `"x"`, and a bare `typer.Exit(code=2)` gives a non-empty text naming the exit code.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: add `fail_text(exc: BaseException) -> str` to `packages/fr/src/fr/triage/drive_errors.py` beside `FAIL_MESSAGE`; make the boundary's own read (`drive_errors.py`, the `typer.Exit` branch near line 131) use it for the message part. Existing `tests/unit/test_triage_drive_errors*.py` (whatever tests cover `classify`/the boundary) stay green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: ruff format and ruff check on the touched files; no other cleanup needed.
+- number: 3
+  title: Guard both take-backs (R1-R3)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: following the fixtures of `tests/unit/test_triage_collected_closeout_drive.py` (a driver with a fake runner), add tests: (a) collected start — runner.dispatch raises `RuntimeError("tab refused")` and `save_closeouts` is monkeypatched to raise `TriageError("store moved")` on the take-back: the action's line contains both `tab refused` and `store moved`, the driver's `failed_write` is true, no exception escapes the action, and a second pass with the same causes says `stopped again` (said once); (b) per-batch `_close_out` with `recorded=False`: dispatch raises and the take-back's `_save` raises `TriageError`: one returned line naming both errors, and captured stderr holds no `error:` line from `_fail`; (c) each path with a take-back that succeeds: the line and the store are exactly as before (marker / event removed).
+  - id: P1.T3.S2
+    text: |-
+      GREEN: in `packages/fr/src/fr/commands/triage_batch_cmd.py`, `_collected_close_out`: wrap `save_closeouts(path, read, read=[*read, marker])` in its own `try/except Exception as back` and append `; taking back its start record failed too: {fail_text(back)}` to the message passed to `_dispatch_failed` (the cause stays the dispatch error). `_close_out`: replace the take-back `_write(...)` with `_save(self.target, judgements.batches, facts, read=after)` inside the same guard, so `_fail` never prints. Tests green.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: if both sites now build the same message, extract one small helper `_takeback_failed(message, back) -> str` in the module; otherwise record the refactor reason. Run the fast tier `uv run pytest --fr-scope -n 2 -q --no-cov` last.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

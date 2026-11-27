@@ -190,3 +190,9 @@ strategy: none
 - Collect appending a stored `repo_left_scope` event (judgements schema 15): the stage is derived.
 - Stopping the driver on a failed take-back.
 - `fr triage check` listing left-scope batches.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-27-closeout-state | `derio-net/super-fr` | `2026-11-27-closeout-state` | — |
