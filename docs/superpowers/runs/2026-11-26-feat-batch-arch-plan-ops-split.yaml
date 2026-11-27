@@ -3,7 +3,7 @@ run: 2026-11-26-feat-batch-arch-plan-ops-split
 workflow: fr-goal@1
 branch: feat/batch-arch-plan-ops-split
 started: '2026-11-26T18:27:40+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -46,7 +46,11 @@ steps:
           returned: '2026-11-27T09:16:00+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-11-27T09:16:05+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
