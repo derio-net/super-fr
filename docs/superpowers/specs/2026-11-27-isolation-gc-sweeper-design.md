@@ -44,9 +44,14 @@ Tests call moved methods on a target at nine sites: `_reap_or_classify` at
 name that only the moved code looks up in `fr.isolation.local`. (`test_isolation.py:1468`
 patches `fr.isolation.local.branch_changes_present`, but for `_reap_hazard`, which stays.)
 
-Two guards list the modules split out of `local.py`: `ISOLATION_MODULES` in
-`tests/unit/test_isolation_network_timeouts.py:249` (no forge CLI argv) and `REMEDY_FILES` in
-`tests/unit/test_vk_compat_removed.py:58` (no bare `fr isolation up` remedy).
+One guard lists the modules split out of `local.py`: `ISOLATION_MODULES` in
+`tests/unit/test_isolation_network_timeouts.py:249` (no forge CLI argv). `REMEDY_FILES` in
+`tests/unit/test_vk_compat_removed.py:58` lists the files whose text offers isolation remedies
+(no bare `fr isolation up`); `local.py` is on it, and the moved gc code carries remedy text
+(`` `fr isolation down` when done ``), so `gc.py` joins it. A third guard,
+`test_split_modules_never_import_local` (`test_isolation_network_timeouts.py:331`), walks the
+whole syntax tree and so also flags an import under `if TYPE_CHECKING:`; `gc.py` needs one for
+its annotation, so it does not join that guard.
 
 ## Requirements
 
@@ -66,15 +71,22 @@ host-wide flock (a second sweep still returns `[]`), and the same per-workspace 
 isolation (one workspace's error is recorded and the sweep goes on).
 R4. The nine test call sites change their receiver from the target to `GcSweeper(<that
 target>)` and nothing else. Every other gc and host-worktree test passes unchanged.
-R5. One new test shows that a `GcSweeper` over a `HostWorktreeTarget` calls that class's own
-overrides: the sweep sends no `docker` command, and a state record whose worktree is gone is
-retired with no docker query (`_stale_state_reapable` is the override's `True`).
-R6. `fr.isolation.gc` is added to `ISOLATION_MODULES` and
-`packages/fr/src/fr/isolation/gc.py` to `REMEDY_FILES`. The `isolation/local.py` budget in
+R5. One new test shows that a `GcSweeper` calls its own target's overrides. It saves a
+host-mode state record (`profile="host"`, `target="worktree"`) whose worktree is gone, so
+`_gc_stale_state` routes it to a docker-less owner whatever the sweeper wraps. Over a
+`HostWorktreeTarget` the sweep sends no `docker` command (its `_labelled_containers` and
+`_sweep_dangling_images` overrides are reached through the target) and retires the record
+(verdict `orphan`, action `reaped`). Over a `LocalWorktreeDevcontainerTarget` the same sweep
+sends `docker ps -a --filter label=devcontainer.local_folder …` (from `_labelled_containers`).
+The two cases differ only in the sweeper's target class.
+R6. `fr.isolation.gc` is added to `ISOLATION_MODULES`, and
+`packages/fr/src/fr/isolation/gc.py` to `REMEDY_FILES` because it carries remedy text. The `isolation/local.py` budget in
 `tests/unit/test_tripwire_module_budget.py` is lowered to at most 50 lines above the module's
 new length, with a comment naming #1521.
 R7. `fr.isolation.gc` does not import `fr.isolation.local` at module level, so the two modules
-form no import cycle. `local.py` imports `GcSweeper` at module level.
+form no import cycle. `local.py` imports `GcSweeper` at module level. A test imports
+`fr.isolation.gc` first in a fresh interpreter (a subprocess, `python -P -c "import
+fr.isolation.gc"`) and expects exit 0; a module-level cycle would make that import fail.
 R8. A `patch` change fragment, `.changes/feat-batch-arch-isolation-gc.yaml`, records the move.
 The `reviewed` stamp of `docs/explainers/fr-isolation.md`, which covers
 `packages/fr/src/fr/isolation/**`, gets a note that this is a refactor with no reader-visible
@@ -141,11 +153,13 @@ and any of `_realpath`, `_git_common_dir`, `list_states`, `delete_state`, `_merg
 
 The nine call sites import `GcSweeper` from `fr.isolation.gc` and change the receiver. The new
 test module builds a `HostWorktreeTarget` over a `FakeRunner` (`tests/unit/test_isolation.py`)
-with a saved state record whose worktree does not exist. It runs `GcSweeper(target).gc()`,
-checks that no recorded call starts with `docker` and that the record was retired with verdict
-`orphan`, action `reaped`. A second case runs the same sweep on a
-`LocalWorktreeDevcontainerTarget` and checks that `docker ps` was called, so the test tells the
-two classes apart.
+with a saved host-mode state record (`profile="host"`, `target="worktree"`) whose worktree does
+not exist. It runs `GcSweeper(target).gc()`, checks that no recorded call starts with `docker`
+and that the record was retired with verdict `orphan`, action `reaped`. A second case runs the
+same sweep on a `LocalWorktreeDevcontainerTarget` and checks that the
+`docker ps -a --filter label=devcontainer.local_folder` call was made, so the test tells the two
+classes apart. A third test runs `python -P -c "import fr.isolation.gc"` in a subprocess and
+expects exit 0 (R7).
 
 ## Verification
 
