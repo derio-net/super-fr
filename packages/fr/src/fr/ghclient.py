@@ -22,6 +22,13 @@ FORGE_PARITY_ISSUE = "gh#611"
 MERGE_METHODS = frozenset({"merge", "squash", "rebase"})
 
 
+def pr_label_names(raw: Sequence[Any] | None) -> list[str]:
+    """The label names of a forge payload's `labels` list (`[{name, ...}, ...]`), shared by
+    both GitHub clients' `pr_view`; a payload with no `labels` key is theirs to report as
+    None (unread), never passed here."""
+    return [str(lb.get("name") or "") for lb in raw or [] if isinstance(lb, dict)]
+
+
 @dataclass(frozen=True)
 class BaseRules:
     """What a base branch's rules require of a merge (2026-10-11-merge-train-safety §D,
@@ -304,8 +311,8 @@ class GhClient(Protocol):
         """`{state, draft, head_oid, head_ref, base_ref, mergeable, merge_state, merge_commit,
         title, body, labels}` of one PR, read fresh. `state` is OPEN | CLOSED | MERGED;
         `merge_commit` is the commit the merge made on the base ("" while unmerged); `labels`
-        the label names (the merge paths read `approved-fr` here, live — 2026-10-11-merge-
-        train-safety §A)."""
+        the label names, or None when the payload carried no `labels` key (unread: the merge
+        paths read `approved-fr` here, live — 2026-10-11-merge-train-safety §A)."""
         ...
 
     def pr_ready(self, repo: str, number: int) -> None:

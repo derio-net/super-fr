@@ -23,7 +23,16 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from fr.labels import APPROVED_FR
-from fr.triage.approval import ApprovalVerdict, Void, approval_verdict, is_approved, voided_at
+from fr.triage.approval import (
+    ApprovalVerdict,
+    Void,
+    Waiting,
+    approval_verdict,
+    conflict_waits,
+    ended_by_label,
+    is_approved,
+    voided_at,
+)
 from fr.triage.batch import (
     QueueEntry,
     batch_item_id,
@@ -221,9 +230,16 @@ def drive_snapshot(
 def fact_approvals(queue: Iterable[QueueEntry]) -> dict[str, ApprovalVerdict]:
     """Each queued batch's approval verdict from the collected labels and its events
     (merge-train-safety §A "The walk"): the board and `drive --plan` read no forge. A
-    PR whose labels were never read (facts before schema 9) is unlabelled."""
+    PR whose labels were never read (facts before schema 9) is unlabelled. A first label on
+    a head with a real conflict waits (queue-followups R2)."""
     return {
-        e.batch.id: approval_verdict(e.batch.events, e.pr.number, e.pr.head_oid, e.pr.labels)
+        e.batch.id: approval_verdict(
+            e.batch.events,
+            e.pr.number,
+            e.pr.head_oid,
+            e.pr.labels,
+            waits=conflict_waits(e.batch.events, e.pr.head_oid, e.pr.mergeable, e.pr.merge_state),
+        )  # fmt: skip
         for e in queue
     }
 
@@ -348,6 +364,8 @@ def needs_you(
         approval = snap.approvals.get(entry.batch.id)
         if verdict != "green" or (approval is not None and is_approved(approval)):
             continue
+        if isinstance(approval, Waiting):
+            continue  # queue-followups R2: labelled; its conflict Need speaks for it
         if conflict_at(entry.batch, live.head if live is not None else pr.head_oid) is not None:
             continue  # R18: conflicting at its head: handed back, or the merge-conflict need
         if not delivered.ok:  # readiness R3, R4: never ask for an approval deliver would void
@@ -361,7 +379,9 @@ def needs_you(
             else voided_at(entry.batch.events, pr.number)
         )
         text = (
-            f"PR #{pr.number} changed since you approved it at {was[:12]}: re-label to merge"
+            f"PR #{pr.number}: approval ended (label removed): label it {APPROVED_FR.name} to merge"
+            if was is not None and ended_by_label(entry.batch.events, pr.number)
+            else f"PR #{pr.number} changed since you approved it at {was[:12]}: re-label to merge"
             if was is not None
             else f"PR #{pr.number} is green: label it {APPROVED_FR.name} to merge"
         )

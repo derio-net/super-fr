@@ -151,7 +151,7 @@ def test_pr_view_shapes_state_draft_head_oid_and_mergeable(
         "merge_commit": "",
         "title": "",
         "body": "",
-        "labels": [],  # none asked for here; the approval gate reads them (merge-train §A)
+        "labels": None,  # no `labels` key in the payload: unread, never "none" (l-errors-r2)
     }
 
 

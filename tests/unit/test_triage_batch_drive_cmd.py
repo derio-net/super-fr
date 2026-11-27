@@ -497,6 +497,12 @@ class _Worktree:
     def abort_merge(self) -> None:
         pass
 
+    def unmerged_stages(self) -> dict[str, dict[int, str]]:
+        return {p: {2: "100644", 3: "100644"} for p in self.checkout.conflicts}
+
+    def read(self, file: str) -> str | None:
+        return None  # no marked-up text: every conflict is real
+
     def commit_all(self, message: str, version_files: list[str]) -> str | None:
         return "sha-updated"
 
@@ -1100,6 +1106,57 @@ def test_no_closeout_before_the_release_commit(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 3, out
     assert runner.dispatched == []
+
+
+@pytest.mark.parametrize("live", [False, True])
+def test_a_queue_landed_batch_is_closed_out_without_the_release_or_the_fallback(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, live: bool
+) -> None:
+    """R5 of spec 2026-11-27-queue-followups: the command's due list reads `queue_landed`,
+    so a live close-out tab of a queue-landed batch is asked about and recorded."""
+    from fr.triage.model import Scope
+    from fr.triage.scope_config import scope_id
+
+    _merged(world, tmp_path)
+    if live:
+        runner.live.add(f"{REPO}/run/closeout-b1")
+    _at_14(tmp_path)
+    land = {"kind": "queue_land", "at": (NOW - timedelta(minutes=2)).isoformat(),
+            "entries": [{"batch": "b1"}], "main": "m" * 40}  # fmt: skip
+    queue = {"repo": REPO, "wave": None, "base": "m" * 40,
+             "scope": scope_id(Scope(kind="repo", target=REPO)), "events": [land]}  # fmt: skip
+    path = tmp_path / "judgements.yaml"
+    path.write_text(path.read_text("utf-8") + yaml.safe_dump({"queues": [queue]}), "utf-8")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    if live:
+        assert runner.dispatched == [], out
+        assert _events(tmp_path, "b1") == ["dispatch", "closeout"]
+    else:
+        assert [i.id for i in runner.dispatched] == [COLLECTED], out
+
+
+def test_another_repo_s_queue_landing_does_not_make_a_batch_due(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """R5, review p1-r4: the command's due list reads `queue_landed_by_repo`, so a
+    `queue_land` of another repo naming the batch's id does not make it due: its close-out
+    item is not probed, and nothing is recorded or started before the release or fallback."""
+    from fr.triage.model import Scope
+    from fr.triage.scope_config import scope_id
+
+    _merged(world, tmp_path)
+    runner.live.add(f"{REPO}/run/closeout-b1")
+    _at_14(tmp_path)
+    land = {"kind": "queue_land", "at": (NOW - timedelta(minutes=2)).isoformat(),
+            "entries": [{"batch": "b1"}], "main": "m" * 40}  # fmt: skip
+    queue = {"repo": "derio-net/other", "wave": None, "base": "m" * 40,
+             "scope": scope_id(Scope(kind="repo", target=REPO)), "events": [land]}  # fmt: skip
+    path = tmp_path / "judgements.yaml"
+    path.write_text(path.read_text("utf-8") + yaml.safe_dump({"queues": [queue]}), "utf-8")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert runner.dispatched == [], out
+    assert _events(tmp_path, "b1") == ["dispatch"], out
+    assert not any(p and p[0].id.endswith("closeout-b1") for p in runner.preflighted), out
 
 
 def test_post_merge_then_one_closeout_through_the_runner(
@@ -5295,13 +5352,16 @@ def test_a_working_session_is_waited_on_with_one_trial_merge_across_passes(
     assert event.delivered == "session"
 
 
-@pytest.mark.parametrize("moves", ["base", "head"])
+@pytest.mark.parametrize("moves", ["base", "head", "generated", "mirrors"])
 def test_a_new_base_or_head_between_passes_is_trial_merged_again(
     tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
     monkeypatch: pytest.MonkeyPatch, moves: str,
 ) -> None:  # fmt: skip
-    """R17: a trial merge per (PR, head, default-branch sha) per process: one that moves is a
-    new key, so the next pass trial-merges again; the unchanged pass after it does not."""
+    """R17: a trial merge per (PR, head, default-branch sha, generated globs, mirrors) per
+    process: one that moves is a new key, so the next pass trial-merges again; the unchanged
+    pass after it does not."""
+    from fr.triage.model import Facts, TriageConfig
+
     _dirty_draft(world, tmp_path, checkout)
     messenger.status[BATCH_ITEM_B1] = "working"  # waited on: nothing recorded, probed again
     trials: list[int] = []
@@ -5310,6 +5370,12 @@ def test_a_new_base_or_head_between_passes_is_trial_merged_again(
         trials.append(checkout.trials)
         if len(trials) == 1 and moves == "base":
             monkeypatch.setattr(checkout, "rev_parse", lambda ref: f"{ref}@moved")
+        elif len(trials) == 1 and moves in ("generated", "mirrors"):
+            # R4 (review p1-r5): the repo's generated globs and mirrors are in the key too
+            config = TriageConfig.model_validate(
+                {"generated": ["gen/*"]} if moves == "generated" else {"mirrors": [["make"]]}
+            )
+            monkeypatch.setattr(Facts, "config_for", lambda self, repo: config)
         elif len(trials) == 1:
             world.prs[101]["head_oid"] = "sha-101b"
         elif len(trials) == 3:
