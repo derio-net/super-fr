@@ -11505,6 +11505,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T19:59:41.355708Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -12946,6 +12953,8 @@ batches:
     pr: 1734
     head: 023073a577601244c5f664c9462f84edb63e7fed
     patch_id: 20bfc093e4784759ac510561341cb14ca06b7bc8
+  - kind: post_merge
+    at: '2026-11-27T19:59:33.063125Z'
 - id: arch-triage-ports
   title: '#1318: the triage driver takes every command-layer effect through one ports object'
   ids:
@@ -14547,6 +14556,11 @@ queues:
     patch_id: 20bfc093e4784759ac510561341cb14ca06b7bc8
     base: 25718a9931b72666391205c8cd829a449c0f4081
     parent: 25718a9931b72666391205c8cd829a449c0f4081
+  - kind: queue_land
+    at: '2026-11-27T19:59:01.015982Z'
+    main: e110425d6254eb5a4f6460bb3f902ac6b23bbdde
+    entries:
+    - batch: arch-isolation-gc
 queue_requests:
 - kind: queue_add
   at: '2026-11-27T15:25:05.595235Z'
