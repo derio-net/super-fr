@@ -74,13 +74,20 @@ steps:
         evidence:
           visual: batch-card-waits-for:2:b6fd247b9e26,batch-lane-owners:3:7dbdddc1dfbf
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-27T20:36:29+00:00'
           agent: afc54c0486df2998c
           harness: claude-code
           model: claude-opus-5-5
           session: 164db869-0dd1-4fdb-8624-054c412af9ff
+          returned: '2026-11-27T20:45:36+00:00'
+          outcome: done
+        evidence:
+          review: review-p1
+          reviewer: afc54c0486df2998c
+          visual: batch-card-waits-for:2:7663dfd5d45a,batch-lane-owners:1:81c5f0888a69
+          findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5
   journal-check:
     state: pending
   lens-review:
