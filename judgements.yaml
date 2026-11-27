@@ -10185,6 +10185,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T10:08:19.020427Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -11229,6 +11236,13 @@ batches:
     runner: herdr
     handle: w3V:p4
     branch: feat/batch-arch-shared-helpers
+  - kind: red_handback
+    at: '2026-11-27T10:08:17.367937Z'
+    pr: 1722
+    head: 5c779e0352d0cde7b2ccbbf52251db646b9ebea3
+    checks:
+    - ci-ok
+    delivered: none
 - id: arch-run-ledger
   title: '#1318: move the write ledger out of run_cmd.py into fr/run/writes.py'
   ids:
@@ -11240,6 +11254,12 @@ batches:
     runner: herdr
     handle: w3V:p3
     branch: feat/batch-arch-run-ledger
+  - kind: conflict
+    at: '2026-11-27T10:08:30.332652Z'
+    head: 07f7151351526d64fe5609a06fd17730b7905d24
+    paths:
+    - docs/reference/workflow-shapes.md
+    delivered: held
 - id: arch-isolation-split
   title: '#1318: split the free functions out of isolation/local.py'
   ids:
