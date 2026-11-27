@@ -1,0 +1,52 @@
+schema_version: 12
+run: 2026-11-26-feat-batch-arch-shared-helpers
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: finding
+    id: p1-r1
+    phase: 1
+    review_scope: in
+    title: "admit.py:80-82 comment left dangling after the split parse_as_utc(...) call"
+    body: "ruff format split the call and left the comment after the closing paren. Fix: comment on its own line above the call."
+  - kind: finding
+    id: p1-r2
+    phase: 1
+    review_scope: in
+    title: "Five hermetic-git modules import unused apply_hermetic_git behind noqa F401"
+    body: "test_gatebackfill_{candidates,delivery,discharged,render}.py and test_status_owed.py; only test_merge_evidence.py calls it. Fix: import only hermetic_git."
+  - kind: finding
+    id: p1-r3
+    phase: 1
+    review_scope: out
+    title: "parse_as_utc body-scan guard would not catch a re-added copy of the removed readers"
+    body: |
+      tests/unit/test_triage_timestamps.py:114 matches parse_as_utc's exact body; none of the five removed copies had
+      it. Spec R8 defines the guard this way, so the change meets its contract. A broader heuristic (fromisoformat +
+      replace(tzinfo=...) outside the owners) hits three more naive-to-UTC readers no issue or spec covers
+      (run/telemetry.py:230 parse_timestamp, triage/pacing_state.py:55 _parsed, triage/quota.py:51 budget_from_json),
+      so it needs a decision about those first: a follow-up, not this batch.
+  - kind: review
+    id: review-p1-1
+    phase: 1
+    title: "Phase 1 review: 3 findings (p1-r1, p1-r2 in; p1-r3 out)"
+    body: |
+      Independent reviewer compared every removed body with its replacement (strict loaders, the five naive-as-UTC
+      readers, _created_since, _pr_time, admit.py), the --gate help bytes, the 11 record payloads and stems, and the
+      hermetic-git activation in the 6 modules plus stub_fetch's importers; found no behaviour change and no stale
+      reference; ran the touched modules and new guards green. Findings p1-r1, p1-r2 (fixed in f3af52681), p1-r3 (out).
+resolves:
+  - id: p1-r1
+    state: fixed
+    body: "Comment moved above `at = parse_as_utc(comment.get(\"created_at\"))` (f3af52681); test_triage_admit green."
+  - id: p1-r2
+    state: fixed
+    body: "The five modules import only `hermetic_git  # noqa: F401` (f3af52681); the seven affected modules pass (152 passed)."
+  - id: p1-r3
+    state: out-of-scope
+    body: "True, but not caused by this change: the guard is exactly what spec R8 asks for, and widening it means deciding about three other naive-to-UTC readers outside this batch. Filed as a follow-up at deliver."
+evidence:
+  review: review-p1-1
+  reviewer: a678e7c7ed9a9847c
+  model: claude-opus-5-5
