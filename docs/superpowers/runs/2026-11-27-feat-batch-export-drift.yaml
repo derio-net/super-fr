@@ -3,7 +3,7 @@ run: 2026-11-27-feat-batch-export-drift
 workflow: fr-goal@1
 branch: feat/batch-export-drift
 started: '2026-11-27T12:56:12+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -46,7 +46,11 @@ steps:
           returned: '2026-11-27T14:51:59+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-11-27T14:52:03+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
