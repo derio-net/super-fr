@@ -35,3 +35,6 @@ Operator chose strategy none and gate developer — the unit suite in CI proves 
 ### d-shape · decision · Run on fr-goal-light
 
 Operator chose the light shape — the move fits one agentic phase.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-isolation-gc-sweeper-p1 created=2026-11-27T14:28:06+00:00 -->
+### phase-split-2026-11-27-isolation-gc-sweeper-p1 · decision · review-size: the whole move (~900 diff lines, R1-R8) is one reviewable phase; it links no rows because the operator chose none for this refactor (d-rows)
