@@ -211,3 +211,8 @@ A wrong adapter changes refusal bytes or exit codes on every run command.
 ### tier-2026-11-27-run-verdict-p5 · decision · hard: phase 5 converts about 56 refusals of the evidence gate path, with the verifier merge rule and the gh#768 accumulation
 
 The evidence verifiers are the resolve gate every run step passes.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-run-verdict-p2-1 created=2026-11-27T15:28:07+00:00 -->
+### phase-split-2026-11-27-run-verdict-p2-1 · decision · review-size: slice 2 of #1519 moves its own cluster (1,200-5,600 lines); one review per cluster keeps each diff reviewable
+
+The rows span all slices, so the asks overlap; the split is by cluster, as the audit's slices and the operator's scope-all-six-slices decision lay out.
