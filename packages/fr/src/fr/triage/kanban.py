@@ -795,7 +795,7 @@ def _card(
         front_key = (
             closeout_item_id(repo, batch.id) if on_closeout else batch_item_id(repo, batch.id)
         )
-    wait = wait_of(
+    who = wait_of(
         column=column,
         stage=stage,
         lane=lane,
@@ -840,7 +840,7 @@ def _card(
         claim_expiry=claim_expiry,
         readiness=(verdicts or {}).get(batch.id),
         others=tuple(more),
-        wait=wait,
+        wait=who,
         repo=repo,
     )
 
