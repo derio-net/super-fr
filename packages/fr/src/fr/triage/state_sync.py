@@ -32,21 +32,36 @@ shares; only the scope id tells them apart. So export stamps the root with the s
 that wrote it (`OWNER_FILE`) and refuses a root another scope id stamped unless told to
 take it over: a second scope's export would otherwise replace the first's judgements,
 origins and snapshots (gh#1101). The stamp is not durable state; import never reads it.
+
+Every export also writes `RECORD_FILE` beside the stamp: JSON naming each durable file the
+root holds once it is done (a repo-only one included) with its sha256 (spec
+2026-11-27-export-drift R1).
+The next export compares the repo-side root with it, so a file someone edited, deleted or
+added in the repo since is drift, and the export refuses before a byte moves instead of
+reverting the edit (R2, R3); `force` overwrites. With no record nothing is drift, and the
+first export writes one. Like the stamp, it is not durable state: import never copies it.
+A targeted import (`only`) takes in named paths alone, removing a named one the repo lacks
+(R5), so a direct edit in the repo can reach the state before the next export.
 """
 
 from __future__ import annotations
 
 import errno
 import filecmp
+import hashlib
+import json
 import os
+import shlex
 import shutil
 import stat
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
 from fr.triage.errors import TriageError
+from fr.triage.merge_stops import MergeStop, clear_stop, export_drift_stop_key, record_stop
 
 # The export set: a subset of `fr.triage.state_ref.REF_FILES` (the state ref carries more:
 # merge stops, the lease, durable settings, the cloud mailbox), pinned by test_triage_state_ref.
@@ -67,6 +82,103 @@ SYMLINK_DEST = "the destination is a symlink, not written through"
 NEWER = "newer in the state directory; --force overwrites it"
 IDENTICAL = "identical"
 OWNER_FILE = "exported-by"  # the scope id that exports into this root (gh#1101)
+RECORD_FILE = "exported-files"  # what the root held after the last export (R1)
+_RECORD_SCHEMA = 1
+
+
+class ExportBlocked(TriageError):  # noqa: N818 - a refusal, beside TriageError
+    """An export refused before any write over something only the operator can mend in the
+    repo-side *root*: drift, a bad record, a stamp or record that is not a regular file, a
+    durable file the drift check cannot read. The driver turns every one into its
+    `export-drift:<repo>` stop and Need (R4, l-errors-r2)."""
+
+    def __init__(self, message: str, *, root: Path) -> None:
+        self.root = root
+        super().__init__(message)
+
+
+class BadRecord(ExportBlocked):
+    """The repo-side record is a symlink, not a regular file, or does not parse (R3)."""
+
+    def __init__(self, path: Path, why: str, *, forceable: bool = True) -> None:
+        self.why, self.forceable = why, forceable
+        fix = (
+            "`fr triage state export --force` rewrites it"
+            if forceable
+            else "remove it by hand, then export again (`--force` writes only a regular file)"
+        )
+        super().__init__(f"{path} {why}; {fix}", root=path.parent)
+
+
+class Drift(NamedTuple):
+    """A durable path the repo changed since the last export (R2)."""
+
+    path: str  # POSIX, relative to the repo-side root
+    kind: str  # changed | deleted | added
+
+
+def shown(arg: str) -> str:
+    """*arg* quoted for a shell and safe to print: `shlex.quote` when every character is
+    printable, else ANSI-C quoting (`$'...'`, which bash and zsh read back to the same
+    bytes) with every control or non-printable character escaped, so a repo-supplied file
+    name never puts an escape sequence or a line break on a terminal or in a one-line
+    stop (l-security-r1)."""
+    if arg.isprintable():
+        return shlex.quote(arg)
+    out = []
+    for ch in arg:
+        if ch in "\\'":
+            out.append("\\" + ch)
+        elif ch.isprintable():
+            out.append(ch)
+        elif ord(ch) < 0x100:
+            out.append(f"\\x{ord(ch):02x}")
+        else:
+            out.append(f"\\u{ord(ch):04x}" if ord(ch) < 0x10000 else f"\\U{ord(ch):08x}")
+    return "$'" + "".join(out) + "'"
+
+
+def shown_argv(argv: Sequence[str]) -> str:
+    """`shlex.join`, through `shown`: every argument quoted and printable."""
+    return " ".join(shown(a) for a in argv)
+
+
+def drift_text(
+    drift: Sequence[Drift],
+    *,
+    import_argv: Sequence[str],
+    force_argv: Sequence[str],
+    at: str | None = None,
+) -> str:
+    """The one operator text for *drift* (R3, R4): the paths with their kinds, then the
+    import that keeps the repo's edit (one `--only` per path, *import_argv* first) and the
+    forced export that keeps the state's; *at*, a default-branch sha the checkout must be at
+    or after. Every argument is shell-quoted and printable (`shown`). One line, so a Need
+    row can carry it."""
+    listed = ", ".join(f"{d.kind} {shown(d.path)}" for d in drift)
+    only = [arg for d in drift for arg in ("--only", d.path)]
+    where = "in a checkout of the default branch" + (f" at or after {at}" if at else "")
+    return (
+        f"changed in the repo since the last export: {listed}. To keep the repo's edit, run "
+        f"`{shown_argv([*import_argv, *only])}` {where}, then export again; to keep the "
+        f"state's version, run `{shown_argv(force_argv)}`, which overwrites them"
+    )
+
+
+class ExportDrift(ExportBlocked):
+    """An export that would overwrite a repo-side edit, refused before any write (R3)."""
+
+    def __init__(self, drift: tuple[Drift, ...], *, base: Path, root: Path) -> None:
+        self.drift = drift
+        super().__init__(
+            f"{root} was "
+            + drift_text(
+                drift,
+                import_argv=["fr", "triage", "state", "import", "--from", str(base)],
+                force_argv=["fr", "triage", "state", "export", "--to", str(base), "--force"],
+            ),
+            root=root,
+        )
 
 
 class Skipped(NamedTuple):
@@ -80,15 +192,23 @@ class SyncReport:
 
     copied: tuple[str, ...]
     skipped: tuple[Skipped, ...]
+    removed: tuple[str, ...] = ()  # a targeted import's named paths the repo lacks (R5)
+
+
+def _check_plain(base: Path, rel: str) -> list[str]:
+    """*rel*'s parts, refused (`TriageError`) when it is absolute or has an empty, `.` or
+    `..` part."""
+    parts = rel.replace("\\", "/").split("/")
+    if not rel or rel.startswith(("/", "\\")) or any(p in ("", ".", "..") for p in parts):
+        raise TriageError(f"{rel!r} must be a plain relative path under {base}")
+    return parts
 
 
 def contained(base: Path, rel: str) -> Path:
     """`base / rel`, refused (`TriageError`, naming the path) when *rel* is absolute,
     has an empty, `.` or `..` part, has an existing component under *base* that is a
     symlink (the last one included), or resolves outside `base.resolve()`."""
-    parts = rel.replace("\\", "/").split("/")
-    if not rel or rel.startswith(("/", "\\")) or any(p in ("", ".", "..") for p in parts):
-        raise TriageError(f"{rel!r} must be a plain relative path under {base}")
+    parts = _check_plain(base, rel)
     path = base
     for part in parts:
         path = path / part
@@ -206,6 +326,176 @@ def _open_dir(root: Path, parts: tuple[str, ...], *, create: bool) -> int:
     return fd
 
 
+def _open_file(root: Path, rel: str) -> int:
+    """A read descriptor for `root/rel`, every component opened with `O_NOFOLLOW` from its
+    parent's descriptor: `_SymlinkError` when one is a symlink, `FileNotFoundError` (or
+    another `OSError`) as `os.open` raises it."""
+    *dirs, name = PurePosixPath(rel).parts
+    parent = _open_dir(root, tuple(dirs), create=False)
+    try:  # O_NONBLOCK: a fifo swapped in must not hang the open
+        return _open(name, os.O_RDONLY | os.O_NONBLOCK, dir_fd=parent)
+    finally:
+        os.close(parent)
+
+
+def _read(root: Path, rel: str) -> bytes | None:
+    """The bytes of `root/rel` through `_open_file`; None when it (or a directory above it)
+    is absent. `_SymlinkError` for a symlink, `OSError(EINVAL)` for a non-regular file."""
+    try:
+        fd = _open_file(root, rel)
+    except FileNotFoundError, NotADirectoryError:
+        return None
+    with os.fdopen(fd, "rb") as reader:
+        if not stat.S_ISREG(os.fstat(reader.fileno()).st_mode):
+            raise OSError(errno.EINVAL, "not a regular file")
+        return reader.read()
+
+
+def _hash(root: Path, rel: str) -> str | None:
+    """The sha256 of `root/rel` read through descriptors; None when absent or a symlink.
+    A file that cannot be read is a `TriageError` naming it."""
+    try:
+        data = _read(root, rel)
+    except _SymlinkError:
+        return None
+    except (OSError, ValueError) as exc:  # ValueError: a NUL in a path (p1-r1)
+        why = getattr(exc, "strerror", None) or exc
+        raise TriageError(f"cannot read {root / rel}: {why}") from exc
+    return None if data is None else hashlib.sha256(data).hexdigest()
+
+
+def _record_path(rel: object) -> bool:
+    """Whether a record key is a plain relative path to a durable file."""
+    if not isinstance(rel, str) or not rel or rel.startswith("/") or "\0" in rel:
+        return False
+    parts = rel.split("/")
+    if any(p in ("", ".", "..") for p in parts):
+        return False
+    return rel in DURABLE_FILES or (len(parts) > 1 and parts[0] in DURABLE_DIRS)
+
+
+def read_record(root: Path) -> dict[str, str] | None:
+    """The record's files (path -> sha256) in the repo-side *root*; None when it has none.
+    `BadRecord`, naming the file, when it is a symlink, not a regular file, or does not
+    hold `{"schema": 1, "files": {<durable path>: <sha256>}}`."""
+    path = root / RECORD_FILE
+    try:
+        data = _read(root, RECORD_FILE)
+    except _SymlinkError:
+        raise BadRecord(path, "is a symlink, not read") from None
+    except OSError as exc:  # a directory or fifo there cannot be forced over (p1-r2)
+        regular = exc.errno not in (errno.EINVAL, errno.EISDIR)
+        why = f"cannot be read ({exc.strerror or exc})" if regular else "is not a regular file"
+        raise BadRecord(path, why, forceable=regular) from exc
+    if data is None:
+        return None
+    try:
+        body = json.loads(data.decode("utf-8"))
+    except UnicodeDecodeError, ValueError:
+        raise BadRecord(path, "is not JSON") from None
+    files = body.get("files") if isinstance(body, dict) else None
+    if (
+        not isinstance(body, dict)
+        or body.get("schema") != _RECORD_SCHEMA
+        or not isinstance(files, dict)
+        or not all(_record_path(k) and isinstance(v, str) for k, v in files.items())
+    ):
+        raise BadRecord(path, f"is not a schema {_RECORD_SCHEMA} export record")
+    return dict(files)
+
+
+def stop_on(
+    exc: TriageError,
+    target: Path,
+    repo: str,
+    scope_args: Sequence[str],
+    *,
+    path: str,
+    at: str,
+) -> str:
+    """The driver's refusal text for an export into *path* refused at default-branch sha
+    *at*. An `ExportBlocked` (the repo copy needs the operator) also records *repo*'s
+    `export-drift:<repo>` stop in the state directory *target* with that text, the whole
+    operator text whose commands carry the driver's own scope options (R4); a stop file
+    that cannot be written leaves the refusal and says so (p1-r5). Any other refusal is its
+    own message, with no stop. The driver never forces."""
+    if not isinstance(exc, ExportBlocked):
+        return str(exc)
+    text = drift_stop_text(exc, scope_args=scope_args or ["--repo", repo], path=path, at=at)
+    stamp = datetime.now(UTC).isoformat(timespec="seconds")
+    try:
+        record_stop(target, export_drift_stop_key(repo), MergeStop(at, text, stamp))
+    except OSError as err:
+        return f"{text} (its Need was not recorded: {err.strerror or err})"
+    return text
+
+
+def clear_drift_stop(target: Path, repo: str) -> str | None:
+    """Clear *repo*'s `export-drift:<repo>` stop in the state directory *target* once an
+    export passed the drift check (R4); the warning to print when the stop file cannot be
+    written, None otherwise. The export itself goes on either way (l-errors-r1)."""
+    try:
+        clear_stop(target, export_drift_stop_key(repo))
+    except OSError as err:
+        return f"could not clear the export-drift stop: {err.strerror or err}"
+    return None
+
+
+def drift_stop_text(
+    exc: ExportBlocked, *, scope_args: Sequence[str], path: str, at: str | None
+) -> str:
+    """The operator text for a refused export into *path* (R3, R4): for drift, `drift_text`
+    with commands that carry *scope_args* (the caller's own scope options, so they paste as
+    printed, p1-r3); for a bad record, the record named with its fault and its remedy (the
+    forced export that rewrites it, or removing it by hand when `--force` cannot, p1-r2).
+    *at*, the default-branch sha the driver read; None from the hand command."""
+    rel = f"{path}/{exc.root.name}"
+    force = ["fr", "triage", "state", "export", *scope_args, "--to", path, "--force"]
+    if isinstance(exc, ExportDrift):
+        imp = ["fr", "triage", "state", "import", *scope_args, "--from", path]
+        return f"{rel} was " + drift_text(exc.drift, import_argv=imp, force_argv=force, at=at)
+    where = "a checkout of the default branch" + (f" at or after {at}" if at else "")
+    if not isinstance(exc, BadRecord):  # a non-regular stamp, an unreadable file
+        return f"{rel}: {shown(str(exc))} (in {where})"
+    if not exc.forceable:
+        return f"{rel}/{RECORD_FILE} {exc.why}: remove it in {where}, then export again"
+    return (
+        f"{rel}/{RECORD_FILE} {exc.why}: mend or remove it in {where}, "
+        f"or run `{shown_argv(force)}` there, which rewrites it"
+    )
+
+
+def find_drift(state_dir: Path, root: Path, record: Mapping[str, str]) -> tuple[Drift, ...]:
+    """Every durable path whose repo copy differs from the state's and that the repo
+    changed (the record names another sha256), deleted (the record names it, the state
+    has it) or added (the record does not name it) since the export *record* describes
+    (R2). A symlink on either side, or under one in the repo, is left out: the copy skips
+    it and reports it."""
+    state, repo = dict(durable_entries(state_dir)), dict(durable_entries(root))
+    out: list[Drift] = []
+    for rel in sorted({*state, *repo, *record}):
+        if state.get(rel) or repo.get(rel) or _symlinked_dest(root, rel):
+            continue
+        if _symlinked_dest(state_dir, rel):
+            continue
+        try:
+            mine, theirs = _hash(root, rel), _hash(state_dir, rel)
+        except TriageError as exc:  # unreadable: the drift cannot be judged (l-errors-r2)
+            raise ExportBlocked(f"{exc}; mend it, then export again", root=root) from exc
+        if mine == theirs:
+            continue
+        known = record.get(rel)
+        if known is None:
+            kind = "added" if mine is not None else None
+        elif mine is None:
+            kind = "deleted" if theirs is not None else None
+        else:
+            kind = "changed" if mine != known else None
+        if kind is not None:
+            out.append(Drift(rel, kind))
+    return tuple(out)
+
+
 def _copy(src: Path, dest: Path, rel: str) -> str | None:
     """Copy `src/rel` to `dest/rel` from descriptors, keeping the source's mode and
     times as `shutil.copy2` did; the skip reason when a component is a symlink by the
@@ -213,11 +503,7 @@ def _copy(src: Path, dest: Path, rel: str) -> str | None:
     so a path swapped after them must still never be followed (gh#1003)."""
     *dirs, name = PurePosixPath(rel).parts
     try:
-        parent = _open_dir(src, tuple(dirs), create=False)
-        try:  # O_NONBLOCK: a fifo swapped in must not hang the open
-            source = _open(name, os.O_RDONLY | os.O_NONBLOCK, dir_fd=parent)
-        finally:
-            os.close(parent)
+        source = _open_file(src, rel)
     except _SymlinkError:
         return SYMLINK
     with os.fdopen(source, "rb") as reader:
@@ -242,10 +528,40 @@ def _copy(src: Path, dest: Path, rel: str) -> str | None:
     return None
 
 
-def _sync(src: Path, dest: Path, *, keep_newer: bool) -> SyncReport:
+def _remove(dest: Path, rel: str) -> str | None:
+    """Unlink `dest/rel` from its parent's `O_NOFOLLOW` descriptor; the skip reason when a
+    directory above it is a symlink, None once removed (or already gone)."""
+    *dirs, name = PurePosixPath(rel).parts
+    try:
+        parent = _open_dir(dest, tuple(dirs), create=False)
+    except _SymlinkError:
+        return SYMLINK_DEST
+    except FileNotFoundError, NotADirectoryError:
+        return None
+    try:
+        if stat.S_ISLNK(os.lstat(name, dir_fd=parent).st_mode):
+            return SYMLINK_DEST
+        os.unlink(name, dir_fd=parent)  # a name swapped for a link: the link goes, not its target
+    except FileNotFoundError:
+        pass
+    finally:
+        os.close(parent)
+    return None
+
+
+def _sync(
+    src: Path, dest: Path, *, keep_newer: bool, selected: frozenset[str] | None = None
+) -> SyncReport:
+    """Copy *src*'s durable entries over *dest*. With *selected* (a targeted import, R5),
+    only those paths: each copied whatever its mtime, and each *dest* has but *src* lacks
+    removed; without it, nothing is ever removed."""
     copied: list[str] = []
     skipped: list[Skipped] = []
-    for rel, link in durable_entries(src):
+    removed: list[str] = []
+    entries = list(durable_entries(src))
+    for rel, link in entries:
+        if selected is not None and rel not in selected:
+            continue
         source, target = src / rel, dest / rel
         if link:
             skipped.append(Skipped(rel, SYMLINK))
@@ -268,7 +584,25 @@ def _sync(src: Path, dest: Path, *, keep_newer: bool) -> SyncReport:
             skipped.append(Skipped(rel, refused))
             continue
         copied.append(rel)
-    return SyncReport(copied=tuple(copied), skipped=tuple(skipped))
+    if selected is not None:
+        have = {rel for rel, _ in entries}
+        for rel, link in durable_entries(dest):
+            if rel not in selected or rel in have:
+                continue
+            if _symlinked_dest(src, rel):  # under a repo-side symlink: never judged (p1-r4)
+                skipped.append(Skipped(rel, SYMLINK))
+                continue
+            try:
+                refused = None if not link else SYMLINK_DEST
+                refused = refused or _remove(dest, rel)
+            except OSError as exc:
+                why = exc.strerror or type(exc).__name__
+                raise TriageError(f"cannot remove {rel} from {dest}: {why}") from exc
+            if refused:
+                skipped.append(Skipped(rel, refused))
+            else:
+                removed.append(rel)
+    return SyncReport(copied=tuple(copied), skipped=tuple(skipped), removed=tuple(removed))
 
 
 def _stamp(root: Path, owner: str, *, take_over: bool) -> bool:
@@ -297,33 +631,118 @@ def _stamp(root: Path, owner: str, *, take_over: bool) -> bool:
     return True
 
 
-def export_state(
-    state_dir: Path, base: Path, rel: str, *, owner: str, take_over: bool = False
-) -> SyncReport:
-    """Copy *state_dir*'s durable state into the repo-side root `contained(base, rel)`
-    (`<dir>/<scope>/`), overwriting what is there, and stamp it with *owner*, the
-    exporting scope's id. Refused before a byte moves when another scope id stamped
-    the root, unless *take_over*."""
-    root = contained(base, rel)
-    restamp = _stamp(root, owner, take_over=take_over)
-    report = _sync(state_dir, root, keep_newer=False)
-    if not restamp:
-        return report
+def _refuse_non_regular(root: Path, name: str) -> None:
+    """Refuse (`TriageError`) when `root/name` exists and is neither a regular file nor a
+    symlink: a directory or fifo is never opened for writing and never removed (p1-r2)."""
+    try:
+        mode = os.lstat(root / name).st_mode  # the last part unfollowed; `contained` did the rest
+    except FileNotFoundError, NotADirectoryError:
+        return
+    if not (stat.S_ISREG(mode) or stat.S_ISLNK(mode)):
+        raise ExportBlocked(
+            f"{root / name} is not a regular file; remove it by hand, then export again",
+            root=root,
+        )
+
+
+def _write_root_file(root: Path, name: str, data: bytes, *, replace_link: bool = False) -> None:
+    """Write *name* in *root* from the root's descriptor with `O_NOFOLLOW`: a name swapped
+    for a symlink is refused (`TriageError`), or unlinked first when *replace_link*."""
     parent = _open_dir(root, (), create=True)
-    try:  # O_NOFOLLOW from the root's descriptor: a stamp swapped for a symlink is refused
-        fd = _open(OWNER_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, dir_fd=parent, mode=0o644)
+    try:
+        _refuse_non_regular(root, name)
+        try:
+            fd = _open(name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, dir_fd=parent, mode=0o644)
+        except _SymlinkError:
+            if not replace_link:
+                raise TriageError(f"{root / name} is a symlink; refusing to write it") from None
+            os.unlink(name, dir_fd=parent)  # the link itself, never what it points at
+            fd = _open(name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, dir_fd=parent, mode=0o644)
     except _SymlinkError:
-        raise TriageError(f"{root / OWNER_FILE} is a symlink; refusing to write it") from None
+        raise TriageError(f"{root / name} is a symlink; refusing to write it") from None
     except OSError as exc:
-        raise TriageError(f"cannot write {root / OWNER_FILE}: {exc.strerror or exc}") from exc
+        raise TriageError(f"cannot write {root / name}: {exc.strerror or exc}") from exc
     finally:
         os.close(parent)
-    with os.fdopen(fd, "w", encoding="utf-8") as writer:
-        writer.write(f"{owner}\n")
-    return SyncReport(copied=(*report.copied, OWNER_FILE), skipped=report.skipped)
+    with os.fdopen(fd, "wb") as writer:
+        writer.write(data)
 
 
-def import_state(base: Path, rel: str, state_dir: Path, *, force: bool) -> SyncReport:
+def _record_bytes(root: Path) -> bytes:
+    """The record of the repo-side *root* after an export: every durable regular file it
+    holds, hashed from *root*, the ones only the repo has included. A file the state never
+    had is then known as it stood at this export, so only a later repo edit is drift, and a
+    first (no-record) or forced export settles it (p1-bootstrap-repo-only-files-drift-forever)."""
+    held = [rel for rel, link in durable_entries(root) if not link]
+    files = {rel: digest for rel in sorted(held) if (digest := _hash(root, rel)) is not None}
+    body = {"schema": _RECORD_SCHEMA, "files": files}
+    return (json.dumps(body, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def _old_record(root: Path) -> bytes | None:
+    try:
+        return _read(root, RECORD_FILE)
+    except _SymlinkError, OSError:
+        return None  # unreadable: rewritten (only `force` gets here with a bad record)
+
+
+def export_state(
+    state_dir: Path,
+    base: Path,
+    rel: str,
+    *,
+    owner: str,
+    take_over: bool = False,
+    force: bool = False,
+) -> SyncReport:
+    """Copy *state_dir*'s durable state into the repo-side root `contained(base, rel)`
+    (`<dir>/<scope>/`), overwriting what is there, stamp it with *owner*, the exporting
+    scope's id, and write the record of what the root holds after it (R1). Refused
+    before a byte moves when another scope id stamped the root, unless *take_over*, and,
+    unless *force*, when the record is bad (`BadRecord`) or the repo changed a file since
+    it was written (`ExportDrift`, R2, R3)."""
+    root = contained(base, rel)
+    restamp = _stamp(root, owner, take_over=take_over)
+    if not force and (recorded := read_record(root)) is not None:
+        if drift := find_drift(state_dir, root, recorded):
+            raise ExportDrift(drift, base=base, root=root)
+    for name in (OWNER_FILE, RECORD_FILE):  # before a byte moves, so a refusal is whole
+        _refuse_non_regular(root, name)
+    report = _sync(state_dir, root, keep_newer=False)
+    copied = list(report.copied)
+    if restamp:
+        _write_root_file(root, OWNER_FILE, f"{owner}\n".encode())
+        copied.append(OWNER_FILE)
+    record = _record_bytes(root)
+    if _old_record(root) != record:
+        _write_root_file(root, RECORD_FILE, record, replace_link=force)
+        copied.append(RECORD_FILE)
+    return SyncReport(copied=tuple(copied), skipped=report.skipped)
+
+
+def _select(root: Path, state_dir: Path, only: Sequence[str]) -> frozenset[str]:
+    """The durable paths *only* names: each path itself, or every durable entry below it
+    as a directory, of the repo-side *root* or the state. Refused (`TriageError`) before
+    anything moves when one is not plain or names no durable entry on either side."""
+    known = [rel for tree in (root, state_dir) for rel, _ in durable_entries(tree)]
+    selected: set[str] = set()
+    for path in only:
+        _check_plain(root, path)
+        hit = {rel for rel in known if rel == path or rel.startswith(f"{path}/")}
+        if not hit:
+            raise TriageError(f"{path!r} names no durable file under {root} or {state_dir}")
+        selected |= hit
+    return frozenset(selected)
+
+
+def import_state(
+    base: Path, rel: str, state_dir: Path, *, force: bool, only: Sequence[str] | None = None
+) -> SyncReport:
     """Copy the repo-side root `contained(base, rel)` into *state_dir*; a state file
-    newer than its copy is skipped unless *force*."""
-    return _sync(contained(base, rel), state_dir, keep_newer=not force)
+    newer than its copy is skipped unless *force*. With *only* (R5), the named paths alone:
+    each copied even over a newer state file, and each the repo lacks removed from the
+    state; no other state file is read or changed."""
+    root = contained(base, rel)
+    if only is None:
+        return _sync(root, state_dir, keep_newer=not force)
+    return _sync(root, state_dir, keep_newer=False, selected=_select(root, state_dir, only))

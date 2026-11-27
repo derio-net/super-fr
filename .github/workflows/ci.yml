@@ -18,6 +18,10 @@ on:
 env:
   UV_PYTHON: "3.14"
 
+# Default token is read-only; a job's own permissions block replaces this (classify, scoped-tests, ci-ok).
+permissions:
+  contents: read
+
 # A newer push to a pull request supersedes its older run (ci-economy R1): only the
 # head counts, so the older run is cancelled. A push to main or fr-queue/** and a merge
 # group get a group of their own (the run id) and are never cancelled.

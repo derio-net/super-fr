@@ -59,6 +59,7 @@ REMEDY_FILES = [
     "packages/fr/src/fr/commands/isolation_cmd.py",
     "packages/fr/src/fr/isolation/sessions.py",
     "packages/fr/src/fr/isolation/local.py",
+    "packages/fr/src/fr/isolation/gc.py",
     "plugins/super-fr/hooks/hermes/fr-isolation-guard.sh",
     "plugins/super-fr/hooks/hermes/fr-isolation-required.sh",
     "packages/fr-opencode-plugin/src/index.ts",

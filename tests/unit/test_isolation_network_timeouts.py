@@ -252,6 +252,7 @@ ISOLATION_MODULES = [
     "fr.isolation.runner",
     "fr.isolation.branchrefs",
     "fr.isolation.landing",
+    "fr.isolation.gc",
 ]
 
 
