@@ -202,3 +202,13 @@ Filed as #1727: move journal_entries to fr.journal and adopt it in the hand-roll
 ### l-simplicity-r3-resolved-2 · finding [deferred → derio-net/super-fr#1727] · resolves l-simplicity-r3: _spec_journal_entries docstring restates the rule journal_entries owns
 
 Folded into #1727: drop the restated rule from _spec_journal_entries' docstring when journal_entries moves.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r4-resolved-2 created=2026-11-27T13:10:30+00:00 state=open resolves=l-simplicity-r4 tracked_by=https://github.com/derio-net/super-fr/issues/1732 -->
+### l-simplicity-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1732] · resolves l-simplicity-r4: spec_table's underscore names are imported across modules
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1732.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved-2 created=2026-11-27T13:10:30+00:00 state=open resolves=l-tests-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1733 -->
+### l-tests-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1733] · resolves l-tests-r5: plan_review/ is not in the write_text guard list
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1733.
