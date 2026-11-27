@@ -116,9 +116,14 @@ rows:
       cutoff hides.
     origin:
     - spec:2026-11-27-board-session-state#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_dwell.py#test_wave_time_sums_a_two_batch_wave_and_names_the_longest
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_time_per_wave_has_a_block_per_wave_after_the_queue_and_marks_the_cutoff
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_the_cutoff_script_hides_the_marked_wave_blocks_too
+    status: ci
+    notes: wave_time and the Time per wave section, cutoff marker included, are unit-tested
+      in CI; browser-checked at phase 2
     verify: none
     visual:
       states:
