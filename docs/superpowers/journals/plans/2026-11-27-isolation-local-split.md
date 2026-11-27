@@ -25,3 +25,13 @@ Dispatched reviewer diffed the moved block byte-for-byte, checked reap.py's impo
 ### p2-r1-resolved · finding [fixed] · resolves p2-r1: local.py budget set to 3000 but the plan's rule (round up to next 25, plus 25) on 2939 lines gives 2975 (phase 2)
 
 Budget lowered to 2975 in 93744980a; module budget tripwire passes.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-27T10:10:48+00:00 phase=4 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · fr docs check stale: docs/reference/dispatch-lifecycle.md covers fr_herdr/runner.py (edited at :118) but its reviewed stamp is not bumped (phase 4)
+
+Belongs to phase 4: plan step P4.T2.S2 moves the reviewed stamp of every covered page the branch edits (spec R8). Filed against phase 4 so its review gates it.
+
+<!-- fr:journal kind=review scope=plan id=review-p3-1 created=2026-11-27T10:10:48+00:00 phase=3 -->
+### review-p3-1 · review · phase 3 review (branchrefs.py move): 1 finding (p3-r1, filed against phase 4) (phase 3)
+
+Dispatched reviewer confirmed byte-identical bodies, imports (no fr.isolation.local), all callers migrated incl. gitseam lazy import and fr_herdr/runner.py, no monkeypatch left patching nothing, guard entry and budget 2650 for 2614 lines; ruff/mypy clean, 123 targeted tests pass.
