@@ -196,3 +196,88 @@ Reworded to the real rule and its one-lost-observation limit.
 ### p2-r6-resolved · finding [out-of-scope] · resolves p2-r6: docs/triage/README.md's export sentence was already inaccurate before this change (phase 2)
 
 Export copying only DURABLE files predates this change; this PR only named dwell.json in the existing sentence.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-27T21:25:22+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · One failed pane read lost every background mark
+
+One failed pane read lost every background mark
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-27T21:25:22+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · An unguarded dwell.store failure failed the whole Batches render
+
+An unguarded dwell.store failure failed the whole Batches render
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-27T21:25:22+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · A non-mapping lane_owners value refused the repo's whole triage config
+
+A non-mapping lane_owners value refused the repo's whole triage config
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-27T21:25:22+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · lane_owner_notes worded three different causes as 'not a lane'
+
+lane_owner_notes worded three different causes as 'not a lane'
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5 created=2026-11-27T21:25:22+00:00 state=open review_scope=in -->
+### l-errors-r5 · finding [open] (reviewer: in scope) · An unusable dwell.json was overwritten without a copy, the note lacked path and loc
+
+An unusable dwell.json was overwritten without a copy, the note lacked path and loc
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6 created=2026-11-27T21:25:22+00:00 state=open review_scope=out -->
+### l-errors-r6 · finding [open] (reviewer: out of scope) · Supervisor.on_refusal swallows render failures with a bare pass
+
+Supervisor.on_refusal swallows render failures with a bare pass
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-27T21:25:22+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · herdr-control-sessions.md overstated the pane reads
+
+herdr-control-sessions.md overstated the pane reads
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-27T21:25:22+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · fr-triage.md states the writer rule but did not cover its files
+
+fr-triage.md states the writer rule but did not cover its files
+
+<!-- fr:journal kind=review scope=plan id=lens-review created=2026-11-27T21:25:22+00:00 -->
+### lens-review · review · lens review: docs-accuracy 2 findings, errors 6 (5 in, 1 out)
+
+One reviewer per lens over the whole diff from 0ba6b3c1; both checked the shape file against the diff (no contradiction). In-scope findings fixed in 39bea405d with tests (438 targeted pass).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-27T21:25:22+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: One failed pane read lost every background mark
+
+Each pane read is guarded, pane-less agents skipped; test_one_unreadable_pane_never_loses_another_items_background_mark.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-27T21:25:22+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: An unguarded dwell.store failure failed the whole Batches render
+
+OSError becomes the note 'dwell times are not stored'; the page still renders; test added.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-27T21:25:22+00:00 state=fixed resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [fixed] · resolves l-errors-r3: A non-mapping lane_owners value refused the repo's whole triage config
+
+Mapped to empty lanes with cause not-a-mapping; parse_triage_config test, post_merge survives.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-27T21:25:22+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: lane_owner_notes worded three different causes as 'not a lane'
+
+Per-cause IgnoredLane records and wording; two tests incl. the facts JSON round trip.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5-resolved created=2026-11-27T21:25:22+00:00 state=fixed resolves=l-errors-r5 -->
+### l-errors-r5-resolved · finding [fixed] · resolves l-errors-r5: An unusable dwell.json was overwritten without a copy, the note lacked path and loc
+
+The writer sets it aside as dwell.json.bad (not on the ref); notes name the path and the first error's loc and msg; three tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6-resolved created=2026-11-27T21:25:22+00:00 state=open resolves=l-errors-r6 out_of_scope=true -->
+### l-errors-r6-resolved · finding [out-of-scope] · resolves l-errors-r6: Supervisor.on_refusal swallows render failures with a bare pass
+
+The bare pass predates this change (supervise.py); this change only passes writer=True into the same render call.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-27T21:25:22+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: herdr-control-sessions.md overstated the pane reads
+
+The section now says reads stop at the first pane with background work and an unreadable pane is skipped.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-27T21:25:22+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: fr-triage.md states the writer rule but did not cover its files
+
+covers now lists triage_kanban_cmd.py and triage_drive_loop.py; the paragraph names dwell.json.bad.
