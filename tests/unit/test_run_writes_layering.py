@@ -95,7 +95,6 @@ def _package_of(path: Path) -> str:
 # The only `fr.commands` imports an `fr/run` module may make (spec 2026-11-27-run-verdict R10).
 _ALLOWED = {
     ("workspace.py", "fr.commands.isolation_cmd"),
-    ("adopt.py", "fr.commands.run_cmd"),  # leaves in phase 2 (spec 2026-11-27-run-verdict R4)
 }
 
 

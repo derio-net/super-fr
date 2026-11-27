@@ -844,10 +844,10 @@ def _adopted_run_id(run_id: str | None, plan_rel: str | None, branch: str) -> st
         return validate_run_id(run_id)
     if plan_rel is not None:
         return validate_run_id(Path(plan_rel).name)
-    # Imported here, not at module scope: `fr.commands.run_cmd` imports this
-    # module for the `fr run adopt` command, so a top-level import is a cycle.
-    # The derivation must stay identical to `fr run start`'s.
-    from fr.commands.run_cmd import derive_run_id
+    # Imported here, not at module scope: `fr.run.steps` imports this module
+    # (`plan_phase_tags`), so a top-level import is a cycle. The derivation
+    # must stay identical to `fr run start`'s.
+    from fr.run.steps import derive_run_id
 
     return derive_run_id(branch)
 

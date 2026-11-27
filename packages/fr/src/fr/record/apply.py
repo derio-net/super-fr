@@ -209,6 +209,7 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
     from fr.commands import run_cmd
     from fr.run.adopt import AdoptError
     from fr.run.model import RunStateError, load_run_state
+    from fr.run.steps import find_step, item_phase, rebind_shape, resolve_manifest_for_state
     from fr.workflow.model import WorkflowError
 
     if record.step is None:
@@ -217,8 +218,8 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
         raise RecordRefusedError(f"{record.step}: record has no `outcome` (done|failed|blocked)")
     try:
         state = load_run_state(repo_root, run_id)
-        manifest = run_cmd._resolve_manifest_for_state(repo_root, state)
-        step, parent = run_cmd._find_step(manifest, record.step)
+        manifest = resolve_manifest_for_state(repo_root, state)
+        step, parent = find_step(manifest, record.step)
     except (RunStateError, WorkflowError, AdoptError) as e:
         raise RecordRefusedError(str(e)) from e
     allowed = allowed_sections(step, parent)
@@ -232,7 +233,7 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
     if record.shape is not None:
         # §A (R1): refused before any write, by the same rules resolve applies.
         try:
-            run_cmd._rebind_shape(state, manifest, record.step, record.shape, repo_root)
+            rebind_shape(state, manifest, record.step, record.shape, repo_root)
         except RunStateError as e:
             raise RecordRefusedError(str(e)) from e
     owner_emits = tuple(step.emits) or (tuple(parent.emits) if parent is not None else ())
@@ -257,7 +258,7 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
         (r.emitted["spec"] for r in state.steps.values() if r.emitted and "spec" in r.emitted),
         None,
     )
-    phase = run_cmd._item_phase(record.item) if record.item else None
+    phase = item_phase(record.item) if record.item else None
     emits_ticks = "plan:ticks" in owner_emits
     current = state.steps.get(record.step)
     gate_answer = (

@@ -1658,8 +1658,8 @@ def test_derive_run_id_always_produces_a_valid_id(branch: str, expect_tail: str 
     `fr run start` impossible on that branch."""
     import datetime as _dt
 
-    from fr.commands.run_cmd import derive_run_id
     from fr.run.model import validate_run_id
+    from fr.run.steps import derive_run_id
 
     derived = derive_run_id(branch, today=_dt.date(2026, 8, 31))
 
@@ -1673,8 +1673,8 @@ def test_derive_run_id_always_produces_a_valid_id(branch: str, expect_tail: str 
 def test_derive_run_id_stays_within_the_length_limit() -> None:
     import datetime as _dt
 
-    from fr.commands.run_cmd import derive_run_id
     from fr.run.model import RUN_ID_MAX_LENGTH, validate_run_id
+    from fr.run.steps import derive_run_id
 
     derived = derive_run_id("feat/" + "x" * 500, today=_dt.date(2026, 8, 31))
 

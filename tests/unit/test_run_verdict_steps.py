@@ -103,10 +103,12 @@ def _unit_key_case(name: str, setup: Any, *args: Any) -> Case:
 
 
 def _cases() -> list[Case]:
-    agentic_and_manual: Callable[[pytest.MonkeyPatch, ModuleType], None] = lambda mp, m: _plan_tags(
-        mp, m, {1: "agentic", 2: "manual"}
-    )
-    nothing: Callable[[pytest.MonkeyPatch, ModuleType], None] = lambda mp, m: None
+    def agentic_and_manual(mp: pytest.MonkeyPatch, module: ModuleType) -> None:
+        _plan_tags(mp, module, {1: "agentic", 2: "manual"})
+
+    def nothing(mp: pytest.MonkeyPatch, module: ModuleType) -> None:
+        return None
+
     return [
         _unit_key_case("member-no-item", nothing, ROOT, PLANNED, MEMBER, GROUP, None),
         _unit_key_case("no-plan-recorded", nothing, ROOT, UNPLANNED, MEMBER, GROUP, "phase/1"),
