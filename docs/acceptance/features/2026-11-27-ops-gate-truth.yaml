@@ -28,8 +28,9 @@ rows:
     acceptance: 'A Test Plan step names the rows it proves with (rows: ...), and recording
       it ran walks each of those rows with the step''s evidence in the same commit'
     origin:
-    - spec:2026-11-27-ops-gate-truth#R6
     - spec:2026-11-27-ops-gate-truth#R7
+    - spec:2026-11-27-ops-gate-truth#R8
+    - spec:2026-11-27-ops-gate-truth#R9
     levels: {}
     status: not-implemented
     notes: ''
