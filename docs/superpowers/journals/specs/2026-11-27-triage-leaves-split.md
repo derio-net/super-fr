@@ -102,3 +102,8 @@ row_kinds: {}
 run_gate: developer
 run_kind: none
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-triage-leaves-split-p1 created=2026-11-27T20:01:26+00:00 -->
+### phase-split-2026-11-27-triage-leaves-split-p1 · decision · tier: the plan's one standard-tier phase; the spec carries no acceptance rows (operator decision q5-rows: a no-behaviour refactor), so no row can name its ask
+
+R1-R12 are all served by this single phase.
