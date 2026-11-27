@@ -43,3 +43,22 @@ rows:
     status: not-implemented
     notes: ''
     verify: none
+amendments:
+  - row: targeted-import-only
+    op: reword
+    base: 0
+    acceptance: '`fr triage state import --only <path>` changes only the named files
+      or directories: copied from the repo even over a newer state copy, or removed
+      from the state when the repo lacks them; every other state file is left alone,
+      and a path naming no durable file on either side is refused before anything changes.'
+    why: spec review s1-r1 — a named path the repo lacks is now removed from the state
+  - row: export-drift-refused
+    op: reword
+    base: 0
+    acceptance: An export over a repo-side root whose durable files changed, were deleted
+      or were added since the last export (per its committed exported-files record),
+      or whose record is unreadable, writes nothing and names every drifted path and
+      the remedy; `fr triage state export --force` overwrites them and rewrites the
+      record; every export writes the record.
+    why: spec review s1-r2, s1-r6 — repo-only files are drift too, and a bad record
+      is refused

@@ -3,7 +3,7 @@ run: 2026-11-27-feat-batch-export-drift
 workflow: fr-goal@1
 branch: feat/batch-export-drift
 started: '2026-11-27T12:56:12+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,17 +12,25 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-27-export-drift-design.md
   spec-review:
-    state: running
-    at: '2026-11-27T14:43:37+00:00'
+    state: done
+    at: '2026-11-27T14:50:06+00:00'
     units:
       step/spec-review:
         attempts:
         - dispatched: '2026-11-27T14:43:37+00:00'
+          agent: a6493889b33070701
           agent_type: super-fr:fr-spec-reviewer
           harness: claude-code
+          model: claude-opus-5-5
           tier: hard
           bound: claude-opus-5-5
           session: e93ee8b9-d840-4dd9-b01a-439138b37e11
+          returned: '2026-11-27T14:50:05+00:00'
+          outcome: done
+        evidence:
+          review: spec-review-1
+          reviewer: a6493889b33070701
+          findings: s1-r1,s1-r2,s1-r3,s1-r4,s1-r5,s1-r6,s1-r7,s1-r8,s1-r9
   plan:
     state: pending
   plan-review:
