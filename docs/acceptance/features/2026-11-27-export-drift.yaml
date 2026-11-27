@@ -35,9 +35,13 @@ rows:
       import command until an export finds no drift.
     origin:
     - spec:2026-11-27-export-drift#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_an_export_over_a_repo_side_edit_stops_with_a_need_and_pushes_nothing
+    status: ci
+    notes: 'a driver unit test exports over drift and a bad record: no push or PR, the
+      stop''s text, the Need row and its label on the rendered page, and the stop cleared
+      by a clean export'
     verify: none
   - id: targeted-import-only
     capability: triage state import
