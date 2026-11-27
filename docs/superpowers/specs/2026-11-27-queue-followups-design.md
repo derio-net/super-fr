@@ -108,6 +108,11 @@ packages/fr/src/fr/commands/triage_batch_cmd.py
 ## Verification
 
 strategy: none
+- queue-approval-label-lifecycle: none — unit tests of `settle_approvals`/`settle_entry_approval` over a fake client, in this PR's CI
+- queue-approval-waits-conflict-free: none — unit tests of `approval_verdict` and both settle functions, in this PR's CI
+- conflict-probe-matches-queue-resolution: none — a trial-merge unit test over a real scratch git repo, in this PR's CI
+- queue-closeout-due-at-landing: none — `drive_pass` and pacer unit tests over built snapshots, in this PR's CI
+- wave-overlap-repo-case: none — an `overlaps` unit test, in this PR's CI
 gate: developer
 settle.conflicts: report — batch queue-followups: the wave driver owns this PR's mergeability
 settle.ci: report — batch queue-followups: the wave driver owns this PR's CI
