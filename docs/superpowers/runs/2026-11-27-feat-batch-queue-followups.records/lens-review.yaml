@@ -25,7 +25,7 @@ journal:
   id: l-errors-r3
   title: trial_conflicts classified before abort_merge, so a GitError there skipped the abort
   body: Raised by the lens reviewer; verified against the code before acting.
-  review_scope: in
+  review_scope: out
   global: true
 - kind: review
   id: lens-review-1
@@ -43,8 +43,8 @@ resolves:
   state: fixed
   body: both pr_view clients return labels None for a missing key (fr.ghclient.pr_label_names); verification/labels.py copes; test_gh_/test_rest_pr_view_reads_a_missing_labels_key_as_unread (a8569adbc).
 - id: l-errors-r3
-  state: fixed
-  body: Reviewer tagged it out; reclassified in, since this change introduced the order. Classification in try/finally so abort_merge always runs; test_a_failing_conflict_read_still_aborts_the_merge_and_propagates (a8569adbc).
+  state: out-of-scope
+  body: Reviewer's tag kept (out). The abort ordering was hardened anyway in a8569adbc (classification in try/finally so abort_merge always runs; test_a_failing_conflict_read_still_aborts_the_merge_and_propagates); the scratch worktree was already removed in every case.
 evidence:
   review: lens-review-1
   reviewer: docs-accuracy=a24afa1542d396e78,errors=ad2f08e0c56ab67cf,security=aad89841d0b2f8127,tests=ad6201fe480463eeb
