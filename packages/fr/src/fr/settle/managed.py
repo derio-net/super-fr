@@ -24,9 +24,11 @@ def driver_managed(branch: str) -> bool:
     from fr.triage.batch import BRANCH_PREFIX, FIX_BRANCH_PREFIX
     from fr.triage.batch_drive import (
         COLLECTED_PREFIX,
-        EXPORT_PREFIX,
         HOUSEKEEPING_PREFIX,
         collected_name,
+    )
+    from fr.triage.batch_drive_export import (
+        EXPORT_PREFIX,
     )
 
     batch = (BRANCH_PREFIX, FIX_BRANCH_PREFIX)

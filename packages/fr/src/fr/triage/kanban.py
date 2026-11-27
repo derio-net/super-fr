@@ -33,25 +33,29 @@ from fr.triage.batch_drive import (
     ARCHIVE_PREFIXES,
     ARCHIVE_WAIT,
     AWAITING_LIVE_HOLD,
-    CONFLICTING,
-    Action,
     IdleSession,
-    LivePr,
     Pass,
     Snapshot,
     attributed,
     checks_verdict,
     closeout_event,
     closeout_item_id,
-    conflict_at,
     default_selection,
     drive_pass,
-    held_archive_conflict,
     idle_session,
     queue_snapshot,
 )
+from fr.triage.batch_drive_types import (
+    CONFLICTING,
+    Action,
+    LivePr,
+)
 from fr.triage.claims import expired, from_issue_claim, held_line, held_map
 from fr.triage.components import stamp_text
+from fr.triage.handback_rules import (
+    conflict_at,
+    held_archive_conflict,
+)
 from fr.triage.lanes import gated_pr_lane, lane_of, live_stops, unlisted_gated_prs
 from fr.triage.merge_stops import MergeStop, archive_stop_key, live_stop
 from fr.triage.mergeability import CONFLICT_HANDED_BACK_HINT, CONFLICT_HINT, conflicting

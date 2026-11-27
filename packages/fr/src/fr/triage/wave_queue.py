@@ -22,7 +22,9 @@ from typing import TYPE_CHECKING, Literal
 from fr.labels import pre_merge_held
 from fr.triage.approval import ApprovalVerdict
 from fr.triage.batch import BatchStage
-from fr.triage.batch_drive import LivePr
+from fr.triage.batch_drive_types import (
+    LivePr,
+)
 from fr.triage.handback_rules import (
     HANDBACKS_PER_DISPATCH,
     RED_HANDBACKS_PER_DISPATCH,

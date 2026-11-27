@@ -12,9 +12,8 @@ import importlib
 import sys
 from pathlib import Path
 
-import pytest
-
 import fr.triage
+import pytest
 
 TRIAGE = Path(fr.triage.__file__).parent
 
