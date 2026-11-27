@@ -16,9 +16,12 @@ rows:
     - spec:2026-11-27-board-session-state#R1
     - spec:2026-11-27-board-session-state#R2
     - spec:2026-11-27-board-session-state#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_waits.py#test_row_8_a_working_front_session_is_the_agent
+      - super-fr:tests/unit/test_triage_waits.py#test_every_card_but_a_done_one_shows_a_wait_pill_that_names_its_party
+    status: ci
+    notes: wait_of's 13 rows, the close-out front and the pill are unit-tested
     verify: none
     visual:
       states:
