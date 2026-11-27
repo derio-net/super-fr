@@ -176,3 +176,8 @@ row_kinds:
 run_gate: developer
 run_kind: none
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-run-verdict-p2 created=2026-11-27T15:27:36+00:00 -->
+### phase-split-2026-11-27-run-verdict-p2 · decision · ask: slice 2, lookup B to fr/run/steps.py (R4), the issue's own slice
+
+Each slice of #1519 is independently reviewable and the operator chose one phase per slice.
