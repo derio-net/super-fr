@@ -14,11 +14,8 @@ from typing import Any
 
 import pytest
 from fr.isolation.hostworktree import HostWorktreeTarget
-from fr.isolation.local import (
-    LocalWorktreeDevcontainerTarget,
-    branch_changed_paths,
-    branch_changes_present,
-)
+from fr.isolation.landing import branch_changed_paths, branch_changes_present
+from fr.isolation.local import LocalWorktreeDevcontainerTarget
 from fr.isolation.reap import ReapHazard, ReapRefused
 from fr.isolation.runner import devcontainer_id, subprocess_runner
 from fr.isolation.types import (
@@ -3339,7 +3336,7 @@ def test_branch_blob_was_on_base_cost_is_constant_per_commit_count(tmp_path: Pat
     path — not one `git rev-parse` per commit in `merge_base..base_ref`. A
     generated report/matrix file is touched by nearly every later PR, so an
     O(N) scan multiplies across every workspace in a gc sweep."""
-    from fr.isolation.local import _branch_blob_was_on_base
+    from fr.isolation.landing import _branch_blob_was_on_base
 
     def _build(parent: Path, n_rewrites: int) -> Path:
         parent.mkdir()

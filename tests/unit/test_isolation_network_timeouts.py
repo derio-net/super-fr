@@ -251,6 +251,7 @@ ISOLATION_MODULES = [
     "fr.isolation.reap",
     "fr.isolation.runner",
     "fr.isolation.branchrefs",
+    "fr.isolation.landing",
 ]
 
 
@@ -275,3 +276,27 @@ def test_local_py_holds_no_forge_cli_argv(module: str) -> None:
         and node.elts[0].value in {"gh", "glab", "tea"}
     ]
     assert argvs == [], f"forge CLI argv in {module} at lines {argvs}"
+
+
+@pytest.mark.parametrize(
+    "module",
+    ["fr.isolation.runner", "fr.isolation.reap", "fr.isolation.branchrefs", "fr.isolation.landing"],
+)
+def test_split_modules_never_import_local(module: str) -> None:
+    """R2 (#1517): the modules split out of local.py never import it back."""
+    import ast
+    import importlib
+
+    mod = importlib.import_module(module)
+    tree = ast.parse(Path(mod.__file__).read_text(encoding="utf-8"))
+    offenders = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            names = {a.name for a in node.names}
+            if node.module == "fr.isolation.local" or (
+                node.module == "fr.isolation" and "local" in names
+            ):
+                offenders.append(node.lineno)
+        elif isinstance(node, ast.Import):
+            offenders += [node.lineno for a in node.names if a.name == "fr.isolation.local"]
+    assert not offenders, f"{module} imports fr.isolation.local at lines {offenders}"
