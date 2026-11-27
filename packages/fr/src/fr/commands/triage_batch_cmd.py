@@ -2422,11 +2422,7 @@ def _untrusted(record: Mapping[str, Any], allowed: frozenset[str]) -> str | None
 
 def _pr_time(record: Mapping[str, Any] | None) -> datetime | None:
     stamp = record.get("createdAt") if record else None
-    try:
-        parsed = datetime.fromisoformat(str(stamp)) if stamp else None
-    except ValueError:
-        return None
-    return parsed if parsed is not None and parsed.tzinfo is not None else None
+    return parse_aware(str(stamp) if stamp else None)
 
 
 def adopt_batch(

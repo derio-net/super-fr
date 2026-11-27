@@ -10,7 +10,7 @@ import re
 import subprocess
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -40,6 +40,7 @@ from fr.debt.model import (
     SourceStatus,
     StalePlan,
 )
+from fr.utc_time import parse_as_utc
 
 DEFAULT_STALE_DAYS = 14
 CONFIG_REL = Path(".fr/debt.yaml")
@@ -288,7 +289,7 @@ def _last_commit(
         )
     except OSError, subprocess.TimeoutExpired:
         return None
-    return _parse(done.stdout.strip()) if done.returncode == 0 else None
+    return parse_as_utc(done.stdout.strip()) if done.returncode == 0 else None
 
 
 def _fr_plan_times(repo_root: Path, plan_dir: Path) -> list[datetime | None]:
@@ -304,16 +305,6 @@ def _fr_plan_times(repo_root: Path, plan_dir: Path) -> list[datetime | None]:
     top, pushed = found
     rel = plan_dir.resolve().relative_to(top.resolve()).as_posix()
     return [_last_commit(top, "HEAD", rel), _last_commit(top, pushed, rel)]
-
-
-def _parse(text: str | None) -> datetime | None:
-    if not text:
-        return None
-    try:
-        dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
 def _safe_branch(repo_root: Path, branch: str) -> bool:
@@ -507,7 +498,7 @@ def compute(
             else:
                 basis = "git+forge"
                 if pr:
-                    times.append(_parse(pr.get("updatedAt")))
+                    times.append(parse_as_utc(pr.get("updatedAt")))
         seen = [t for t in times if t is not None]
         if not seen:
             # No readable activity is not "active": list it, with the age unknown.
