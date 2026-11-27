@@ -16,9 +16,16 @@ rows:
     - spec:2026-11-27-closeout-state#R1
     - spec:2026-11-27-closeout-state#R2
     - spec:2026-11-27-closeout-state#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_closeout_takeback.py#test_a_collected_start_whose_takeback_fails_reports_both_errors_once
+      - super-fr:tests/unit/test_triage_closeout_takeback.py#test_a_takeback_that_first_fails_on_pass_two_is_said_on_pass_two
+      - super-fr:tests/unit/test_triage_closeout_takeback.py#test_a_per_batch_start_whose_takeback_fails_reports_both_and_prints_no_error
+      - super-fr:tests/unit/test_triage_closeout_takeback.py#test_a_collected_start_whose_takeback_succeeds_is_unchanged
+    status: ci
+    notes: Unit tests in CI drive both close-out starts with a failing dispatch and
+      a failing take-back (TriageError, fail_exit, VisibilityUnreadable), including
+      a real two-pass drive
     verify: none
   - id: batch-left-scope-stage
     capability: triage batch board
