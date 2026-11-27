@@ -10,10 +10,12 @@ rows:
   - id: queue-approval-label-lifecycle
     capability: wave merge queue approvals
     acceptance: A recorded approval whose approved-fr label is gone is ended, so re-adding
-      the label approves the live head; every label removal fr makes posts its reason
-      on the PR once.
+      the label approves the live head; a label on a head with a real conflict is held
+      unrecorded until a conflict-free head; every label removal fr makes posts its
+      reason on the PR once.
     origin:
     - spec:2026-11-27-queue-followups#R1
+    - spec:2026-11-27-queue-followups#R2
     - spec:2026-11-27-queue-followups#R3
     levels: {}
     status: not-implemented
