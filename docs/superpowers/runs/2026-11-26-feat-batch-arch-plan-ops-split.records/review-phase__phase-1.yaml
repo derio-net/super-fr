@@ -1,0 +1,34 @@
+schema_version: 12
+run: 2026-11-26-feat-batch-arch-plan-ops-split
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: finding
+    id: p1-r1
+    phase: 1
+    review_scope: in
+    title: Docstrings still name fr.plan_ops for the moved sizing reader and rework writer
+    body: requirements.py:15 listed fr.plan_ops as a phase-sizing reader; plan_ops.py:1-14 said rework writes happen there; _yaml.py:29 named plan_ops as the router.
+  - kind: finding
+    id: p1-r2
+    phase: 1
+    review_scope: in
+    title: Reviewed-stamp note differs from R14's literal wording
+    body: 'Pages carry "still true, import-only change (plan_ops split)"; R14 said "still true: import-only change".'
+  - kind: review
+    id: p1-review-r1
+    phase: 1
+    title: Phase 1 code review — verbatim moves, no cycle, two wording findings
+    body: |
+      Independent reviewer compared every moved top-level body by ast against origin/main (byte-identical except the merged journal read), checked journal_entries against both old readers, import direction (fresh-interpreter sys.modules check), every monkeypatch target, R9 re-export identity, R10 callers, R11 test diffs, budget, docs check and fragment; ran 517 targeted tests green. Findings: p1-r1, p1-r2.
+resolves:
+  - id: p1-r1
+    state: fixed
+    body: requirements.py, plan_ops.py and _yaml.py docstrings now name fr.plan_review, fr.plan_rework and fr._plan_io (3d771d421).
+  - id: p1-r2
+    state: fixed
+    body: "The colon form breaks the page's YAML front matter (discovery logged by the executor), so the spec's R14 now states the comma form the pages carry (3d771d421)."
+evidence:
+  review: p1-review-r1
+  reviewer: aa97ecf978ea957bf
