@@ -844,3 +844,110 @@ def test_the_export_verb_refuses_drift_with_exit_2_until_force(tmp_path: Path) -
     forced = _invoke(*args, "--force")
     assert forced.exit_code == 0, forced.output  # type: ignore[attr-defined]
     assert edited.read_text(encoding="utf-8") == "sections: []\n"
+
+
+# ------------------------------------------------- the targeted import (R5)
+
+
+def _imported(tmp_path: Path) -> tuple[Path, Path]:
+    """A repo copy and a state imported from it, the state's copies then made newer."""
+    src = tmp_path / "repo" / SCOPE_NAME
+    export_state(_state(tmp_path / "old"), *_at(src), owner=HOST)
+    state = tmp_path / "state"
+    import_state(*_at(src), state, force=False)
+    for rel in DURABLE:
+        _age(src / rel, 60)  # every repo copy older than the state's
+    return src, state
+
+
+def _stats(root: Path) -> dict[str, tuple[bytes, int]]:
+    return {
+        rel: (p.read_bytes(), p.stat().st_mtime_ns)
+        for rel in _files(root)
+        if (p := root / rel).is_file()
+    }
+
+
+def test_only_copies_a_named_file_over_a_newer_state_copy_and_nothing_else(
+    tmp_path: Path,
+) -> None:
+    src, state = _imported(tmp_path)
+    (src / "board" / "manifest.yaml").write_text("repo edit\n", encoding="utf-8")
+    _age(src / "board" / "manifest.yaml", 120)
+    (src / "judgements.yaml").write_text("schema: 3\n# repo\n", encoding="utf-8")  # unnamed
+    before = _stats(state)
+
+    report = import_state(*_at(src), state, force=False, only=["board/manifest.yaml"])
+
+    assert report.copied == ("board/manifest.yaml",)
+    assert (state / "board" / "manifest.yaml").read_text(encoding="utf-8") == "repo edit\n"
+    after = _stats(state)
+    del before["board/manifest.yaml"], after["board/manifest.yaml"]
+    assert after == before  # unnamed state files: bytes and mtime untouched
+
+
+def test_only_a_directory_takes_every_durable_file_under_it(tmp_path: Path) -> None:
+    src, state = _imported(tmp_path)
+    (src / "architecture" / "hurts.html").write_text("new\n", encoding="utf-8")
+    (src / "architecture" / "fresh.html").write_text("fresh\n", encoding="utf-8")
+
+    report = import_state(*_at(src), state, force=False, only=["architecture"])
+
+    assert sorted(report.copied) == ["architecture/fresh.html", "architecture/hurts.html"]
+    assert (state / "architecture" / "fresh.html").read_text(encoding="utf-8") == "fresh\n"
+
+
+def test_only_removes_a_named_path_the_repo_lacks(tmp_path: Path) -> None:
+    src, state = _imported(tmp_path)
+    (src / "origins" / "manifest.yaml").unlink()
+
+    report = import_state(*_at(src), state, force=False, only=["origins/manifest.yaml"])
+
+    assert report.removed == ("origins/manifest.yaml",)
+    assert not (state / "origins" / "manifest.yaml").exists()
+
+
+def test_only_skips_a_named_symlink_on_either_side(tmp_path: Path) -> None:
+    src, state = _imported(tmp_path)
+    secret = tmp_path / "secret"
+    secret.write_text("PRIVATE\n", encoding="utf-8")
+    (src / "board" / "planted.html").symlink_to(secret)  # repo side
+    (state / "origins" / "kept.html").symlink_to(secret)  # state side, repo lacks it
+
+    report = import_state(
+        *_at(src), state, force=False, only=["board/planted.html", "origins/kept.html"]
+    )
+
+    assert report.copied == () and report.removed == ()
+    assert _skipped(report) == {"board/planted.html": SYMLINK, "origins/kept.html": SYMLINK_DEST}
+    assert (state / "origins" / "kept.html").is_symlink()
+    assert secret.read_text(encoding="utf-8") == "PRIVATE\n"
+
+
+@pytest.mark.parametrize("bad", ["../x", "/abs", "board/../judgements.yaml", "nothing/here"])
+def test_only_refuses_a_bad_or_unmatched_path_before_any_write(tmp_path: Path, bad: str) -> None:
+    src, state = _imported(tmp_path)
+    (src / "board" / "manifest.yaml").write_text("repo edit\n", encoding="utf-8")
+    before = _stats(state)
+
+    with pytest.raises(TriageError):
+        import_state(*_at(src), state, force=False, only=["board/manifest.yaml", bad])
+
+    assert _stats(state) == before
+
+
+def test_the_import_verb_takes_only_and_prints_removed(tmp_path: Path) -> None:
+    out = tmp_path / "docs" / "triage"
+    src, state = _imported(tmp_path / "w")
+    shutil.copytree(src, out / SCOPE_NAME)
+    (out / SCOPE_NAME / "origins" / "manifest.yaml").unlink()
+    (out / SCOPE_NAME / "board" / "manifest.yaml").write_text("repo edit\n", encoding="utf-8")
+    args = ("import", "--from", str(out), "--repo", SCOPE, "--dir", str(state))
+
+    result = _invoke(*args, "--only", "origins/manifest.yaml", "--only", "board/manifest.yaml")
+
+    text = result.output  # type: ignore[attr-defined]
+    assert result.exit_code == 0, text  # type: ignore[attr-defined]
+    assert "removed origins/manifest.yaml" in text and "copied board/manifest.yaml" in text
+    refused = CliRunner().invoke(app, ["triage", "state", *args, "--only", "../x"])
+    assert refused.exit_code == 2, refused.output

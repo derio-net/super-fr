@@ -141,15 +141,23 @@ class SyncReport:
 
     copied: tuple[str, ...]
     skipped: tuple[Skipped, ...]
+    removed: tuple[str, ...] = ()  # a targeted import's named paths the repo lacks (R5)
+
+
+def _check_plain(base: Path, rel: str) -> list[str]:
+    """*rel*'s parts, refused (`TriageError`) when it is absolute or has an empty, `.` or
+    `..` part."""
+    parts = rel.replace("\\", "/").split("/")
+    if not rel or rel.startswith(("/", "\\")) or any(p in ("", ".", "..") for p in parts):
+        raise TriageError(f"{rel!r} must be a plain relative path under {base}")
+    return parts
 
 
 def contained(base: Path, rel: str) -> Path:
     """`base / rel`, refused (`TriageError`, naming the path) when *rel* is absolute,
     has an empty, `.` or `..` part, has an existing component under *base* that is a
     symlink (the last one included), or resolves outside `base.resolve()`."""
-    parts = rel.replace("\\", "/").split("/")
-    if not rel or rel.startswith(("/", "\\")) or any(p in ("", ".", "..") for p in parts):
-        raise TriageError(f"{rel!r} must be a plain relative path under {base}")
+    parts = _check_plain(base, rel)
     path = base
     for part in parts:
         path = path / part
@@ -403,10 +411,40 @@ def _copy(src: Path, dest: Path, rel: str) -> str | None:
     return None
 
 
-def _sync(src: Path, dest: Path, *, keep_newer: bool) -> SyncReport:
+def _remove(dest: Path, rel: str) -> str | None:
+    """Unlink `dest/rel` from its parent's `O_NOFOLLOW` descriptor; the skip reason when a
+    directory above it is a symlink, None once removed (or already gone)."""
+    *dirs, name = PurePosixPath(rel).parts
+    try:
+        parent = _open_dir(dest, tuple(dirs), create=False)
+    except _SymlinkError:
+        return SYMLINK_DEST
+    except FileNotFoundError, NotADirectoryError:
+        return None
+    try:
+        if stat.S_ISLNK(os.lstat(name, dir_fd=parent).st_mode):
+            return SYMLINK_DEST
+        os.unlink(name, dir_fd=parent)  # a name swapped for a link: the link goes, not its target
+    except FileNotFoundError:
+        pass
+    finally:
+        os.close(parent)
+    return None
+
+
+def _sync(
+    src: Path, dest: Path, *, keep_newer: bool, selected: frozenset[str] | None = None
+) -> SyncReport:
+    """Copy *src*'s durable entries over *dest*. With *selected* (a targeted import, R5),
+    only those paths: each copied whatever its mtime, and each *dest* has but *src* lacks
+    removed; without it, nothing is ever removed."""
     copied: list[str] = []
     skipped: list[Skipped] = []
-    for rel, link in durable_entries(src):
+    removed: list[str] = []
+    entries = list(durable_entries(src))
+    for rel, link in entries:
+        if selected is not None and rel not in selected:
+            continue
         source, target = src / rel, dest / rel
         if link:
             skipped.append(Skipped(rel, SYMLINK))
@@ -429,7 +467,22 @@ def _sync(src: Path, dest: Path, *, keep_newer: bool) -> SyncReport:
             skipped.append(Skipped(rel, refused))
             continue
         copied.append(rel)
-    return SyncReport(copied=tuple(copied), skipped=tuple(skipped))
+    if selected is not None:
+        have = {rel for rel, _ in entries}
+        for rel, link in durable_entries(dest):
+            if rel not in selected or rel in have or _symlinked_dest(src, rel):
+                continue
+            try:
+                refused = None if not link else SYMLINK_DEST
+                refused = refused or _remove(dest, rel)
+            except OSError as exc:
+                why = exc.strerror or type(exc).__name__
+                raise TriageError(f"cannot remove {rel} from {dest}: {why}") from exc
+            if refused:
+                skipped.append(Skipped(rel, refused))
+            else:
+                removed.append(rel)
+    return SyncReport(copied=tuple(copied), skipped=tuple(skipped), removed=tuple(removed))
 
 
 def _stamp(root: Path, owner: str, *, take_over: bool) -> bool:
@@ -527,7 +580,29 @@ def export_state(
     return SyncReport(copied=tuple(copied), skipped=report.skipped)
 
 
-def import_state(base: Path, rel: str, state_dir: Path, *, force: bool) -> SyncReport:
+def _select(root: Path, state_dir: Path, only: Sequence[str]) -> frozenset[str]:
+    """The durable paths *only* names: each path itself, or every durable entry below it
+    as a directory, of the repo-side *root* or the state. Refused (`TriageError`) before
+    anything moves when one is not plain or names no durable entry on either side."""
+    known = [rel for tree in (root, state_dir) for rel, _ in durable_entries(tree)]
+    selected: set[str] = set()
+    for path in only:
+        _check_plain(root, path)
+        hit = {rel for rel in known if rel == path or rel.startswith(f"{path}/")}
+        if not hit:
+            raise TriageError(f"{path!r} names no durable file under {root} or {state_dir}")
+        selected |= hit
+    return frozenset(selected)
+
+
+def import_state(
+    base: Path, rel: str, state_dir: Path, *, force: bool, only: Sequence[str] | None = None
+) -> SyncReport:
     """Copy the repo-side root `contained(base, rel)` into *state_dir*; a state file
-    newer than its copy is skipped unless *force*."""
-    return _sync(contained(base, rel), state_dir, keep_newer=not force)
+    newer than its copy is skipped unless *force*. With *only* (R5), the named paths alone:
+    each copied even over a newer state file, and each the repo lacks removed from the
+    state; no other state file is read or changed."""
+    root = contained(base, rel)
+    if only is None:
+        return _sync(root, state_dir, keep_newer=not force)
+    return _sync(root, state_dir, keep_newer=False, selected=_select(root, state_dir, only))
