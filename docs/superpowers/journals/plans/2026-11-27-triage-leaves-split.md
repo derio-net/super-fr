@@ -45,3 +45,38 @@ test_triage_batch_drive_cmd.py, 1985 passed. CI (`tests: ci`) is the suite evide
 ### no-refactor-p1-t5 · discovery · no-refactor-because P1.T5 (phase 1)
 
 guard widening, a budget number, doc stamps and a fragment; no code was written that could be cleaned.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-27T21:04:06+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · spec Background/Design/R11 no longer match: nine src callers import moved names from their new homes and docs/reference/cli.md was stamped (phase 1)
+
+Strict mypy (no_implicit_reexport) forced the caller repointing; the spec still said callers import through the re-export.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-27T21:04:06+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · batch_drive.py TYPE_CHECKING comment says wave_queue imports batch_drive, false since wave_queue now imports batch_drive_types (phase 1)
+
+packages/fr/src/fr/triage/batch_drive.py:109.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-27T21:04:06+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · batch_merge.py:25-27 single-name import left on three lines (phase 1)
+
+Leftover trailing comma from the repointing.
+
+<!-- fr:journal kind=review scope=plan id=review-p1 created=2026-11-27T21:04:06+00:00 phase=1 -->
+### review-p1 · review · phase 1 review: 3 findings, all in scope and fixed (phase 1)
+
+Independent reviewer verified: all 30 moved definitions byte-identical (ast source segments vs origin/main); moved set exactly R1/R2/R3; each new module imports cleanly in a fresh interpreter with no batch_drive* load (R5); every origin/main name of batch_drive still an attribute except four plain non-re-exported imports nothing used (R6); mypy clean over 470 files; triage_batch_cmd.py 8315 <= 8320; purity guards flag a planted impurity per file and require >= 4 files; budget 1900 vs 1879; fr docs check clean; fragment present; 268 targeted tests passed. Findings p1-r1..p1-r3.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-27T21:04:06+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: spec Background/Design/R11 no longer match: nine src callers import moved names from their new homes and docs/reference/cli.md was stamped (phase 1)
+
+Spec amended: Background states mypy's no_implicit_reexport; new R9a requires src callers to import from the new homes; R11 adds docs/reference/cli.md; the Design shape lists the nine files.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-27T21:04:06+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: batch_drive.py TYPE_CHECKING comment says wave_queue imports batch_drive, false since wave_queue now imports batch_drive_types (phase 1)
+
+Comment now says fr.triage.readiness imports this module (readiness.py:59 still does), so both TYPE_CHECKING modules are read lazily.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-27T21:04:06+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: batch_merge.py:25-27 single-name import left on three lines (phase 1)
+
+Collapsed to `from fr.triage.batch_drive import checks_verdict`.
