@@ -1,0 +1,40 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-queue-followups
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T4.S1, P2.T4.S2, P2.T5.S1]
+refactor:
+  P2.T1: "the end of an approval is one shared helper (_ended/_end) for both settle functions; the cmd's voided set now comes from settle_approvals' removed set, which dropped a repo_of map and an import"
+  P2.T2: "conflict_waits/view_waits is the one R2 test, shared by settle_approvals, the drive's live snapshot, fact_approvals and lanes; nothing duplicated left"
+  P2.T3: "ended_by_label is one small helper read by readiness and views; nothing to tidy around it"
+  P2.T4: "_comments_off moved beside _labels_off and re-exported; the test fakes gained the comment methods on the base _Forge instead of a parallel fake"
+journal:
+  - kind: decision
+    id: p2-waits-at-every-first-reader
+    phase: 2
+    title: "R2's waits is passed wherever a first label would read as approved, not only in settle_approvals"
+    body: |
+      A Waiting PR records nothing, so the drive's live snapshot (`judge_approval` in
+      triage_batch_cmd's queue read) would otherwise judge it `First`, which `is_approved`
+      admits to the queue. The snapshot, `views.fact_approvals` and `lanes` (the board's
+      "delivered: approve it" line) all compute waits with `approval.conflict_waits`, so a
+      Waiting PR is never a queue member and the board never asks for its label.
+  - kind: decision
+    id: p2-waiting-said-once-per-process
+    phase: 2
+    title: "The Waiting line is said once per (repo, PR, head) through a module-level set by default"
+    body: |
+      `settle_approvals(said=...)` takes the set; its default is a module-level set, so the
+      long-lived drive process says it once per head with no change in triage_batch_cmd
+      (8293 of 8300 lines). Tests pass their own set.
+  - kind: discovery
+    id: p2-fast-tier
+    phase: 2
+    title: "Fast tier run for phase 2 (see the executor's return for the pass/fail line)"
+    body: |
+      `uv run pytest --fr-scope origin/main -n 2 -q --no-cov` was run in the background with a
+      bounded wait; touched and neighbouring test files were also run directly. Advisory, not
+      tests evidence: this repo declares `tests: ci`.
+resolves: []
+evidence: {}
