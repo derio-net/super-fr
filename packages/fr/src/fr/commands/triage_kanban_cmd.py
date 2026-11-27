@@ -75,6 +75,7 @@ from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout
 from fr.triage.kanban import BoardStatus, build_board
 from fr.triage.kanban_render import render_board
+from fr.triage.lease import load_lease
 from fr.triage.merge_stops import load_stops
 from fr.triage.model import Facts, Judgements, Scope
 from fr.triage.orphan import focus_refusal
@@ -448,8 +449,9 @@ def write_board(
 
     The dwell ledger (spec 2026-11-27-board-session-state R5) is observed at *now* on every
     render and stored only by its one writer: *writer* True (the driver holding
-    `drive.lock`, or its supervisor), or None while no live driver holds the lock. False, or
-    None beside a live driver, observes in memory and leaves `dwell.json` alone."""
+    `drive.lock`, or its supervisor), or None while no driver runs anywhere
+    (`_no_driver_anywhere`). False, or None beside a driver here or on another host,
+    observes in memory and leaves `dwell.json` alone, so nothing new reaches the ref push."""
     _, facts, judgements = _load_state(scope, target, None)
     reads = read_sessions(judgements, facts, prefix=prefix, target=target, loader=loader)
     statuses, notes = reads.statuses, reads.notes
@@ -485,7 +487,7 @@ def write_board(
     if dwell_note is not None:
         notes.append(dwell_note)
     ledger = dwell.observe(ledger, board, rendered_at)
-    if writer or (writer is None and live_driver(target) is None):
+    if writer or (writer is None and _no_driver_anywhere(target, rendered_at, notes)):
         dwell.store(target, ledger)
     html = render_board(
         board,
@@ -507,6 +509,21 @@ def write_board(
         warn_nav(f"the Batches page's old file was not removed: {exc}")
     refresh_navs(target, "batches", warn=warn_nav)
     return out, len(judgements.batches)
+
+
+def _no_driver_anywhere(target: Path, now: datetime, notes: list[str]) -> bool:
+    """True when no live driver holds the local `drive.lock` and `lease.yaml` (which the
+    state ref carries from other hosts and cloud sessions) holds no lease unexpired at
+    *now* (R5, p2-r1). An unreadable lease is not proof of no driver: the render does
+    not store, and says why on the page."""
+    if live_driver(target) is not None:
+        return False
+    try:
+        held = load_lease(target)
+    except TriageError as exc:
+        notes.append(f"dwell times are not stored: {one_line(exc)}")
+        return False
+    return held is None or held.expired(now)
 
 
 def publish(scope: Scope, target: Path, board: Path, failures: set[str]) -> None:

@@ -398,6 +398,72 @@ def test_write_board_with_writer_false_never_stores(
     assert not (tmp_path / "dwell.json").exists()
 
 
+def _lease(tmp_path: Path, expires: datetime) -> None:
+    """A lease another host's (or a cloud session's) driver holds, as the state ref carries
+    it: no local `drive.lock` names that driver."""
+    body = {
+        "holder": "s:cloud:other-host",
+        "started": (expires - timedelta(hours=1)).isoformat(),
+        "expires": expires.isoformat(),
+    }
+    (tmp_path / "lease.yaml").write_text(yaml.safe_dump(body), encoding="utf-8")
+
+
+def test_write_board_beside_an_unexpired_lease_stores_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r1: a driver on another host or in the cloud holds no local lock, only the lease;
+    a render here must not store (and so push) the ledger it does not own."""
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    _lease(tmp_path, T_DWELL + timedelta(minutes=30))
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    assert not (tmp_path / "dwell.json").exists()
+    assert 'class="dwell"' in _column(path.read_text(encoding="utf-8"), "proposed")
+
+
+def test_write_board_beside_an_expired_lease_stores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    _lease(tmp_path, T_DWELL - timedelta(minutes=1))
+    write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    assert set(_dwell(tmp_path)["batches"]) == {"b1"}
+
+
+def test_write_board_with_no_lease_and_no_lock_stores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    assert not (tmp_path / "lease.yaml").exists()
+    write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    assert set(_dwell(tmp_path)["batches"]) == {"b1"}
+
+
+def test_a_non_writer_render_leaves_the_ledger_bytes_and_so_the_ref_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r1: `_push_if_changed` pushes only when a `REF_FILES` entry changed, and
+    `dwell.json` is the one a render writes; a render beside a live lease changes no byte
+    of it, even though the board moved and the in-memory ledger closed an interval."""
+    from fr.triage.state_ref import REF_FILES
+
+    assert "dwell.json" in REF_FILES
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    before = (tmp_path / "dwell.json").read_bytes()
+    _lease(tmp_path, T_DWELL + timedelta(hours=2))
+    _setup(tmp_path, _dispatch_event("b1"))
+    later = T_DWELL + timedelta(minutes=45)
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=later)
+    assert (tmp_path / "dwell.json").read_bytes() == before
+    assert 'class="dwell"' in _column(path.read_text(encoding="utf-8"), "running")
+    assert not any(p.name.startswith("dwell.json.") for p in tmp_path.iterdir())
+
+
 def test_an_unreadable_ledger_is_one_page_note_and_starts_over(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
