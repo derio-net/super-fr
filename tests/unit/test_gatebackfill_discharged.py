@@ -19,18 +19,15 @@ from tests.unit.gatebackfill_fixtures import (
     row,
     write_matrix,
 )
+from tests.unit.hermetic_git import hermetic_git  # noqa: F401
 from tests.unit.test_merge_evidence import _write_plan
+
+pytestmark = pytest.mark.usefixtures("hermetic_git")
 
 PLAN = "2026-10-20-ops"
 SLUG = "2026-10-20-widget"
 SPEC = f"{SP}/specs/{SLUG}-design.md"
 CREATED = "2026-10-11T10:00:00+00:00"
-
-
-@pytest.fixture(autouse=True)
-def _hermetic_git(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
 
 
 def owed(root: Path, key: str, *, entry_id: str = "owed-1", slug: str = "some-slug") -> None:

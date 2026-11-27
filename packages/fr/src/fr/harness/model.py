@@ -13,10 +13,12 @@ failure. Callers never catch pydantic's `ValidationError` directly.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
+from fr.yamlio import StrictLoader
 
 HARNESSES: tuple[str, ...] = ("claude-code", "opencode", "hermes", "codex", "copilot-cli")
 """The closed, ordered harness set (spec §3.A). Closed for the same reason
@@ -150,34 +152,15 @@ def _first_message(exc: ValidationError) -> str:
     return msg[len(prefix) :] if msg.startswith(prefix) else msg
 
 
-class _StrictLoader(yaml.SafeLoader):
-    """`SafeLoader` that refuses a mapping with a repeated key.
+class _StrictLoader(StrictLoader):
+    """`fr.yamlio.StrictLoader` that words a repeated key as a `HarnessError`.
 
-    PyYAML keeps the LAST occurrence and says nothing, so a duplicate key is a
-    *silent* rewrite: the shape still validates and the earlier value is simply
-    gone. For a file whose entire purpose is to not misstate a cell, that is
-    the wrong loader. Same detector, same reason, as
-    `fr.artifacts.structure._StrictLoader` — which exists because a row of
-    `docs/acceptance/matrix.yaml` carried `levels:` twice and lost a test ref
-    with nothing anywhere reporting it. (A local subclass rather than an
-    import: `fr.artifacts.structure` pulls the plan parser and pydantic models
-    in behind it, and this module is reached from CLI entry.)"""
+    The detector and the reason for it live once, in `fr.yamlio`; this reader
+    only overrides the refusal, because a parity file's callers expect a
+    `HarnessError` rather than PyYAML's own error."""
 
-    def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[Any, Any]:
-        seen: set[Any] = set()
-        for key_node, _ in node.value:
-            # PyYAML ships no stubs for its constructor API, hence the ignore —
-            # same as `fr.artifacts.structure._StrictLoader`, whose unhashable
-            # key guard is mirrored here too.
-            key: Any = self.construct_object(key_node, deep=deep)  # type: ignore[no-untyped-call]
-            try:
-                duplicate = key in seen
-            except TypeError:  # pragma: no cover — an unhashable YAML key
-                continue
-            if duplicate:
-                raise HarnessError(f"duplicate key {key!r} in parity data")
-            seen.add(key)
-        return super().construct_mapping(node, deep=deep)
+    def duplicate_key(self, node: Any, key_node: Any, key: Any) -> NoReturn:
+        raise HarnessError(f"duplicate key {key!r} in parity data")
 
 
 def _load_mapping(source: str | Mapping[str, object]) -> Mapping[str, object]:

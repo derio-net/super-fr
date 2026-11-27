@@ -20,7 +20,10 @@ from fr.commands import status_cmd
 from typer.testing import CliRunner
 
 from tests.unit.fakes import FakeGhClient
+from tests.unit.hermetic_git import hermetic_git  # noqa: F401
 from tests.unit.test_merge_evidence import _add_remote, _commit, _init, _publish, _write_plan
+
+pytestmark = pytest.mark.usefixtures("hermetic_git")
 
 SP = Path("docs/superpowers")
 
@@ -70,11 +73,7 @@ def _run_cursor(repo: Path, run_id: str, plan_rel: str) -> Path:
 
 
 @pytest.fixture(autouse=True)
-def _hermetic(monkeypatch: pytest.MonkeyPatch) -> None:
-    import os
-
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+def _stub_archive_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("fr.archive._fetch", lambda root, remote: None)
 
 

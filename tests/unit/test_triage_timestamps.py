@@ -18,6 +18,7 @@ pytestmark = pytest.mark.own_artifacts
 
 PACKAGES = Path(__file__).resolve().parents[2] / "packages"
 OWNER = PACKAGES / "fr" / "src" / "fr" / "triage" / "timestamps.py"
+UTC_OWNER = PACKAGES / "fr" / "src" / "fr" / "utc_time.py"
 
 
 @pytest.mark.parametrize("stamp", [None, "", "not a time", "2026-11-16T10:00:00"])
@@ -108,3 +109,14 @@ def test_only_the_owner_holds_that_body() -> None:
         for name in same_body_functions(py.read_text(), owner_source)
     ]
     assert found == [("fr/src/fr/triage/timestamps.py", "parse_aware")]
+
+
+def test_only_the_utc_owner_holds_the_naive_as_utc_body() -> None:
+    """`fr.utc_time.parse_as_utc` is the other contract's one reader (spec 2026-11-27 R8)."""
+    owner_source = UTC_OWNER.read_text()
+    found = [
+        (py.relative_to(PACKAGES).as_posix(), name)
+        for py in sorted(PACKAGES.glob("*/src/**/*.py"))
+        for name in same_body_functions(py.read_text(), owner_source)
+    ]
+    assert found == [("fr/src/fr/utc_time.py", "parse_as_utc")]

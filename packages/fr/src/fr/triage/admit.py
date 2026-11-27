@@ -24,7 +24,8 @@ import re
 from collections.abc import Collection, Iterable, Mapping
 from datetime import datetime
 
-from fr.triage.claims import _created, trusted_author
+from fr.triage.claims import trusted_author
+from fr.utc_time import parse_as_utc
 
 ADMIT_PREFIX = "<!-- fr-admit:"
 _SUFFIX = " -->"
@@ -76,7 +77,8 @@ def latest_admit(comments: Iterable[Mapping[str, object]], trusted: Collection[s
         digest = parse_admit(str(comment.get("body") or ""))
         if digest is None or not trusted_author(comment, allowed):
             continue
-        at = _created(comment)  # the claim reader's: a marker no time orders counts for nothing
+        # the claim reader's contract: a marker no time orders counts for nothing
+        at = parse_as_utc(comment.get("created_at"))
         if at is None:
             continue
         if best is None or at >= best[0]:

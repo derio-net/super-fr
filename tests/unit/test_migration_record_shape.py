@@ -14,6 +14,8 @@ from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 from fr.record.model import RECORD_SCHEMA_VERSION, load_record, parse_record
 
+from tests.unit.record_helpers import write_record
+
 _V5_RECORD = """\
 schema_version: 5
 run: r1
@@ -30,13 +32,6 @@ step: brainstorm
 outcome: done
 shape: fr-goal-light
 """
-
-
-def _record_file(root: Path, text: str = _V5_RECORD, stem: str = "implement-phase__phase-1"):
-    path = root / "docs" / "superpowers" / "runs" / "r1.records" / f"{stem}.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    return path
 
 
 def test_the_record_kind_is_at_version_six_or_later() -> None:
@@ -62,7 +57,7 @@ def test_the_chain_from_one_passes_six_hop_by_hop() -> None:
 
 
 def test_a_v5_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
-    path = _record_file(tmp_path)
+    path = write_record(tmp_path, _V5_RECORD)
     before = path.read_text()
 
     report = run_migrations(tmp_path, dry_run=False)
@@ -74,7 +69,7 @@ def test_a_v5_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
 
 
 def test_migrating_is_idempotent(tmp_path: Path) -> None:
-    path = _record_file(tmp_path)
+    path = write_record(tmp_path, _V5_RECORD)
     run_migrations(tmp_path, dry_run=False)
     once = path.read_text()
 
@@ -85,8 +80,8 @@ def test_migrating_is_idempotent(tmp_path: Path) -> None:
 
 
 def test_an_unreadable_v5_record_is_refused_byte_identical(tmp_path: Path) -> None:
-    broken = _record_file(tmp_path, "schema_version: 5\nticks: [nope]\n", stem="deliver")
-    healthy = _record_file(tmp_path)
+    broken = write_record(tmp_path, "schema_version: 5\nticks: [nope]\n", stem="deliver")
+    healthy = write_record(tmp_path, _V5_RECORD)
     before = broken.read_bytes()
 
     report = run_migrations(tmp_path, dry_run=False)
@@ -97,7 +92,7 @@ def test_an_unreadable_v5_record_is_refused_byte_identical(tmp_path: Path) -> No
 
 
 def test_a_v6_record_carrying_shape_loads(tmp_path: Path) -> None:
-    path = _record_file(tmp_path, _V6_BRAINSTORM_RECORD, stem="brainstorm")
+    path = write_record(tmp_path, _V6_BRAINSTORM_RECORD, stem="brainstorm")
     run_migrations(tmp_path, dry_run=False)
 
     record = load_record(path)
