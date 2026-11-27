@@ -46,3 +46,6 @@ Operator chose no install walk (recommended): the CI unit suite and the new AST 
 ### q-rows · decision · No new acceptance rows
 
 Operator chose no new rows (recommended): no product behaviour changes; the guards are tests, not business claims.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-arch-shared-helpers-p1 created=2026-11-27T09:04:33+00:00 -->
+### phase-split-2026-11-27-arch-shared-helpers-p1 · decision · review-size: the whole batch (R1-R9) is one reviewable diff; it has no acceptance rows by operator decision q-rows, so the phase serves the requirements directly
