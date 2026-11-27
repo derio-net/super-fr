@@ -10192,6 +10192,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T10:12:30.189859Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T10:12:44.573611Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -11243,6 +11258,18 @@ batches:
     checks:
     - ci-ok
     delivered: none
+  - kind: conflict
+    at: '2026-11-27T10:12:42.434777Z'
+    head: 7014bd9de4119c09b1c4ab31fe8dbb2ae5f906c1
+    paths:
+    - docs/explainers/fr-isolation.md
+    - docs/explainers/fr-triage.md
+    - docs/explainers/fr-wave-driver.md
+    - docs/herdr-control-sessions.md
+    - docs/reference/workflow-shapes.md
+    - docs/review-lenses.md
+    - packages/fr/src/fr/lenses/model.py
+    delivered: held
 - id: arch-run-ledger
   title: '#1318: move the write ledger out of run_cmd.py into fr/run/writes.py'
   ids:
