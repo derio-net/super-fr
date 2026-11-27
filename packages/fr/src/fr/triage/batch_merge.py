@@ -25,9 +25,7 @@ from fr.triage.batch_dispatch import TRIAGE_CONFIG_PATH
 from fr.triage.batch_drive import (
     checks_verdict,
 )
-from fr.triage.batch_drive_types import (
-    ChecksVerdict,
-)
+from fr.triage.batch_drive_types import ChecksVerdict
 from fr.triage.batch_version import (
     all_version_files,
     is_lockfile,

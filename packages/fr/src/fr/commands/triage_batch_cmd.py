@@ -241,17 +241,8 @@ from fr.triage.batch_drive import (
     unfinished_waves,
     wave_group,
 )
-from fr.triage.batch_drive_export import (
-    export_branch,
-    export_target,
-    export_wave_of,
-)
-from fr.triage.batch_drive_types import (
-    Action,
-    Admitted,
-    ChecksVerdict,
-    LivePr,
-)
+from fr.triage.batch_drive_export import export_branch, export_target, export_wave_of
+from fr.triage.batch_drive_types import Action, Admitted, ChecksVerdict, LivePr
 from fr.triage.batch_merge import (
     MergeConflictError,
     MergeContext,

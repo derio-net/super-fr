@@ -27,9 +27,7 @@ def driver_managed(branch: str) -> bool:
         HOUSEKEEPING_PREFIX,
         collected_name,
     )
-    from fr.triage.batch_drive_export import (
-        EXPORT_PREFIX,
-    )
+    from fr.triage.batch_drive_export import EXPORT_PREFIX
 
     batch = (BRANCH_PREFIX, FIX_BRANCH_PREFIX)
     legacy_archive = tuple(COLLECTED_PREFIX + p.replace("/", "-") for p in batch)

@@ -61,11 +61,7 @@ from fr.triage.batch_drive import (
     Snapshot,
     queue_snapshot,
 )
-from fr.triage.batch_drive_types import (
-    Action,
-    Admitted,
-    LivePr,
-)
+from fr.triage.batch_drive_types import Action, Admitted, LivePr
 from fr.triage.mergeability import conflicting
 from fr.triage.model import (
     ApprovalEvent,

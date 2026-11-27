@@ -30,13 +30,8 @@ from fr.triage.batch_drive import (
     HOUSEKEEPING_PREFIX,
     checks_verdict,
 )
-from fr.triage.batch_drive_export import (
-    EXPORT_PREFIX,
-)
-from fr.triage.batch_drive_types import (
-    Action,
-    LivePr,
-)
+from fr.triage.batch_drive_export import EXPORT_PREFIX
+from fr.triage.batch_drive_types import Action, LivePr
 from fr.triage.errors import TriageError
 from fr.triage.model import (
     ConflictEvent,
