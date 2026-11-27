@@ -3,7 +3,7 @@ run: 2026-11-26-feat-batch-arch-run-ledger
 workflow: fr-goal-light@1
 branch: feat/batch-arch-run-ledger
 started: '2026-11-26T18:28:12+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -54,8 +54,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-11-27T09:27:15+00:00'
+    state: done
+    at: '2026-11-27T09:37:33+00:00'
     members:
     - implement-phase
     - review-phase
@@ -76,7 +76,7 @@ steps:
         evidence:
           visual: none
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-27T09:26:29+00:00'
           harness: claude-code
@@ -89,6 +89,13 @@ steps:
           harness: claude-code
           model: claude-sonnet-5-5
           session: 6e6722ab-f02b-4fa2-8efd-b25754ecc390
+          returned: '2026-11-27T09:37:33+00:00'
+          outcome: done
+        evidence:
+          review: p1-review
+          reviewer: aad61136945d93f9b
+          visual: none
+          findings: p1-r1,p1-r2,p1-r3
   journal-check:
     state: pending
   lens-review:
