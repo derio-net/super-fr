@@ -215,3 +215,8 @@ no_forge also patches make_checkout, _open_checkout and _tracking_gate; plan and
 ### p2-r4-resolved-2 · finding [fixed] · resolves p2-r4: A batch that comes after a left-scope batch waits forever
 
 Fixed in this PR by l-docs-accuracy-r1: left-scope is in UNSATISFIABLE, so a dependent shows blocked (test_a_dependency_on_a_left_scope_batch_is_unsatisfiable). Operator approved marking it fixed.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved-2 created=2026-11-27T14:34:53+00:00 state=fixed resolves=p1-r2 answered_by=operator -->
+### p1-r2-resolved-2 · finding [fixed] · resolves p1-r2: triage_batch_cmd.py sits at its 8300-line module budget
+
+This PR moved triage_batch_cmd.py's budget 8300 -> 8320 with a reason (module at 8309). Operator approved treating that as the resolution.
