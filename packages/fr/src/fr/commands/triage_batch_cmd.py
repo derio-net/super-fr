@@ -343,6 +343,7 @@ from fr.triage.operator_entries import (
     lineage_reads,
     operator_reads,
 )
+from fr.triage.orphan import ORPHANED_HELP, orphan_refusal, retire
 from fr.triage.pacing import Pacer
 from fr.triage.privacy import VisibilityUnreadable, guard_write
 from fr.triage.probe import PassPlan
@@ -1090,6 +1091,7 @@ def batch_cancel_command(
     batch_id: Annotated[str, typer.Argument(help="The batch to withdraw.")],
     reason: Annotated[str, typer.Option("--reason", help="Why; posted on each member.")] = "",
     yes: Annotated[bool, typer.Option("--yes", help="Act; without it, print the plan.")] = False,
+    orphaned: Annotated[bool, typer.Option("--orphaned", help=ORPHANED_HELP)] = False,
     checkout_path: CheckoutOpt = None,
     repo: RepoOpt = None,
     org: OrgOpt = None,
@@ -1100,6 +1102,21 @@ def batch_cancel_command(
     target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     batch = _find(judgements.batches, batch_id)
     stage = derive_batch_stage(batch, facts)
+    if (why := orphan_refusal(batch, facts, orphaned=orphaned)) is not None:
+        _fail(why)
+    if orphaned:  # 2026-11-27-closeout-state R8: only the cancel event, nothing on the forge
+        say = partial(console.print, markup=False)
+        retire(
+            batch,
+            yes=yes,
+            reason=reason,
+            at=_now_after(batch),
+            say=say,
+            save=lambda b: _write(
+                target, _replace(judgements.batches, b), facts, read=judgements.batches
+            ),
+        )
+        return
     # An obsolete batch (never dispatched, every member closed) is cancelled to retire it:
     # it withdraws nothing, so only the cancel event is appended (2026-11-22-triage-hardening R9).
     if stage in CLOSED_OUT and stage != "obsolete":
