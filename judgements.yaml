@@ -11365,6 +11365,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T18:32:54.434433Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -12415,6 +12422,13 @@ batches:
     handle: w3V:p8
     run: 2026-11-27-feat-batch-queue-followups
     archive: chore/closeout-2026-11-27-1
+  - kind: closeout
+    at: '2026-11-27T18:32:56.188762Z'
+    runner: herdr
+    handle: w3V:p8
+    run: 2026-11-27-feat-batch-queue-followups
+    archive: chore/closeout-2026-11-27-1
+    archived: 1743
 - id: closeout-state
   title: Close-outs and batches never stuck as started or Running
   ids:
@@ -12440,6 +12454,13 @@ batches:
     handle: w3V:p8
     run: 2026-11-27-feat-batch-closeout-state
     archive: chore/closeout-2026-11-27-1
+  - kind: closeout
+    at: '2026-11-27T18:32:56.188808Z'
+    runner: herdr
+    handle: w3V:p8
+    run: 2026-11-27-feat-batch-closeout-state
+    archive: chore/closeout-2026-11-27-1
+    archived: 1743
 - id: export-drift
   title: Triage export refuses to overwrite a repo-side edit; targeted import
   ids:
@@ -12522,6 +12543,13 @@ batches:
     handle: w3V:p8
     run: 2026-11-26-feat-batch-arch-shared-helpers
     archive: chore/closeout-2026-11-27-1
+  - kind: closeout
+    at: '2026-11-27T18:32:56.188834Z'
+    runner: herdr
+    handle: w3V:p8
+    run: 2026-11-26-feat-batch-arch-shared-helpers
+    archive: chore/closeout-2026-11-27-1
+    archived: 1743
 - id: arch-run-ledger
   title: '#1318: move the write ledger out of run_cmd.py into fr/run/writes.py'
   ids:
@@ -12558,6 +12586,13 @@ batches:
     handle: w3V:p8
     run: 2026-11-26-feat-batch-arch-run-ledger
     archive: chore/closeout-2026-11-27-1
+  - kind: closeout
+    at: '2026-11-27T18:32:56.188860Z'
+    runner: herdr
+    handle: w3V:p8
+    run: 2026-11-26-feat-batch-arch-run-ledger
+    archive: chore/closeout-2026-11-27-1
+    archived: 1743
 - id: arch-isolation-split
   title: '#1318: split the free functions out of isolation/local.py'
   ids:
@@ -12581,6 +12616,13 @@ batches:
     handle: w3V:p8
     run: 2026-11-26-feat-batch-arch-isolation-split
     archive: chore/closeout-2026-11-27-1
+  - kind: closeout
+    at: '2026-11-27T18:32:56.188884Z'
+    runner: herdr
+    handle: w3V:p8
+    run: 2026-11-26-feat-batch-arch-isolation-split
+    archive: chore/closeout-2026-11-27-1
+    archived: 1743
 - id: arch-plan-ops-split
   title: '#1318: split self-review, the spec table and the refactor-gate read out of plan_ops.py'
   ids:
@@ -12631,6 +12673,13 @@ batches:
     handle: w3V:p8
     run: 2026-11-26-feat-batch-arch-plan-ops-split
     archive: chore/closeout-2026-11-27-1
+  - kind: closeout
+    at: '2026-11-27T18:32:56.188909Z'
+    runner: herdr
+    handle: w3V:p8
+    run: 2026-11-26-feat-batch-arch-plan-ops-split
+    archive: chore/closeout-2026-11-27-1
+    archived: 1743
 - id: triage-privacy
   title: 'Triage privacy: outsider text never reaches worker sessions or the state ref unfenced'
   ids:
@@ -13835,6 +13884,7 @@ closeouts:
   - arch-isolation-split
   - arch-plan-ops-split
   pr: 1743
+  merged: true
   head: d0d88bebc4224d26304633eef7f6a0a9d68ba127
   members:
   - queue-followups
