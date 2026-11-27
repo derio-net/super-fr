@@ -70,6 +70,7 @@ from fr.commands.triage_cmd import (
     RepoOpt,
     WorkspaceOpt,
     _load_state,
+    _previous_facts,
     _scope,
     _sync_with_ref,
     batch_app,
@@ -8135,7 +8136,7 @@ def build_driver(
     chosen = _chosen(known, batch_ids) if known else []
     facts_path = target / "facts.json"
     try:
-        facts = load_scope_facts(facts_path, scope) if facts_path.exists() else None
+        facts = _previous_facts(facts_path, scope)  # unusable facts count as absent
         # a batch whose repo left the scope is driven no more: no clone is asked for it
         names = {_batch_slug(scope, b.repo_name) for b in chosen if not _left(b, facts)}
         checkouts = checkout_map(checkout, scope, names)

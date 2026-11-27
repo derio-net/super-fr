@@ -349,7 +349,8 @@ def is_deferred(batch: Batch) -> bool:
 
 
 def is_terminal(batch: Batch, stage: str | None) -> bool:
-    """Landed, cancelled, abandoned, obsolete or deferred: it holds no wave open (R2, R30)."""
+    """Landed, cancelled, abandoned, obsolete, left-scope or deferred: it holds no wave open
+    (R2, R30)."""
     return stage in TERMINAL_STAGES or is_deferred(batch)
 
 

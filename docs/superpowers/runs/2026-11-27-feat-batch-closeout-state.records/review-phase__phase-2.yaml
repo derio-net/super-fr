@@ -1,0 +1,44 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-closeout-state
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+  - kind: finding
+    id: p2-r1
+    phase: 2
+    review_scope: in
+    title: "After cancel --orphaned, plan_sync owes claim releases every pass that fail on the departed repo"
+    body: "Once cancelled, releasing() is true and owed_releases lists the members; execute fails each with 'its repo is not in this scope's facts' (claim_sync.py:201-204), setting failed_write so drive --once exits 1 every pass."
+  - kind: finding
+    id: p2-r2
+    phase: 2
+    review_scope: in
+    title: "build_driver loads facts.json strictly, so an unusable file makes drive exit 2 at startup"
+    body: "load_scope_facts refuses an old-schema, corrupt or other-scope file; before this change build_driver read no facts and collect re-read such a file leniently (triage_cmd._previous_facts)."
+  - kind: finding
+    id: p2-r3
+    phase: 2
+    review_scope: in
+    title: "Docstrings of is_open, wave_queue.is_terminal and finished_waves list the old closed sets"
+    body: "batch.py:387, wave_queue.py:352, batch_drive.py:1245 omitted left-scope."
+  - kind: finding
+    id: p2-r4
+    phase: 2
+    review_scope: out
+    title: "A batch that comes after a left-scope batch waits forever"
+    body: "dependency_state gives waiting for left-scope (in neither meets_dependency nor UNSATISFIABLE). Unchanged from before: the batch derived dispatched, which also waited; the spec does not decide this case."
+  - kind: review
+    id: review-p2
+    phase: 2
+    title: "Phase 2 review: R4-R9 met apart from p2-r1..p2-r3 (in), p2-r4 (out)"
+    body: "Independent reviewer checked the predicate, stage order, every closed set, board, build_driver and the checkout-map move, focus and cancel --orphaned, batch list, the changed plan_overlap test, the README regeneration, the tests and the explainer."
+resolves:
+  - {id: p2-r1, state: fixed, body: "plan_sync drops every batch left_scope holds, whatever its stage; test_an_orphan_cancelled_batch_plans_no_release."}
+  - {id: p2-r2, state: fixed, body: "build_driver reads facts through triage_cmd._previous_facts, so an unusable file counts as absent; test_unusable_facts_count_as_absent (old schema, corrupt, empty)."}
+  - {id: p2-r3, state: fixed, body: "The three docstrings name left-scope."}
+  - {id: p2-r4, state: out-of-scope, body: "Pre-existing: a dependent of the batch waited the same way when it derived dispatched; deciding left-scope as unsatisfiable is a separate change."}
+evidence:
+  review: review-p2
+  reviewer: addf2cfdbaf6b4533
+  model: claude-opus-5-5

@@ -65,3 +65,14 @@ def test_without_facts_every_repo_still_needs_a_clone(tmp_path: Path) -> None:
     target = _state(tmp_path, [], facts=False)
     with pytest.raises(Exit):
         _build(target, ["example-org/kept=/tmp/kept"])
+
+
+@pytest.mark.parametrize(
+    "text", ['{"schema": 1}', "not json", ""], ids=["old-schema", "corrupt", "empty"]
+)
+def test_unusable_facts_count_as_absent(tmp_path: Path, text: str) -> None:
+    """p2-r2: drive never refuses to start over a facts file collect would re-read anyway."""
+    target = _state(tmp_path, [], facts=False)
+    (target / "facts.json").write_text(text, "utf-8")
+    driver = _build(target, ["example-org/kept=/tmp/kept", "example-org/gone=/tmp/gone"])
+    assert set(driver.checkout_paths) == {"example-org/kept", "example-org/gone"}

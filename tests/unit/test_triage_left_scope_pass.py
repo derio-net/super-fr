@@ -84,3 +84,26 @@ def test_preselected_wave_skips_a_left_scope_batch() -> None:
     gone["ids"] = ["other#1"]  # its repo is not among the facts' repos
     jj = judgements(judged, [gone, batch("b", [1], wave=1)])
     assert preselected_wave(f, jj) == 1
+
+
+def test_an_orphan_cancelled_batch_plans_no_release(tmp_path: Path) -> None:
+    """p2-r1: once cancelled, a dispatched batch whose repo left the scope owes no release:
+    its repo is unreachable, so the release would fail every pass."""
+    (tmp_path / "judgements.yaml").write_text(
+        "schema: 6\ntiers: [{n: 1, title: Now}]\nissues:\n  'super-fr#11': {tier: 1}\n"
+        "batches:\n  - {id: mine, title: mine, ids: ['super-fr#11'], wave: 1, events: ["
+        "{kind: dispatch, at: '2026-10-14T10:00:00+00:00', runner: herdr, handle: h, "
+        "branch: feat/batch-mine}, {kind: cancel, at: '2026-10-14T10:30:00+00:00'}]}\n",
+        "utf-8",
+    )
+    batches = load_judgements(tmp_path / "judgements.yaml").batches
+    facts = Facts(
+        viewer="operator",
+        scope="derio-net--other",
+        kind="repo",
+        collected_at="2026-10-14T11:00:00+00:00",
+        repos=["derio-net/other"],
+        issues=[],
+    )
+    plan = cs.plan_sync(_env("s-11111111", facts), batches, NOW)
+    assert plan.ops == [] and plan.held == []

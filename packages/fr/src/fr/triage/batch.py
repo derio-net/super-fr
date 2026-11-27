@@ -384,7 +384,7 @@ def derive_batch_stage(batch: Batch, facts: Facts) -> BatchStage:
 
 
 def is_open(batch: Batch, facts: Facts) -> bool:
-    """Open unless cancelled, merged, partial, abandoned or obsolete (spec §3.A)."""
+    """Open unless cancelled, merged, partial, abandoned, obsolete or left-scope (spec §3.A)."""
     return derive_batch_stage(batch, facts) not in CLOSED_OUT
 
 
