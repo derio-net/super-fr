@@ -14,9 +14,11 @@ rows:
       interpreter.
     origin:
     - spec:2026-11-27-ci-hygiene#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ci_python_floor.py#test_every_uv_workflow_pins_uv_python_to_the_floor
+    status: ci
+    notes: every setup-uv workflow pins UV_PYTHON; unit test runs in CI
   - id: ci-workflows-least-privilege-token
     capability: CI token scope
     acceptance: Every workflow declares its token permissions at workflow level, and
