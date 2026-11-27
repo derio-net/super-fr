@@ -153,3 +153,6 @@ row_kinds:
 run_gate: none
 run_kind: none
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-closeout-state-p2 created=2026-11-27T11:30:10+00:00 -->
+### phase-split-2026-11-27-closeout-state-p2 · decision · ask: #1626's left-scope stage and cancel --orphaned is its own ask, independent of #1601's take-back
