@@ -3,7 +3,7 @@ run: 2026-11-27-feat-batch-closeout-state
 workflow: fr-goal@1
 branch: feat/batch-closeout-state
 started: '2026-11-27T11:04:53+00:00'
-cursor: journal-check
+cursor: lens-review
 steps:
   brainstorm:
     state: done
@@ -117,7 +117,11 @@ steps:
           visual: none
           findings: p2-r1,p2-r2,p2-r3,p2-r4
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-27T13:23:28+00:00'
+    exit: 0
+    stdout: |
+      2 out-of-scope finding(s): p1-r2, p2-r4
   lens-review:
     state: pending
   deliver:
