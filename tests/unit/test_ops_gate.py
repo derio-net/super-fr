@@ -1390,3 +1390,84 @@ def test_a_forge_error_on_the_default_branch_read_is_a_refusal_naming_it(
     assert exc.value.code == 2
     assert "cannot read the default branch from the forge" in exc.value.why
     assert "SSO or forward-auth login page" in exc.value.why
+
+
+# ------------------------------------- ops-gate-truth R6: ops a refresh reopened
+
+
+def test_the_host_state_keeps_reopened_ops_and_the_entries_before_them(ops_root: Path) -> None:
+    state = _host(ops_root)
+    assert state.reopened() == (frozenset(), frozenset())
+    state.set_reopened({"post", "new"}, {"e1", "e2"})
+    assert state.reopened() == (frozenset({"post", "new"}), frozenset({"e1", "e2"}))
+    state.clear_reopened()
+    assert state.reopened() == (frozenset(), frozenset())
+
+
+def test_forget_drops_the_stages_from_n_and_keeps_the_rest(ops_root: Path) -> None:
+    state = _host(ops_root)
+    for n in (1, 3, 4, 5, 6):
+        state.mark(n, head=HEAD if n == 1 else None)
+    state.set_cut(HEAD)
+    state.set_pushed(TIP)
+    state.set_reopened({"post"}, {"e1"})
+    state.forget(4)
+    assert state.stages() == {1, 3}
+    assert (state.head(), state.cut(), state.pushed()) == (HEAD, HEAD, TIP)
+    assert state.reopened() == (frozenset({"post"}), frozenset({"e1"}))
+
+
+def _post_applies(host: FakeHost) -> list[list[str]]:
+    applies = [a for a, _ in host.calls if a[:2] == ["isolation", "exec"] and "apply" in a]
+    return [a[a.index("--") + 1 :] for a in applies]
+
+
+def test_a_reopened_op_whose_old_evidence_closes_it_is_applied_again(ops_root: Path) -> None:
+    gate, host, tree, _, prompt, _ = _gate(ops_root, up=True)
+    old = record_op(ops_root, "p", op="post", result="done", phase="post-merge")
+    host.live["post"] = "DONE"
+    gate_mod.apply_phase(gate, "post-merge")
+    assert _post_applies(host) == []  # recorded and live: nothing to do
+
+    _host(ops_root).set_reopened({"post"}, {old.id})
+    host.calls.clear()
+    gate_mod.apply_phase(gate, "post-merge")
+    assert _post_applies(host) == [["fr", "ops", "apply", "post", "--plan", PLAN, "--yes"]]
+    assert prompt.asked == []  # live DONE: it records, runs nothing
+
+    host.live["post"] = "OPEN"
+    host.calls.clear()
+    _host(ops_root).set_reopened({"post"}, {old.id, *_entry_ids(ops_root)})
+    gate_mod.apply_phase(gate, "post-merge")
+    assert _post_applies(host) == [["fr", "ops", "apply", "post", "--plan", PLAN, "--yes"]]
+    assert len(prompt.asked) == 1 and "post" in prompt.asked[0]  # it runs: confirmed
+
+
+def _entry_ids(root: Path) -> set[str]:
+    from fr.journal.model import parse_journal
+
+    return {e.id for e in parse_journal(journal_path(root, "plan", "p").read_text())}
+
+
+def test_a_closure_from_before_the_refresh_does_not_close_a_reopened_op(ops_root: Path) -> None:
+    gate, host, tree, *_ = _gate(ops_root, up=True)
+    host.live["post"] = "DONE"
+    host.how["post"] = "attested"  # closed by its journal entry, not by a live check
+    old = record_op(ops_root, "p", op="post", result="done", phase="post-merge")
+    ops = gate_mod._ops(tree, PLAN, "post-merge")
+    rows = gate_mod._status_rows(gate, "post-merge")
+    assert gate_mod._unclosed(gate, tree, ops, rows) == []
+
+    _host(ops_root).set_reopened({"post"}, {old.id})
+    assert gate_mod._unclosed(gate, tree, ops, rows) == ["post: DONE"]
+    record_op(ops_root, "p", op="post", result="done", phase="post-merge")  # after the refresh
+    assert gate_mod._unclosed(gate, tree, ops, rows) == []
+
+
+def test_stage_4_clears_the_reopened_ops(ops_root: Path) -> None:
+    _record_stages(ops_root, 1, 3)
+    gate, *_ = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _host(ops_root).set_reopened({"post"}, set())
+    gate_mod.stage_4(gate)
+    assert 4 in _host(ops_root).stages()
+    assert _host(ops_root).reopened() == (frozenset(), frozenset())

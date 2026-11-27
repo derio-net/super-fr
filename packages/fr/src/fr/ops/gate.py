@@ -30,7 +30,7 @@ import json
 import os
 import re
 import shlex
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
@@ -259,6 +259,14 @@ class GateState(Protocol):
 
     def mark(self, n: int, *, head: str | None = None) -> None: ...
 
+    def reopened(self) -> tuple[frozenset[str], frozenset[str]]: ...
+
+    def set_reopened(self, ops: Iterable[str], before: Iterable[str]) -> None: ...
+
+    def clear_reopened(self) -> None: ...
+
+    def forget(self, from_stage: int) -> None: ...
+
 
 class HostGateState:
     """The operator's own record of a run's DevOps stage (R15): the stages done and the PR
@@ -303,6 +311,33 @@ class HostGateState:
         data["stages"] = sorted(self.stages() | {n})
         if head is not None:
             data["head"] = head
+        self._write(data)
+
+    def reopened(self) -> tuple[frozenset[str], frozenset[str]]:
+        """The ops a refresh reopened, and the plan-journal entry ids present at that
+        refresh: none of those closes a reopened op (spec 2026-11-27-ops-gate-truth R6)."""
+        raw = self._data().get("reopened")
+        raw = raw if isinstance(raw, dict) else {}
+
+        def ids(key: str) -> frozenset[str]:
+            value = raw.get(key)
+            return frozenset(str(i) for i in value) if isinstance(value, list) else frozenset()
+
+        return ids("ops"), ids("before")
+
+    def set_reopened(self, ops: Iterable[str], before: Iterable[str]) -> None:
+        self._write({**self._data(), "reopened": {"ops": sorted(ops), "before": sorted(before)}})
+
+    def clear_reopened(self) -> None:
+        data = self._data()
+        data.pop("reopened", None)
+        self._write(data)
+
+    def forget(self, from_stage: int) -> None:
+        """Drop stages *from_stage* and later; the heads, the lease and the reopened ops
+        stay, so the same run goes back to *from_stage* (R6)."""
+        data = self._data()
+        data["stages"] = sorted(n for n in self.stages() if n < from_stage)
         self._write(data)
 
     def _write(self, data: dict[str, Any]) -> None:
@@ -566,15 +601,24 @@ def _recorded_here(lo: LoadedOp, tree: OpsTree, slug: str, at_head: set[str]) ->
     return ev is not None and ev.entry_id not in at_head and recorded_close(lo, ev) is not None
 
 
+def _excluded(gate: Gate, tree: OpsTree) -> Callable[[str], set[str]]:
+    """The plan-journal entry ids that close nothing, per op: the PR head's own, and for an
+    op a refresh reopened, every entry from before that refresh (R6)."""
+    from fr.ops.refresh import closure_exclusions
+
+    at_head = head_entry_ids(tree, gate.pinned_head(), "plan", gate.target.slug)
+    return closure_exclusions(gate.state, at_head)
+
+
 def _unclosed(
     gate: Gate, tree: OpsTree, ops: Sequence[LoadedOp], rows: Mapping[str, Mapping[str, Any]]
 ) -> list[str]:
     """Each op the live status and the ops branch's own evidence do not close."""
-    at_head = head_entry_ids(tree, gate.pinned_head(), "plan", gate.target.slug)
+    excluded = _excluded(gate, tree)
     out = []
     for lo in ops:
         row = rows.get(lo.op.id)
-        if _closed(lo, row, tree, gate.target.slug, at_head) is None:
+        if _closed(lo, row, tree, gate.target.slug, excluded(lo.op.id)) is None:
             live = str(row.get("label") or row.get("state")) if row else "not reported"
             out.append(f"{lo.op.id}: {live}")
     return out
@@ -607,11 +651,12 @@ def apply_phase(gate: Gate, phase: str) -> None:
     ops = _ops(tree, t.plan_rel, phase)
     gate.say(f"{phase} ops of {t.slug}: {len(ops)}")
     rows = _status_rows(gate, phase)
-    at_head = head_entry_ids(tree, gate.pinned_head(), "plan", t.slug)
+    excluded = _excluded(gate, tree)
     for lo in ops:
         op = lo.op
-        closed = _closed(lo, rows.get(op.id), tree, t.slug, at_head) is not None
-        if closed and _recorded_here(lo, tree, t.slug, at_head):
+        skip = excluded(op.id)
+        closed = _closed(lo, rows.get(op.id), tree, t.slug, skip) is not None
+        if closed and _recorded_here(lo, tree, t.slug, skip):
             continue
         state = str(rows.get(op.id, {}).get("state") or "")
         flags = ["--yes"]
@@ -998,6 +1043,7 @@ def stage_4(gate: Gate) -> None:
     if QUEUE_POSTMERGE_DONE.name not in labels:  # added by hand under `forge.labels: off`
         add_queue_label(gate, QUEUE_POSTMERGE_DONE)
     gate.finish(gate.tree(), 4, "post-merge ops closed")
+    gate.state.clear_reopened()  # applied again: a later refresh decides afresh (R6)
 
 
 _KEYWORD = re.compile(

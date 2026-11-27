@@ -25,6 +25,9 @@ from typing import TYPE_CHECKING
 from fr.ops.gate import StageFailed
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from fr.ops.gate import GateState
     from fr.ops.model import Op
     from fr.spec import Step
 
@@ -91,3 +94,11 @@ def drift(
         test_plan=_steps_of(workspace_root, spec_rel, "the ops workspace")
         != _steps_of(default_root, spec_rel, "the default branch"),
     )
+
+
+def closure_exclusions(state: GateState, at_head: set[str]) -> Callable[[str], set[str]]:
+    """Per op id, the plan-journal entries that do not close it: the PR head's own
+    (*at_head*), and for an op a refresh reopened, also every entry present at that refresh.
+    Only its live status, or evidence recorded after the refresh, closes it (R6)."""
+    reopened, before = state.reopened()
+    return lambda op_id: at_head | before if op_id in reopened else at_head
