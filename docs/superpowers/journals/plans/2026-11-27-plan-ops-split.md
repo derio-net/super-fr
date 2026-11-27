@@ -197,3 +197,8 @@ plan_review writes nothing, so the guard has nothing to cover; this change adds 
 ### l-simplicity-r2-resolved-2 · finding [deferred → derio-net/super-fr#1727] · resolves l-simplicity-r2: journal_entries is a generic reader housed in plan_review; four modules hand-roll the same read
 
 Filed as #1727: move journal_entries to fr.journal and adopt it in the hand-rolled readers.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r3-resolved-2 created=2026-11-27T13:10:19+00:00 state=open resolves=l-simplicity-r3 tracked_by=derio-net/super-fr#1727 -->
+### l-simplicity-r3-resolved-2 · finding [deferred → derio-net/super-fr#1727] · resolves l-simplicity-r3: _spec_journal_entries docstring restates the rule journal_entries owns
+
+Folded into #1727: drop the restated rule from _spec_journal_entries' docstring when journal_entries moves.
