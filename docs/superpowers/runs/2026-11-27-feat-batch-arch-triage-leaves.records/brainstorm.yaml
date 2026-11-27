@@ -1,0 +1,51 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-arch-triage-leaves
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - kind: discovery
+    input: true
+    id: brief
+    title: "Operator brief: batch arch-triage-leaves (super-fr#1516)"
+    body: |
+      /fr-goal batch arch-triage-leaves — Batch `arch-triage-leaves` of derio-net/super-fr: 1 issue, one PR.
+      Issue #1516 title: "Split the wave-export and hand-back leaves out of triage/batch_drive.py (the one cheap triage slice)".
+      Body (summary of the tracker text): decomposition plan for packages/fr/src/fr/triage/batch_drive.py from the #1318
+      review (section 5.2), P3 refactor, no behaviour change. The slice: wave export (batch_drive.py:1219-1443 at 3d398d19)
+      and hand-back decisions (:828-1035) to batch_drive_export.py and batch_drive_handback.py, re-exported from
+      batch_drive; drive_pass, Snapshot and Action stay as one planner. Preserved: drive_pass's action order; every
+      public name importable from fr.triage.batch_drive. Callers to migrate: none. Guards: widen
+      test_the_pass_module_reaches_no_runner_git_process_or_clock to a batch_drive*.py glob; lower the budget.
+      Delivery rules: branch feat/batch-arch-triage-leaves; draft PR with "Closes derio-net/super-fr#1516"; run started
+      with --issue 1516; no member issue as a phase tracking_issue; no fr pr settle loop (the wave driver owns
+      mergeability and CI); never add approved-fr.
+  - kind: decision
+    id: q1-cycle
+    title: "Break the export import cycle with a value-types leaf, batch_drive_types.py"
+    body: "Operator chose: move LivePr, Action, Admitted, ChecksVerdict, ActionKind, CONFLICTING (and EXPORT_PREFIX stays with export) into a pure batch_drive_types.py; batch_drive re-exports. Rejected: a lazy import in the leaf; a leaf-local verdict type."
+  - kind: decision
+    id: q2-handback-home
+    title: "The remaining hand-back decisions move into the existing handback_rules.py"
+    body: "Operator chose one home for every hand-back rule over a new batch_drive_handback.py; the purity guards name handback_rules.py beside the batch_drive*.py glob."
+  - kind: decision
+    id: q3-finished-waves
+    title: "finished_waves stays in batch_drive"
+    body: "Operator chose to keep finished_waves (read by board, kanban, history and the triage command) beside closeout_event/is_finished; the export leaf takes export_branch through _stale_orphans."
+  - kind: decision
+    id: q4-verification
+    title: "Verification: strategy none, gate developer, the CI suite is the evidence"
+    body: "Operator chose strategy none over a candidate walk: a pure move proves nothing more installed. No Test Plan."
+  - kind: decision
+    id: q5-rows
+    title: "No acceptance rows"
+    body: "Operator chose no rows: the change alters nothing a user sees; the import, purity and budget tripwires are the evidence."
+  - kind: discovery
+    id: wrong-base-shared
+    title: "_wrong_base is shared by the export row, the collected close-out step and drive_pass"
+    body: "batch_drive.py:1156, :2044, :2053 call it besides _export_row; it moves to batch_drive_types beside LivePr, not to the export leaf."
+resolves: []
+acceptance: []
+emitted:
+  spec: docs/superpowers/specs/2026-11-27-triage-leaves-split-design.md
+evidence: {}
