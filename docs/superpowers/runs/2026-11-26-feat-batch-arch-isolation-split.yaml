@@ -3,7 +3,7 @@ run: 2026-11-26-feat-batch-arch-isolation-split
 workflow: fr-goal@1
 branch: feat/batch-arch-isolation-split
 started: '2026-11-26T18:27:45+00:00'
-cursor: lens-review
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -184,8 +184,8 @@ steps:
     exit: 0
     stdout: ''
   lens-review:
-    state: running
-    at: '2026-11-27T10:24:09+00:00'
+    state: done
+    at: '2026-11-27T10:25:02+00:00'
     units:
       step/lens-review:
         attempts:
@@ -193,6 +193,13 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: e7b88638-d75e-401b-b20b-fe99a8901c21
+          returned: '2026-11-27T10:25:02+00:00'
+          outcome: done
+        evidence:
+          review: lens-review-1
+          reviewer: docs-accuracy=a3c18c74a2ea3deb0
+          findings: none
+          lenses: docs-accuracy=12:none
   deliver:
     state: pending
 fr_version: 9.1.0rc3

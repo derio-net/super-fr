@@ -65,3 +65,12 @@ Dispatched reviewer confirmed byte-identical bodies, landing.py imports per R2, 
 ### p4-r1-resolved · finding [fixed] · resolves p4-r1: R2 AST guard (test_isolation_network_timeouts.py:281-302) misses relative imports (`from .local import X`, `from . import local`) (phase 4)
 
 ded94bed5: `_local_imports` resolves relative imports against fr.isolation; planted tests cover absolute, aliased, relative, parent-relative and lazy forms plus a negative sibling case; 27 passed.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-27T10:25:02+00:00 -->
+### lens-review-1 · review · lens review (docs-accuracy): no findings
+
+One dispatched reviewer for the docs-accuracy lens over da66accc5..HEAD. The seven touched pages change only by a still-true reviewed stamp; no page body names a moved function or local.py; the shape file matches the diff.
+```review-lens
+lens: docs-accuracy
+examined: docs/explainers/fr-dispatch.md, docs/explainers/fr-isolation.md, docs/explainers/fr-progress.md, docs/explainers/fr-triage.md, docs/herdr-control-sessions.md, docs/reference/cli.md, docs/reference/dispatch-lifecycle.md, packages/fr-herdr/src/fr_herdr/runner.py, packages/fr/src/fr/closeout.py, packages/fr/src/fr/commands/archive_cmd.py, packages/fr/src/fr/commands/isolation_cmd.py, packages/fr/src/fr/triage/gitseam.py
+```
