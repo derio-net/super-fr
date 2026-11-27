@@ -129,9 +129,12 @@ def left_scope(batch: Batch, facts: Facts) -> bool:
     """Whether the batch's repo left the scope: absent from the facts, and the facts hold no
     truncation of the repo list (a list cut at its limit may only have lost the repo from
     view; 2026-11-27-closeout-state R4)."""
-    return batch_repo(batch, facts) is None and not any(
-        w.source == "repos" for w in facts.warnings
-    )
+    return batch_repo(batch, facts) is None and not any(w.source == "repos" for w in facts.warnings)
+
+
+def left_scope_note(batch: Batch, facts: Facts | None) -> str:
+    """The `batch list` row's closing words for a `left-scope` batch (empty without facts)."""
+    return "  repo left this scope" if facts is not None and left_scope(batch, facts) else ""
 
 
 def last_dispatch(batch: Batch) -> DispatchEvent | None:

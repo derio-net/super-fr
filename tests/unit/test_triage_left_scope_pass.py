@@ -1,4 +1,4 @@
-"""A `left-scope` batch is left alone by claims, waves and the pass (2026-11-27-closeout-state R5)."""
+"""A `left-scope` batch is left alone by claims, waves and the pass (closeout-state R5)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 from fr.triage import claim_sync as cs
 from fr.triage.batch_drive import finished_waves, wave_landings_done
 from fr.triage.claims import owed_claims, owed_releases, releasing
-from fr.triage.model import Batch, Facts, load_judgements
+from fr.triage.model import Facts, load_judgements
 from fr.triage.views import cancelled_waves, preselected_wave
 from fr.triage.wave_queue import is_terminal
 

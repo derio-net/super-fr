@@ -163,6 +163,7 @@ from fr.triage.batch import (
     effective_handle,
     foreign_batch_prs,
     last_dispatch,
+    left_scope_note,
     lifecycle_events,
     mixed_themes,
     parse_refs,
@@ -882,7 +883,7 @@ def _wave_columns(batch: Batch, batches: list[Batch], facts: Facts | None) -> st
     closeout = closeout_state(batch)
     wave = "-" if batch.wave is None else str(batch.wave)
     after = f"  after {deps}" if deps else ""
-    return f"  wave {wave}{after}  close-out {closeout}"
+    return f"  wave {wave}{after}  close-out {closeout}{left_scope_note(batch, facts)}"
 
 
 def _warn_mixed_themes(batch: Batch, judgements: Judgements) -> None:

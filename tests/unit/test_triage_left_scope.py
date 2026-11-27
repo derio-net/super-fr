@@ -15,7 +15,6 @@ from tests.unit.triage_board_fixtures import (
     pr,
 )
 
-
 CANCEL_EVENT = {"kind": "cancel", "at": "2026-10-01T12:00:00Z", "reason": "superseded"}
 
 

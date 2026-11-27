@@ -751,7 +751,8 @@ def preselected_wave(
     live = [
         n
         for n, stage, b in waved
-        if stage not in {"merged", "cancelled", "obsolete", "left-scope"} and not batch_awaits_live(b, facts)
+        if stage not in {"merged", "cancelled", "obsolete", "left-scope"}
+        and not batch_awaits_live(b, facts)
     ]
     return max(live) if live else max(n for n, _, _ in waved)
 

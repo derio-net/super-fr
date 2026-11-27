@@ -118,8 +118,12 @@ _COLUMN_OF_STAGE: Mapping[BatchStage, Column] = {
     "pr-open": "pr-open",
     "cancelled": "done",
     "abandoned": "done",
+    # The batch's repo left the scope's facts (2026-11-27-closeout-state R6): finished.
+    "left-scope": "done",
 }
-PILL_STAGES: frozenset[BatchStage] = frozenset({"cancelled", "abandoned", "partial"})
+PILL_STAGES: frozenset[BatchStage] = frozenset({"cancelled", "abandoned", "partial", "left-scope"})
+# The pill's words where they differ from the stage name; the one place pill text lives.
+_PILL_TEXT: Mapping[BatchStage, str] = {"left-scope": "repo left this scope"}
 _DEAD: frozenset[DependencyState] = frozenset({"unsatisfiable", "unknown"})
 
 # R6: what the driver's action means for a card, by action kind.
@@ -308,7 +312,9 @@ class HeldIssue:
     line: str  # `claims.held_line`: the same words the drive and the batch verbs use
 
 
-_TERMINAL_STAGES: frozenset[BatchStage] = frozenset({"merged", "cancelled", "abandoned"})
+_TERMINAL_STAGES: frozenset[BatchStage] = frozenset(
+    {"merged", "cancelled", "abandoned", "left-scope"}
+)
 
 
 @dataclass(frozen=True)
@@ -441,14 +447,16 @@ def column_of(
     """R2's table, from `derive_batch_stage`, `dependency_state` and `closeout_state`; a
     batch `lane_of` places is in that Needs-you lane instead (exit-gates R17). *stop* is
     the batch's live merge stop."""
-    if derive_batch_stage(batch, facts) == "obsolete":
+    stage = derive_batch_stage(batch, facts)
+    if stage == "obsolete":
         return "obsolete"
+    if stage == "left-scope":
+        return "done"
     if not batch.events:
         waiting = any(dependency_state(d, batches, facts) != "satisfied" for d in batch.after)
         return "waiting" if waiting else "proposed"
     if (lane := lane_of(batch, facts, stop)) is not None:
         return lane.lane
-    stage = derive_batch_stage(batch, facts)
     if stage in _COLUMN_OF_STAGE:
         return _COLUMN_OF_STAGE[stage]
     if closeout_state(batch) == "archived":
@@ -456,10 +464,17 @@ def column_of(
     return "partial" if stage == "partial" else "closing-out"
 
 
+def jumpable(status: str | None, stage: BatchStage) -> bool:
+    """Whether a card offers a Jump command: it has a session, and its batch is not
+    `left-scope` (no runner of the scope reaches a departed repo's session)."""
+    return status is not None and status != "absent" and stage != "left-scope"
+
+
 def pill_of(batch: Batch, facts: Facts) -> str | None:
-    """`cancelled`, `abandoned` or `partial`: the word a Done card carries; else None."""
+    """`cancelled`, `abandoned`, `partial` or `repo left this scope`: the words a Done card
+    carries; else None."""
     stage = derive_batch_stage(batch, facts)
-    return stage if stage in PILL_STAGES else None
+    return _PILL_TEXT.get(stage, stage) if stage in PILL_STAGES else None
 
 
 # -------------------------------------------------------------------- hints
@@ -683,6 +698,7 @@ def _card(
     stop = stops.get(batch.id)
     lane = lane_of(batch, facts, stop)
     column = column_of(batch, facts, batches, stop=stop)
+    stage = derive_batch_stage(batch, facts)
     deps = tuple(Dep(d, dependency_state(d, batches, facts)) for d in batch.after)
     repo = batch_repo(batch, facts)
     dispatch, closeout = last_dispatch(batch), closeout_event(batch)
@@ -763,15 +779,15 @@ def _card(
     return Card(
         batch=batch,
         column=column,
-        stage=derive_batch_stage(batch, facts),
+        stage=stage,
         pill=pill_of(batch, facts),
         blocked=column == "waiting" and any(d.state in _DEAD for d in deps),
         hint=hint,
         needs_you=needs_you,
         status=status,
         closeout_status=closeout_status,
-        show_jump=status is not None and status != "absent",
-        show_closeout_jump=closeout_status is not None and closeout_status != "absent",
+        show_jump=jumpable(status, stage),
+        show_closeout_jump=jumpable(closeout_status, stage),
         hand_closeout=closeout is not None and closeout.runner == "hand",
         members=_members(batch, facts),
         pr=None
