@@ -102,6 +102,8 @@ class FakeTree:
         self.push_error: str | None = None
         self.leases: list[str | None] = []
         self.head_files: dict[str, str] = {}  # what the PR head carries, by path
+        self.merge_conflict: tuple[str, ...] = ()  # paths a merge_commit conflicts on
+        self.on_merge: Any = None  # called on a clean merge: what the merge brings in
 
     def snapshot_head(self) -> None:
         """Freeze the tree's current journals as what the PR head carries (p4-r2)."""
@@ -163,6 +165,14 @@ class FakeTree:
         self.calls.append(("rebase", (new_base, upstream)))
         if self.rebase_error:
             raise RuntimeError(self.rebase_error)
+
+    def merge_commit(self, ref: str, message: str) -> str:
+        self.calls.append(("merge", (ref, message)))
+        if self.merge_conflict:
+            raise gate_mod.MergeConflict(self.merge_conflict)
+        if self.on_merge is not None:
+            self.on_merge()
+        return HEAD
 
     def push(self, branch: str, lease: str | None = None) -> None:
         self.calls.append(("push", branch))

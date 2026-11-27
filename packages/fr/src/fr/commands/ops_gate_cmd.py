@@ -72,6 +72,20 @@ class OpsWorkspace:
         git(["fetch", "--quiet", "origin"], self.path)
         self._tree.rebase_onto(new_base, upstream)
 
+    def merge_commit(self, ref: str, message: str) -> str:
+        from fr.ops.gate import MergeConflict
+        from fr.triage.gitseam import git, git_ok
+
+        git(["fetch", "--quiet", "origin"], self.path)
+        conflicted = self._tree.merge(ref)
+        if conflicted:
+            self._tree.abort_merge()
+            raise MergeConflict(conflicted)
+        if not git_ok(["rev-parse", "--quiet", "--verify", "MERGE_HEAD"], self.path):
+            return self._tree.head()  # *ref* is already in the ops branch: nothing to merge
+        git(["commit", "--no-verify", "--quiet", "--no-edit", "-m", message], self.path)
+        return self._tree.head()
+
     def push(self, branch: str, lease: str | None = None) -> None:
         """fr owns the ops branch and stage 3 rebases it, so a later push replaces it, but
         only while the remote is still at the sha fr last pushed (`--force-with-lease`);

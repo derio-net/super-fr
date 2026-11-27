@@ -76,6 +76,14 @@ class StageFailed(Exception):  # noqa: N818 — a stage's stop, not a fault
 # --------------------------------------------------------------------------- ports
 
 
+class MergeConflict(Exception):  # noqa: N818 — git's verdict, carried to the stage
+    """A merge into the ops branch conflicted and was aborted: the conflicted paths."""
+
+    def __init__(self, paths: Sequence[str]) -> None:
+        super().__init__(", ".join(paths))
+        self.paths = tuple(paths)
+
+
 class GateHost(Protocol):
     def materialise(self, ref: str, paths: Sequence[str]) -> Path:
         """A fresh temporary directory holding *paths* as *ref* carries them (`git archive
@@ -142,6 +150,13 @@ class OpsTree(Protocol):
     def commit_paths(self, paths: list[str], message: str) -> str | None: ...
 
     def rebase_onto(self, new_base: str, upstream: str) -> None: ...
+
+    def merge_commit(self, ref: str, message: str) -> str:
+        """Fetch origin, then merge *ref* into the ops branch with a merge commit; the new
+        head. Never a rebase: the pushed ops branch moves forward only, so its lease holds
+        (spec 2026-11-27-ops-gate-truth R3). A conflict is aborted, leaving HEAD and the
+        working tree as they were, and raised as `MergeConflict`."""
+        ...
 
     def push(self, branch: str, lease: str | None = None) -> None:
         """Push HEAD to *branch*: with *lease*, only while the remote is still at that sha
