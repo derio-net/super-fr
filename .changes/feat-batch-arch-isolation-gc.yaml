@@ -1,0 +1,2 @@
+bump: patch
+summary: isolation gc moves from LocalWorktreeDevcontainerTarget to a GcSweeper collaborator in fr/isolation/gc.py (no behaviour change)
