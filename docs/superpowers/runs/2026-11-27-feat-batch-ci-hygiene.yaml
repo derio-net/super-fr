@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-27-ci-hygiene-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-11-27T20:16:00+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-27T20:16:00+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: claude-opus-5-5
+          session: 1d1108f9-da26-4cbe-8254-4bfd597bcf81
   plan:
     state: pending
   plan-review:
