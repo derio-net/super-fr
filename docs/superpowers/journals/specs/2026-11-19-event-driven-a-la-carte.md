@@ -362,3 +362,52 @@ Filed at deliver as derio-net/super-fr#1698; still owed until discharged.
 ### sr-oos-1-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1697] · resolves sr-oos-1: Under repo placement, executable configuration on the default branch is equally unprotected on a GitHub free-plan private repo
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1697.
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-1 created=2026-11-27T12:53:31+00:00 -->
+### test-plan-step-1 · discovery · Test Plan step 1: ran
+
+Step: pre-merge — CI: `tests/unit/test_config_space.py` pins `dir`, `at_default` and `at_pair` under repo, quiet and stealth, the ignored-product notice and the `fr settings paths` answers (R1 to R4, R9), and `tests/unit/test_tripwire_config_space.py` fails a `.fr` path construction outside the resolver and passes a message naming one (R2, R22) (row `s1-config-root`).
+
+Evidence: test_config_space.py + test_tripwire_config_space.py: 51 passed on main edc6195a7 (contains merge 817a8547b), 2026-11-27; PR #1696 CI green on head 1a9f634 (7 shards, ci-ok)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-2 created=2026-11-27T12:53:34+00:00 -->
+### test-plan-step-2 · discovery · Test Plan step 2: ran
+
+Step: pre-merge — CI: `tests/unit/test_placement_quiet.py` and `tests/unit/test_settings_load.py` read the switch on `fr-config` and the old file, write both in step and refuse two that differ; `tests/unit/test_hooks_isolation_required.py` and `tests/unit/test_isolation_decision_core.py` cover the hook library's new switch read, the `fr-config` worktree and stealth configuration clone as write targets, and the old-path fallback (the Hermes hook sources the same library), and `bun test` in `packages/fr-opencode-plugin` covers the plugin (R5, R6, R8, R13) (row `s1-switch-moved`).
+
+Evidence: test_placement_quiet/test_settings_load/test_hooks_isolation_required/test_isolation_decision_core: 165 passed; bun test fr-opencode-plugin: 419 pass 0 fail on main edc6195a7 (contains merge 817a8547b), 2026-11-27; PR #1696 CI green on head 1a9f634 (7 shards, ci-ok)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-3 created=2026-11-27T12:53:36+00:00 -->
+### test-plan-step-3 · discovery · Test Plan step 3: ran
+
+Step: pre-merge — CI: `tests/unit/test_config_protection.py` answers enforced, not enforced (free-plan 403, 404, no `pull_request` rule, unreadable, non-GitHub forge) from captured REST fixtures, and each executor refuses with the reason under quiet and runs under repo (R7) (row `s1-executable-config-protection`).
+
+Evidence: test_config_protection.py + test_config_protection_executors.py: 86 passed on main edc6195a7 (contains merge 817a8547b), 2026-11-27; PR #1696 CI green on head 1a9f634 (7 shards, ci-ok)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-4 created=2026-11-27T12:53:39+00:00 -->
+### test-plan-step-4 · discovery · Test Plan step 4: ran
+
+Step: pre-merge — CI: framework tests for location-stamped kinds and relocating hops (locators, no-op stamp, staged rename, validation at the destination, cross-space ordering with a refused push); per-kind migration tests under each placement, R12's refusal, the untracked allowlist, the profiles 1 → 3 chain and its crash window, and the quiet `.fr/` move (R10 to R12); the notice readers (R13) and the owed entry (R14) (row `s1-migration`).
+
+Evidence: s1-migration row unit refs (migration_config_kinds, config_move_verified, config_legacy_by_tip, config_stealth_keeps_product, config_profiles_v1_across): 56 passed on main edc6195a7 (contains merge 817a8547b), 2026-11-27; PR #1696 CI green on head 1a9f634 (7 shards, ci-ok)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-5 created=2026-11-27T12:53:41+00:00 -->
+### test-plan-step-5 · discovery · Test Plan step 5: ran
+
+Step: pre-merge — CI: `tests/unit/test_tripwire_shipped_defaults.py` and resolver tests for the order, the aliases and lenses taking no repo directory (R15, R16) (row `s1-shipped-defaults`).
+
+Evidence: test_tripwire_shipped_defaults.py + test_shipped_defaults_resolve.py: 54 passed on main edc6195a7 (contains merge 817a8547b), 2026-11-27; PR #1696 CI green on head 1a9f634 (7 shards, ci-ok)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-6 created=2026-11-27T12:53:43+00:00 -->
+### test-plan-step-6 · discovery · Test Plan step 6: ran
+
+Step: pre-merge — CI: triage tests for the cache repository syncing with no product clone, the move and each of its five rules, the stealth-workspace default, the one-repo default, the override and the mismatch set, `schema: 2`, and the privacy guard on each (R17 to R21) (row `s1-triage-state-home`).
+
+Evidence: test_triage_state_home/state_repo_s1/state_repo/state_ref_sync: 114 passed on main edc6195a7 (contains merge 817a8547b), 2026-11-27; PR #1696 CI green on head 1a9f634 (7 shards, ci-ok)
+
+<!-- fr:journal kind=discovery scope=spec id=test-plan-step-7 created=2026-11-27T12:53:46+00:00 -->
+### test-plan-step-7 · discovery · Test Plan step 7: ran
+
+Step: pre-merge — candidate: `tests/scenarios/` gains a configuration-homes scenario that installs the candidate, migrates fixture repos holding every old path under repo, quiet and stealth (with local bare remotes), and runs `fr settings paths`, `fr workflow check`, `fr verification list` and a triage collect against them (every row above).
+
+Evidence: candidate walk 20261125T193454Z.log@1d25ab3ab065 at deliver: install+smoke+config-homes.sh for all 5 rows exit 0; re-run tests/integration/test_scenarios.py::test_config_homes: 1 passed on main edc6195a7 (contains merge 817a8547b), 2026-11-27; PR #1696 CI green on head 1a9f634 (7 shards, ci-ok)
