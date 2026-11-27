@@ -1,0 +1,94 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-board-session-state
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+- kind: finding
+  id: p1-r1
+  phase: 1
+  review_scope: in
+  title: The R2 background test built boards with statuses={}, so background never changed a wait
+  body: The R2 background test built boards with statuses={}, so background never changed a wait
+- kind: finding
+  id: p1-r2
+  phase: 1
+  review_scope: in
+  title: A null lane_owners, a lone string or a null lane refused the repo's whole triage.yaml; a user-written
+    ignored key faked a note
+  body: A null lane_owners, a lone string or a null lane refused the repo's whole triage.yaml; a user-written
+    ignored key faked a note
+- kind: finding
+  id: p1-r3
+  phase: 1
+  review_scope: in
+  title: A lane card with no owners showed no (unassigned) while its header did
+  body: A lane card with no owners showed no (unassigned) while its header did
+- kind: finding
+  id: p1-r4
+  phase: 1
+  review_scope: in
+  title: Gated PR cards in Tester/DevOps lanes rendered no wait or owners
+  body: Gated PR cards in Tester/DevOps lanes rendered no wait or owners
+- kind: finding
+  id: p1-r5
+  phase: 1
+  review_scope: in
+  title: A wrapped wait pill kept its full radius, turning a long owner list into a circle
+  body: A wrapped wait pill kept its full radius, turning a long owner list into a circle
+- kind: review
+  id: review-p1
+  phase: 1
+  title: 'phase 1 review: 5 in-scope findings, all fixed'
+  body: Independent reviewer (separate context) checked waits.py against spec §A row by row, SessionActivity,
+    read_sessions, LaneOwners, escaping, docs and tests; raised p1-r1..p1-r5, all in scope, all fixed
+    in 35b795095 with tests (384 targeted tests pass).
+resolves:
+- id: p1-r1
+  state: fixed
+  body: test_background_never_moves_a_column_or_a_hint now uses idle statuses, asserts a wait differs,
+    then that columns and hints are equal.
+- id: p1-r2
+  state: fixed
+  body: LaneOwners' before-validator normalises null/str/null-list, drops non-strings into the note, treats
+    a user `ignored:` as unknown (stored as fr_ignored_keys); four parse_triage_config tests, post_merge
+    survives.
+- id: p1-r3
+  state: fixed
+  body: _wait always names owners or (unassigned) for a role wait in a Needs-you column, never outside
+    one; two tests.
+- id: p1-r4
+  state: fixed
+  body: _gated_card renders the lane's wait pill and owners; two tests.
+- id: p1-r5
+  state: fixed
+  body: Owners moved to a muted span.wait-owners line under a short pill; test_the_owners_never_sit_inside_the_pill.
+evidence:
+  review: review-p1
+  reviewer: afc54c0486df2998c
+  model: claude-opus-5-5
+visual:
+- row: batch-card-waits-for
+  script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/164db869-0dd1-4fdb-8624-054c412af9ff/scratchpad/render_vis_review.py
+  shots:
+  - path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/164db869-0dd1-4fdb-8624-054c412af9ff/scratchpad/vis-review/waits-1400x1700.png
+    shows:
+    - wait-you-reviewer
+    - wait-agent
+    - wait-background
+    - wait-ci
+    - wait-queue
+    - wait-dependency
+    - terminal-no-wait
+  - path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/164db869-0dd1-4fdb-8624-054c412af9ff/scratchpad/vis-review/waits-390x2600.png
+    shows:
+    - phone-width-long-ids
+- row: batch-lane-owners
+  script: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/164db869-0dd1-4fdb-8624-054c412af9ff/scratchpad/render_vis_review.py
+  shots:
+  - path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/164db869-0dd1-4fdb-8624-054c412af9ff/scratchpad/vis-review/owners-two-1400x1700.png
+    shows:
+    - owners-named
+    - owner-unassigned
+    - owners-per-repo
+    - lane-card-owners
