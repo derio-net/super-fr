@@ -10,3 +10,8 @@
 ### c3c792188da9 · hypothesis · the trust read searches only facts.prs
 
 collect files a PR whose Closes lines name an issue under that issue's prs; facts.prs holds only open PRs linked to no issue. queue add looked up author/cross_repo in facts.prs alone, so a linked PR read as never-read. Confirmed by the new tests failing on main.
+
+<!-- fr:journal kind=root-cause scope=debug id=73a9581e21ca created=2026-11-27T20:06:12+00:00 -->
+### 73a9581e21ca · root-cause · queue add reads PR author and origin from facts.prs only, so a linked batch PR has no identity
+
+packages/fr/src/fr/commands/triage_queue_cmd.py queue_add_command looked up the PR in facts.prs (unlinked open PRs). A batch PR closes its members, so collect files it under those issues' prs; the lookup returned None and distrust() answered 'never read'. batch_pr (via _branch_prs) already pools member-linked PRs, facts.prs and facts.batch_prs and applies distrust itself.
