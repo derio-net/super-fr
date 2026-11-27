@@ -25,8 +25,10 @@ from pathlib import Path  # noqa: E402
 import pytest  # noqa: E402
 from fr.commands import triage_batch_cmd  # noqa: E402
 from fr.triage import batch as batch_mod  # noqa: E402
+from fr.triage.drive_errors import fail_exit  # noqa: E402
 from fr.triage.errors import TriageError  # noqa: E402
 from fr.triage.model import load_judgements  # noqa: E402
+from fr.triage.privacy import VisibilityUnreadable  # noqa: E402
 
 from tests.unit.test_triage_batch_closeout_cmd import _landed as _world_landed  # noqa: E402
 from tests.unit.test_triage_batch_dispatch import FakeRunner  # noqa: E402
@@ -42,33 +44,39 @@ from tests.unit.test_triage_batch_drive_cmd import (  # noqa: E402
 )
 
 
-def _fail_takeback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Every `save_closeouts` after the marker's own write raises `TriageError`."""
+def _fail_takeback(monkeypatch: pytest.MonkeyPatch, make: object = TriageError) -> None:
+    """Every `save_closeouts` after the marker's own write raises `make("store moved")`."""
     real = triage_batch_cmd.save_closeouts
     seen: list[int] = []
 
     def wrapped(path: Path, closeouts: list, *, read: list) -> object:
         seen.append(1)
         if len(seen) > 1:
-            raise TriageError("store moved")
+            raise make("store moved")  # type: ignore[operator]
         return real(path, closeouts, read=read)
 
     monkeypatch.setattr(triage_batch_cmd, "save_closeouts", wrapped)
 
 
+@pytest.mark.parametrize(
+    "make",
+    [TriageError, fail_exit, VisibilityUnreadable],
+    ids=["triage", "fail-exit", "visibility"],
+)
 def test_a_collected_start_whose_takeback_fails_reports_both_errors_once(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, make: object,
 ) -> None:  # fmt: skip
     _world_landed(world, tmp_path, "b1")
     checkout.released = True
     runner.fail = RuntimeError("tab refused")
-    _fail_takeback(monkeypatch)
+    _fail_takeback(monkeypatch, make)
 
     code, out = _drive(tmp_path, "--once", "--yes")
 
     (line,) = _lines(out, "closeout")
     assert "tab refused" in line and "store moved" in line
+    assert "exited 2" not in line  # a `fail_exit`'s carried text, never its code
     assert code == 1, out  # failed_write: --once exits 1, nothing escaped the action
     assert "Traceback" not in out
 
@@ -86,6 +94,7 @@ def test_a_takeback_that_keeps_failing_is_said_once() -> None:
     )
 
     assert first.startswith("stopped: ") and second.startswith("stopped again")
+    assert first.endswith("failed too: x")
     assert driver.failed_write
 
 
