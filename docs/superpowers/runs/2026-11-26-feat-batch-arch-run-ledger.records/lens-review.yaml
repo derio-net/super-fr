@@ -1,0 +1,14 @@
+schema_version: 12
+run: 2026-11-26-feat-batch-arch-run-ledger
+step: lens-review
+outcome: done
+journal:
+  - kind: review
+    id: lens-review-1
+    global: true
+    title: "lens review: docs-accuracy and tests, no findings"
+    body: "docs-accuracy: both touched pages are stamp-only and still true (workflow-shapes.md lines 51-54 hold against writes.py:265 and run_cmd.py:245-247). tests: every monkeypatch of a moved lookup intercepts where it is called; the conflict refusal stays CLI-tested (test_run_durability.py:219); the layering guard plants each spelling. Shape file matches the diff in both reviews."
+resolves: []
+evidence:
+  review: lens-review-1
+  reviewer: "docs-accuracy=a4977ca28e4fb65df,tests=a5541b9252a94d7d3"
