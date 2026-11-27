@@ -10,3 +10,28 @@ A runner error with no `code` keys the dedupe on the whole message, so appending
 ### p1-module-budget · discovery · triage_batch_cmd.py sits at its 8300-line budget (phase 1)
 
 The shared take-back wording lives in `fr.triage.drive_errors.takeback_failed` (beside `fail_text`) so the module stays within budget (8299).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-27T12:25:52+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · Take-back failure tests used only TriageError; the fail_exit and VisibilityUnreadable cases were untested (phase 1)
+
+tests/unit/test_triage_closeout_takeback.py raised only TriageError, so a regression from fail_text back to str(exc) on a fail_exit would go unnoticed; the dedupe test never asserted the take-back text on the first line.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-27T12:25:52+00:00 phase=1 state=open review_scope=out -->
+### p1-r2 · finding [open] (reviewer: out of scope) · triage_batch_cmd.py sits at its 8300-line module budget (phase 1)
+
+Not a defect of this phase; phase 2 adds to the module and must extract code or move the budget with a reason in its own diff.
+
+<!-- fr:journal kind=review scope=plan id=review-p1 created=2026-11-27T12:25:52+00:00 phase=1 -->
+### review-p1 · review · Phase 1 review: R1-R3 met; findings p1-r1 (in), p1-r2 (out) (phase 1)
+
+Independent reviewer checked both guarded take-backs, the single reported line, the dedupe key, R3's unchanged success path, fail_text and the boundary, the tests and the fragment. Raised p1-r1 and p1-r2.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-27T12:25:52+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: Take-back failure tests used only TriageError; the fail_exit and VisibilityUnreadable cases were untested (phase 1)
+
+The collected take-back test is parametrized over TriageError, fail_exit and VisibilityUnreadable and asserts the carried text (never 'exited 2'); the dedupe test asserts the first line ends with the take-back text.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-27T12:25:52+00:00 phase=1 state=open resolves=p1-r2 out_of_scope=true -->
+### p1-r2-resolved · finding [out-of-scope] · resolves p1-r2: triage_batch_cmd.py sits at its 8300-line module budget (phase 1)
+
+The budget was already near full before this change; phase 2, which adds to the module, handles it in its own diff.
