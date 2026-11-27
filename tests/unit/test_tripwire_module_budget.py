@@ -1,4 +1,4 @@
-"""Line budget for the five largest modules (spec 2026-11-16 architecture-review-sweep, R12).
+"""Line budget for five held modules (spec 2026-11-16 architecture-review-sweep, R12).
 
 A budget is a review trigger, not a ceiling for the codebase. The module may not grow
 past its budget, and the budget may not sit more than `MAX_HEADROOM` lines above the
