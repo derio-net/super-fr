@@ -60,6 +60,8 @@ class _Herdr:
         assert args[:2] == ["pane", "read"], args
         assert "--source" in args and "visible" in args and "--ansi" in args
         self.reads.append(args[2])
+        if self.screens[args[2]] == "RAISE":
+            raise RuntimeError("pane read failed")
         return {"raw": self.screens[args[2]]}
 
 
@@ -95,6 +97,24 @@ def test_an_idle_claude_pane_with_a_shell_is_background_and_nothing_else_is_read
     herdr.install(monkeypatch)
     assert HerdrRunner().session_background(items) == frozenset({ids[0]})
     assert sorted(herdr.reads) == ["p0", "p3"]
+
+
+def test_one_unreadable_pane_never_loses_another_items_background_mark(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    items = [run_item(run_id=r) for r in ("a", "b", "c")]
+    ids = [i.id for i in items]
+    herdr = _Herdr(
+        tabs=[_tab(ids[0], "t0", "idle"), _tab(ids[1], "t1", "idle"), _tab(ids[2], "t2", "idle")],
+        agents=[
+            _agent("t0", "p0"),
+            _agent("t1", "p1"),
+            {"agent": "claude", "tab_id": "t2", "agent_status": "idle"},  # no pane_id
+        ],
+        screens={"p0": "RAISE", "p1": _screen("screen-background.json")},
+    )
+    herdr.install(monkeypatch)
+    assert HerdrRunner().session_background(items) == frozenset({ids[1]})
 
 
 # ------------------------------------------------------------------ read_sessions

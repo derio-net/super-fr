@@ -77,7 +77,7 @@ from fr.triage.kanban import BoardStatus, build_board
 from fr.triage.kanban_render import render_board
 from fr.triage.lease import load_lease
 from fr.triage.merge_stops import load_stops
-from fr.triage.model import Facts, Judgements, Scope
+from fr.triage.model import Facts, IgnoredLane, Judgements, Scope
 from fr.triage.orphan import focus_refusal
 from fr.triage.plan_overlap import card_lines, plan_overlap_report, source_for_clones
 from fr.triage.quota import budget_from_json
@@ -404,14 +404,31 @@ def gated_notes(facts: Facts) -> list[str]:
     return notes
 
 
+_LANES_SAID = "lanes are developer, reviewer, tester, devops"
+
+
+def _ignored_note(item: IgnoredLane) -> str:
+    """One ignored item, worded for its own cause (l-errors-r4)."""
+    match item.cause:
+        case "unknown-key":
+            return f"`{item.key}` is not a lane ({_LANES_SAID})"
+        case "not-a-list":
+            return f"`{item.key}` is not a list of logins"
+        case "not-a-login":
+            return f"`{item.key}` is not a login"
+        case _:
+            return f"`{item.key}` is not a mapping"
+
+
 def lane_owner_notes(facts: Facts) -> list[str]:
-    """One page note per repo whose `lane_owners:` names a key that is no lane (spec
-    2026-11-27-board-session-state R4): the key is ignored, never a refusal."""
+    """One page note per repo whose `lane_owners:` held something the board ignores (spec
+    2026-11-27-board-session-state R4): never a refusal, and each ignored item is worded
+    for its own cause."""
     return [
-        f"{repo}: lane_owners ignores {', '.join(f'`{k}`' for k in cfg.lane_owners.ignored)} "
-        "(lanes are developer, reviewer, tester, devops)"
+        f"{repo}: lane_owners ignores "
+        + "; ".join(_ignored_note(i) for i in cfg.lane_owners.ignored_causes)
         for repo, cfg in sorted(facts.config.items())
-        if cfg.lane_owners.ignored
+        if cfg.lane_owners.ignored_causes
     ]
 
 
@@ -488,7 +505,14 @@ def write_board(
         notes.append(dwell_note)
     ledger = dwell.observe(ledger, board, rendered_at)
     if writer or (writer is None and _no_driver_anywhere(target, rendered_at, notes)):
-        dwell.store(target, ledger)
+        try:  # the board is a view: a ledger that cannot be kept never stops the page (r2)
+            if dwell_note is not None and (kept := dwell.set_aside(target)) is not None:
+                notes.append(f"the unusable {dwell.DWELL_FILE} was moved to {kept}")
+            dwell.store(target, ledger)
+        except OSError as exc:
+            notes.append(
+                f"dwell times are not stored: {target / dwell.DWELL_FILE}: {one_line(exc)}"
+            )
     html = render_board(
         board,
         scope_args=scope_args,

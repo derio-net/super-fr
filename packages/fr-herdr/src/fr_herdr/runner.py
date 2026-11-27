@@ -216,7 +216,7 @@ class HerdrRunner:
         2026-11-27-board-session-state R3): one `tab list` and one `agent list`, then one
         `pane read` per Claude agent pane of an idle tab, asked of
         `restart.has_background_work`. A working or blocked tab is never read, and neither
-        is another agent kind."""
+        is another agent kind. A pane with no id, or one that cannot be read, is skipped."""
         tabs = _list_tabs()
         idle = [i for i in items if _status_of(_tabs_labelled(tabs, i.id)) in ("idle", "done")]
         if not idle:
@@ -231,11 +231,17 @@ class HerdrRunner:
                     or _HARNESSES.get(str(agent.get("agent"))) != "claude"
                 ):
                     continue
-                screen = str(
-                    _run_herdr(
-                        ["pane", "read", str(agent.get("pane_id")), "--source", "visible", "--ansi"]
-                    ).get("raw", "")
-                )
+                pane = agent.get("pane_id")
+                if not pane:
+                    continue
+                try:  # one unreadable pane never loses the marks already found (r1)
+                    screen = str(
+                        _run_herdr(
+                            ["pane", "read", str(pane), "--source", "visible", "--ansi"]
+                        ).get("raw", "")
+                    )
+                except Exception:  # noqa: BLE001
+                    continue
                 if restart.has_background_work(screen):
                     found.add(item.id)
                     break

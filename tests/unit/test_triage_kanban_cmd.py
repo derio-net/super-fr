@@ -476,6 +476,56 @@ def test_an_unreadable_ledger_is_one_page_note_and_starts_over(
     assert set(_dwell(tmp_path)["batches"]) == {"b1"}  # rewritten, not a crash
 
 
+def test_a_writer_keeps_the_unusable_ledger_as_dwell_json_bad_and_names_the_path_and_loc(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    bad = b'{"schema": 1, "batches": {"b1": {"column": "nowhere"}}}'
+    (tmp_path / "dwell.json").write_bytes(bad)
+    (tmp_path / "dwell.json.bad").write_bytes(b"older")
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    page = path.read_text(encoding="utf-8")
+    assert (tmp_path / "dwell.json.bad").read_bytes() == bad
+    assert f"{tmp_path / 'dwell.json'}: not usable" in page and "batches.b1.column" in page
+    assert "was moved to" in page and "dwell.json.bad" in page
+    assert set(_dwell(tmp_path)["batches"]) == {"b1"}
+
+
+def test_a_reader_leaves_the_unusable_ledger_where_it_is(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    (tmp_path / "dwell.json").write_text("{garbage", encoding="utf-8")
+    write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL, writer=False)
+    assert (tmp_path / "dwell.json").read_text(encoding="utf-8") == "{garbage"
+    assert not (tmp_path / "dwell.json.bad").exists()
+
+
+def test_dwell_json_bad_never_rides_on_the_state_ref() -> None:
+    from fr.triage import state_ref
+
+    assert state_ref._allowed("dwell.json") and not state_ref._allowed("dwell.json.bad")
+
+
+def test_a_ledger_that_cannot_be_stored_is_a_note_and_the_page_still_renders(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage import dwell
+
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+
+    def refuse(*_a: Any, **_k: Any) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(dwell, "store", refuse)
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    page = path.read_text(encoding="utf-8")
+    assert f"dwell times are not stored: {tmp_path / 'dwell.json'}: disk full" in page
+
+
 # ---------------------------------------------------------------- --watch (R12)
 
 

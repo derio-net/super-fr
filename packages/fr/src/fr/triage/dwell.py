@@ -127,12 +127,30 @@ def load(state_dir: Path) -> tuple[Ledger, str | None]:
     except FileNotFoundError:
         return Ledger(), None
     except (OSError, ValueError) as exc:  # ValueError: not UTF-8
-        return Ledger(), f"{DWELL_FILE}: unreadable, dwell times start over ({exc})"
+        return Ledger(), f"{path}: unreadable, dwell times start over ({exc})"
     try:
         return Ledger.model_validate_json(text), None
     except ValidationError as exc:
-        why = exc.errors()[0].get("msg", "invalid") if exc.errors() else "invalid"
-        return Ledger(), f"{DWELL_FILE}: not usable, dwell times start over ({why})"
+        errors = exc.errors()
+        where = ".".join(str(p) for p in errors[0]["loc"]) if errors else ""
+        why = f"{where or '(file)'}: {errors[0]['msg'] if errors else 'invalid'}"
+        return Ledger(), f"{path}: not usable, dwell times start over ({why})"
+
+
+BAD_SUFFIX = ".bad"
+"""`dwell.json.bad`: where a writer keeps the ledger it found unusable. It is no entry of
+`state_ref.REF_FILES`, so it never rides on the state ref."""
+
+
+def set_aside(state_dir: Path) -> Path | None:
+    """Move an unusable ledger to `dwell.json.bad` (replacing an older one) before a fresh
+    one is stored, and return where it went; None when there is no file to keep."""
+    path = state_dir / DWELL_FILE
+    if not path.is_file():
+        return None
+    kept = path.with_name(DWELL_FILE + BAD_SUFFIX)
+    path.replace(kept)
+    return kept
 
 
 def store(state_dir: Path, ledger: Ledger) -> None:

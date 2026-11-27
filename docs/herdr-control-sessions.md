@@ -39,10 +39,12 @@ blindly resend a brief with uncertain uptake. See
 
 ## The board's background read
 
-When the Batches page is drawn, the herdr runner reads the visible screen of each Claude
-agent pane whose tab is idle or done, one `pane read` per pane, to tell an idle prompt that
-has background shells, monitors or subagents running from a really idle one. A working tab
-and another agent kind are never read. A failed read adds one note to the page and no
+When the Batches page is drawn, the herdr runner reads the visible screen of an item's idle or
+done Claude agent panes, one `pane read` each, to tell an idle prompt that has background
+shells, monitors or subagents running from a really idle one. It stops at the first pane of
+the item that shows background work. A working tab and another agent kind are never read. A
+pane that cannot be read, or that has no pane id, is skipped, and the background marks the
+runner already found stay. A failure of the whole read adds one note to the page and no
 background reading.
 
 ## Audited replacement

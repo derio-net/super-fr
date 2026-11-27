@@ -173,6 +173,37 @@ def test_a_non_string_item_is_dropped_into_the_note() -> None:
     assert owners.devops == [] and owners.ignored  # nothing raised; the board names them
 
 
+@pytest.mark.parametrize("value", [["developer"], "reviewer", 7])
+def test_a_lane_owners_value_that_is_no_mapping_is_empty_lanes_with_its_cause(value: Any) -> None:
+    owners, _ = _owners(value)
+    assert (owners.developer, owners.reviewer, owners.tester, owners.devops) == ([], [], [], [])
+    assert [(i.key, i.cause) for i in owners.ignored_causes] == [("lane_owners", "not-a-mapping")]
+
+
+def _notes_for(value: Any) -> list[str]:
+    from fr.commands.triage_kanban_cmd import lane_owner_notes
+
+    f, _ = _world(value)
+    return lane_owner_notes(f)
+
+
+def test_each_ignored_cause_is_worded_for_itself() -> None:
+    (n,) = _notes_for({"review": ["x"]})
+    assert "`review` is not a lane (lanes are developer, reviewer, tester, devops)" in n
+    (n,) = _notes_for({"developer": 5})
+    assert "`developer` is not a list of logins" in n
+    (n,) = _notes_for({"developer": ["a", 7]})
+    assert "`developer[1]` is not a login" in n
+    assert "is not a lane" not in n and "is not a list" not in n
+
+
+def test_the_cause_survives_the_facts_json_round_trip() -> None:
+    f, _ = _world({"developer": ["a", 7], "review": []})
+    again = Facts.model_validate(json.loads(json.dumps(f.to_json())))
+    causes = [(i.key, i.cause) for i in again.config_for(REPO).lane_owners.ignored_causes]
+    assert causes == [("developer[1]", "not-a-login"), ("review", "unknown-key")]
+
+
 def test_a_user_written_ignored_key_is_an_unknown_key_never_data() -> None:
     owners, cfg = _owners({"reviewer": ["a"], "ignored": ["sneaky"]})
     assert owners.reviewer == ["a"] and owners.ignored == ["ignored"]
