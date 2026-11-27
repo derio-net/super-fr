@@ -181,3 +181,8 @@ run_kind: none
 ### phase-split-2026-11-27-run-verdict-p2 · decision · ask: slice 2, lookup B to fr/run/steps.py (R4), the issue's own slice
 
 Each slice of #1519 is independently reviewable and the operator chose one phase per slice.
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-run-verdict-p3 created=2026-11-27T15:27:39+00:00 -->
+### phase-split-2026-11-27-run-verdict-p3 · decision · ask: slice 3, deliver gates H to fr/run/deliver.py (R5)
+
+One phase per slice, operator decision scope-all-six-slices.
