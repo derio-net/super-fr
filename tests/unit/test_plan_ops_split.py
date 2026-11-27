@@ -28,20 +28,57 @@ _NEW_MODULE_FILES = (
 
 def _new_module_files() -> list[Path]:
     review = SRC / "plan_review"
-    return [*_NEW_MODULE_FILES, *sorted(review.glob("*.py"))]
+    # record/gates.py read `_refactor_justifications` through a lazy `fr.plan_ops`
+    # import before the split; it now holds that read itself.
+    return [*_NEW_MODULE_FILES, *sorted(review.glob("*.py")), SRC / "record" / "gates.py"]
+
+
+def _package_of(py: Path) -> list[str]:
+    """The dotted package `py` belongs to, as parts (`fr/plan_review/checks.py` and
+    `fr/plan_review/__init__.py` are both in `fr.plan_review`)."""
+    return list(py.relative_to(SRC.parent).with_suffix("").parts[:-1])
 
 
 def _imported_modules(py: Path) -> set[str]:
-    """Every module an import in `py` names, function-local imports included;
-    `from fr import x` names `fr.x`."""
+    """Every module an import in `py` names, function-local and relative imports
+    included; `from fr import x` names `fr.x`, and `from .. import x` in
+    `fr/plan_review/` names `fr.x` too."""
     out: set[str] = set()
     for node in ast.walk(ast.parse(py.read_text())):
         if isinstance(node, ast.Import):
             out.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            out.add(node.module)
-            out.update(f"{node.module}.{alias.name}" for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                package = _package_of(py)
+                base = package[: len(package) - (node.level - 1)]
+                module = ".".join([*base, *([node.module] if node.module else [])])
+            else:
+                module = node.module or ""
+            out.add(module)
+            out.update(f"{module}.{alias.name}" for alias in node.names)
     return out
+
+
+@pytest.mark.parametrize(
+    ("source", "where"),
+    [
+        ("def f():\n    import fr.plan_ops\n", "plan_errors.py"),
+        ("from fr import plan_ops\n", "plan_errors.py"),
+        ("from . import plan_ops\n", "plan_errors.py"),
+        ("from .plan_ops import create\n", "plan_errors.py"),
+        ("from .. import plan_ops\n", "plan_review/checks.py"),
+        ("from ..plan_ops import create\n", "plan_review/__init__.py"),
+    ],
+)
+def test_the_import_reader_sees_every_spelling_of_plan_ops(
+    source: str, where: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_src = tmp_path / "fr"
+    py = fake_src / where
+    py.parent.mkdir(parents=True, exist_ok=True)
+    py.write_text(source)
+    monkeypatch.setattr(f"{__name__}.SRC", fake_src)
+    assert "fr.plan_ops" in _imported_modules(py)
 
 
 def test_the_plan_review_package_has_more_than_one_module() -> None:
@@ -95,7 +132,7 @@ def test_plan_ops_reexports_the_moved_names(name: str, home: str) -> None:
 def test_plan_ops_keeps_its_writers(name: str) -> None:
     from fr import plan_ops
 
-    assert hasattr(plan_ops, name)
+    assert getattr(plan_ops, name).__module__ == "fr.plan_ops"
 
 
 def test_the_refactor_justification_read_lives_in_gates() -> None:
@@ -105,3 +142,32 @@ def test_the_refactor_justification_read_lives_in_gates() -> None:
     assert callable(gates._refactor_justifications)
     assert not hasattr(plan_ops, "_refactor_justifications")
     assert not hasattr(plan_ops, "_TASK_ID_RE")
+
+
+_ENTRY = (
+    "<!-- fr:journal kind=decision scope={scope} id=d1 created=2026-11-27T00:00:00+00:00 -->\n"
+    "### d1 · decision · kept\n\nbody\n"
+)
+
+
+@pytest.mark.parametrize("scope", ["spec", "plan"])
+def test_journal_entries_reads_active_then_archived_and_treats_bad_as_empty(
+    scope: str, tmp_path: Path
+) -> None:
+    """R3: the one journal read of self-review (spec scope) and the refactor gate
+    (plan scope): a missing journal and an unparseable one hold no entries, and an
+    archived journal is read when no active one exists."""
+    from fr.journal.model import archived_journal_path, journal_path
+    from fr.plan_review.journal import journal_entries
+
+    assert journal_entries(tmp_path, scope, "s") == []  # type: ignore[arg-type]
+
+    archived = archived_journal_path(tmp_path, scope, "s")  # type: ignore[arg-type]
+    archived.parent.mkdir(parents=True)
+    archived.write_text(_ENTRY.format(scope=scope))
+    assert [e.id for e in journal_entries(tmp_path, scope, "s")] == ["d1"]  # type: ignore[arg-type]
+
+    active = journal_path(tmp_path, scope, "s")  # type: ignore[arg-type]
+    active.parent.mkdir(parents=True)
+    active.write_text("<!-- fr:journal kind finding scope=plan id=x -->\n### x\n\nbody\n")
+    assert journal_entries(tmp_path, scope, "s") == []  # type: ignore[arg-type]
