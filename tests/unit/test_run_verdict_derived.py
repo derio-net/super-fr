@@ -5,7 +5,8 @@ with the same faked inputs that drove the pre-move `run_cmd` functions, settled 
 `run_cmd`'s adapter onto a recording console (colour on, so a lost `style` shows), and
 compared byte for byte, with its exit code, against the capture in
 `tests/fixtures/run_verdict/derived/`. The capture was taken once from the code before the
-move; it is never regenerated from the code under test.
+move (commit b39ef3751, before the move in f53d3542f); it is never regenerated from the
+code under test.
 """
 
 from __future__ import annotations
@@ -127,11 +128,10 @@ def _docs(mp: pytest.MonkeyPatch, *, env_error: str | None = None, findings: int
 
 @dataclass(frozen=True)
 class Case:
-    """One refusal path: how to fake its inputs, and the call before and after the move."""
+    """One refusal path: how to fake its inputs, and the call through the moved code."""
 
     name: str
     setup: Callable[[pytest.MonkeyPatch], None]
-    old: Callable[[], object]
     new: Callable[[], object]
 
 
@@ -165,10 +165,6 @@ def _new_base(state: Any, name: str, *, announce: bool) -> Callable[[], object]:
     return call
 
 
-def _old(name: str, *args: Any, **kwargs: Any) -> Callable[[], object]:
-    return lambda: getattr(run_cmd, name)(*args, **kwargs)
-
-
 _FALLBACK = _Git(head="feat/x", branches=("main",))
 _NOTHING = _Git(head="feat/x", branches=())
 
@@ -181,49 +177,41 @@ def _cases() -> list[Case]:
         Case(
             "proportionality_witness-no-plan",
             lambda mp: None,
-            _old("_proportionality_witness", KEY, ROOT, no_plan),
             _new_proportionality(no_plan),
         ),
         Case(
             "proportionality_witness-plan-does-not-parse",
             lambda mp: _plan_parses(mp, error="phase [1] has no tasks"),
-            _old("_proportionality_witness", KEY, ROOT, targeted),
             _new_proportionality(targeted),
         ),
         Case(
             "proportionality_witness-no-merge-base",
             lambda mp: (_plan_parses(mp), _target(mp), _no_merge_base(mp)) and None,
-            _old("_proportionality_witness", KEY, ROOT, targeted),
             _new_proportionality(targeted),
         ),
         Case(
             "proportionality_witness-fallback-then-no-merge-base",
             lambda mp: (_plan_parses(mp), _no_remote(mp, _FALLBACK), _no_merge_base(mp)) and None,
-            _old("_proportionality_witness", KEY, ROOT, untargeted),
             _new_proportionality(untargeted),
         ),
         Case(
             "proportionality_witness-no-base",
             lambda mp: (_plan_parses(mp), _no_remote(mp, _NOTHING)) and None,
-            _old("_proportionality_witness", KEY, ROOT, untargeted),
             _new_proportionality(untargeted),
         ),
         Case(
             "docs_witness-env-error",
             lambda mp: _docs(mp, env_error="cannot read .fr/docs.yaml: [bad] key"),
-            _old("_docs_witness", KEY, ROOT, announce=True, state=targeted),
             _new_docs(targeted, announce=True),
         ),
         Case(
             "docs_witness-findings",
             lambda mp: (_docs(mp, findings=2), _target(mp)) and None,
-            _old("_docs_witness", KEY, ROOT, announce=True, state=targeted),
             _new_docs(targeted, announce=True),
         ),
         Case(
             "docs_witness-fallback-then-findings",
             lambda mp: (_docs(mp, findings=1), _no_remote(mp, _FALLBACK)) and None,
-            _old("_docs_witness", KEY, ROOT, announce=True, state=untargeted),
             _new_docs(untargeted, announce=True),
         ),
         Case(
@@ -231,25 +219,21 @@ def _cases() -> list[Case]:
             lambda mp: (
                 (_docs(mp), _target(mp, error="base branch [main] does not resolve")) and None
             ),
-            _old("_docs_witness", KEY, ROOT, announce=False, state=targeted),
             _new_docs(targeted, announce=False),
         ),
         Case(
             "witness_base-target-error",
             lambda mp: _target(mp, error="base branch [main] does not resolve"),
-            _old("_witness_base", KEY, ROOT, "docs", announce=True, state=targeted),
             _new_base(targeted, "docs", announce=True),
         ),
         Case(
             "witness_base-no-base",
             lambda mp: _no_remote(mp, _NOTHING),
-            _old("_witness_base", KEY, ROOT, "proportionality", announce=True, state=untargeted),
             _new_base(untargeted, "proportionality", announce=True),
         ),
         Case(
             "witness_base-fallback-announced",
             lambda mp: _no_remote(mp, _FALLBACK),
-            _old("_witness_base", KEY, ROOT, "proportionality", announce=True, state=untargeted),
             _new_base(untargeted, "proportionality", announce=True),
         ),
     ]
