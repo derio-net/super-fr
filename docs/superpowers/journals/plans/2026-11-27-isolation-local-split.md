@@ -35,3 +35,18 @@ Belongs to phase 4: plan step P4.T2.S2 moves the reviewed stamp of every covered
 ### review-p3-1 · review · phase 3 review (branchrefs.py move): 1 finding (p3-r1, filed against phase 4) (phase 3)
 
 Dispatched reviewer confirmed byte-identical bodies, imports (no fr.isolation.local), all callers migrated incl. gitseam lazy import and fr_herdr/runner.py, no monkeypatch left patching nothing, guard entry and budget 2650 for 2614 lines; ruff/mypy clean, 123 targeted tests pass.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-d1 created=2026-11-27T10:19:44+00:00 phase=4 -->
+### p4-d1 · discovery · reviewed stamps cannot hold a colon (phase 4)
+
+A `reviewed:` value containing `still true: ...` is unreadable YAML (fr docs check reports bad-page); the stamps use `still true, ...`. fr docs check also reads committed pages only, so stamps must be committed before it re-runs.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-27T10:19:44+00:00 phase=4 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: fr docs check stale: docs/reference/dispatch-lifecycle.md covers fr_herdr/runner.py (edited at :118) but its reviewed stamp is not bumped (phase 4)
+
+docs/reference/dispatch-lifecycle.md (covers fr_herdr/runner.py) carries a 2026-11-27 reviewed stamp; fr docs check --base origin/main exits 0.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-11-27T10:19:44+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+budget and stamps only, nothing to clean
