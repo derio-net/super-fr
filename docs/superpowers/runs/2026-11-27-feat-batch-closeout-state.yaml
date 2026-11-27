@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-27-closeout-state-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-11-27T11:21:57+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-27T11:21:57+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: claude-opus-5-5
+          session: cb639c3e-79db-4eda-8c7a-b9aa00904308
   plan:
     state: pending
   plan-review:
