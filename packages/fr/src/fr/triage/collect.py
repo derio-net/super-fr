@@ -58,6 +58,7 @@ from fr.triage.model import (
 )
 from fr.triage.scope_config import scope_id
 from fr.triage.stage import pr_rank
+from fr.triage.timestamps import parse_aware
 
 ISSUE_LIMIT = 1000
 PR_LIMIT = 200
@@ -1442,13 +1443,8 @@ def _closed_in_progress(
 
 def _created_since(pr: PullRequest, at: datetime) -> bool:
     """Whether *pr* was opened at or after *at*; unknown creation counts as yes."""
-    try:
-        created = datetime.fromisoformat(pr.created_at) if pr.created_at else None
-    except ValueError:
-        created = None
-    if created is None or created.tzinfo is None:
-        return True
-    return created >= at
+    created = parse_aware(pr.created_at)
+    return created is None or created >= at
 
 
 def _batch_prs(

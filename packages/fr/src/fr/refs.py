@@ -213,7 +213,7 @@ def canonical_spec_ref(value: str, repo_root: Path, res: RefResolution | None = 
 
     Lifecycle-independent (it still resolves once the spec moves to
     `implemented/specs/`), unlike a full path. Every `spec:` writer —
-    `plan_ops.create`, `plan_ops.rework_create`, `repair._repair_meta`, the
+    `plan_ops.create`, `plan_rework.rework_create`, `repair._repair_meta`, the
     v1->v2 migration (`migrate._migrate_one`) — calls it, so they cannot
     drift (#686, #711). A ref is left verbatim exactly when
     `keeps_spec_ref_verbatim` says so. A path inside a lifecycle root —

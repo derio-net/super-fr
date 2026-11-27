@@ -1,4 +1,4 @@
-"""Line budget for the five largest modules (spec 2026-11-16 architecture-review-sweep, R12).
+"""Line budget for five held modules (spec 2026-11-16 architecture-review-sweep, R12).
 
 A budget is a review trigger, not a ceiling for the codebase. The module may not grow
 past its budget, and the budget may not sit more than `MAX_HEADROOM` lines above the
@@ -28,7 +28,8 @@ BUDGETS: dict[str, int] = {
     f"{SRC}commands/triage_batch_cmd.py": 8300,
     # isolation/local.py: 3200 -> 2125 after runner, reap, branchrefs and landing left it (#1517).
     f"{SRC}isolation/local.py": 2125,
-    f"{SRC}plan_ops.py": 2600,
+    # #1518 split self-review, the spec table, rework and the refactor-gate read out.
+    f"{SRC}plan_ops.py": 700,
     f"{SRC}triage/batch_drive.py": 2275,
 }
 

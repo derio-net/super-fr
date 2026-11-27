@@ -270,7 +270,7 @@ def sync_commands() -> None:
 # is absent is an error (review r-p1/f1). The distinction is the whole point:
 # a vocabulary that silently drops what it does not recognise is not closed,
 # and this repo already raises rather than drops in `fr.harness.model`
-# (unknown harness key), `fr.capabilities`, and `_StrictLoader` (duplicate
+# (unknown harness key), `fr.capabilities`, and `fr.yamlio.StrictLoader` (duplicate
 # YAML key) for exactly this class of silent loss.
 _TOOL_PERMISSIONS: dict[str, tuple[str, str] | None] = {
     "Edit": ("edit", "allow"),

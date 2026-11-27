@@ -1,0 +1,138 @@
+schema_version: 12
+run: 2026-11-26-feat-batch-arch-shared-helpers
+workflow: fr-goal-light@1
+branch: feat/batch-arch-shared-helpers
+started: '2026-11-26T18:29:05+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-11-27T09:02:49+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-27-arch-shared-helpers-design.md
+  plan:
+    state: done
+    at: '2026-11-27T09:04:45+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-11-27-arch-shared-helpers
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-11-27T09:02:55+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: b7ab4abb-7d26-46b9-b91b-a7169c5c67aa
+          returned: '2026-11-27T09:04:45+00:00'
+          outcome: done
+        evidence:
+          single-phase: phase 1
+  spec-plan-review:
+    state: done
+    at: '2026-11-27T09:11:54+00:00'
+    units:
+      step/spec-plan-review:
+        attempts:
+        - dispatched: '2026-11-27T09:04:45+00:00'
+          agent: a2133bf0144118bbd
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-opus-5-5
+          tier: hard
+          bound: claude-opus-5-5
+          session: b7ab4abb-7d26-46b9-b91b-a7169c5c67aa
+          returned: '2026-11-27T09:11:53+00:00'
+          outcome: done
+        evidence:
+          review: spec-plan-review-1
+          reviewer: a2133bf0144118bbd
+          findings: spr-r1,spr-r2,spr-r3,spr-r4,spr-r5,spr-r6
+  plan-review:
+    state: done
+    at: '2026-11-27T09:12:23+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-11-27T09:51:13+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-27T09:12:24+00:00'
+          agent: a108e6b2ac242a690
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-sonnet-5-5
+          tier: standard
+          bound: claude-sonnet-5
+          session: b7ab4abb-7d26-46b9-b91b-a7169c5c67aa
+          returned: '2026-11-27T09:37:59+00:00'
+          outcome: done
+        evidence:
+          visual: none
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-27T09:38:00+00:00'
+          agent: a678e7c7ed9a9847c
+          harness: claude-code
+          model: claude-opus-5-5
+          session: b7ab4abb-7d26-46b9-b91b-a7169c5c67aa
+          returned: '2026-11-27T09:51:13+00:00'
+          outcome: done
+        evidence:
+          review: review-p1-1
+          reviewer: a678e7c7ed9a9847c
+          visual: none
+          findings: p1-r1,p1-r2,p1-r3
+  journal-check:
+    state: done
+    at: '2026-11-27T09:51:16+00:00'
+    exit: 0
+    stdout: |
+      1 out-of-scope finding(s): p1-r3
+  lens-review:
+    state: done
+    at: '2026-11-27T09:56:56+00:00'
+    units:
+      step/lens-review:
+        attempts:
+        - dispatched: '2026-11-27T09:51:17+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: b7ab4abb-7d26-46b9-b91b-a7169c5c67aa
+          returned: '2026-11-27T09:56:56+00:00'
+          outcome: done
+        evidence:
+          review: lens-review-1
+          reviewer: docs-accuracy=ac07b85255447b408,tests=afe5b4e20b4971ff6
+          findings: l-tests-r1,l-tests-r2,l-tests-r3
+          lenses: docs-accuracy=15:none;tests=17:l-tests-r1,l-tests-r2,l-tests-r3
+  deliver:
+    state: done
+    at: '2026-11-27T11:16:06+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1722
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-27T09:56:57+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: b7ab4abb-7d26-46b9-b91b-a7169c5c67aa
+          returned: '2026-11-27T11:15:43+00:00'
+          outcome: done
+        evidence:
+          tests: ci:10d04527757348016a494d06da4ee4a0e54b2b30+91f8f71f951fddc84f3284671abaf7b242c7abd7;tree=8ef323466c45e7df69d7f35351ec67704001a5380ece1571c40fdb667444adf2
+          walk: none
+          proportionality: 91f8f71f951fddc84f3284671abaf7b242c7abd7:b726b6ada518d862ea87edf5dd03784db9ac7c04f325b6071788ef69244c8ccd
+          docs: 91f8f71f951fddc84f3284671abaf7b242c7abd7:56d5f46f50b13e79a70f883cd6ca4a954654cf0eb2ec3ed2f8262dd8027c25c1
+          visual: none
+          settle: managed
+fr_version: 9.1.0rc3
+pr: https://github.com/derio-net/super-fr/pull/1722

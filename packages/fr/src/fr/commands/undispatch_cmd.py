@@ -29,7 +29,7 @@ from fr import plan_ops
 from fr._urls import parse_issue_url
 from fr.commands.common import require_migrated_layout, resolve_repo_root
 from fr.parser import PlanSchemaError, parse
-from fr.plan_ops import PlanEditError
+from fr.plan_errors import PlanEditError
 from fr.services import ServicesError
 from fr.settings import forge_allows, require_forge
 

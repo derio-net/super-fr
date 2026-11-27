@@ -18,6 +18,7 @@ from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 from fr.record import legacy
 from fr.record.model import RECORD_SCHEMA_VERSION, AcceptanceItem, RecordError, parse_record
 
+from tests.unit.record_helpers import write_record
 from tests.unit.test_record_apply import _matrix_repo, _move
 
 _WALK = {
@@ -135,13 +136,6 @@ acceptance:
 """
 
 
-def _record_file(root: Path, text: str, stem: str) -> Path:
-    path = root / "docs" / "superpowers" / "runs" / "r1.records" / f"{stem}.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    return path
-
-
 def test_the_record_kind_is_past_version_eight() -> None:
     # 8 -> 9 (the `skipped` split) is `test_migration_record_status_split`'s.
     assert RECORD_SCHEMA_VERSION >= 8
@@ -155,7 +149,7 @@ def test_the_chain_from_one_passes_eight_hop_by_hop() -> None:
 
 def test_a_v7_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
     plain = _V7.split("acceptance:")[0]
-    path = _record_file(tmp_path, plain, "implement-phase__phase-1")
+    path = write_record(tmp_path, plain, stem="implement-phase__phase-1")
 
     report = run_migrations(tmp_path, dry_run=False)
 
@@ -172,7 +166,7 @@ def test_the_frozen_v7_reader_reads_a_v7_record() -> None:
 
 
 def test_an_unreadable_v7_record_is_left_byte_identical(tmp_path: Path) -> None:
-    path = _record_file(tmp_path, _V7.replace("outcome: done", "outcome: maybe"), "x")
+    path = write_record(tmp_path, _V7.replace("outcome: done", "outcome: maybe"), stem="x")
     before = path.read_bytes()
 
     report = run_migrations(tmp_path, dry_run=False)
@@ -204,7 +198,7 @@ def test_a_v7_post_merge_entry_becomes_live(tmp_path: Path) -> None:
     """R7 for a record in flight: the entry gets what the matrix row got."""
     from fr.record.model import load_record
 
-    path = _record_file(tmp_path, _V7, "implement-phase__phase-1")
+    path = write_record(tmp_path, _V7, stem="implement-phase__phase-1")
 
     report = run_migrations(tmp_path, dry_run=False)
 

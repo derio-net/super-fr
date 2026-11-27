@@ -44,7 +44,7 @@ from fr.diff import (
     RepoLabelEnsure,
 )
 from fr.parser import Plan, PlanSchemaError, _find_repo_root
-from fr.plan_ops import PlanEditError
+from fr.plan_errors import PlanEditError
 from fr.services import ServicesError
 from fr.settings import require_forge
 from fr.workflow.model import WorkflowError

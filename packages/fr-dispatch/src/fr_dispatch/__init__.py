@@ -33,7 +33,7 @@ from fr.ghclient import GhClient
 from fr.item_state import DISPATCH_STAMP, ItemState, state_from_labels
 from fr.observe import observe
 from fr.parser import Plan, PlanSchemaError, parse
-from fr.plan_ops import PlanEditError
+from fr.plan_errors import PlanEditError
 from fr.render import render
 from fr.spec import SpecMeta
 from fr.states import GhState, RenderedIssue, RenderedState

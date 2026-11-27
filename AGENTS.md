@@ -937,8 +937,8 @@ exists and how it's checked, not a restatement:
 - **import direction** (`tests/unit/test_import_direction.py`) — the package-boundary guard
   reads imports from the syntax tree (`ast`), so a comma list, an alias or a nested import is
   seen; dynamic imports and entry-point loading are not judged. An unparseable file fails it.
-- **module line budget** (2026-11-16, `tests/unit/test_tripwire_module_budget.py`) — the five
-  largest modules (`run_cmd.py`, `triage_batch_cmd.py`, `isolation/local.py`, `plan_ops.py`,
+- **module line budget** (2026-11-16, `tests/unit/test_tripwire_module_budget.py`) — five held
+  modules, the largest when it was added (`run_cmd.py`, `triage_batch_cmd.py`, `isolation/local.py`, `plan_ops.py`,
   `triage/batch_drive.py`) may not grow past their budget, and a budget may not sit more than 400
   lines above its module. When it fails, move the new code into the module the architecture report
   (`docs/superpowers/audits/2026-11-16-architecture-review.md`) names, or change the budget in the

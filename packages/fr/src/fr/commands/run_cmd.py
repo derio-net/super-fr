@@ -560,7 +560,7 @@ def _group_done_line(step_id: str, expected: list[str], manual: list[int]) -> st
     the common case is: after review `r4-f1` a manual phase may legitimately
     be front-loaded-and-already-complete instead, and deciding which from
     here would be a second definition of "trailing" beside
-    `fr.plan_ops._trailing_manual_block`.
+    `fr.plan_review._trailing_manual_block`.
     """
     line = f"{step_id}: done ({len(expected)} members done"
     if manual:
@@ -4887,7 +4887,7 @@ def _manual_placement_errors(repo_root: Path, state: RunState) -> tuple[str | No
     §4.G) can ask "would `advance` refuse this group?" without a second
     definition of the rule — and without printing or exiting.
 
-    It calls `fr.plan_ops._manual_placement_issues` — the authoring gate
+    It calls `fr.plan_review._manual_placement_issues` — the authoring gate
     ITSELF, not a re-implementation of it — so the two points share one
     definition of "trailing" (`_trailing_manual_block`), one definition of
     "outstanding", and one message. Spelled twice they would drift, and an
@@ -4895,7 +4895,7 @@ def _manual_placement_errors(repo_root: Path, state: RunState) -> tuple[str | No
     which is current.
     """
     from fr.parser import PlanSchemaError, parse
-    from fr.plan_ops import _manual_placement_issues
+    from fr.plan_review import _manual_placement_issues
 
     plan_rel = _emitted_plan(state)
     if plan_rel is None:  # pragma: no cover — `_group_phases` refused first

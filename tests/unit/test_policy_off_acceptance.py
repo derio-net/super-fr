@@ -124,7 +124,8 @@ def test_pr_body_owed_sections_say_disabled(repo: Path) -> None:
 
 
 def test_self_review_and_proportionality_say_disabled(repo: Path) -> None:
-    from fr import plan_ops, proportionality
+    from fr import proportionality
+    from fr.plan_review.checks import _acceptance_link_issues
 
     spec = repo / "docs" / "superpowers" / "specs" / "s.md"
     spec.parent.mkdir(parents=True)
@@ -136,7 +137,7 @@ def test_self_review_and_proportionality_say_disabled(repo: Path) -> None:
         meta=SimpleNamespace(spec=""),
         phases=[],
     )
-    issues = plan_ops._acceptance_link_issues(plan)
+    issues = _acceptance_link_issues(plan)
     assert [i.severity for i in issues] == ["info"]
     assert DISABLED in issues[0].message
     lines = proportionality._phases(repo, plan, [])

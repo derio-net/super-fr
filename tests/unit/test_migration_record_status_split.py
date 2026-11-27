@@ -19,6 +19,7 @@ from fr.record import legacy
 from fr.record.model import RECORD_SCHEMA_VERSION, RecordError, load_record, parse_record
 
 from tests.unit.acceptance_helpers import MATRIX_HEADER, make_repo, row
+from tests.unit.record_helpers import write_record
 
 _V4_HEADER = "schema_version: 4\n" + MATRIX_HEADER
 
@@ -38,13 +39,6 @@ def _v8(entry: str = "") -> str:
         "schema_version: 8\nrun: r1\nstep: implement-phase\nitem: phase/1\noutcome: done\n"
         "ticks: [P1.T1.S1]\nacceptance:\n  - id: r1\n    status: skipped\n    notes: why\n" + entry
     )
-
-
-def _record_file(root: Path, text: str, stem: str = "implement-phase__phase-1") -> Path:
-    path = root / "docs" / "superpowers" / "runs" / "r1.records" / f"{stem}.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    return path
 
 
 def test_the_record_kind_is_at_version_nine_or_later() -> None:
@@ -75,7 +69,7 @@ def test_a_v8_skipped_entry_moves_by_the_r6_rule(
     if row_verify is not None:
         rows += f"    verify: {row_verify}\n"
     root = make_repo(tmp_path, rows, header=_V4_HEADER)
-    path = _record_file(root, _v8(entry))
+    path = write_record(root, _v8(entry))
 
     report = run_migrations(root, dry_run=False)
 
@@ -91,7 +85,7 @@ def test_a_migrated_record_then_applies(tmp_path: Path) -> None:
     from tests.unit.test_record_apply import _matrix_repo
 
     root = _matrix_repo(tmp_path)
-    path = _record_file(root, _v8().replace("id: r1", "id: target"))
+    path = write_record(root, _v8().replace("id: r1", "id: target"))
 
     report = run_migrations(root, dry_run=False)
     assert report.ok, report.failed
@@ -111,7 +105,7 @@ def test_a_migrated_record_then_applies(tmp_path: Path) -> None:
 
 def test_an_unresolvable_verify_leaves_the_record_byte_identical(tmp_path: Path) -> None:
     root = make_repo(tmp_path, row(id="r1"))
-    path = _record_file(root, _v8("    verify: no-such-strategy\n"))
+    path = write_record(root, _v8("    verify: no-such-strategy\n"))
     before = path.read_bytes()
 
     report = run_migrations(root, dry_run=False)
@@ -123,7 +117,7 @@ def test_an_unresolvable_verify_leaves_the_record_byte_identical(tmp_path: Path)
 def test_a_wholly_v9_body_under_a_v8_stamp_is_only_stamped(tmp_path: Path) -> None:
     root = make_repo(tmp_path, row(id="r1"))
     body = _v8().replace("status: skipped", "status: manual")
-    path = _record_file(root, body)
+    path = write_record(root, body)
 
     report = run_migrations(root, dry_run=False)
 

@@ -1,0 +1,2 @@
+bump: patch
+summary: share the duplicate-key YAML loader and the naive-as-UTC reader, and drop copied test helpers (no behaviour change)
