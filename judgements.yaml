@@ -13597,3 +13597,10 @@ queue_requests:
   pr: 1107
   by: YiannisDermitzakis
   preapproved: true
+- kind: queue_add
+  at: '2026-11-27T15:25:16.574375Z'
+  repo: derio-net/super-fr
+  scope: s-f7ea4061
+  pr: 1079
+  by: YiannisDermitzakis
+  preapproved: true
