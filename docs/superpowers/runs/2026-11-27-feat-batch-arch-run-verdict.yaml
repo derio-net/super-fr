@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-27-run-verdict-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-11-27T15:14:12+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-27T15:14:12+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: claude-opus-5-5
+          session: 8e3374b0-0cd7-4813-af3d-0f5d9a6a93e0
   plan:
     state: pending
   plan-review:
