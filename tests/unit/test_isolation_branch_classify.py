@@ -17,13 +17,9 @@ from typing import Any
 import pytest
 from fr.cli import app
 from fr.commands import isolation_cmd
+from fr.isolation.branchrefs import BranchDecision, RemoteView, classify_branch
 from fr.isolation.hostworktree import HostWorktreeTarget
-from fr.isolation.local import (
-    BranchDecision,
-    RemoteView,
-    classify_branch,
-    subprocess_runner,
-)
+from fr.isolation.runner import subprocess_runner
 from fr.isolation.types import IsolationError
 from typer.testing import CliRunner
 

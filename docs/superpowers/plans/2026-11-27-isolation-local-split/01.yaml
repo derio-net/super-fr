@@ -1,0 +1,69 @@
+schema_version: 2
+phase:
+  number: 1
+  title: runner.py — the runner plumbing leaves local.py (R1-R6)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - isolation-local-split-guards
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/isolation/local.py
+  - packages/fr/src/fr/isolation/runner.py
+  - packages/fr/src/fr/isolation/*.py
+  - packages/fr/src/fr/commands/*.py
+  - packages/fr/src/fr/triage/gitseam.py
+  - tests/unit/*.py
+  - tests/integration/*.py
+  - .changes/feat-batch-arch-isolation-split.yaml
+  estimate_lines: 360
+tasks:
+- number: 1
+  title: Smoke — the guard suite is green before anything moves
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Run `uv run pytest tests/unit/test_isolation_network_timeouts.py tests/unit/test_vk_compat_removed.py tests/unit/test_tripwire_module_budget.py -q --no-cov` and record it passes on the untouched tree (the baseline every later step is compared to).
+  - id: P1.T1.S2
+    text: |-
+      Add the change fragment `.changes/feat-batch-arch-isolation-split.yaml` with `bump: patch` and `summary: isolation/local.py's free functions move into runner, reap, branchrefs and landing modules (no behaviour change)`.
+- number: 2
+  title: Guard first, then the move
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in `tests/unit/test_isolation_network_timeouts.py`, turn `test_local_py_holds_no_forge_cli_argv` into a test parametrized over a module list `ISOLATION_MODULES = ["fr.isolation.local", "fr.isolation.runner"]` (import each with `importlib.import_module`, AST-scan its file exactly as today). It fails: `fr.isolation.runner` does not exist.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: create `packages/fr/src/fr/isolation/runner.py` with a docstring (what it holds, #1517) and the runner group moved byte-identical from `local.py` lines 50-171: `Runner`, `_BASE32`, `devcontainer_id`, `_missing_binary`, `subprocess_runner`, `_home`, `GcSpawner`, `_detached_gc_spawn`, `_noop_gc_spawn`, with the imports they need. Delete them from `local.py` and import from `fr.isolation.runner` only the names local.py's remaining code uses. `uv run python -c "import fr.isolation.local"` works; the guard from S1 passes.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: migrate every caller of a moved name (`grep -rn "fr.isolation.local import" packages tests`, including lazy imports inside functions and `fr/isolation/routing.py`, `external.py`) to import it from `fr.isolation.runner`; names not moved keep importing from `local`. Patch targets need no change (`local_mod.subprocess` is the shared module, spec Background). Then lower `local.py`'s budget in `tests/unit/test_tripwire_module_budget.py` to the line count rounded up to the next 25, plus 25. `uv run ruff check packages tests`, `uv run ruff format packages tests`, mypy over the five packages clean; the fast tier green.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-27T09:36:16+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-11-27T09:36:16+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-27T09:36:16+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-27T09:36:16+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-27T09:36:16+00:00'
+      note: null
+  completion:
+    at: '2026-11-27T09:36:16+00:00'
+    note: null
+    observed_prs: []

@@ -17,7 +17,8 @@ import pytest
 from fr.isolation import local as local_mod
 from fr.isolation import routing
 from fr.isolation.hostworktree import HostWorktreeTarget
-from fr.isolation.local import LocalWorktreeDevcontainerTarget, _detached_gc_spawn
+from fr.isolation.local import LocalWorktreeDevcontainerTarget
+from fr.isolation.runner import _detached_gc_spawn
 from fr.isolation.types import IsolationState, load_state, save_state
 
 from tests.unit.test_isolation import FakeRunner, make_repo_with_origin

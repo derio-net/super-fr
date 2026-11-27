@@ -53,13 +53,13 @@ from fr.archive import (
 from fr.artifacts.paths import KIND_DIRS, artifact_root, kind_dir, space_for
 from fr.closeout import BranchArtifact, branch_artifacts, journal_scope_and_slug, owed_artifacts
 from fr.commands.common import build_plan_report, require_migrated_layout, resolve_repo_root
-from fr.isolation.local import (
+from fr.isolation.branchrefs import resolve_branch_refs
+from fr.isolation.landing import (
     branch_changed_paths,
     branch_changes_present,
     recorded_start,
-    resolve_branch_refs,
-    subprocess_runner,
 )
+from fr.isolation.runner import subprocess_runner
 from fr.isolation.types import IsolationError
 from fr.journal.model import JournalScope, archived_journal_path, journal_path
 from fr.parser import PlanSchemaError
