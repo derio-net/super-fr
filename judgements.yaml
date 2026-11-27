@@ -13589,3 +13589,11 @@ queues:
   - kind: queue_cleared
     at: '2026-11-25T20:55:27.918282Z'
     detail: the release cleared the hold
+queue_requests:
+- kind: queue_add
+  at: '2026-11-27T15:25:05.595235Z'
+  repo: derio-net/super-fr
+  scope: s-f7ea4061
+  pr: 1107
+  by: YiannisDermitzakis
+  preapproved: true
