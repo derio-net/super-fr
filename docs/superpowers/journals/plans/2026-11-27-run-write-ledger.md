@@ -40,3 +40,8 @@ Stray blank line removed (8a925e2f9).
 ### p1-r3-resolved · finding [out-of-scope] · resolves p1-r3: AST layering guard cannot see dynamic imports or transitive typer imports; pre-existing limit of the approach (phase 1)
 
 Not caused by this change. A syntactic import guard is what R2 requires and what the repo's other boundary guard (test_import_direction.py) does; dynamic and transitive imports are outside both.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-27T09:41:55+00:00 -->
+### lens-review-1 · review · lens review: docs-accuracy and tests, no findings
+
+docs-accuracy: both touched pages are stamp-only and still true (workflow-shapes.md lines 51-54 hold against writes.py:265 and run_cmd.py:245-247). tests: every monkeypatch of a moved lookup intercepts where it is called; the conflict refusal stays CLI-tested (test_run_durability.py:219); the layering guard plants each spelling. Shape file matches the diff in both reviews.
