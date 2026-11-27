@@ -13,7 +13,7 @@ The copied command is `shlex.join(["fr", "triage", "batch", "focus", id, *scope_
 from __future__ import annotations
 
 import shlex
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -29,6 +29,7 @@ from fr.triage.components import (
     when,
 )
 from fr.triage.kanban import (
+    NEEDS_YOU_COLUMNS,
     Board,
     BoardStatus,
     Card,
@@ -41,6 +42,7 @@ from fr.triage.kanban import (
 )
 from fr.triage.readiness import Readiness
 from fr.triage.render import FONTS, _safe_url, esc, noun
+from fr.triage.waits import Wait
 from fr.triage.wave_report import span
 
 if TYPE_CHECKING:
@@ -102,6 +104,11 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
 .status-working { color: var(--accent); border-color: var(--accent); }
 .status-blocked { color: var(--sev-1); border-color: var(--sev-1); font-weight: 600; }
 .status-done { color: var(--live); border-color: var(--live); }
+.wait-you { color: var(--sev-1); border-color: var(--sev-1); font-weight: 600; }
+.wait-agent, .wait-background { color: var(--accent); border-color: var(--accent); }
+.wait-ci, .wait-queue, .wait-dependency { color: var(--muted); border-color: var(--line); }
+.owners { margin: 2px 0 6px; font-size: .78rem; color: var(--muted); }
+.owners span { display: block; overflow-wrap: anywhere; }
 .stage-cancelled, .stage-abandoned, .stage-partial, .stage-left-scope {
   color: var(--sev-2); border-color: var(--sev-2); }
 .flag { color: var(--sev-1); }
@@ -137,7 +144,7 @@ button.coltoggle { font: inherit; color: inherit; background: transparent; borde
 button.coltoggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 button.coltoggle::before { content: "\\25BE\\00a0"; color: var(--muted); }
 .col.collapsed button.coltoggle::before { content: "\\25B8\\00a0"; }
-.col.collapsed .col-body { display: none; }
+.col.collapsed .col-body, .col.collapsed .owners { display: none; }
 @media (min-width: 1101px) {
   .board { display: flex; }
   .col { flex: 1 1 0; }
@@ -485,8 +492,44 @@ def _body(card: Card, scope_args: Sequence[str], collected_at: str = "") -> str:
     return f'<div class="body">{"".join(parts)}</div>'
 
 
+def _logins(logins: Sequence[str]) -> str:
+    return ", ".join(f"@{x}" for x in logins) if logins else "unassigned"
+
+
+def _wait(wait: Wait, owners: Sequence[str] = ()) -> str:
+    """The pill that names who the card waits for (spec 2026-11-27-board-session-state R1,
+    R4): the lane's role and owners ride along when the wait is the operator's in a lane."""
+    text = f"waits for {wait.party}"
+    if wait.role is not None:
+        text += f" · {wait.role}"
+        if owners:
+            text += f" ({_logins(owners)})"
+    return f'<span class="pill wait-{esc(wait.party)}">{esc(text)}</span>'
+
+
+def _owners(column: ColumnView) -> str:
+    """A Needs-you column's owners under its title (R4): one line when every repo names the
+    same, one per repo when they differ."""
+    if column.key not in NEEDS_YOU_COLUMNS:
+        return ""
+    distinct = {tuple(v) for v in column.owners.values()}
+    if len(distinct) <= 1:
+        owner = next(iter(distinct), ())
+        return f'<p class="owners"><span>owner: {esc(_logins(owner))}</span></p>'
+    lines = "".join(
+        f"<span>{esc(repo)}: {esc(_logins(logins))}</span>"
+        for repo, logins in sorted(column.owners.items())
+    )
+    return f'<p class="owners">{lines}</p>'
+
+
 def _card(
-    card: Card, scope_args: Sequence[str], *, hidden: bool = False, collected_at: str = ""
+    card: Card,
+    scope_args: Sequence[str],
+    *,
+    hidden: bool = False,
+    collected_at: str = "",
+    owners: Mapping[str, tuple[str, ...]] | None = None,
 ) -> str:
     bid = card.batch.id
     classes = "card needs-you" if card.needs_you else "card"
@@ -502,6 +545,9 @@ def _card(
     front_status = card.closeout_status if front_closeout else card.status
     if front_status is not None:
         pills += " " + _status(front_status)
+    if card.wait is not None:
+        lane_owners = (owners or {}).get(card.repo or "", ())
+        pills += " " + _wait(card.wait, lane_owners)
     if card.pill:
         pills += f' <span class="pill {_pill_class(card)}">{esc(card.pill)}</span>'
     if card.blocked:
@@ -593,7 +639,7 @@ def _column(
 ) -> str:
     cards = "".join(
         _card(c, scope_args, hidden=c.wave is not None and str(c.wave) in hidden_waves,
-              collected_at=collected_at)
+              collected_at=collected_at, owners=column.owners)
         for c in column.cards
     )  # fmt: skip
     cards += "".join(_gated_card(g) for g in column.gated)
@@ -605,6 +651,7 @@ def _column(
         f'<h2><button type="button" class="coltoggle" '
         f'aria-expanded="{"false" if collapsed else "true"}" aria-controls="col-{key}">'
         f'{esc(column.title)}</button> <span class="count">{count}</span></h2>'
+        f"{_owners(column)}"
         f'<div class="col-body" id="col-{key}">{cards}</div></section>'
     )
 

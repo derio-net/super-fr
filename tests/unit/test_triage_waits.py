@@ -249,3 +249,38 @@ def test_background_never_moves_a_column_or_a_hint() -> None:
     assert [(c.batch.id, c.column, c.hint) for col in plain.columns for c in col.cards] == [
         (c.batch.id, c.column, c.hint) for col in loud.columns for c in col.cards
     ]
+
+
+# ------------------------------------------------------------ the pill on the page (R1)
+
+import re  # noqa: E402
+from datetime import UTC, datetime  # noqa: E402
+
+from fr.triage.kanban_render import render_board  # noqa: E402
+
+from tests.unit.triage_kanban_fixtures import world  # noqa: E402
+
+AT = datetime(2026, 10, 5, 21, 30, tzinfo=UTC)
+
+
+def test_every_card_but_a_done_one_shows_a_wait_pill_that_names_its_party() -> None:
+    f, jd, statuses, notes = world()
+    board = build_board(f, jd, statuses)
+    page = render_board(board, scope_args=["--repo", REPO], rendered_at=AT, refresh=30, notes=notes)
+    seen = set()
+    for col in board.columns:
+        for card in col.cards:
+            html = re.search(
+                rf'<details class="card[^"]*" id="card-{card.batch.id}".*?</summary>', page, re.S
+            )
+            assert html, card.batch.id
+            pills = re.findall(
+                r'<span class="pill wait-(\w+)">(waits for [^<]*)</span>', html.group(0)
+            )
+            if col.key == "done":
+                assert card.wait is None and pills == [], card.batch.id
+            else:
+                assert card.wait is not None and len(pills) == 1, card.batch.id
+                assert pills[0][0] == card.wait.party and card.wait.party in pills[0][1]
+                seen.add(card.wait.party)
+    assert {"you", "agent", "queue"} <= seen

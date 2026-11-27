@@ -12,7 +12,7 @@ what it would do (`drive_pass` over `drive_snapshot`) and falls back per column.
 from __future__ import annotations
 
 from collections.abc import Collection, Iterable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Literal
 
@@ -113,6 +113,10 @@ COLUMN_TITLES: Mapping[Column, str] = {
 """The columns, left to right (R2): the one ordered table every other read derives from."""
 
 COLUMNS: tuple[Column, ...] = tuple(COLUMN_TITLES)
+NEEDS_YOU_COLUMNS: tuple[Column, ...] = (
+    "needs-developer", "needs-reviewer", "needs-tester", "needs-devops",
+)  # fmt: skip
+"""The four Needs-you lanes: the columns that show an owner (2026-11-27-board-session-state R4)."""
 
 _COLUMN_OF_STAGE: Mapping[BatchStage, Column] = {
     "dispatched": "running",
@@ -352,6 +356,7 @@ class Card:
     overlaps: tuple[str, ...] = ()  # plan file overlap sentences (spec 2026-11-25)
     # Who the card waits for (spec 2026-11-27-board-session-state R1): derived after the column
     wait: Wait | None = None
+    repo: str | None = None  # the batch's repo: the lane owners a card names are its repo's
 
     @property
     def front(self) -> Literal["batch", "closeout"]:
@@ -413,6 +418,9 @@ class ColumnView:
     title: str
     cards: tuple[Card, ...]
     gated: tuple[GatedCard, ...] = ()
+    # A Needs-you column: each of the scope's repos -> the logins that own the lane (R4);
+    # empty for every other column
+    owners: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -833,6 +841,7 @@ def _card(
         readiness=(verdicts or {}).get(batch.id),
         others=tuple(more),
         wait=wait,
+        repo=repo,
     )
 
 
@@ -881,6 +890,18 @@ def _board_stops(
             if archive is not None and (stop := live_stop(stops[key], archive.head)):
                 out[key] = stop
     return out
+
+
+def lane_owners_of(facts: Facts, repo: str, column: Column) -> tuple[str, ...]:
+    """The logins *repo*'s `.fr/triage.yaml` names for the Needs-you lane *column*."""
+    owners = facts.config_for(repo).lane_owners
+    return tuple(getattr(owners, column.removeprefix("needs-")))
+
+
+def _lane_owners(facts: Facts, column: Column) -> dict[str, tuple[str, ...]]:
+    if column not in NEEDS_YOU_COLUMNS:
+        return {}
+    return {repo: lane_owners_of(facts, repo, column) for repo in facts.collected}
 
 
 def build_board(
@@ -964,6 +985,7 @@ def build_board(
             COLUMN_TITLES[key],
             tuple(c for c in cards if c.column == key),
             tuple(gated.get(key, ())),
+            _lane_owners(facts, key),
         )
         for key in COLUMNS
     )

@@ -102,7 +102,10 @@ from fr.triage.stage import Stage, derive_stage
 # 20 adds (2026-11-19-event-driven-a-la-carte R20) `state_repo_declared`, the state repo a
 # one-repo scope's settings name: `to_json` dumps it, which a closed-world schema-19 reader
 # rejects; a file below 20 reads it as empty, so no mismatch is reported until collect.
-FACTS_SCHEMA: Final[int] = 20
+# 21 adds (2026-11-27-board-session-state R4) per-config `lane_owners`, the logins that own each
+# Needs-you lane: `to_json` dumps it, which a closed-world schema-20 reader rejects; a file below
+# 21 reads it as empty, so every lane shows `owner: unassigned` until the next collect.
+FACTS_SCHEMA: Final[int] = 21
 FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
 # The version this fr WRITES: every engine write stamps 14 (the `conflict` event's `onto`
 # and `reissue`, 2026-11-24-wave-queue-gaps R16; 13 was the wave merge queue's
@@ -544,6 +547,30 @@ class ConfigDefaults(_Strict):
     launch: Launch = Launch()
 
 
+class LaneOwners(_Strict):
+    """`.fr/triage.yaml`'s `lane_owners:` (spec 2026-11-27-board-session-state R4): who owns
+    each Needs-you lane, for display. Display-only, so a key that is not one of the four
+    lanes never refuses the repo's config: it is moved into `ignored` and the board names it."""
+
+    developer: list[str] = []
+    reviewer: list[str] = []
+    tester: list[str] = []
+    devops: list[str] = []
+    ignored: list[str] = []
+
+    @model_validator(mode="before")
+    @classmethod
+    def _ignore_unknown_lanes(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        known = {"developer", "reviewer", "tester", "devops", "ignored"}
+        kept = {k: v for k, v in data.items() if k in known}
+        moved = sorted(str(k) for k in data if k not in known)
+        if moved:
+            kept["ignored"] = [*(kept.get("ignored") or []), *moved]
+        return kept
+
+
 class ExportConfig(_Strict):
     """`.fr/triage.yaml`'s `export:` (spec 2026-10-05-triage-pages-goal §I): the
     repo-relative directory the driver exports the triage state under."""
@@ -634,6 +661,9 @@ class TriageConfig(_Strict):
     # The wave merge queue (spec 2026-11-19-wave-merge-queue): None, the repo's merges are
     # not the queue's.
     queue: QueueBlock | None = None
+    # Who owns each Needs-you lane (spec 2026-11-27-board-session-state R4). Display-only, so
+    # it is not one of `config.protection.GUARDED_TRIAGE_KEYS`.
+    lane_owners: LaneOwners = LaneOwners()
 
 
 def trusted_logins(config: TriageConfig, viewer: str | None) -> frozenset[str]:

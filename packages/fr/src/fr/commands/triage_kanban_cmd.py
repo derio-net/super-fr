@@ -403,6 +403,17 @@ def gated_notes(facts: Facts) -> list[str]:
     return notes
 
 
+def lane_owner_notes(facts: Facts) -> list[str]:
+    """One page note per repo whose `lane_owners:` names a key that is no lane (spec
+    2026-11-27-board-session-state R4): the key is ignored, never a refusal."""
+    return [
+        f"{repo}: lane_owners ignores {', '.join(f'`{k}`' for k in cfg.lane_owners.ignored)} "
+        "(lanes are developer, reviewer, tester, devops)"
+        for repo, cfg in sorted(facts.config.items())
+        if cfg.lane_owners.ignored
+    ]
+
+
 ACTIVITY_ENTRIES = 50
 
 
@@ -446,6 +457,7 @@ def write_board(
     if (labels_note := in_progress_note(facts, scope_args)) is not None:
         notes.append(labels_note)
     notes.extend(gated_notes(facts))
+    notes.extend(lane_owner_notes(facts))
     if (refusal := stopped(*view_inputs(target))) is not None:  # batch-train-truth R8
         notes.insert(0, stopped_line(refusal))
     try:  # plan file overlap (spec 2026-11-25): the board is a view, never a refusal
