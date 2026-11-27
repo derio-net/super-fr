@@ -265,3 +265,8 @@ Reviewer's tag kept (out). The abort ordering was hardened anyway in a8569adbc (
 ### p1-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1739] · resolves p1-r6: wave_overlap.py:75 compares repo_name exactly, the same case bug as #1695 in a sibling module (phase 1)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1739.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved-2 created=2026-11-27T16:19:07+00:00 state=open resolves=l-errors-r3 tracked_by=https://github.com/derio-net/super-fr/issues/1740 -->
+### l-errors-r3-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1740] · resolves l-errors-r3: trial_conflicts classified before abort_merge, so a GitError there skipped the abort
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1740.
