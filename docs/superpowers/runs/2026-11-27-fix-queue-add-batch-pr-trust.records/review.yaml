@@ -1,0 +1,20 @@
+schema_version: 12
+run: 2026-11-27-fix-queue-add-batch-pr-trust
+step: review
+outcome: done
+journal:
+  - kind: review
+    id: d-review-1
+    title: "independent review of the queue add trust fix: no findings"
+    body: |
+      A separate reviewer read triage_queue_cmd.py, its tests, the fragment and batch.py.
+      No in-scope or out-of-scope findings (review-findings: []). Checked: a batch PR's
+      trust comes from batch_pr (distrust + repo + dispatch-branch + of_dispatch); a fork
+      or foreign PR on a batch branch falls to the ordinary path and is refused as itself;
+      repo and number both filter _known_pr; an unread PR still refuses with re-collect;
+      the head_ref fallback is unchanged. Noted, not a finding: two disagreeing records of
+      one PR resolve first-seen, the same dedupe _branch_prs uses.
+resolves: []
+evidence:
+  review: d-review-1
+  reviewer: aacf187ff2e64198d
