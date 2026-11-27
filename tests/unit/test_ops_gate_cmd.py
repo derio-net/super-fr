@@ -531,7 +531,7 @@ def test_merge_commit_fetches_and_merges_with_a_two_parent_commit(
     origin, ops = origin_and_ops
     fixed = _commit(origin, "ops.yaml", "apply: fixed\n")
     before = _out(ops, "rev-parse", "HEAD")
-    head = OpsWorkspace(ops).merge_commit("origin/main", "chore(ops): bring p up to date")
+    head = OpsWorkspace(ops).merge_commit(fixed, "chore(ops): bring p up to date")
     assert head == _out(ops, "rev-parse", "HEAD")
     assert _out(ops, "rev-list", "--parents", "-n1", "HEAD").split()[1:] == [before, fixed]
     assert _out(ops, "log", "-1", "--format=%s") == "chore(ops): bring p up to date"
@@ -546,11 +546,11 @@ def test_a_conflicting_merge_is_aborted_and_names_the_paths(
     from fr.ops.gate import MergeConflict
 
     origin, ops = origin_and_ops
-    _commit(origin, "ops.yaml", "apply: fixed on main\n")
+    fixed = _commit(origin, "ops.yaml", "apply: fixed on main\n")
     _commit(ops, "ops.yaml", "apply: edited on the ops branch\n")
     before = _out(ops, "rev-parse", "HEAD")
     with pytest.raises(MergeConflict) as exc:
-        OpsWorkspace(ops).merge_commit("origin/main", "m")
+        OpsWorkspace(ops).merge_commit(fixed, "m")
     assert exc.value.paths == ("ops.yaml",)
     assert _out(ops, "rev-parse", "HEAD") == before
     assert _out(ops, "status", "--porcelain") == ""
@@ -564,5 +564,36 @@ def test_merge_commit_of_a_ref_already_merged_commits_nothing(
 
     _, ops = origin_and_ops
     before = _out(ops, "rev-parse", "HEAD")
-    assert OpsWorkspace(ops).merge_commit("origin/main", "m") == before
+    assert OpsWorkspace(ops).merge_commit(_out(ops, "rev-parse", "origin/main"), "m") == before
+    assert _out(ops, "rev-parse", "HEAD") == before
+
+
+def test_merge_commit_merges_the_pinned_sha_not_a_moved_tip(
+    origin_and_ops: tuple[Path, Path],
+) -> None:
+    """Review p1-sec-r1: origin moves after the refresh diffed it; the merge still takes the
+    commit the operator confirmed, though its own fetch sees the newer tip."""
+    from fr.commands.ops_gate_cmd import OpsWorkspace
+
+    origin, ops = origin_and_ops
+    confirmed = _commit(origin, "ops.yaml", "apply: fixed\n")
+    _git(ops, "fetch", "-q", "origin")
+    _commit(origin, "ops.yaml", "apply: moved after the question\n")
+    OpsWorkspace(ops).merge_commit(confirmed, "m")
+    assert _out(ops, "rev-parse", "HEAD^2") == confirmed
+    assert (ops / "ops.yaml").read_text() == "apply: fixed\n"
+
+
+@pytest.mark.parametrize("what", ["ref", "blob"])
+def test_merge_commit_refuses_anything_but_a_commit_sha(
+    origin_and_ops: tuple[Path, Path], what: str
+) -> None:
+    from fr.commands.ops_gate_cmd import OpsWorkspace
+    from fr.triage.gitseam import GitError
+
+    _, ops = origin_and_ops
+    before = _out(ops, "rev-parse", "HEAD")
+    arg = "origin/main" if what == "ref" else _out(ops, "rev-parse", "HEAD:evidence")
+    with pytest.raises(GitError, match="nothing merged"):
+        OpsWorkspace(ops).merge_commit(arg, "m")
     assert _out(ops, "rev-parse", "HEAD") == before

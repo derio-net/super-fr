@@ -72,12 +72,17 @@ class OpsWorkspace:
         git(["fetch", "--quiet", "origin"], self.path)
         self._tree.rebase_onto(new_base, upstream)
 
-    def merge_commit(self, ref: str, message: str) -> str:
-        from fr.ops.gate import MergeConflict
-        from fr.triage.gitseam import git, git_ok
+    def merge_commit(self, sha: str, message: str) -> str:
+        from fr.ops.gate import SHA_RE, MergeConflict
+        from fr.triage.gitseam import GitError, git, git_ok
 
+        if not SHA_RE.match(sha or ""):
+            raise GitError(f"{sha!r} is not a full commit sha; nothing merged")
+        # objects only: the merge takes the pinned sha, never whatever origin points at now
         git(["fetch", "--quiet", "origin"], self.path)
-        conflicted = self._tree.merge(ref)
+        if not git_ok(["cat-file", "-e", f"{sha}^{{commit}}"], self.path):
+            raise GitError(f"{sha} is not a commit here; nothing merged")
+        conflicted = self._tree.merge(sha)
         if conflicted:
             self._tree.abort_merge()
             raise MergeConflict(conflicted)

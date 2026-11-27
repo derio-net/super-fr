@@ -100,7 +100,8 @@ When both match, the stage goes on and says nothing. When something differs, the
 each op added, removed or changed, and says whether the Test Plan changed. Then it asks you to
 confirm, even under `--yes`. If you say no, the stage stops and nothing changes. If you say
 yes, fr commits the stage records in the workspace, merges the default branch into the ops
-branch and pushes it. A merge that conflicts is undone, and the stage names the files and the
+branch and pushes it. It merges the exact commit it compared, which the question names, so
+a push to the default branch while you read the question changes nothing. A merge that conflicts is undone, and the stage names the files and the
 commands to merge by hand.
 
 fr merges and never rebases here, because the ops branch is already pushed. A merge only adds

@@ -160,9 +160,10 @@ class OpsTree(Protocol):
 
     def rebase_onto(self, new_base: str, upstream: str) -> None: ...
 
-    def merge_commit(self, ref: str, message: str) -> str:
-        """Fetch origin, then merge *ref* into the ops branch with a merge commit; the new
-        head. Never a rebase: the pushed ops branch moves forward only, so its lease holds
+    def merge_commit(self, sha: str, message: str) -> str:
+        """Merge exactly the commit *sha* (a full object id, the one the refresh diffed and
+        the operator confirmed; never a ref a later fetch could move, review p1-sec-r1) into
+        the ops branch with a merge commit; the new head. Never a rebase: the pushed ops branch moves forward only, so its lease holds
         (spec 2026-11-27-ops-gate-truth R3). A conflict is aborted, leaving HEAD and the
         working tree as they were, and raised as `MergeConflict`."""
         ...

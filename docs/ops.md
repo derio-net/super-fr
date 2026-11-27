@@ -313,7 +313,8 @@ stage stops and changes nothing.
 If you confirm, the stage does these steps in order:
 
 1. It commits the workspace's records under `docs/` on the ops branch.
-2. It merges `origin/<default>` into the ops branch with a merge commit.
+2. It merges `origin/<default>` into the ops branch with a merge commit. It merges the
+   exact commit that it compared and that the question names, also if the branch moved after.
 3. It pushes the ops branch, leased on the sha that fr last pushed.
 4. It reopens each changed or added op.
 5. It asks for trust again, on the merged content, before a probe or an apply runs.

@@ -1562,7 +1562,7 @@ def test_a_confirmed_refresh_commits_merges_pushes_then_trusts_before_any_apply(
     gate_mod.stage_4(gate)
     kinds = [k for k, _ in tree.calls if k in ("commit", "merge", "push")]
     assert kinds[:3] == ["commit", "merge", "push"]
-    assert tree.calls[[k for k, _ in tree.calls].index("merge")][1][0] == "origin/main"
+    assert tree.calls[[k for k, _ in tree.calls].index("merge")][1][0] == TIP
     assert order.index("ops trust") < order.index("ops apply")
     assert _host(ops_root).pushed() == HEAD
     (q,) = _refresh_q(prompt)
@@ -1591,7 +1591,7 @@ def test_a_conflicting_refresh_names_the_paths_and_the_manual_merge(ops_root: Pa
         gate_mod.stage_4(gate)
     why = exc.value.why
     assert f"{PLAN}/ops.yaml" in why and "docs/x.md" in why
-    assert f"git -C {ops_root} merge origin/main" in why
+    assert f"git -C {ops_root} merge {TIP}" in why
     assert not [c for c in tree.calls if c[0] == "push"]
     assert 4 not in _host(ops_root).stages()
 
@@ -1624,3 +1624,31 @@ def test_a_default_branch_without_the_plan_dir_is_refused(ops_root: Path) -> Non
         gate_mod.stage_4(gate)
     assert PLAN in exc.value.why and exc.value.code == 2
     assert _refresh_q(prompt) == [] and not tree.calls
+
+
+def test_the_refresh_merges_the_sha_it_diffed_though_the_default_branch_moved(
+    ops_root: Path,
+) -> None:
+    """Review p1-sec-r1: the drift, the question and the merge name one pinned commit."""
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    materialise = host.materialise
+
+    def then_move(ref: str, paths: Sequence[str]) -> Path:
+        out = materialise(ref, paths)
+        host.tip = "d" * 40  # origin/main moves while the operator reads the question
+        return out
+
+    host.materialise = then_move  # type: ignore[method-assign]
+    gate_mod.stage_4(gate)
+    assert ["materialise", TIP] == [a for a, _ in host.calls if a[0] == "materialise"][0][:2]
+    assert [v[0] for k, v in tree.calls if k == "merge"] == [TIP]
+    (q,) = _refresh_q(prompt)
+    assert TIP[:12] in q
+
+
+def test_a_default_tip_that_is_no_sha_is_refused_before_any_diff(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    host.tip = "origin/main"
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_4(gate)
+    assert exc.value.code == 2 and not tree.calls and _refresh_q(prompt) == []

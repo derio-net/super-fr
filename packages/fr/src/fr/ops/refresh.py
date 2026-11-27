@@ -127,6 +127,7 @@ def _entry_ids(tree: OpsTree, slug: str) -> set[str]:
 
 
 def _merge_by_hand(gate: Gate, tree: OpsTree, ref: str, paths: tuple[str, ...]) -> str:
+    """*ref* is the pinned sha: the commit the operator confirmed, never a moved tip."""
     where = tree.path
     return (
         f"merging {ref} into {gate.target.ops_branch} conflicts on {', '.join(paths)}; the "
@@ -143,14 +144,18 @@ def refresh(gate: Gate, tree: OpsTree, stage: int) -> None:
     import shutil
 
     from fr.artifacts.paths import KIND_DIRS
-    from fr.ops.gate import _head_paths
+    from fr.ops.gate import _head_paths, valid_sha
     from fr.requirements import run_spec
 
     t = gate.target
     gate.host.fetch(gate.default)
-    ref = f"origin/{gate.default}"
+    # Pinned once (review p1-sec-r1): the diff, the question and the merge name ONE commit,
+    # so a default branch that moves while the operator reads the question merges nothing new.
+    tip = f"origin/{gate.default}"
+    sha = valid_sha(gate.host.rev_parse(tip) or "", f"{tip}'s tip")
+    ref = f"{tip} at {sha[:12]}"
     spec_rel = run_spec(t.run)
-    scratch = gate.host.materialise(ref, _head_paths(t, spec_rel or f"{KIND_DIRS['spec']}/"))
+    scratch = gate.host.materialise(sha, _head_paths(t, spec_rel or f"{KIND_DIRS['spec']}/"))
     try:
         d = drift(tree.path, scratch, t.plan_rel, spec_rel)
     finally:
@@ -171,9 +176,9 @@ def refresh(gate: Gate, tree: OpsTree, stage: int) -> None:
         if stage > 4:
             gate.state.forget(4)
     try:
-        tree.merge_commit(ref, f"chore(ops): merge {ref} into {t.ops_branch}")
+        tree.merge_commit(sha, f"chore(ops): merge {ref} into {t.ops_branch}")
     except MergeConflict as exc:
-        raise StageFailed(_merge_by_hand(gate, tree, ref, exc.paths)) from exc
+        raise StageFailed(_merge_by_hand(gate, tree, sha, exc.paths)) from exc
     except Exception as exc:  # noqa: BLE001 — git's own words
         raise StageFailed(f"cannot merge {ref} into {t.ops_branch}: {exc}") from exc
     try:
