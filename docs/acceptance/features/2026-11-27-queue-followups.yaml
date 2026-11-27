@@ -25,18 +25,13 @@ rows:
       - super-fr:tests/unit/test_triage_approval.py#test_a_waiting_pr_is_recorded_once_its_head_is_conflict_free
       - super-fr:tests/unit/test_triage_approval.py#test_a_void_removes_the_label_records_it_and_says_why_on_the_pr
       - super-fr:tests/unit/test_triage_approval.py#test_a_trusted_marker_for_the_head_suppresses_the_comment
-      - super-fr:tests/unit/test_triage_approval.py#test_no_comment_when_comments_are_off_or_the_policy_is_unreadable
       - super-fr:tests/unit/test_triage_readiness.py#test_a_waiting_approval_reads_as_waiting_for_a_conflict_free_head
       - super-fr:tests/unit/test_triage_readiness.py#test_an_ended_approval_is_not_a_push_void
       - super-fr:tests/unit/test_merge_train_label_board.py#test_an_ended_approval_asks_for_the_label_without_naming_a_push
+      - super-fr:tests/unit/test_triage_approval.py#test_no_comment_when_comments_are_off_or_the_policy_is_unreadable_and_it_says_why
     status: ci
-    notes: 'R1-R3 (#1680) covered by unit tests: a removed label ends a live approval
-      with no forge write and is not counted as a removed label; a label on a head the
-      forge reads conflicting and a conflict event names waits (Waiting), said once,
-      recorded once the head is conflict-free; every fr removal of approved-fr posts
-      one marked comment per voided head, suppressed by a trusted marker, none when
-      comments are off or unreadable; readiness and the board word an ended approval
-      apart from a push void.'
+    notes: R1-R3 proven by approval, board, lane and client unit tests in CI; the comments-off
+      test was renamed when it learned to say why (l-errors-r1)
     verify: none
   - id: queue-approval-waits-conflict-free
     capability: wave merge queue approvals
