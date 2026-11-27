@@ -20,7 +20,7 @@ from fr.triage.batch_drive import Summary
 
 PACING_FILE = "pacing.json"
 
-_TIMES = ("full_at", "wait_until", "next_pass_at")
+_TIMES = ("full_at", "wait_until", "next_pass_at", "planned_at")
 
 # A quiet pass builds the drive's `Summary` from the recorded one (R9), so a record is
 # usable only when it has exactly that shape (p2-r7).
@@ -46,6 +46,9 @@ class PacingState:
     # The last planned pass held its dispatches below the floor (R7): the first pass back
     # above it is never quiet, or the held dispatches would wait for the next full pass.
     held_for_quota: bool = False
+    # When the last planned pass planned: a close-out deadline passed since then wakes a
+    # quiet pass (R7 of spec 2026-11-27-queue-followups). None: unknown, which reads.
+    planned_at: datetime | None = None
 
 
 def _stamp(value: datetime | None) -> str | None:
@@ -57,6 +60,14 @@ def _parsed(value: object) -> datetime | None:
         return None
     when = datetime.fromisoformat(value)
     return when if when.tzinfo else when.replace(tzinfo=UTC)
+
+
+def _parsed_or_none(value: object) -> datetime | None:
+    """A time whose bad value is unknown, never a reset of the whole state (R7)."""
+    try:
+        return _parsed(value)
+    except (ValueError, TypeError):
+        return None
 
 
 def _from_json(data: object) -> PacingState:
@@ -91,6 +102,7 @@ def _from_json(data: object) -> PacingState:
         budget=budget if isinstance(budget, dict) else None,
         summary=dict(summary) if summary is not None else None,
         held_for_quota=data.get("held_for_quota") is True,
+        planned_at=_parsed_or_none(data.get("planned_at")),
     )
 
 

@@ -21,10 +21,11 @@ from typing import Literal, Protocol
 
 from fr.triage.batch import batch_pr, batch_repo, derive_batch_stage
 from fr.triage.batch_dispatch import LIVE_STAGES
-from fr.triage.batch_drive import ARCHIVE_PREFIXES, closeout_event
+from fr.triage.batch_drive import ARCHIVE_PREFIXES, CLOSEOUT_FALLBACK, LANDED, closeout_event
 from fr.triage.errors import ForgeError
 from fr.triage.model import Facts, Judgements
 from fr.triage.pacing_state import PacingState
+from fr.triage.timestamps import parse_aware
 
 # R11: a full pass at least this often, whatever the probes say.
 FULL_EVERY = timedelta(minutes=15)
@@ -82,6 +83,35 @@ def closing_repos(facts: Facts | None, judgements: Judgements | None) -> set[str
         event = closeout_event(batch)
         repo = batch_repo(batch, facts)
         if event is not None and event.archived is None and repo is not None:
+            out.add(repo)
+    return out
+
+
+def deadline_repos(
+    facts: Facts | None, judgements: Judgements | None, since: datetime | None, now: datetime
+) -> set[str]:
+    """The repos with a close-out deadline (`merged_at + CLOSEOUT_FALLBACK`) in
+    (*since*, *now*]: of a landed batch with no close-out event that no `queue_land` of
+    its repo names (a queue landing is due at once). Fails open: an unknown *since*, or a
+    landed batch with no readable `merged_at`, reads its repo (R7 of spec
+    2026-11-27-queue-followups)."""
+    from fr.triage.wave_queue import queue_landed
+
+    if facts is None or judgements is None:
+        return set()
+    out: set[str] = set()
+    for batch in judgements.batches:
+        repo = batch_repo(batch, facts)
+        if repo is None or repo in out or closeout_event(batch) is not None:
+            continue
+        if derive_batch_stage(batch, facts) not in LANDED:
+            continue
+        if batch.id in queue_landed([r for r in judgements.queues if r.repo == repo]):
+            continue
+        pr = batch_pr(batch, facts)
+        merged = parse_aware(pr.merged_at if pr is not None else None)
+        due = None if merged is None else merged + CLOSEOUT_FALLBACK
+        if since is None or due is None or since < due <= now:
             out.add(repo)
     return out
 
@@ -213,10 +243,12 @@ def plan_pass(
     probes: int,
     full: bool | None = None,
     closing: set[str] | frozenset[str] = frozenset(),
+    deadline: set[str] | frozenset[str] = frozenset(),
 ) -> PassPlan:
     """The pass's kind and the repos it reads (R7, R9-R11). The *closing* repos
     (`closing_repos`) are read on every pass, whatever its kind: a would-be quiet pass
-    with any becomes a partial one that reads only them (merge-truth R8)."""
+    with any becomes a partial one that reads only them (merge-truth R8). The *deadline*
+    repos (`deadline_repos`) are read the same way (R7 of spec 2026-11-27-queue-followups)."""
     every = frozenset(repos)
     if state.summary is None:
         # The last pass never planned (it failed after its collect, p2-r1): its ETags may be
@@ -224,7 +256,8 @@ def plan_pass(
         changed = set(every)
     due = full_due(state, now) if full is None else full
     kind = pass_kind(state, now, changed, digest, below_floor=below_floor)
-    reading = frozenset(closing) & every
+    reading = frozenset(closing) | frozenset(deadline)
+    reading &= every
     if kind == "quiet" and reading:
         kind = "partial"
     held: str | None = None

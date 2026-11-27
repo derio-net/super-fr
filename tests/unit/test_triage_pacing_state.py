@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -96,3 +97,20 @@ def test_held_for_quota_round_trips_and_a_bad_value_is_false(tmp_path: Path) -> 
     assert pacing_state.load(tmp_path)[0].held_for_quota is True
     (tmp_path / pacing_state.PACING_FILE).write_text('{"held_for_quota": "yes"}')
     assert pacing_state.load(tmp_path)[0].held_for_quota is False
+
+
+def test_planned_at_round_trips_and_a_bad_value_is_none(tmp_path: Path) -> None:
+    """R7 of spec 2026-11-27-queue-followups: `planned_at` is parsed on its own, so a bad
+    value is unknown and the rest of the state is kept."""
+    state = PacingState(etags={"o/r": {"p": "e"}}, planned_at=AT,
+                        summary={"in_flight": 1, "merged": 2, "pending": 0, "closing": 0})  # fmt: skip
+    pacing_state.save(tmp_path, state)
+    loaded, warning = pacing_state.load(tmp_path)
+    assert loaded == state and warning is None
+    path = tmp_path / pacing_state.PACING_FILE
+    data = json.loads(path.read_text("utf-8"))
+    data["planned_at"] = "garbage"
+    path.write_text(json.dumps(data), "utf-8")
+    loaded, warning = pacing_state.load(tmp_path)
+    assert warning is None and loaded.planned_at is None
+    assert loaded.etags == state.etags and loaded.summary == state.summary

@@ -103,3 +103,10 @@ def test_the_planned_pass_records_its_summary_digest_and_quota_hold(tmp_path: Pa
     )
     pacer.record_summary(SUMMARY, digest="d-now", held=False)
     assert pacing_state.load(tmp_path)[0].held_for_quota is False
+
+
+def test_the_planned_pass_stamps_planned_at(tmp_path: Path) -> None:
+    """R7 of spec 2026-11-27-queue-followups: the next pass's deadlines count from here."""
+    pacer = _pacer(tmp_path, PacingState())
+    pacer.record_summary(SUMMARY, digest="d-now", held=False)
+    assert pacing_state.load(tmp_path)[0].planned_at == NOW
