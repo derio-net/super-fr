@@ -41,7 +41,14 @@ from fr.triage.batch import (
     save_queue_requests,
 )
 from fr.triage.errors import TriageError
-from fr.triage.model import Facts, Judgements, QueueAddEvent, QueueRemoveEvent, Scope
+from fr.triage.model import (
+    Facts,
+    Judgements,
+    PullRequest,
+    QueueAddEvent,
+    QueueRemoveEvent,
+    Scope,
+)
 from fr.triage.operator_entries import reserved_entry
 from fr.triage.queue_requests import added
 from fr.triage.scope_config import scope_id
@@ -98,6 +105,18 @@ def _batch_of(repo: str, number: int, facts: Facts, judgements: Judgements) -> s
             if p.number == number:
                 return batch.id
     return None
+
+
+def _known_pr(repo: str, number: int, facts: Facts) -> PullRequest | None:
+    """PR *number* of *repo* as collect read it, from the pool `batch_pr` reads: the PRs
+    linked to an issue (a Closes line files a batch PR under its members), the unlinked
+    open PRs and the head-branch lookups (gh#1741). A record whose author and origin were
+    read wins over one where they were not."""
+    pool = [p for issue in facts.issues for p in issue.prs]
+    pool += [*facts.prs, *facts.batch_prs]
+    found = [p for p in pool if p.repo == repo and p.number == number]
+    read = [p for p in found if p.author is not None and p.cross_repo is not None]
+    return next(iter(read or found), None)
 
 
 def _refuse(repo: str, number: int, why: str) -> NoReturn:
@@ -167,13 +186,16 @@ def queue_add_command(
         _refuse(owner_repo, number, f"the PR is not open ({view.get('state')})")
     if (base := str(view.get("base_ref") or "")) != default:
         _refuse(owner_repo, number, f"its base {base!r} is not the default branch {default!r}")
-    known = next((p for p in facts.prs if p.repo == owner_repo and p.number == number), None)
-    why = distrust(
-        known.author if known else None,
-        known.cross_repo if known else None,
-        allowed_authors(owner_repo, facts),
-    )
-    if why is not None:
+    batch = _batch_of(owner_repo, number, facts, judgements)
+    known = _known_pr(owner_repo, number, facts)
+    # A batch's PR was trusted by `batch_pr` itself; any other PR on the same read (gh#1741).
+    if batch is None and (
+        why := distrust(
+            known.author if known else None,
+            known.cross_repo if known else None,
+            allowed_authors(owner_repo, facts),
+        )
+    ):
         _refuse(owner_repo, number, why)
     sid = scope_id(scope)
     if number in added(judgements.queue_requests, owner_repo, sid):
@@ -181,7 +203,6 @@ def queue_add_command(
     head_ref = str(view.get("head_ref") or (known.head_ref if known else ""))
     if (kind := reserved_entry(owner_repo, number, head_ref, judgements)) is not None:
         _refuse(owner_repo, number, f"it is fr's own {kind} entry")
-    batch = _batch_of(owner_repo, number, facts, judgements)
     if batch is not None and not preapproved:
         _refuse(owner_repo, number, f"it is batch {batch}'s PR, already an entry; add "
                 "--preapproved to let the driver approve it")  # fmt: skip
