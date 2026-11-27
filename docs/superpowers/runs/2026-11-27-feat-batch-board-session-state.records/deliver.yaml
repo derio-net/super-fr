@@ -53,3 +53,6 @@ visual:
     - expand-wave-block
     - wave-several-batches
     - wave-one-batch
+  - path: /Users/idermitzakis/.claude-tmp/claude-502/-Users-idermitzakis-Docs-projects-super-fr/164db869-0dd1-4fdb-8624-054c412af9ff/scratchpad/vis-dwell-review/cutoff-off-1400.png
+    shows:
+    - toggle-cutoff
