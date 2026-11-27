@@ -105,3 +105,8 @@ test_hermetic_git.py runs the fixture itself and asserts both variables; test_ga
 ### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: The parse_aware/parse_as_utc swaps at _created_since, _pr_time and _worth_reading have no caller-level tests for awkward inputs
 
 tests/unit/test_timestamp_callers.py parametrizes _created_since and _pr_time over None, empty, garbage, naive, Z and offset stamps; test_usage_backfill.py tests _worth_reading with unreadable, naive old, naive recent and Z captured_at.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved-2 created=2026-11-27T09:57:29+00:00 phase=1 state=open resolves=p1-r3 tracked_by=https://github.com/derio-net/super-fr/issues/1725 -->
+### p1-r3-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1725] · resolves p1-r3: parse_as_utc body-scan guard would not catch a re-added copy of the removed readers (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1725.
