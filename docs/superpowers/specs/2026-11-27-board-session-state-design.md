@@ -209,3 +209,9 @@ gate: developer
   only first sightings, not late dating.
 - One `pane read` per idle Claude pane per render costs wall clock on a large wave; it is
   bounded by the number of idle panes and runs only where the herdr runner is loaded.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-27-board-session-state | `derio-net/super-fr` | `2026-11-27-board-session-state` | — |

@@ -1,0 +1,128 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Who each card waits for, background work and lane owners (R1-R4, R8)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - batch-card-waits-for
+  - batch-card-background-wait
+  - batch-lane-owners
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/waits.py
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/triage/kanban_render.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/commands/triage_kanban_cmd.py
+  - packages/fr-dispatch/src/fr_dispatch/protocols.py
+  - packages/fr-herdr/src/fr_herdr/runner.py
+  - tests/unit/*.py
+  - tests/unit/fixtures/**
+  - .changes/feat-batch-board-session-state.yaml
+  - docs/acceptance/features/2026-11-27-board-session-state.yaml
+  - docs/*.md
+  - docs/explainers/*.md
+  - docs/reference/*.md
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Smoke — the board test harness renders a card (skeleton)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Smoke: add tests/unit/test_triage_waits.py with one trivial test that builds a board from the existing kanban test fixtures (reuse the helpers tests/unit/test_triage_kanban*.py already use to make Facts/Judgements with one dispatched batch) via `fr.triage.kanban.build_board` and asserts the card is in `running`. Run `uv run pytest tests/unit/test_triage_waits.py -q --no-cov`: green. Commit and push with `uv run fr push`, so the draft PR's CI runs on the branch (CI is the gate this repo declares).
+- number: 2
+  title: The pure wait (spec §A)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_triage_waits.py add one test per row of the spec's §A table (13 rows) against a new pure `fr.triage.waits.wait_of(...)`, plus the close-out-front cases for rows 8, 9 and 12 (a live close-out whose item id `closeout_item_id(repo, batch)` is or is not in the background set, while the batch's own item id says the opposite), `checks=None` for row 10, a dependency `satisfied` by an obsolete batch (no wait from row 6), and `blocked` always reaching row 2. Run them: they fail on the missing module.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/triage/waits.py (module docstring citing spec 2026-11-27-board-session-state §A): `Party = Literal["you","agent","background","ci","queue","dependency"]`, `Role = Literal["developer","reviewer","tester","devops"]`, frozen `Wait(party, role=None)`, and `wait_of(*, column, stage, lane, needs_you, front_status, front_background, checks, has_action, queued, ready, awaiting, selected, deps)` implementing the table first-match. `lane` is the `LaneVerdict | None`; map `needs-<role>` to the role. Run the tests: green.
+  - id: P1.T2.S3
+    text: |-
+      GREEN: wire it in packages/fr/src/fr/triage/kanban.py: `Card.wait: Wait | None = None`; `build_board(..., background: Collection[str] = frozenset())` passes it to `_card`, which computes the front item id (`closeout_item_id` when the close-out status is not in (None, "absent", "unknown"), as `Card.front` decides, else `batch_item_id`) and calls `wait_of` after the column and hint are decided, using the `awaiting`, `queued`, `plan.ready`, `actions` and `selected` sets `_card` already receives. Add a test that the column and hint of every fixture card are unchanged whether or not `background` names them (R2). Run `uv run pytest tests/unit/test_triage_waits.py tests/unit/test_triage_kanban*.py -q --no-cov -n 2`: green.
+- number: 3
+  title: Background work from the runner (R3)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests for (a) `fr_dispatch.protocols.SessionActivity` being runtime_checkable with `session_background(items) -> frozenset[str]`; (b) `HerdrRunner.session_background` with `_list_tabs`, `_list_agents` and `_run_herdr` monkeypatched: an idle tab whose `claude` agent's screen shows `1 shell` (reuse a captured screen from the existing has_background_work tests) is returned, a working tab is not read at all, an `opencode` agent is never read, a screen with only `← 1 agent` is not returned; (c) `read_sessions` with a fake runner implementing SessionActivity fills `SessionReads.background`, and one whose `session_background` raises adds the note `runner <name> could not read background work: <reason>` and no background while statuses are kept. Run: red.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: add `SessionActivity` beside `SessionNotes` in packages/fr-dispatch/src/fr_dispatch/protocols.py; implement `HerdrRunner.session_background` in packages/fr-herdr/src/fr_herdr/runner.py (one `tab list`, one `agent list`; for items whose `_status_of` is idle/done, each agent whose `tab_id` is in their tabs and whose kind is `claude` (the field `_HARNESSES` reads) gets `pane read <pane> --source visible --ansi` and `restart.has_background_work`); add `background: frozenset[str] = frozenset()` to `SessionReads` and ask the runner in `read_sessions` after `session_statuses`, inside its own try. In `write_board` pass `background=reads.background` to `build_board`. Run the tests and `uv run pytest tests/unit/test_import_direction.py -q --no-cov`: green.
+- number: 4
+  title: Lane owners (R4)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests that `TriageConfig` parses `lane_owners: {reviewer: [a, b]}`, defaults to empty lists, moves an unknown key (`review: [x]`) into `ignored` without refusing the config, and that `FACTS_SCHEMA == 21` (update the pin in tests/unit/test_triage_model.py); that `lane_owners` is not in `fr.config.protection.GUARDED_TRIAGE_KEYS`; that a Needs-you `ColumnView.owners` holds repo -> logins for the scope's repos; and that the rendered column header reads `owner: @a, @b`, `owner: unassigned`, or one line per repo when two repos differ, and a lane card's wait line names the owners. Run: red.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/triage/model.py add `LaneOwners` (four `list[str]` fields, `ignored: list[str] = []`, a `mode="before"` validator moving unknown keys into `ignored`) and `TriageConfig.lane_owners`; bump `FACTS_SCHEMA` to 21 with a comment in the existing style (21 adds per-config `lane_owners`, which `to_json` dumps; a file below 21 reads it as empty). In kanban.py add `ColumnView.owners: Mapping[str, tuple[str, ...]]` filled for the four Needs-you columns from `facts.config_for(repo).lane_owners`. Add a page note per repo with ignored keys in `write_board`. Run the tests: green.
+- number: 5
+  title: Render the wait and owners, docs, fragment, quality gate
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      GREEN: in packages/fr/src/fr/triage/kanban_render.py render the wait as a pill `<span class="pill wait-<party>">waits for <party>[ · <role>][ (@owners)]</span>` in the card summary, CSS beside the status pills (`wait-you` uses `--sev-1`), and the owners line under each Needs-you column title in `_column`. Tests assert the pill per party, none on a Done card, and HTML escaping of logins. Run: green.
+  - id: P1.T5.S2
+    text: |-
+      Visual check (rows batch-card-waits-for, batch-lane-owners carry `visual`): render a Batches page from a fixture state holding a card per party, a Done card, owned and unassigned lanes and a two-repo scope with different owners into a git-ignored directory of the worktree, open it in a browser at desktop and 390px width, screenshot each named state, open every screenshot, and fill the step record's `visual:` section.
+  - id: P1.T5.S3
+    text: |-
+      REFACTOR + quality gate: add `.changes/feat-batch-board-session-state.yaml` (`bump: minor`, summary: The Batches page shows who each card waits for, an owner per Needs-you lane, and how long each card has been in its column and wait). Update docs/explainers/fr-triage.md (the wait parties and `lane_owners`), docs/explainers/fr-dispatch.md and docs/reference/dispatch-lifecycle.md (`SessionActivity` beside `SessionNotes`) and docs/herdr-control-sessions.md (the board's one pane read per idle Claude pane), and stamp `reviewed:` on any other page `uv run fr docs check` names. Run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, mypy over the five packages, `uv run fr docs check`. Move rows batch-card-waits-for, batch-card-background-wait and batch-lane-owners to `ci` with `uv run fr acceptance set-status --level unit=super-fr:tests/unit/<file>.py#<test> --notes ...`. Commit, then run the fast tier the brief names last.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
