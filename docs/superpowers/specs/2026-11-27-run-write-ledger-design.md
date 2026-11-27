@@ -20,16 +20,22 @@ issue was filed:
   `fr/commands`, against the package's layering.
 
 The ledger's users outside `run_cmd.py`: `fr/record/apply.py:1684` (`run_cmd.ResolveGuard()`),
-`tests/unit/test_deliver_local_stamp.py:395-401` (`_RunWrites`, `_RUN_WRITES`) and
+`tests/unit/test_deliver_local_stamp.py:395-401` (`_RunWrites`, `_RUN_WRITES`),
+`tests/unit/test_run_cost_cmd.py:345` (`from fr.commands.run_cmd import _capture_usage`) and
 `tests/unit/test_record_review_fixes.py:123` (patches `run_cmd.commit_records`, which
-`_RunWrites.commit` calls).
+`_RunWrites.commit` calls). `tests/unit/test_placement_emitted_paths.py:150` imports
+`_save_run_state`, which stays in `run_cmd.py` (R3).
+
+`docs/reference/workflow-shapes.md` covers `fr/run/**` and `run_cmd.py`, and
+`docs/reference/cli.md` covers `fr/commands/*.py`, so `fr docs check` owes each page an edit or a
+`reviewed` stamp.
 
 ## Requirements
 
-R1. A new module `packages/fr/src/fr/run/writes.py` holds the run write ledger: `ResolveGuard`, `RunWrites` (was `_RunWrites`), the `RUN_WRITES` context variable, `note_record_write`, `remember`, `save_run_state_noted`, `note_subject`, `commit_run_writes_now`, `note_loaded`, `commits_run_writes`, `now`, `fr_version` and `capture_usage`, with the bodies they have today.
-R2. `fr/run/writes.py` imports neither `typer` nor `rich`, nor any `fr.commands` module, and a unit test that reads its syntax tree fails when it does.
+R1. A new module `packages/fr/src/fr/run/writes.py` holds the run write ledger: `ResolveGuard`, `RunWrites` (was `_RunWrites`), the `RUN_WRITES` context variable, `note_record_write`, `remember`, `save_run_state_noted`, `note_subject`, `commit_run_writes_now`, `note_loaded`, `commits_run_writes` (with its `_Cmd` type variable), `now`, `fr_version` and `capture_usage`, with the bodies they have today, and the gh#610 §3.C header comment (`run_cmd.py:164-171`) as its module docstring.
+R2. `fr/run/writes.py` imports neither `typer` nor `rich`, nor any `fr.commands` module, in any spelling (`from fr import commands` and a relative `from ..commands import …` included), and a unit test that reads its syntax tree fails when it does.
 R3. A cursor conflict is still refused exactly as today: `save_run_state_noted` lets `RunStateConflictError` propagate having noted nothing, and `run_cmd._save_run_state` catches it, prints the red line and exits 2.
-R4. `_capture_on_new_host`, `_closeout_handoff_lines`, `_RECORD_ROWS`, the `_UNOBSERVED` cluster, `_GATE_DECISIONS` and `_note_supersede_writes` stay in `run_cmd.py`.
+R4. `_capture_on_new_host`, `_closeout_handoff_lines`, `_RECORD_ROWS`, the unobserved-gate cluster (`_UNOBSERVED`, `_note_unobserved`, `_why_unobservable`, `TESTS_PROVENANCE_SURFACE`, `_why_tests_unobservable`, `_take_unobserved`), `_GATE_DECISIONS` and `_note_supersede_writes` stay in `run_cmd.py`.
 R5. Behaviour is unchanged: a command's writes are committed before a dispatch brief is printed, the decorator commits in `finally` on every exit path, the context variables keep their meaning and commit subjects are byte-identical.
 R6. `fr/record/apply.py` and the tests import the ledger from `fr.run.writes` (a test that patched `run_cmd.commit_records` patches `fr.run.writes.commit_records`); `run_cmd.py` imports only the names its own body uses, under its existing `_`-prefixed spellings, with no compatibility-only re-export.
 R7. The `run_cmd.py` line budget is lowered to the module's new length plus at most 20 lines.
@@ -82,7 +88,9 @@ with that cluster after #1519. `_closeout_handoff_lines` belongs with deliver (c
 
 The guard test, `tests/unit/test_run_writes_layering.py`, parses `fr/run/writes.py` with
 `ast` and fails on any `import typer`, `import rich…`, `from rich…` or `fr.commands…` import
-at any nesting level, and carries a planted-source case proving it fires.
+at any nesting level. For a `from X import Y` it judges both `X` and `X.Y`, and it resolves a
+relative import against `fr.run` first, so `from fr import commands` and
+`from ..commands import common` are caught. Planted-source cases prove each form fires.
 
 ## Design shape
 
@@ -93,7 +101,7 @@ packages/fr/src/fr/
 +                        save_run_state_noted, note_subject, commit_run_writes_now,
 +                        note_loaded, commits_run_writes, now, fr_version, capture_usage
   commands/
-~   run_cmd.py           -~330 lines; imports the above as _names;
+~   run_cmd.py           about -225 lines net; imports the above as _names;
 ~                        _save_run_state = try save_run_state_noted / except conflict → print, Exit(2)
 =                        keeps _capture_on_new_host, _closeout_handoff_lines, _RECORD_ROWS,
 =                        _UNOBSERVED cluster, _GATE_DECISIONS, _note_supersede_writes

@@ -1,0 +1,70 @@
+schema_version: 12
+run: 2026-11-26-feat-batch-arch-run-ledger
+step: spec-plan-review
+outcome: done
+journal:
+- kind: finding
+  id: spr-r1
+  title: Plan omits the docs-currency stamps for the two pages covering run_cmd.py and fr/run/**
+  body: 'target: plan. docs/reference/workflow-shapes.md:8-9 and docs/reference/cli.md:8 cover the changed
+    paths; the plan had no step and no files entry for them, so fr docs check and deliver would refuse.'
+  review_scope: in
+- kind: finding
+  id: spr-r2
+  title: A test that imports `_capture_usage` from run_cmd is missed, and the plan's grep would not find
+    it
+  body: 'target: plan. tests/unit/test_run_cost_cmd.py:345 imports `_capture_usage` from run_cmd; the
+    grep searched no from-import form.'
+  review_scope: in
+- kind: finding
+  id: spr-r3
+  title: 'R1/R4 leave part of the moved range unplaced: `_Cmd`, the header comment and the unobserved/provenance
+    helpers'
+  body: 'target: spec. `_Cmd` (run_cmd.py:477), the gh#610 header comment (:164-171) and the helpers at
+    :296-353 had no stated home in the spec.'
+  review_scope: in
+- kind: finding
+  id: spr-r4
+  title: Design shape's '-~330 lines' overstates the extraction
+  body: 'target: spec. The moved blocks total about 240 lines, about -225 net.'
+  review_scope: in
+- kind: finding
+  id: spr-r5
+  title: Layering guard keys on the import's module name only, so `from fr import commands` and relative
+    imports pass
+  body: 'target: plan. A check on node.module alone misses `from fr import commands` and `from ..commands
+    import common`.'
+  review_scope: in
+- kind: review
+  id: spr-review
+  title: 'independent spec+plan review: 5 findings, all in scope'
+  body: 'Findings raised: spr-r1..spr-r5, all fixed in the spec and plan. All four operator decisions
+    honoured (d-conflict-refusal, d-capture-on-new-host, d-verification, d-migrate-callers).'
+- kind: lens
+  lens: tests
+  title: The move relies on monkeypatches following each lookup into fr.run.writes; check every patched
+    name still intercepts where it is called
+resolves:
+- id: spr-r1
+  state: fixed
+  body: 'Plan: docs pages added to files; P1.T4.S1 runs fr docs check and bumps both reviewed stamps (or
+    edits). Spec Background names both pages.'
+- id: spr-r2
+  state: fixed
+  body: Spec Background names test_run_cost_cmd.py:345 (and test_placement_emitted_paths.py:150, which
+    stays); P1.T3.S2 migrates it and greps the from-import form.
+- id: spr-r3
+  state: fixed
+  body: R1 names `_Cmd` and the header comment; R4 lists the unobserved-gate cluster's six names; P1.T3.S1
+    matches.
+- id: spr-r4
+  state: fixed
+  body: Design shape now says about -225 lines net.
+- id: spr-r5
+  state: fixed
+  body: R2 and the Design require both spellings caught; P1.T1.S1 judges module and module.name, resolves
+    relative imports against fr.run, and plants both forms.
+acceptance: []
+evidence:
+  review: spr-review
+  reviewer: a016da84d0beebf63
