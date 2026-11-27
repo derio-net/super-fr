@@ -1,0 +1,23 @@
+schema_version: 12
+run: 2026-11-26-feat-batch-arch-isolation-split
+step: review-phase
+item: phase/2
+outcome: done
+journal:
+  - kind: finding
+    id: p2-r1
+    phase: 2
+    review_scope: in
+    title: "local.py budget set to 3000 but the plan's rule (round up to next 25, plus 25) on 2939 lines gives 2975"
+    body: "tests/unit/test_tripwire_module_budget.py:27 at 02e587e64; P2.T1.S3 / P1.T2.S3 rule."
+  - kind: review
+    id: review-p2-1
+    phase: 2
+    title: "phase 2 review (reap.py move): 1 finding (p2-r1)"
+    body: "Dispatched reviewer diffed the moved block byte-for-byte, checked reap.py's imports against the spec, every caller incl. lazy test imports, ReapRefused identity across modules, the guard entry; ruff/mypy clean, 163 targeted tests pass. Raised p2-r1 (budget slack), fixed in 93744980a."
+resolves:
+  - {id: p2-r1, state: fixed, body: "Budget lowered to 2975 in 93744980a; module budget tripwire passes."}
+evidence:
+  review: review-p2-1
+  reviewer: a0ebd9465923b204f
+  model: claude-opus-5-5
