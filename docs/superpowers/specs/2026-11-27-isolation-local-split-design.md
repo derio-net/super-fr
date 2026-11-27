@@ -120,6 +120,8 @@ imports (arrow = "imports from"):
 strategy: none
 - isolation-local-split-guards: none — the forge-argv, remedy and budget tripwires run in this PR's CI, with the whole unit suite unchanged in behaviour
 gate: developer
+settle.conflicts: report — batch arch-isolation-split: the wave driver owns this PR's mergeability
+settle.ci: report — batch arch-isolation-split: the wave driver owns this PR's CI
 
 ## Implementation Plans
 
