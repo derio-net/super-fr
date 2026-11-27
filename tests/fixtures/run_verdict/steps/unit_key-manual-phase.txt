@@ -1,0 +1,2 @@
+[31mphase/2/implement-phase: phase 2 is `tag: manual` and is deliberately never dispatched, so there is no outcome to record.[0m
+  Its record is the plan's own steps plus the PR's "unimplemented — operator pushes to this PR".
