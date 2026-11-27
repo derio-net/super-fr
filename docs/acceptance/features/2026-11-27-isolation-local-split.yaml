@@ -18,7 +18,12 @@ rows:
     - spec:2026-11-27-isolation-local-split#R2
     - spec:2026-11-27-isolation-local-split#R5
     - spec:2026-11-27-isolation-local-split#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_isolation_network_timeouts.py#test_split_modules_never_import_local
+      - super-fr:tests/unit/test_isolation_network_timeouts.py#test_local_py_holds_no_forge_cli_argv
+      - super-fr:tests/unit/test_tripwire_module_budget.py#test_module_is_within_its_budget
+    status: ci
+    notes: 'guards land with the split (#1517): forge-argv scan over every isolation
+      module, no-import-of-local AST guard, local.py budget; run in CI''s unit shards'
     verify: none
