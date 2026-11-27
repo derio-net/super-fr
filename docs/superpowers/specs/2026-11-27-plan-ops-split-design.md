@@ -60,7 +60,7 @@ R10. Every caller under `packages/` imports a moved name from its new home, not 
 R11. Tests that import or patch a moved private name import or patch it in its new home; no test assertion changes. The plain-`write_text` guard's parameter list widens to every new module holding a writer (`_plan_io.py`, `spec_table.py`, `plan_rework.py`), so the guard covers the same writes as before.
 R12. Behaviour is unchanged: self-review returns the same issues in the same order, and every writer writes and stages the same files.
 R13. The `plan_ops.py` budget in `test_tripwire_module_budget.py` drops to within its 400-line headroom of the new size; `plan_ops.py` stays a held module.
-R14. `docs/explainers/01-fr-goal.md` names `self_review`'s new path; every page `fr docs check` reports for a file this change edits (no page covers `plan_ops.py` itself) gets its `reviewed` stamp moved with the note `still true: import-only change`, or an edit where a claim moved.
+R14. `docs/explainers/01-fr-goal.md` names `self_review`'s new path; every page `fr docs check` reports for a file this change edits (no page covers `plan_ops.py` itself) gets its `reviewed` stamp moved with the note `still true, import-only change` (a comma: a colon followed by a space breaks the page's YAML front matter), or an edit where a claim moved.
 R15. The PR adds the change fragment `.changes/feat-batch-arch-plan-ops-split.yaml` with `bump: patch`.
 
 ## Design

@@ -2,15 +2,15 @@
 
 These are the writers — every other v2 module is a reader (parse,
 render, observe) or a mutator-of-GitHub (diff, apply). Plan-file
-writes happen here.
+writes happen here and in `fr.plan_rework`.
 
 Conventions:
   - All writers stage via `git add` after the file write but do NOT
     commit. The caller (CLI) decides commit cadence.
   - All writers re-parse after writing to confirm the file still
     passes schema validation.
-  - `fr.plan.create` and `fr.plan.rework_create` additionally append
-    a row to the spec's Implementation Plans table; the spec edit is
+  - `fr.plan.create` (here) and `fr.plan_rework.rework_create` additionally
+    append a row to the spec's Implementation Plans table; the spec edit is
     staged in the same change so it lands in the same PR.
 
 Split out (spec 2026-11-27-plan-ops-split, #1518), and re-exported here:
