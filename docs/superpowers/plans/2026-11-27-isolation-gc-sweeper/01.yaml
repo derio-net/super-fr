@@ -1,0 +1,90 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Move isolation gc to a GcSweeper collaborator (R1-R8)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  tier: standard
+  files:
+  - packages/fr/src/fr/isolation/gc.py
+  - packages/fr/src/fr/isolation/local.py
+  - tests/unit/test_isolation.py
+  - tests/unit/test_isolation_gc_routing.py
+  - tests/unit/test_isolation_preserve.py
+  - tests/unit/test_isolation_gc_sweeper.py
+  - tests/unit/test_isolation_network_timeouts.py
+  - tests/unit/test_vk_compat_removed.py
+  - tests/unit/test_tripwire_module_budget.py
+  - .changes/feat-batch-arch-isolation-gc.yaml
+  - docs/explainers/fr-isolation.md
+  - .test_durations
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Failing test for the sweeper over each target class (R5)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add tests/unit/test_isolation_gc_sweeper.py. Using FakeRunner and make_repo_with_origin from tests/unit/test_isolation.py (HOME pointed at tmp_path/"home"), save an IsolationState whose worktree path does not exist. Case 1: `GcSweeper(HostWorktreeTarget(repo, runner=runner, gc_spawner=lambda _r, _m: None)).gc()` — assert no recorded call starts with "docker", the action for that worktree is verdict "orphan", action "reaped", and load_state(...) is None afterwards. Case 2: the same over LocalWorktreeDevcontainerTarget — assert a recorded `docker ps` call exists. Run `uv run pytest tests/unit/test_isolation_gc_sweeper.py -q --no-cov` and see it fail with ImportError on fr.isolation.gc.
+- number: 2
+  title: Create fr/isolation/gc.py and delegate gc (R1-R3, R7)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      GREEN: create packages/fr/src/fr/isolation/gc.py with `class GcSweeper` (`__init__(self, target: "LocalWorktreeDevcontainerTarget")` storing `self._target`; the type imported under TYPE_CHECKING only). Move, with bodies, comments and docstrings, the 14 methods _acquire_gc_lock, _gc_one_guarded, _gc_one, _reap_or_classify, _gc_stale_state, _merged_by_content, _discover_workspaces, _repo_states, _worktree_dirs, _resolve_state, _empty_repo_dirs, _sweep_empty_repo_dirs, _sweep_stale_sessions, _sweep_agent_worktrees from local.py, and put gc's current body in `GcSweeper.gc(self, dry_run: bool = False)`. Rewrite receivers only: `self.run` -> `self._target.run`, `self.repo_root` -> `self._target.repo_root`, `self._labelled_containers/_sweep_dangling_images/_label_reap/_pr_from` -> `self._target.<same>`, `type(self)(...)` in _merged_by_content -> `type(self._target)(...)`; calls between moved methods stay on self. Keep function-local imports function-local.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in local.py, `gc` keeps its signature and docstring and returns `GcSweeper(self).gc(dry_run)`; add a module-level `from fr.isolation.gc import GcSweeper`; delete the 14 methods; keep _spawn_gc, _teardown_container, _labelled_containers, _sweep_dangling_images, _stale_state_reapable, _label_reap, _vsc_images, _referenced_images. Drop imports the move left unused (ruff F401 names them). `uv run ruff check packages/fr/src/fr/isolation`, `uv run mypy packages/fr/src` and `uv run python -c "import fr.isolation.gc, fr.isolation.local, fr.isolation.hostworktree"` are clean; the new test passes.
+- number: 3
+  title: Tests follow the move (R4)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      Change the nine receivers to GcSweeper(<target>) and nothing else: tests/unit/test_isolation.py (_discover_workspaces near :1728, :1776, :2125; _reap_or_classify near :1960; _acquire_gc_lock near :2367; _merged_by_content near :4301), tests/unit/test_isolation_gc_routing.py:90, tests/unit/test_isolation_preserve.py:421 and :440, importing GcSweeper from fr.isolation.gc. Grep tests/ for any remaining `._<moved name>(` on a target and confirm none. `uv run pytest tests/unit/test_isolation.py tests/unit/test_isolation_gc_routing.py tests/unit/test_isolation_preserve.py tests/unit/test_isolation_gc_hygiene.py tests/unit/test_isolation_gc_sweeper.py -q --no-cov -n 2` is green.
+- number: 4
+  title: Guards, budget, fragment, docs stamp (R6, R8)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      Add "fr.isolation.gc" to ISOLATION_MODULES in tests/unit/test_isolation_network_timeouts.py and "packages/fr/src/fr/isolation/gc.py" to REMEDY_FILES in tests/unit/test_vk_compat_removed.py; lower the isolation/local.py budget in tests/unit/test_tripwire_module_budget.py to at most 50 lines above `wc -l packages/fr/src/fr/isolation/local.py`, with a comment naming #1521. Those three test files pass.
+  - id: P1.T4.S2
+    text: |-
+      Add .changes/feat-batch-arch-isolation-gc.yaml (`bump: patch`, `summary: isolation gc moves from LocalWorktreeDevcontainerTarget to a GcSweeper collaborator in fr/isolation/gc.py (no behaviour change)`), and prepend to the `reviewed:` stamp of docs/explainers/fr-isolation.md `2026-11-27 still true; gc moved to a GcSweeper collaborator (#1521), no reader-visible change; `. `uv run fr docs check` and `uv run --no-project python scripts/check-change-fragment.py origin/main` are clean.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR + quality gate: re-read gc.py's section comments so they say the sweeper calls the target (not that the target overrides); `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/` and mypy clean; then the repo's fast tier last.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

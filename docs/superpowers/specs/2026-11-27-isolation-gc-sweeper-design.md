@@ -156,3 +156,9 @@ This is a refactor with no behaviour change. The unit suite in this PR's CI prov
 existing gc and host-worktree tests, the nine receiver changes and the new override test. It
 adds no acceptance rows (operator decision): no product behaviour changes, and the guards are
 tests, not business claims.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-27-isolation-gc-sweeper | `derio-net/super-fr` | `2026-11-27-isolation-gc-sweeper` | — |
