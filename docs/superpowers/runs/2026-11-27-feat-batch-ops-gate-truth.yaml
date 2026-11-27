@@ -3,7 +3,7 @@ run: 2026-11-27-feat-batch-ops-gate-truth
 workflow: fr-goal@1
 branch: feat/batch-ops-gate-truth
 started: '2026-11-27T21:26:29+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -46,7 +46,11 @@ steps:
           returned: '2026-11-27T22:05:17+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-11-27T22:05:20+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
