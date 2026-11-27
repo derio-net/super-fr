@@ -93,9 +93,14 @@ rows:
       only its column time.
     origin:
     - spec:2026-11-27-board-session-state#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_dwell.py#test_card_dwell_marks_each_first_seen_part
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_a_card_shows_its_dwell_line_under_the_hint
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_a_done_card_shows_only_its_column_time
+    status: ci
+    notes: card_dwell, its format boundaries and the rendered line are unit-tested in
+      CI; browser-checked at phase 2
     verify: none
     visual:
       states:
