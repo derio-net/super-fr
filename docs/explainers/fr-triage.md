@@ -240,7 +240,9 @@ lane_owners: {developer: [alice], reviewer: [bob, carol], tester: [], devops: []
 
 The column header then reads `owner: @bob, @carol`, or `owner: unassigned`, and one line per
 repo when the repos of a scope differ. The key is for display only. A lane name it does not
-know is ignored, and the page says so.
+know is ignored, and the page says so. A card in a lane, and a Tester or DevOps gated
+pull request, shows the short pill `waits for you · reviewer` and its owners on a line below,
+or `(unassigned)`.
 
 Several scopes can work one repo, so a scope **claims** each issue it plans to act on with an
 `fr:claimed` label and a marker comment. Another scope's claim is hands-off. Taking one over

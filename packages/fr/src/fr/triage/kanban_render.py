@@ -15,7 +15,7 @@ from __future__ import annotations
 import shlex
 from collections.abc import Mapping, Sequence
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from fr.triage.components import (
     CHROME_CSS,
@@ -42,7 +42,7 @@ from fr.triage.kanban import (
 )
 from fr.triage.readiness import Readiness
 from fr.triage.render import FONTS, _safe_url, esc, noun
-from fr.triage.waits import Wait
+from fr.triage.waits import Role, Wait
 from fr.triage.wave_report import span
 
 if TYPE_CHECKING:
@@ -104,10 +104,10 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
 .status-working { color: var(--accent); border-color: var(--accent); }
 .status-blocked { color: var(--sev-1); border-color: var(--sev-1); font-weight: 600; }
 .status-done { color: var(--live); border-color: var(--live); }
-.pill[class*="wait-"] { white-space: normal; overflow-wrap: anywhere; }
 .wait-you { color: var(--sev-1); border-color: var(--sev-1); font-weight: 600; }
 .wait-agent, .wait-background { color: var(--accent); border-color: var(--accent); }
 .wait-ci, .wait-queue, .wait-dependency { color: var(--muted); border-color: var(--line); }
+.wait-owners { display: block; font-size: .72rem; color: var(--muted); overflow-wrap: anywhere; }
 .owners { margin: 2px 0 6px; font-size: .78rem; color: var(--muted); }
 .owners span { display: block; overflow-wrap: anywhere; }
 .stage-cancelled, .stage-abandoned, .stage-partial, .stage-left-scope {
@@ -497,15 +497,18 @@ def _logins(logins: Sequence[str]) -> str:
     return ", ".join(f"@{x}" for x in logins) if logins else "unassigned"
 
 
-def _wait(wait: Wait, owners: Sequence[str] = ()) -> str:
+def _wait(wait: Wait, owners: Sequence[str] | None = None) -> str:
     """The pill that names who the card waits for (spec 2026-11-27-board-session-state R1,
-    R4): the lane's role and owners ride along when the wait is the operator's in a lane."""
+    R4). *owners* is the lane's logins when the card sits in a Needs-you lane (None
+    elsewhere, so a role outside a lane names no one); they ride on their own muted line
+    under the short pill, `(unassigned)` when the lane has none, as the header does."""
     text = f"waits for {wait.party}"
     if wait.role is not None:
         text += f" · {wait.role}"
-        if owners:
-            text += f" ({_logins(owners)})"
-    return f'<span class="pill wait-{esc(wait.party)}">{esc(text)}</span>'
+    pill = f'<span class="pill wait-{esc(wait.party)}">{esc(text)}</span>'
+    if wait.role is not None and owners is not None:
+        pill += f'<span class="wait-owners">({esc(_logins(owners))})</span>'
+    return pill
 
 
 def _owners(column: ColumnView) -> str:
@@ -547,8 +550,10 @@ def _card(
     if front_status is not None:
         pills += " " + _status(front_status)
     if card.wait is not None:
-        lane_owners = (owners or {}).get(card.repo or "", ())
-        pills += " " + _wait(card.wait, lane_owners)
+        in_lane = card.column in NEEDS_YOU_COLUMNS
+        pills += " " + _wait(
+            card.wait, (owners or {}).get(card.repo or "", ()) if in_lane else None
+        )
     if card.pill:
         pills += f' <span class="pill {_pill_class(card)}">{esc(card.pill)}</span>'
     if card.blocked:
@@ -622,12 +627,14 @@ def _queue_section(board: Board) -> str:
     )
 
 
-def _gated_card(g: GatedCard) -> str:
+def _gated_card(g: GatedCard, column: ColumnView) -> str:
+    role = column.key.removeprefix("needs-")
+    wait = _wait(Wait("you", cast(Role, role)), column.owners.get(g.repo, ()))
     return (
         f'<div class="card needs-you" data-gated-pr="{esc(g.repo)}#{g.number}">'
         f'<span class="mono">{_link(f"PR #{g.number}", g.url)}</span> '
         f'<span class="meta">{esc(g.repo)}</span>'
-        f'<span class="title">{esc(g.title)}</span>'
+        f'{wait}<span class="title">{esc(g.title)}</span>'
         f'<span class="hint">{esc(g.reason)}</span></div>'
     )
 
@@ -643,7 +650,7 @@ def _column(
               collected_at=collected_at, owners=column.owners)
         for c in column.cards
     )  # fmt: skip
-    cards += "".join(_gated_card(g) for g in column.gated)
+    cards += "".join(_gated_card(g, column) for g in column.gated)
     count = len(column.cards) + len(column.gated)
     collapsed = count == 0
     key = esc(column.key)

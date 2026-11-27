@@ -556,18 +556,49 @@ class LaneOwners(_Strict):
     reviewer: list[str] = []
     tester: list[str] = []
     devops: list[str] = []
-    ignored: list[str] = []
+    # The note the board shows. Stored under a name no config file would write, so the
+    # parsed model round-trips through the facts file while a user's own `ignored:` key is
+    # just another unknown key. Read it as `.ignored`.
+    fr_ignored_keys: list[str] = []
+
+    @property
+    def ignored(self) -> list[str]:
+        return self.fr_ignored_keys
 
     @model_validator(mode="before")
     @classmethod
     def _ignore_unknown_lanes(cls, data: object) -> object:
+        """Display-only, so nothing in it refuses the repo's config: null is empty, a lone
+        string is one login, a null lane is empty, a non-string item and any key that is
+        not a lane (a user-written `ignored:` included) is dropped into the note."""
+        if data is None:
+            return {}
         if not isinstance(data, dict):
             return data
-        known = {"developer", "reviewer", "tester", "devops", "ignored"}
-        kept = {k: v for k, v in data.items() if k in known}
-        moved = sorted(str(k) for k in data if k not in known)
-        if moved:
-            kept["ignored"] = [*(kept.get("ignored") or []), *moved]
+        lanes = ("developer", "reviewer", "tester", "devops")
+        kept: dict[str, object] = {}
+        moved: list[str] = []
+        carried = data.get("fr_ignored_keys")
+        if isinstance(carried, list):
+            moved.extend(str(c) for c in carried if isinstance(c, str))
+        for key, value in data.items():
+            if key == "fr_ignored_keys":
+                continue
+            if key not in lanes:
+                moved.append(str(key))
+                continue
+            if value is None:
+                items: list[object] = []
+            elif isinstance(value, str):
+                items = [value]
+            elif isinstance(value, (list, tuple)):
+                items = list(value)
+            else:
+                moved.append(str(key))
+                continue
+            kept[key] = [i for i in items if isinstance(i, str)]
+            moved.extend(f"{key}[{n}]" for n, i in enumerate(items) if not isinstance(i, str))
+        kept["fr_ignored_keys"] = sorted(set(moved))
         return kept
 
 

@@ -240,12 +240,15 @@ def test_a_running_session_waits_for_the_agent_and_a_done_card_for_no_one() -> N
 
 def test_background_never_moves_a_column_or_a_hint() -> None:
     f, jd = busy()
-    statuses: Any = {}
     every = {batch_item_id(REPO, b.id) for b in jd.batches} | {
         closeout_item_id(REPO, b.id) for b in jd.batches
     }
+    statuses: Any = dict.fromkeys(every, "idle")
     plain = build_board(f, jd, statuses)
     loud = build_board(f, jd, statuses, background=every)
+    waits = [(c.batch.id, c.wait) for col in plain.columns for c in col.cards]
+    loud_waits = [(c.batch.id, c.wait) for col in loud.columns for c in col.cards]
+    assert waits != loud_waits  # the background set does change at least one wait
     assert [(c.batch.id, c.column, c.hint) for col in plain.columns for c in col.cards] == [
         (c.batch.id, c.column, c.hint) for col in loud.columns for c in col.cards
     ]

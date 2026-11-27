@@ -117,7 +117,9 @@ def test_a_lane_card_names_the_lanes_owners_in_its_wait_line() -> None:
     board = build_board(f, jd, {})
     assert board.card("a").column == "needs-reviewer"
     card = re.search(r'<details class="card[^"]*" id="card-a".*?</details>', _page(f, jd), re.S)
-    assert card and "waits for you · reviewer (@a, @b)" in card.group(0)
+    assert card
+    assert '<span class="pill wait-you">waits for you · reviewer</span>' in card.group(0)
+    assert '<span class="wait-owners">(@a, @b)</span>' in card.group(0)
 
 
 def test_owner_logins_are_escaped() -> None:
@@ -144,3 +146,90 @@ def test_a_facts_file_below_21_reads_lane_owners_as_empty(below: int) -> None:
     for cfg in data.get("config", {}).values():
         cfg.pop("lane_owners", None)
     assert Facts.model_validate(data).config_for(REPO).lane_owners.reviewer == []
+
+
+# ------------------------------------------- display-only: no value refuses the config (p1-r2)
+
+
+def _owners(value: Any) -> tuple[Any, Any]:
+    cfg, ignored = parse_triage_config({"lane_owners": value, "post_merge": ["make", "x"]})
+    assert cfg.post_merge == ["make", "x"] and ignored == ()  # the repo's other keys survive
+    return cfg.lane_owners, cfg
+
+
+def test_a_null_lane_owners_block_is_empty() -> None:
+    owners, _ = _owners(None)
+    assert (owners.developer, owners.reviewer, owners.ignored) == ([], [], [])
+
+
+def test_a_lone_string_is_one_login_and_a_null_lane_is_empty() -> None:
+    owners, _ = _owners({"reviewer": "bob", "tester": None})
+    assert owners.reviewer == ["bob"] and owners.tester == [] and owners.ignored == []
+
+
+def test_a_non_string_item_is_dropped_into_the_note() -> None:
+    owners, _ = _owners({"reviewer": ["a", 7, None, {"x": 1}], "devops": 5})
+    assert owners.reviewer == ["a"]
+    assert owners.devops == [] and owners.ignored  # nothing raised; the board names them
+
+
+def test_a_user_written_ignored_key_is_an_unknown_key_never_data() -> None:
+    owners, cfg = _owners({"reviewer": ["a"], "ignored": ["sneaky"]})
+    assert owners.reviewer == ["a"] and owners.ignored == ["ignored"]
+    again = TriageConfig.model_validate(json.loads(cfg.model_dump_json()))
+    assert again.lane_owners.ignored == ["ignored"]
+
+
+# ------------------------------------------ the owners ride on their own line (p1-r3, r4, r5)
+
+
+def test_a_lane_card_with_no_owners_reads_unassigned_like_the_header() -> None:
+    f, jd = _world({"tester": ["t"]})
+    card = re.search(r'<details class="card[^"]*" id="card-a".*?</details>', _page(f, jd), re.S)
+    assert card and '<span class="wait-owners">(unassigned)</span>' in card.group(0)
+    assert "owner: unassigned" in _column(_page(f, jd), "needs-reviewer")
+
+
+def test_the_owners_never_sit_inside_the_pill() -> None:
+    f, jd = _world({"reviewer": ["a", "b", "c", "d", "e", "f", "g"]})
+    page = _page(f, jd)
+    for pill in re.findall(r'<span class="pill wait-[^"]*">([^<]*)</span>', page):
+        assert "@" not in pill and "(" not in pill and "unassigned" not in pill
+
+
+def test_a_wait_with_a_role_outside_a_lane_column_names_no_owners() -> None:
+    from dataclasses import replace
+
+    from fr.triage.kanban_render import _card
+    from fr.triage.waits import Wait
+
+    f, jd = _world({"reviewer": ["a"]})
+    card = build_board(f, jd, {}).card("a")
+    held = replace(card, column="pr-open", wait=Wait("you", "reviewer"))  # row 4's awaiting card
+    html = _card(held, SCOPE, owners={REPO: ("a",)})
+    assert "waits for you · reviewer" in html
+    assert "wait-owners" not in html and "unassigned" not in html
+
+
+def _gated_world(owners: dict[str, Any] | None, label: str) -> str:
+    from tests.unit.test_triage_board_lanes import _gated, _with_gated
+
+    config: dict[str, Any] = {REPO: {"lane_owners": owners}} if owners is not None else {}
+    f = _with_gated(facts([], config=config), _gated(5, [label]))
+    return _page(f, judgements({}))
+
+
+def test_a_gated_pr_card_shows_the_lanes_wait_and_owners() -> None:
+    page = _gated_world({"tester": ["t1", "t2"]}, "gate:tester")
+    card = re.search(r'<div class="card needs-you" data-gated-pr=.*?</div>', page, re.S)
+    assert card
+    assert '<span class="pill wait-you">waits for you · tester</span>' in card.group(0)
+    assert '<span class="wait-owners">(@t1, @t2)</span>' in card.group(0)
+
+
+def test_a_gated_devops_pr_with_no_owners_reads_unassigned() -> None:
+    page = _gated_world(None, "gate:devops")
+    card = re.search(r'<div class="card needs-you" data-gated-pr=.*?</div>', page, re.S)
+    assert card
+    assert "waits for you · devops</span>" in card.group(0)
+    assert '<span class="wait-owners">(unassigned)</span>' in card.group(0)
