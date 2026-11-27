@@ -1,0 +1,2 @@
+bump: patch
+summary: run_cmd.py refuses through a typed verdict and its lookup, deliver, brief, evidence and provenance code moved into fr/run; no behaviour change.
