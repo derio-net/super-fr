@@ -68,11 +68,11 @@ its own. Each name links to the page that covers it.
 | [`fr-goal`](https://derio-net.github.io/super-fr/01-fr-goal.html) | super-fr | Take a feature from a sentence to a reviewed pull request, with one question round and no other approval gates. |
 | [`fr-init`](https://derio-net.github.io/super-fr/fr-init.html) | super-fr | Interview you about a repo once and scaffold the devcontainer profiles its isolated runs use. |
 | [`fr-isolation`](https://derio-net.github.io/super-fr/fr-isolation.html) | super-fr | Run work in a throwaway worktree and container so your checkout is never touched. |
-| [`fr-origins`](https://derio-net.github.io/super-fr/fr-triage.html) | super-fr | Classify where a repo's recent bugs came from and which process change would have prevented them. |
+| `fr-origins` | super-fr | Classify where a repo's recent bugs came from and which process change would have prevented them. |
 | [`fr-plan`](https://derio-net.github.io/super-fr/fr-brainstorming-and-plan.html) | super-fr | Turn a spec into a phase-by-phase plan that tooling can track and an agent can execute. |
 | [`fr-progress`](https://derio-net.github.io/super-fr/fr-progress.html) | super-fr | Report what is in progress, what drifted and what is ready to archive. |
 | [`fr-show-me`](https://derio-net.github.io/super-fr/fr-show-me.html) | super-fr | Draw a change as a tree, a structure-diff or a diagram, for a spec, a PR or a question. |
-| [`fr-triage`](https://derio-net.github.io/super-fr/fr-triage.html) | super-fr | Rank a repo's or an org's open issues, group them into batches and drive the batches to merged PRs. |
+| [`fr-triage`](https://derio-net.github.io/super-fr/fr-wave-driver.html) | super-fr | Rank a repo's or an org's open issues, group them into batches and drive the batches to merged PRs. |
 <!-- /generated:skills -->
 
 ## The `fr` command line
