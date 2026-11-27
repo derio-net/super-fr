@@ -468,8 +468,8 @@ def test_apply_command_writeback_failure_surfaced_in_json_and_text(tmp_path, cap
 
     import pytest as _pytest
     import typer
-    from fr import plan_ops
     from fr.commands import apply_cmd
+    from fr.plan_errors import PlanEditError
 
     from tests.unit.fakes import FakeGhClient
 
@@ -477,7 +477,7 @@ def test_apply_command_writeback_failure_surfaced_in_json_and_text(tmp_path, cap
     fake = FakeGhClient()
 
     def boom(*a, **kw):
-        raise plan_ops.PlanEditError("disk full")
+        raise PlanEditError("disk full")
 
     # JSON run
     with _pytest.MonkeyPatch.context() as mp:
@@ -523,6 +523,7 @@ def test_apply_command_all_isolates_writeback_per_plan(tmp_path, monkeypatch):
     import yaml
     from fr import plan_ops
     from fr.commands import apply_cmd
+    from fr.plan_errors import PlanEditError
 
     from tests.unit.fakes import FakeGhClient
 
@@ -571,7 +572,7 @@ def test_apply_command_all_isolates_writeback_per_plan(tmp_path, monkeypatch):
 
     def conditional_set(plan_dir, phase_n, url):
         if "plan-b-second" in str(plan_dir):
-            raise plan_ops.PlanEditError("simulated B-only writeback failure")
+            raise PlanEditError("simulated B-only writeback failure")
         return real_set(plan_dir, phase_n, url)
 
     with _pytest.MonkeyPatch.context() as mp:

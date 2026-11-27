@@ -4,7 +4,7 @@ Exit code conventions (uniform across every subcommand):
   0 = success
   1 = lint failure (e.g. `fr plan self-review` found errors)
   2 = usage error or plan-edit refusal (bad flags, missing args,
-      `plan_ops.PlanEditError`)
+      `plan_errors.PlanEditError`)
   4 = gh / network failure during `fr apply`
   5 = plan parse error (`PlanSchemaError`)
 

@@ -1,4 +1,4 @@
-"""Line budget for the five largest modules (spec 2026-11-16 architecture-review-sweep, R12).
+"""Line budget for five held modules (spec 2026-11-16 architecture-review-sweep, R12).
 
 A budget is a review trigger, not a ceiling for the codebase. The module may not grow
 past its budget, and the budget may not sit more than `MAX_HEADROOM` lines above the
@@ -18,7 +18,8 @@ SRC = "packages/fr/src/fr/"
 MAX_HEADROOM = 400
 
 BUDGETS: dict[str, int] = {
-    f"{SRC}commands/run_cmd.py": 9120,  # show-me-visuals: three call sites of fr.shape
+    # run-write-ledger (#1515): the write ledger moved to fr/run/writes.py
+    f"{SRC}commands/run_cmd.py": 8895,
     # +25 each: batch closeout-truth (gh#1494/#1496/#1497/#1569) changes the close-out steps
     # these modules hold; the split they need is #1516 (hand-back and close-out leaves).
     # triage_batch_cmd.py, 8300: main's landing-method `_landing_hold` (spec 2026-11-26 R2,
@@ -28,7 +29,8 @@ BUDGETS: dict[str, int] = {
     f"{SRC}commands/triage_batch_cmd.py": 8320,
     # isolation/local.py: 3200 -> 2125 after runner, reap, branchrefs and landing left it (#1517).
     f"{SRC}isolation/local.py": 2125,
-    f"{SRC}plan_ops.py": 2600,
+    # #1518 split self-review, the spec table, rework and the refactor-gate read out.
+    f"{SRC}plan_ops.py": 700,
     f"{SRC}triage/batch_drive.py": 2275,
 }
 

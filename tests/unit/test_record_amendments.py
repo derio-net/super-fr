@@ -24,6 +24,7 @@ from fr.record.model import (
 )
 
 from tests.unit.acceptance_helpers import FRAGMENTS_REL
+from tests.unit.record_helpers import write_record
 from tests.unit.test_acceptance_amend import SLUG_B, fragment, merged_repo
 
 _V10 = """\
@@ -36,13 +37,6 @@ ticks: [P1.T1.S1]
 acceptance:
   - {id: x, status: ci, notes: wired}
 """
-
-
-def _record_file(root: Path, text: str = _V10) -> Path:
-    path = root / "docs" / "superpowers" / "runs" / "r1.records" / "implement-phase__phase-1.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    return path
 
 
 def _record(acceptance: list[dict]) -> str:
@@ -161,7 +155,7 @@ def test_the_chain_from_one_reaches_eleven_hop_by_hop() -> None:
 
 
 def test_a_v10_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
-    path = _record_file(tmp_path)
+    path = write_record(tmp_path, _V10)
 
     report = run_migrations(tmp_path, dry_run=False)
 
@@ -173,7 +167,7 @@ def test_a_v10_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
 
 def test_an_unreadable_v10_record_is_refused_and_left_alone(tmp_path: Path) -> None:
     bad = _V10.replace("outcome: done", "outcome: done\nnot_a_field: 1")
-    path = _record_file(tmp_path, bad)
+    path = write_record(tmp_path, bad)
 
     report = run_migrations(tmp_path, dry_run=False)
 
@@ -185,7 +179,7 @@ def test_the_validator_accepts_an_amendment_item(tmp_path: Path) -> None:
     text = _V10.replace("schema_version: 10", f"schema_version: {RECORD_SCHEMA_VERSION}").replace(
         "{id: x, status: ci, notes: wired}", "{row: r, op: retire, notes: n, why: w}"
     )
-    path = _record_file(tmp_path, text)
+    path = write_record(tmp_path, text)
     assert artifact_kind("record").validate(path) == []
 
 

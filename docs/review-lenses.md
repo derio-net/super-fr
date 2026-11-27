@@ -12,7 +12,7 @@ covers:
   - packages/fr/src/fr/lenses/**
   - plugins/super-fr/defaults/lenses/**
   - packages/fr/src/fr/commands/lenses_cmd.py
-reviewed: 2026-11-25 the shipped texts move to `plugins/super-fr/defaults/lenses/` (wheel `fr/defaults/lenses/`), `FR_SHIPPED_DEFAULTS_DIR` points at another tree, and `.fr/lenses.yaml` is read from the configuration space (S1 R1, R15, R16); 2026-11-24 the brief gains a `shape` key and the return rule a sentence on it (show-me-visuals R16); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; explicit run merge targets and fail-closed target alignment
+reviewed: 2026-11-27 still true; shared-helper refactor (batch arch-shared-helpers), no behaviour change; 2026-11-25 the shipped texts move to `plugins/super-fr/defaults/lenses/` (wheel `fr/defaults/lenses/`), `FR_SHIPPED_DEFAULTS_DIR` points at another tree, and `.fr/lenses.yaml` is read from the configuration space (S1 R1, R15, R16); 2026-11-24 the brief gains a `shape` key and the return rule a sentence on it (show-me-visuals R16); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; explicit run merge targets and fail-closed target alignment
 ---
 
 ## What a lens is

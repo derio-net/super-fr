@@ -14,6 +14,8 @@ from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
 from fr.record.model import RECORD_SCHEMA_VERSION, JournalItem, parse_record
 
+from tests.unit.record_helpers import write_record
+
 pytestmark = pytest.mark.own_artifacts
 
 _V9 = """\
@@ -26,13 +28,6 @@ ticks: [P1.T1.S1]
 journal:
   - {kind: decision, id: d1, title: plain decision}
 """
-
-
-def _record_file(root: Path, text: str = _V9) -> Path:
-    path = root / "docs" / "superpowers" / "runs" / "r1.records" / "implement-phase__phase-1.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    return path
 
 
 def test_journal_item_accepts_gate_and_narrows() -> None:
@@ -63,7 +58,7 @@ def test_the_chain_from_one_reaches_ten_hop_by_hop() -> None:
 
 
 def test_a_v9_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
-    path = _record_file(tmp_path)
+    path = write_record(tmp_path, _V9)
 
     report = run_migrations(tmp_path, dry_run=False)
 
@@ -75,7 +70,7 @@ def test_a_v9_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
 
 def test_an_unreadable_v9_record_is_refused_and_left_alone(tmp_path: Path) -> None:
     bad = _V9.replace("outcome: done", "outcome: done\nnot_a_field: 1")
-    path = _record_file(tmp_path, bad)
+    path = write_record(tmp_path, bad)
 
     report = run_migrations(tmp_path, dry_run=False)
 
@@ -206,7 +201,7 @@ def test_the_validator_accepts_both_fields(tmp_path: Path) -> None:
         "{kind: decision, id: d1, title: plain decision}",
         "{kind: decision, id: d1, title: t, gate: owner, narrows: ['#1'], answered_by: operator}",
     )
-    path = _record_file(tmp_path, text)
+    path = write_record(tmp_path, text)
     assert artifact_kind("record").validate(path) == []
 
 

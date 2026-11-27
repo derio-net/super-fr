@@ -24,6 +24,7 @@ from rich.markup import escape
 
 from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.commands.common import resolve_repo_root
+from fr.gates import Gate
 from fr.git import head_on_default_branch
 from fr.journal.model import (
     TRACKED_BY_RE,
@@ -218,8 +219,7 @@ def add(
     gate: str | None = typer.Option(
         None,
         "--gate",
-        help="--kind decision only: the gate role that owns it "
-        "(developer|reviewer|tester|devops|owner|security).",
+        help=f"--kind decision only: the gate role that owns it ({'|'.join(get_args(Gate))}).",
     ),
     narrows: str | None = typer.Option(
         None,

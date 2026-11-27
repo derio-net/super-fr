@@ -935,10 +935,10 @@ def _edit_profiles_text(
     out = newline.join(ln.rstrip("\r") for ln in lines) + newline
     # The strict loader refuses a duplicate key: `safe_load` keeps the last,
     # so an appended `dev:` beside an unmatched `"dev":` would read as intended.
-    from fr.artifacts.structure import _StrictLoader
+    from fr.yamlio import StrictLoader
 
     try:
-        reread = yaml.load(out, Loader=_StrictLoader) or {}  # noqa: S506
+        reread = yaml.load(out, Loader=StrictLoader) or {}  # noqa: S506
     except yaml.YAMLError:
         return None
     reread.pop("schema_version", None)

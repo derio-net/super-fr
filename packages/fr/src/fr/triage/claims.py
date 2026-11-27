@@ -32,6 +32,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationErro
 
 from fr.triage.batch import BatchStage
 from fr.triage.model import BATCH_ID_RE, Batch, ClaimTakenEvent, Facts, IssueClaim
+from fr.utc_time import parse_as_utc
 
 CLAIM_PREFIX = "<!-- fr-claim:"
 RELEASED_PREFIX = "<!-- fr-claim-released:"
@@ -171,17 +172,6 @@ class ClaimRead:
     untrusted_authors: list[str] = field(default_factory=list)
 
 
-def _created(comment: Mapping[str, object]) -> datetime | None:
-    raw = comment.get("created_at")
-    if not isinstance(raw, str):
-        return None
-    try:
-        at = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return at if at.tzinfo else at.replace(tzinfo=UTC)
-
-
 def trusted_author(comment: Mapping[str, object], allowed: Collection[str]) -> bool:
     """R17: *comment*'s author is in *allowed* (lowercased logins), or its association
     with the repo is OWNER, MEMBER or COLLABORATOR."""
@@ -211,7 +201,7 @@ def read_claims(comments: Iterable[Mapping[str, object]], trusted: Collection[st
             if login not in authors:
                 authors.append(login)
             continue
-        cid, created = comment.get("id"), _created(comment)
+        cid, created = comment.get("id"), parse_as_utc(comment.get("created_at"))
         if marker is None or not isinstance(cid, int) or created is None:
             continue
         seen = latest.get(marker.signer)

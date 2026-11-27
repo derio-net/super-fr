@@ -7,7 +7,7 @@ whole precision claim of the lint is that it scores zero hits on the way
 super-fr actually writes steps about dispatch.
 
 Phase 1 is the harness only; the detector itself lands in phase 2, which
-consumes `corpus_plans()` and runs the REAL `fr.plan_ops.self_review`
+consumes `corpus_plans()` and runs the REAL `fr.plan_review.self_review`
 over it — never a re-implementation of the gate's exemptions.
 """
 
@@ -89,7 +89,7 @@ def _parse_corpus() -> tuple[tuple[Plan, ...], int]:
 def corpus_plans() -> tuple[Plan, ...]:
     """The parsed corpus — phase 2's feed.
 
-    Phase 2 runs `fr.plan_ops.self_review` over THESE, not over raw step
+    Phase 2 runs `fr.plan_review.self_review` over THESE, not over raw step
     text, so the gate's own agentic-only and `state == "x"` exemptions
     apply exactly as they do in production. A test that re-implemented
     them would be free to drift from the shipped gate, and a corpus test
@@ -256,7 +256,7 @@ def pattern_hits() -> list[tuple[str, str, str, str]]:
     avoid): there is nothing here to drift from, because this half is
     measuring the PATTERNS, not the gate.
     """
-    from fr.plan_ops import _DISPATCH_RES, _strip_fenced_code
+    from fr.plan_review.vocabulary import _DISPATCH_RES, _strip_fenced_code
 
     out = []
     for step in agentic_steps():

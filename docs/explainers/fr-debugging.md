@@ -13,7 +13,7 @@ covers:
   - plugins/super-fr/skills/fr-debugging/SKILL.md
   - packages/fr/src/fr/journal/**
   - packages/fr/src/fr/commands/journal_cmd.py
-reviewed: 2026-11-25 a reused workspace starts a run only when its branch has none, fr run stays on the host, the review entry goes through the step record; 2026-11-25 the skill starts the shipped fr-debugging run (debug, review, deliver) and resolves each step with a record (batch-merge-readiness R10, R11); 2026-11-23 fr pr settle warns on a branch with two debug journals and applies the repo setting (lens review); 2026-11-23 the last step waits for the PR to settle, with three fix rounds at most (pr-readiness-wait R10); 2026-11-15 owed-archive-side-effects phase 1, owed issues are closed by reading the one issue; the page is still true
+reviewed: 2026-11-27 still true; shared-helper refactor (batch arch-shared-helpers), no behaviour change; 2026-11-25 a reused workspace starts a run only when its branch has none, fr run stays on the host, the review entry goes through the step record; 2026-11-25 the skill starts the shipped fr-debugging run (debug, review, deliver) and resolves each step with a record (batch-merge-readiness R10, R11); 2026-11-23 fr pr settle warns on a branch with two debug journals and applies the repo setting (lens review); 2026-11-23 the last step waits for the PR to settle, with three fix rounds at most (pr-readiness-wait R10); 2026-11-15 owed-archive-side-effects phase 1, owed issues are closed by reading the one issue; the page is still true
 ---
 
 ## Why is "just try something" the expensive path?

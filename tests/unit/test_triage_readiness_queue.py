@@ -97,7 +97,8 @@ def test_both_snapshot_builders_fill_the_cursors_from_facts(
     facts = world.facts()
     jd = load_judgements(tmp_path / "judgements.yaml")
     driver = triage_batch_cmd._Driver(
-        triage_batch_cmd._scope(DRIVE_REPO, None), tmp_path, named=None, checkouts={DRIVE_REPO.lower(): None},
+        triage_batch_cmd._scope(DRIVE_REPO, None), tmp_path, named=None,
+        checkouts={DRIVE_REPO.lower(): None},
         max_inflight=4, yes=False,
     )  # fmt: skip
     live = driver.snapshot(facts, jd, NOW).cursors

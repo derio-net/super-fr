@@ -14,15 +14,10 @@ from fr._urls import is_cross_repo_spec
 from fr.commands.common import require_migrated_layout
 from fr.journal.model import journal_path
 from fr.parser import Plan, PlanSchemaError
-from fr.plan_ops import (
-    PhaseSpec,
-    PlanEditError,
-    create,
-    rework_add_origin,
-    rework_create,
-    rework_list,
-    self_review,
-)
+from fr.plan_errors import PlanEditError
+from fr.plan_ops import PhaseSpec, create
+from fr.plan_review import self_review
+from fr.plan_rework import rework_add_origin, rework_create, rework_list
 from fr.plan_validator_wrapper import validator_wrapper_path
 from fr.records_commit import commit_records
 from fr.version_floor import CEILING_VERSION, PRE_4_20_PROBES, PRE_4_PROBES, admits_below
@@ -84,8 +79,8 @@ def _staged_among(repo_root: Path, candidates: list[Path]) -> list[Path] | None:
     `None` when git cannot answer: fail closed and commit NOTHING (p3-m3).
     Passing the candidates on instead would hand `commit_paths` exactly the
     foreign file this filter exists to keep out, and it would `git add` it."""
+    from fr._plan_io import worktree_of
     from fr.git import GitUnavailableError, git_answer
-    from fr.plan_ops import worktree_of
 
     # Grouped by the checkout holding each path: under quiet the plan files sit in the
     # `fr` worktree, whose index is not the product checkout's.

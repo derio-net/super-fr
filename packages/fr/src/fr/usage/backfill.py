@@ -52,6 +52,7 @@ from fr.usage.file import (
 from fr.usage.model import unavailable
 from fr.usage.rollup import windows_from_cursor
 from fr.usage.sources import read_session, sessions_of
+from fr.utc_time import parse_as_utc
 
 ARCHIVED_RUNS_REL = Path(KIND_DIRS["run-archived"])
 
@@ -161,12 +162,9 @@ def _worth_reading(usage: UsageFile, env: Mapping[str, str], max_age_days: int |
         return False
     if max_age_days is None:
         return True
-    try:
-        at = _dt.datetime.fromisoformat(mine.captured_at)
-    except ValueError:
+    at = parse_as_utc(mine.captured_at)
+    if at is None:
         return True
-    if at.tzinfo is None:
-        at = at.replace(tzinfo=_dt.UTC)
     return _dt.datetime.now(_dt.UTC) - at <= _dt.timedelta(days=max_age_days)
 
 

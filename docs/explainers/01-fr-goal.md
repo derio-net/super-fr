@@ -880,7 +880,7 @@ any phase runs. The reason is the same as for manual work in an agentic phase:
 both give work to an actor that cannot do it. The executor is told to refuse as well and to leave
 the step unticked, because a tick is a claim of performance. Self-review also
 warns about unresolved local spec references
-(`self_review` in `packages/fr/src/fr/plan_ops.py`). The agent
+(`self_review` in `packages/fr/src/fr/plan_review/`). The agent
 fixes what it reports and advances the run again. There is nothing to record
 by hand, because a command step completes itself.
 

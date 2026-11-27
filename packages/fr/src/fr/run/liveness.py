@@ -48,6 +48,7 @@ from typing import Literal, NamedTuple
 from fr.run import units
 from fr.run.model import RunState, StepRecord
 from fr.run.units import UnitAttempt
+from fr.utc_time import parse_as_utc
 from fr.workflow.model import Step, WorkflowManifest
 
 __all__ = [
@@ -304,14 +305,6 @@ class StalledAttempt(NamedTuple):
     age_minutes: int
 
 
-def _parse_instant(text: str) -> _dt.datetime | None:
-    try:
-        parsed = _dt.datetime.fromisoformat(text)
-    except TypeError, ValueError:
-        return None
-    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=_dt.UTC)
-
-
 def stalled_attempts(
     state: RunState, *, now: _dt.datetime, after_minutes: int
 ) -> list[StalledAttempt]:
@@ -322,7 +315,7 @@ def stalled_attempts(
     never be what turns a freshness gate into an error."""
     found: list[StalledAttempt] = []
     for step_id, key, attempt in open_attempts(state):
-        since = _parse_instant(attempt.dispatched)
+        since = parse_as_utc(attempt.dispatched)
         if since is None:
             continue
         age = int((now - since).total_seconds() // 60)
