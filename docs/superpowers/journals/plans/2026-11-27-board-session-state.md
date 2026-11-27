@@ -286,3 +286,8 @@ covers now lists triage_kanban_cmd.py and triage_drive_loop.py; the paragraph na
 ### p2-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1756] · resolves p2-r6: docs/triage/README.md's export sentence was already inaccurate before this change (phase 2)
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1756.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6-resolved-2 created=2026-11-27T21:54:54+00:00 state=open resolves=l-errors-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1757 -->
+### l-errors-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1757] · resolves l-errors-r6: Supervisor.on_refusal swallows render failures with a bare pass
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1757.
