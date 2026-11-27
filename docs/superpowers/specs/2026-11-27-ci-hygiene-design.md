@@ -21,7 +21,8 @@ location below was checked on `main` at `e110425d6`.
 - **floors.py (#1595).** `scripts/floors.py:31-38` explains how Python 3.11's tokenizer hands
   over an f-string, and builds `_STRING_TOKENS` with `getattr(tokenize, "FSTRING_MIDDLE", …)`.
   Every `requires-python` is `>=3.14`, where `tokenize.FSTRING_MIDDLE` always exists.
-- **test_ci_shards.py (#1596).** The module docstring (lines 4 and 11) says the `test` job is
+- **test_ci_shards.py (#1596).** The module docstring (lines 4 and 11) and the section
+  comment at line 102 say the `test` job is
   a 6-way matrix; it has 7 shards (line 56 asserts `[1..7]`). The partition test also splits
   into a literal 6 groups (lines 115-121), not the matrix's 7.
 - **UV_PYTHON (#1598).** `ci.yml:19` and `release.yml:91` set `UV_PYTHON: "3.14"`.
@@ -57,23 +58,32 @@ declares a workflow-level `permissions:` block, and a test fails when either sto
    `on.workflow_run.workflows`. In the fr-progress skill, drop the sentence that says the
    workflow posts the output; run `scripts/sync-opencode.py` and `scripts/sync-hermes.py`.
    In the explainer, drop the same sentence and move its `reviewed` stamp. In `states.py`,
-   say "in `fr spec status` output". `test_ci_budget.py` and `test_tripwire_actions_pinned.py`
-   use the file name only as data in a tmp tree; they stay. A patch change fragment is
+   say "in `fr spec status` output". `test_ci_budget.py:372-373` (an in-memory config) and
+   `test_tripwire_actions_pinned.py:178-185` (a tmp file) use the file name only as data;
+   they stay. `test_ci_budget.py:199-201`, `test_counted_pr_spec_status_counts_every_event`,
+   reads the real `_pr_spec_status.yml` and is deleted with it: the every-event case keeps its
+   cover in `test_counted_pinned_clis_counts_every_event` (`:204`). A patch change fragment is
    added (the skill and `packages/*/src` changed).
 2. **floors.py (R2).** `_STRING_TOKENS = {tokenize.STRING, tokenize.FSTRING_MIDDLE}`; the
    comment says only what the regex accepts on 3.12+ (the middle piece ends after `<`).
    The regex is unchanged. `tests/unit/test_version_floors.py` proves no behaviour moved.
-3. **Shards (R3).** Docstring says 7; the partition test reads the shard list from
+3. **Shards (R3).** Docstring (lines 4, 11) and the section comment (line 102) say 7, or
+   the matrix's count; the partition test reads the shard list from
    `ci.yml`'s `test` matrix and splits into `len(shards)`.
 4. **UV_PYTHON (R4).** Add `env: UV_PYTHON: "3.14"` at workflow level to the four files
    (merged into an existing `env:` when there is one). In `test_ci_python_floor.py`, a new
    test walks every workflow; one whose steps use `astral-sh/setup-uv` must have
-   workflow-level `env.UV_PYTHON == _floor()`.
+   workflow-level `env.UV_PYTHON == _floor()`. `pages.yml` is covered by
+   `docs/docs-currency.md` (`covers:`, line 17); the page stays true, so its `reviewed` stamp
+   moves with a "still true" note. The row `ci-workflows-pin-the-python-floor` gets the new
+   test as its `unit` level and moves to `ci` (`fr acceptance set-status`).
 5. **Permissions (R5).** Add `permissions:\n  contents: read` at the top of `ci.yml`; the
    job-level blocks stay (they replace it for their job). A new test (in
    `tests/unit/test_ci_lanes_workflow.py`, which already pins `ci.yml`'s permissions) asserts
    `ci.yml`'s workflow-level block is exactly `{contents: read}`, and that every
-   `.github/workflows/*.yml` has a workflow-level `permissions` key.
+   `.github/workflows/*.yml` has a workflow-level `permissions` key. The row
+   `ci-workflows-least-privilege-token` gets those tests as its `unit` levels and moves to
+   `ci`.
 
 ## Design shape
 
@@ -96,6 +106,9 @@ tests/unit/
   test_ci_shards.py              ~ 7-shard docstring, partition from matrix (R3)
   test_ci_python_floor.py        + every setup-uv workflow pins UV_PYTHON (R4)
   test_ci_lanes_workflow.py      + workflow-level permissions guards (R5)
+  test_ci_budget.py              - test_counted_pr_spec_status_counts_every_event (R1)
+docs/docs-currency.md            ~ reviewed stamp (pages.yml touched, R4)
+docs/acceptance/features/2026-11-27-ci-hygiene.yaml  ~ both rows: unit levels, status ci
 .changes/feat-batch-ci-hygiene.yaml  + patch fragment
 ```
 
