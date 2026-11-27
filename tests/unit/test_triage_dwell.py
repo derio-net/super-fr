@@ -6,10 +6,12 @@ here reads the wall clock, a forge or a runner.
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from fr.triage import dwell
 from fr.triage.dwell import (
     CAP,
@@ -26,6 +28,7 @@ from fr.triage.dwell import (
 )
 from fr.triage.kanban import COLUMN_TITLES, COLUMNS, Board, Card, ColumnView, build_board
 from fr.triage.waits import Wait
+from pydantic import ValidationError
 
 from tests.unit.triage_board_fixtures import batch, facts, issue, j, judgements
 
@@ -165,6 +168,32 @@ def test_load_of_non_utf8_is_empty_with_a_note(tmp_path: Path) -> None:
     (tmp_path / DWELL_FILE).write_bytes(b"\xff\xfe")
     led, note = load(tmp_path)
     assert led == Ledger() and note is not None
+
+
+def test_load_of_a_naive_timestamp_is_empty_with_a_note(tmp_path: Path) -> None:
+    """p2-r2: a naive `column_since` used to validate, then crash `observe` and
+    `card_dwell` comparing it with the aware render time."""
+    store(tmp_path, observe(Ledger(), _board(_card("a", "running", "agent")), T0))
+    data = json.loads((tmp_path / DWELL_FILE).read_text(encoding="utf-8"))
+    data["batches"]["a"]["column_since"] = T0.replace(tzinfo=None).isoformat()
+    (tmp_path / DWELL_FILE).write_text(json.dumps(data), encoding="utf-8")
+    led, note = load(tmp_path)
+    assert led == Ledger() and note is not None and DWELL_FILE in note
+    observe(led, _board(_card("a", "running", "agent")), _at(5))  # no TypeError
+
+
+def test_every_ledger_time_field_refuses_a_naive_datetime() -> None:
+    naive = T0.replace(tzinfo=None)
+    for build in (
+        lambda: Interval(column="running", wait=None, start=naive, end=T0),
+        lambda: Interval(column="running", wait=None, start=T0, end=naive),
+        lambda: Entry(column="running", column_since=naive, column_first_seen=True,
+                      wait=None, wait_since=T0, wait_first_seen=True),
+        lambda: Entry(column="running", column_since=T0, column_first_seen=True,
+                      wait=None, wait_since=naive, wait_first_seen=True),
+    ):  # fmt: skip
+        with pytest.raises(ValidationError):
+            build()
 
 
 def test_store_round_trips_and_writes_the_schema_key(tmp_path: Path) -> None:

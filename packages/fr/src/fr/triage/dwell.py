@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 
 from fr.artifacts.atomic import write_text_atomic
 from fr.triage.kanban import COLUMN_TITLES, COLUMNS, Board, Card, Column
@@ -41,19 +41,21 @@ class _Strict(BaseModel):
 
 
 class Interval(_Strict):
+    # Every time field is timezone-aware: a naive one would validate, then raise TypeError
+    # in `observe` against the aware render time (R5: such a ledger is unusable).
     column: Column
     wait: Party | None
-    start: datetime
-    end: datetime
+    start: AwareDatetime
+    end: AwareDatetime
     first_seen: bool = False  # its start was the ledger's first sighting of the state
 
 
 class Entry(_Strict):
     column: Column
-    column_since: datetime
+    column_since: AwareDatetime
     column_first_seen: bool
     wait: Party | None
-    wait_since: datetime
+    wait_since: AwareDatetime
     wait_first_seen: bool
     intervals: tuple[Interval, ...] = ()
     truncated: bool = False
