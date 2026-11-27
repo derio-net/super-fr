@@ -1,0 +1,14 @@
+schema_version: 12
+run: 2026-11-27-fix-queue-add-batch-pr-trust
+workflow: fr-debugging@1
+branch: fix/queue-add-batch-pr-trust
+started: '2026-11-27T20:01:35+00:00'
+cursor: debug
+steps:
+  debug:
+    state: pending
+  review:
+    state: pending
+  deliver:
+    state: pending
+fr_version: 9.1.0rc10
