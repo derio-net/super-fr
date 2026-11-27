@@ -129,3 +129,9 @@ settle.ci: report — batch arch-triage-leaves: the wave driver owns this PR's C
 The change has no behaviour of its own: the existing suite, unchanged except for the two
 widened purity guards and the budget line, is the evidence, run by this PR's CI. No
 acceptance rows are added.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-27-triage-leaves-split | `derio-net/super-fr` | `2026-11-27-triage-leaves-split` | — |

@@ -1,0 +1,106 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Split the value types, the wave-export leaf and the hand-back decisions out
+    of batch_drive.py
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/batch_drive_types.py
+  - packages/fr/src/fr/triage/batch_drive_export.py
+  - packages/fr/src/fr/triage/handback_rules.py
+  - tests/unit/test_triage_drive_split.py
+  - tests/unit/test_triage_batch_drive.py
+  - tests/unit/test_triage_drive_purity.py
+  - tests/unit/test_tripwire_module_budget.py
+  - docs/explainers/fr-wave-driver.md
+  - docs/explainers/index.md
+  - docs/explainers/fr-triage.md
+  - docs/herdr-control-sessions.md
+  - .changes/feat-batch-arch-triage-leaves.yaml
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: Pin the module boundaries in a failing test (R5, R6)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add tests/unit/test_triage_drive_split.py. It asserts (a) fr/triage/batch_drive_types.py imports only the standard library (plus `__future__`), read with `ast` over every Import/ImportFrom node; (b) fr/triage/batch_drive_export.py imports no `fr.triage.batch_drive*` module at run time — walk the `ast`, skipping the body of any `if TYPE_CHECKING:` block, and count function-local imports too; (c) fr/triage/handback_rules.py imports no `fr.triage.batch_drive*` module at all, TYPE_CHECKING blocks included; (d) every moved name of spec R1, R2 and R3 is importable from `fr.triage.batch_drive` and `is` the same object as in its new home (e.g. `batch_drive.Action is batch_drive_types.Action`, `batch_drive._export_actions is batch_drive_export._export_actions`, `batch_drive.closeout_handback_decision is handback_rules.closeout_handback_decision`), parametrised over the full name lists. Run `uv run pytest tests/unit/test_triage_drive_split.py -q --no-cov` and confirm it fails on the missing modules.
+- number: 2
+  title: Value-types leaf (R1)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      GREEN: create packages/fr/src/fr/triage/batch_drive_types.py with a docstring saying it holds the pass's value types, split out so the leaves can build actions without importing the pass (spec 2026-11-27-triage-leaves-split R1). Move verbatim from batch_drive.py: `ChecksVerdict` and `ActionKind` (:121-155), `CONFLICTING` with its docstring (:162), `LivePr` (:171), `Admitted` (:491), `Action` (:512) and `_wrong_base` (:1361), with the stdlib imports they need (dataclass, datetime, Literal). batch_drive.py imports them back with `# noqa: F401 - re-exported` where unused there. Run `uv run pytest tests/unit/test_triage_batch_drive.py tests/unit/test_triage_drive_split.py -q --no-cov -n 2`: the batch_drive tests are green; the split test still fails on the two leaves.
+- number: 3
+  title: Wave-export leaf (R2)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      GREEN: create packages/fr/src/fr/triage/batch_drive_export.py and move verbatim `EXPORT_PREFIX` (with its docstring) and the export section `export_branch` through `_stale_orphans` (:1283-1489, minus `_wrong_base`, already moved). It imports `Action`, `Admitted`, `LivePr`, `CONFLICTING`, `_wrong_base` from fr.triage.batch_drive_types, `Batch` and `Export` from fr.triage.model, stdlib (`dataclass`, `replace`, `Iterable`, `Mapping`, `Sequence`, `Literal`), and `Snapshot` from fr.triage.batch_drive under `if TYPE_CHECKING:` only. batch_drive.py imports every moved name back (re-export, `# noqa: F401` where unused) and keeps `finished_waves`, `is_finished`, `unfinished_waves`. Run `uv run pytest tests/unit/test_triage_batch_drive.py tests/unit/test_triage_batch_drive_cmd.py -q --no-cov -n 2`: green.
+- number: 4
+  title: Hand-back decisions into handback_rules.py (R3)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      GREEN: move verbatim `conflict_at`, `fresh_conflicts`, `conflict_item_id` (:940-961), the archive-conflict section (:964-1010) and the collected close-out hand-back section (:1013-1036) to the end of packages/fr/src/fr/triage/handback_rules.py, keeping their section comments. Add `ArchiveConflictEvent`, `CloseoutEvent`, `CloseoutHandbackEvent` to its fr.triage.model import and `Iterable` to its collections.abc import; extend its module docstring to name the archive-conflict and collected close-out decisions. batch_drive.py's existing handback_rules re-export line grows by every moved name. Update batch_drive.py's module docstring to say the value types, the export leaf and the hand-back decisions live in batch_drive_types, batch_drive_export and handback_rules. Run `uv run pytest tests/unit/test_triage_drive_split.py tests/unit/test_triage_batch_conflict.py tests/unit/test_triage_batch_drive.py -q --no-cov -n 2`: green, the split test included.
+- number: 5
+  title: Widen the purity guards, lower the budget, stamp the docs, add the fragment
+    (R8, R10, R11, R12)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Widen tests/unit/test_triage_batch_drive.py::test_the_pass_module_reaches_no_runner_git_process_or_clock (:717) and tests/unit/test_triage_drive_purity.py::test_the_drive_pass_reads_no_clock_and_starts_no_process (:39) to loop over `sorted(TRIAGE.glob("batch_drive*.py")) + [TRIAGE / "handback_rules.py"]` (TRIAGE = the fr/triage source dir), asserting the list holds at least four files and running the existing per-file check on each. Run both tests: green. Then temporarily add `import time` to batch_drive_export.py, confirm each guard fails naming that file, and revert.
+  - id: P1.T5.S2
+    text: |-
+      Lower the batch_drive.py budget in tests/unit/test_tripwire_module_budget.py to the new `wc -l` of batch_drive.py rounded up to the next 25 (no more than 50 above it), with a comment line `#1516 split the value types, the wave-export leaf and the hand-back decisions out.`; batch_drive.py stays in HELD. Run `uv run pytest tests/unit/test_tripwire_module_budget.py -q --no-cov`: green.
+  - id: P1.T5.S3
+    text: |-
+      Run `uv run fr docs check` and, for each page it reports (expected: docs/explainers/fr-wave-driver.md, docs/explainers/index.md, docs/explainers/fr-triage.md, docs/herdr-control-sessions.md), move its `reviewed:` stamp to `2026-11-27 still true, module split only` (a comma, never a colon followed by a space); add `packages/fr/src/fr/triage/batch_drive_types.py` and `packages/fr/src/fr/triage/batch_drive_export.py` to fr-wave-driver.md's `covers:`. Add `.changes/feat-batch-arch-triage-leaves.yaml` with `bump: patch` and `summary: Split the wave driver pass's value types, wave-export leaf and hand-back decisions out of fr/triage/batch_drive.py (no behaviour change).` Re-run `uv run fr docs check`: exit 0.
+- number: 6
+  title: REFACTOR + quality gate
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/` and `uv run mypy packages/fr/src`: clean. Confirm no moved body changed: `git diff origin/main -- packages/fr/src/fr/triage/` shows only moves and import/docstring lines. Commit, then run the brief's fast tier last and report its pass/fail line.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
