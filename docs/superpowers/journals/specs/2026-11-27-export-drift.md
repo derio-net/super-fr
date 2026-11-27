@@ -157,3 +157,8 @@ row_kinds:
 run_gate: developer
 run_kind: none
 ```
+
+<!-- fr:journal kind=finding scope=spec id=s1-r9-resolved-2 created=2026-11-27T16:48:04+00:00 state=open resolves=s1-r9 tracked_by=https://github.com/derio-net/super-fr/issues/1742 -->
+### s1-r9-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1742] · resolves s1-r9: A targeted import writes the state directory under a running driver with no drive.lock check
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1742.
