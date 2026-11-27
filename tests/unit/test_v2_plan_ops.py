@@ -133,7 +133,7 @@ def test_append_spec_row_idempotent_within_table(tmp_path):
     """The scoped guard must still be idempotent: re-appending the same file
     row is a no-op (exactly one data row), and a same-named row OUTSIDE the
     table must not suppress the append."""
-    from fr.plan_ops import _append_spec_row
+    from fr.spec_table import _append_spec_row
 
     repo = _make_repo(tmp_path)
     spec_path = repo / "docs" / "superpowers" / "specs" / "s.md"
@@ -167,7 +167,8 @@ def _create_args(repo, spec_path, slug):
 
 @pytest.mark.parametrize("body", ["# Test spec\n\nSome prose.\n", "# Test spec\n\nSome prose."])
 def test_create_appends_missing_section_with_header_and_row(tmp_path, body):
-    from fr.plan_ops import _CANONICAL_HEADER_LINE, _CANONICAL_HEADER_SEPARATOR, create
+    from fr.plan_ops import create
+    from fr.spec_table import _CANONICAL_HEADER_LINE, _CANONICAL_HEADER_SEPARATOR
 
     repo = _make_repo(tmp_path)
     spec_path = repo / "docs" / "superpowers" / "specs" / "2026-05-10-no-section.md"
@@ -181,7 +182,7 @@ def test_create_appends_missing_section_with_header_and_row(tmp_path, body):
 
 
 def test_validate_spec_section_is_read_only_on_missing_section(tmp_path):
-    from fr.plan_ops import _validate_spec_section
+    from fr.spec_table import _validate_spec_section
 
     spec_path = tmp_path / "spec.md"
     spec_path.write_text("# S\n\nprose\n")
@@ -272,7 +273,8 @@ def test_create_no_table_error_names_the_header_and_creates_nothing(tmp_path):
 
 
 def test_append_spec_row_no_table_error_names_the_header(tmp_path):
-    from fr.plan_ops import PlanEditError, _append_spec_row
+    from fr.plan_ops import PlanEditError
+    from fr.spec_table import _append_spec_row
 
     spec_path = tmp_path / "spec.md"
     spec_path.write_text("# S\n\n## Implementation Plans\n\nprose\n")
@@ -282,7 +284,8 @@ def test_append_spec_row_no_table_error_names_the_header(tmp_path):
 
 
 def test_append_spec_row_missing_section_error_names_the_header(tmp_path):
-    from fr.plan_ops import PlanEditError, _append_spec_row
+    from fr.plan_ops import PlanEditError
+    from fr.spec_table import _append_spec_row
 
     spec_path = tmp_path / "spec.md"
     spec_path.write_text("# S\n\nprose\n")

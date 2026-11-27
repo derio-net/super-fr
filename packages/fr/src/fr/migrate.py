@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from fr import _plan_io, plan_ops, refs
+from fr import _plan_io, refs, spec_table
 from fr._urls import is_cross_repo_spec
 from fr._yaml import LiteralStr, dump_plan_yaml
 from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
@@ -755,14 +755,14 @@ def _ensure_spec_plan_row(
     else None.
     """
     text = spec_path.read_text()
-    if plan_ops._SPEC_TABLE_HEADER_RE.search(text):
+    if spec_table._SPEC_TABLE_HEADER_RE.search(text):
         return None
 
-    text = plan_ops._ensure_section_text(text)
+    text = spec_table._ensure_section_text(text)
     spec_path.write_text(text)
 
     try:
-        plan_ops._append_spec_row(
+        spec_table._append_spec_row(
             spec_path, plan_name=slug, repo=target_repo, file=slug, depends_on="—"
         )
     except PlanEditError as e:  # pragma: no cover - defensive
