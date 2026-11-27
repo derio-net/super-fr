@@ -29,9 +29,12 @@ rows:
       a planted import of any of them
     origin:
     - spec:2026-11-27-run-verdict#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_writes_layering.py#test_every_run_engine_module_imports_no_cli_layer
+      - super-fr:tests/unit/test_run_writes_layering.py#test_the_helper_reports_planted_cli_imports_and_accepts_clean_ones
+    status: ci
+    notes: every fr/run module checked by its syntax tree; slice 1
     verify: none
   - id: run-cmd-clusters-in-fr-run
     capability: run engine layering
