@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-26-feat-batch-arch-shared-helpers
+captures:
+- host: h-a87b9517
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-27T09:02:55+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: b7ab4abb-7d26-46b9-b91b-a7169c5c67aa
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 54
+        cache_write: 290915
+        cache_read: 3585919
+        output: 20510
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 8
+      other:
+        usd: null
+        turns: 9
+      paperwork:
+        usd: null
+        turns: 8
+    steps:
+      (outside run):
+        usd: null
+        turns: 3
+        input: 8
+        cache_write: 103797
+        cache_read: 266115
+        output: 774
+      brainstorm:
+        usd: null
+        turns: 22
+        input: 46
+        cache_write: 187118
+        cache_read: 3319804
+        output: 19736
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 3
+          input: 8
+          cache_write: 103797
+          cache_read: 266115
+          output: 774
+        brainstorm:
+          usd: null
+          turns: 22
+          input: 46
+          cache_write: 187118
+          cache_read: 3319804
+          output: 19736
