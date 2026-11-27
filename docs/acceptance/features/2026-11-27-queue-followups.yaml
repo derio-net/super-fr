@@ -61,9 +61,11 @@ rows:
       repo for plan-file overlap.
     origin:
     - spec:2026-11-27-queue-followups#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_plan_overlap.py#test_overlaps_compares_repo_names_case_insensitively
+    status: ci
+    notes: overlaps compares repo names lower-cased; unit test in CI (R8)
     verify: none
 amendments:
   - row: queue-approval-waits-conflict-free
