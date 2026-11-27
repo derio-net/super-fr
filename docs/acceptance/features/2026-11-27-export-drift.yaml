@@ -50,9 +50,16 @@ rows:
       and refuses a path naming no durable file before copying anything.'
     origin:
     - spec:2026-11-27-export-drift#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_state_sync.py#test_only_copies_a_named_file_over_a_newer_state_copy_and_nothing_else
+      - super-fr:tests/unit/test_triage_state_sync.py#test_only_removes_a_named_path_the_repo_lacks
+      - super-fr:tests/unit/test_triage_state_sync.py#test_only_skips_a_named_symlink_on_either_side
+      - super-fr:tests/unit/test_triage_state_sync.py#test_only_refuses_a_bad_or_unmatched_path_before_any_write
+    status: ci
+    notes: 'unit tests import with --only: named paths alone move (over a newer state
+      copy), a path the repo lacks is removed, symlinks skipped, a bad or unmatched
+      path refused before any write'
     verify: none
 amendments:
   - row: targeted-import-only
