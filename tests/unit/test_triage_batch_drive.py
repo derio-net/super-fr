@@ -719,15 +719,18 @@ def test_the_pass_module_reaches_no_runner_git_process_or_clock() -> None:
 
     from tests.unit.triage_fixtures import forbidden_imports
 
-    path = Path(__file__).resolve().parents[2] / "packages/fr/src/fr/triage/batch_drive.py"
+    triage = Path(__file__).resolve().parents[2] / "packages/fr/src/fr/triage"
+    paths = sorted(triage.glob("batch_drive*.py")) + [triage / "handback_rules.py"]
+    assert len(paths) >= 4  # the pass and its leaves (triage-leaves-split R8)
     banned = ("fr_dispatch", "subprocess", "fr.triage.gitseam", "os", "time", "shutil")
-    assert forbidden_imports(path, "fr.triage", banned) == []
-    calls = {
-        n.func.attr
-        for n in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
-    }
-    assert not calls & {"now", "utcnow", "today"}
+    for path in paths:
+        assert forbidden_imports(path, "fr.triage", banned) == [], path.name
+        calls = {
+            n.func.attr
+            for n in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+        }
+        assert not calls & {"now", "utcnow", "today"}, path.name
 
 
 # ------------------------------------------- review fixes (phase 2 review rg-*)

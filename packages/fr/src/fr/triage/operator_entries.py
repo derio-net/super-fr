@@ -27,12 +27,11 @@ from fr.triage.batch import (
 from fr.triage.batch_drive import (
     ARCHIVE_PREFIXES,
     COLLECTED_PREFIX,
-    EXPORT_PREFIX,
     HOUSEKEEPING_PREFIX,
-    Action,
-    LivePr,
     checks_verdict,
 )
+from fr.triage.batch_drive_export import EXPORT_PREFIX
+from fr.triage.batch_drive_types import Action, LivePr
 from fr.triage.errors import TriageError
 from fr.triage.model import (
     ConflictEvent,

@@ -37,7 +37,11 @@ def impurities(source: str) -> list[str]:
 
 
 def test_the_drive_pass_reads_no_clock_and_starts_no_process() -> None:
-    assert impurities(Path(batch_drive.__file__).read_text(encoding="utf-8")) == []
+    triage = Path(batch_drive.__file__).parent
+    paths = sorted(triage.glob("batch_drive*.py")) + [triage / "handback_rules.py"]
+    assert len(paths) >= 4  # the pass and its leaves (triage-leaves-split R8)
+    for path in paths:
+        assert impurities(path.read_text(encoding="utf-8")) == [], path.name
 
 
 def test_the_checker_finds_each_kind_of_impurity() -> None:
