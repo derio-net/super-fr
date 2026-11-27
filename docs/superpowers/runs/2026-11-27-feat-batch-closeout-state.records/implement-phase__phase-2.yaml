@@ -1,0 +1,30 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-closeout-state
+step: implement-phase
+item: phase/2
+outcome: done
+ticks: [P2.T1.S1, P2.T1.S2, P2.T2.S1, P2.T2.S2, P2.T3.S1, P2.T3.S2, P2.T3.S3, P2.T4.S1, P2.T4.S2, P2.T5.S1, P2.T5.S2, P2.T6.S1, P2.T6.S2]
+refactor:
+  P2.T1: "derive_batch_stage was reordered in place; nothing duplicated to clean"
+  P2.T2: "five one-line additions to existing closed sets; nothing to clean"
+  P2.T4: "the checkout map moved out whole into fr.triage.checkouts; build_driver gained one filter"
+  P2.T5: "the --orphaned flow lives in fr.triage.orphan; the command only calls it"
+  P2.T6: "docs and stamps only"
+journal:
+  - kind: discovery
+    id: p2-module-budget
+    title: "triage_batch_cmd.py kept within its budget by moving _checkout_map out"
+    body: "The build_driver filter, the batch list marker and cancel --orphaned needed command-side lines. `_checkout_map` (used only by build_driver) moved to `fr.triage.checkouts.checkout_map` raising TriageError, and the --orphaned flow to `fr.triage.orphan`. The module is 8294 lines, budget 8300 unchanged."
+    phase: 2
+  - kind: discovery
+    id: p2-unknown-repo-overlap
+    title: "A batch of a repo absent from a complete repo list is now left-scope, so plan overlap no longer reports it unread"
+    body: "`test_a_batch_of_an_unknown_repo_is_not_compared` held a batch of an absent repo as open. Under R4 it is left-scope and closed out; the test now uses a truncated repo list for the unread case and asserts the complete-list case reports nothing."
+    phase: 2
+  - kind: discovery
+    id: p2-pill-class
+    title: "The board card pill class is stage-<stage>, so left-scope needed its own class"
+    body: "`kanban_render._pill_class` gives a left-scope card `stage-left-scope bstage-left-scope` (the second matches the other pages' pill CSS); other pills keep `stage-<word>`."
+    phase: 2
+resolves: []
+evidence: {}
