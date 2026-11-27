@@ -1,0 +1,19 @@
+schema_version: 12
+run: 2026-11-26-feat-batch-arch-isolation-split
+step: lens-review
+outcome: done
+journal:
+  - kind: review
+    id: lens-review-1
+    global: true
+    title: "lens review (docs-accuracy): no findings"
+    body: |
+      One dispatched reviewer for the docs-accuracy lens over da66accc5..HEAD. The seven touched pages change only by a still-true reviewed stamp; no page body names a moved function or local.py; the shape file matches the diff.
+      ```review-lens
+      lens: docs-accuracy
+      examined: docs/explainers/fr-dispatch.md, docs/explainers/fr-isolation.md, docs/explainers/fr-progress.md, docs/explainers/fr-triage.md, docs/herdr-control-sessions.md, docs/reference/cli.md, docs/reference/dispatch-lifecycle.md, packages/fr-herdr/src/fr_herdr/runner.py, packages/fr/src/fr/closeout.py, packages/fr/src/fr/commands/archive_cmd.py, packages/fr/src/fr/commands/isolation_cmd.py, packages/fr/src/fr/triage/gitseam.py
+      ```
+resolves: []
+evidence:
+  review: lens-review-1
+  reviewer: "docs-accuracy=a3c18c74a2ea3deb0"
