@@ -1,0 +1,52 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-27-run-verdict
+repo: derio-net/super-fr
+rows:
+  - id: run-verdict-refusals-preserved
+    capability: run refusals
+    acceptance: After the lookup, provenance, brief, deliver and evidence code moves
+      out of run_cmd.py, every refusal those paths print keeps its wording, markup,
+      wrapping, line order and exit code, and every warning prints in the same place
+      relative to it
+    origin:
+    - spec:2026-11-27-run-verdict#R1
+    - spec:2026-11-27-run-verdict#R2
+    - spec:2026-11-27-run-verdict#R6
+    - spec:2026-11-27-run-verdict#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: run-engine-cli-free
+    capability: run engine layering
+    acceptance: No module under fr/run imports a CLI framework, a console library other
+      than markup escaping, or a command module (one named allowance), and CI fails
+      a planted import of any of them
+    origin:
+    - spec:2026-11-27-run-verdict#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: run-cmd-clusters-in-fr-run
+    capability: run engine layering
+    acceptance: The lookup, provenance, brief, deliver-gate and evidence code lives
+      in fr/run modules that importers and tests use directly, and run_cmd.py's line
+      budget falls with each move
+    origin:
+    - spec:2026-11-27-run-verdict#R3
+    - spec:2026-11-27-run-verdict#R4
+    - spec:2026-11-27-run-verdict#R5
+    - spec:2026-11-27-run-verdict#R7
+    - spec:2026-11-27-run-verdict#R10
+    - spec:2026-11-27-run-verdict#R11
+    - spec:2026-11-27-run-verdict#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
