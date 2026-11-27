@@ -48,7 +48,12 @@ steps:
           reviewer: a2133bf0144118bbd
           findings: spr-r1,spr-r2,spr-r3,spr-r4,spr-r5,spr-r6
   plan-review:
-    state: pending
+    state: failed
+    at: '2026-11-27T09:12:00+00:00'
+    exit: 1
+    stdout: "[error] phase 1 (agentic) step P1.T2.S1 reads like a manual operation\
+      \ (matched \n'\\\\bclick\\\\b') — move it into a manual phase; agentic phases\
+      \ must be pure \nagentic.\n"
   implement:
     state: pending
     members:
