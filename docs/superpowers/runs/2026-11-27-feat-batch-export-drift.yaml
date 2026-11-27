@@ -111,7 +111,15 @@ steps:
           findings: l-security-r1,l-docs-accuracy-r1,l-errors-r1,l-errors-r2
           lenses: docs-accuracy=11:l-docs-accuracy-r1;errors=5:l-errors-r1,l-errors-r2;security=5:l-security-r1
   deliver:
-    state: pending
+    state: running
+    at: '2026-11-27T16:47:41+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-27T16:47:41+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: e93ee8b9-d840-4dd9-b01a-439138b37e11
 fr_version: 9.1.0rc5
 issue: 1667
 pr: https://github.com/derio-net/super-fr/pull/1736
