@@ -10968,6 +10968,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T15:27:13.765345Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T15:27:28.418534Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -12700,6 +12715,11 @@ exports:
   pr: 1718
   head: b0ca528cb2605655df8a4ca095ac5939880139e1
   merged: true
+- wave: '24'
+  repo: derio-net/super-fr
+  at: '2026-11-27T15:27:24.974923Z'
+  pr: 1738
+  head: 8fb101a5cbc6bf85b3b79734753fb2a12f500642
 closeouts:
 - repo: derio-net/super-fr
   item: derio-net/super-fr/run/closeout-2026-11-15-1
