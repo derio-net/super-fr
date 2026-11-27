@@ -10,7 +10,6 @@ are cut off per test, so an operator's `checkout.defaultRemote` or
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -21,16 +20,15 @@ import yaml
 from fr.archive import DefaultRef, MergeEvidence, merge_evidence
 from fr.git import GitRefusal, remote_default_ref, remote_name
 
-pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="needs git")
+from tests.unit.hermetic_git import apply_hermetic_git, hermetic_git  # noqa: F401
+
+pytestmark = [
+    pytest.mark.skipif(shutil.which("git") is None, reason="needs git"),
+    pytest.mark.usefixtures("hermetic_git"),
+]
 
 FIXTURE = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
 PLANS_REL = Path("docs/superpowers/plans")
-
-
-@pytest.fixture(autouse=True)
-def _hermetic_git(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
 
 
 def stub_fetch(monkeypatch: pytest.MonkeyPatch) -> list[str]:
@@ -41,8 +39,7 @@ def stub_fetch(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     and the returned list records one remote name per fetch, so a test can
     assert "one ``merge_evidence(fetch=True)`` per invocation".
     """
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    apply_hermetic_git(monkeypatch)
     fetched: list[str] = []
     monkeypatch.setattr(archive_mod, "_fetch", lambda root, remote: fetched.append(remote))
     return fetched

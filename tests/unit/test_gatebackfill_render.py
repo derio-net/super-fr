@@ -10,15 +10,12 @@ from fr.gatebackfill.model import PlanEntry, PrHit
 from fr.gatebackfill.render import decision_commands, row_reconcile, summary
 
 from tests.unit.gatebackfill_fixtures import SP, make_repo, row, write_matrix
+from tests.unit.hermetic_git import apply_hermetic_git, hermetic_git  # noqa: F401
 from tests.unit.test_merge_evidence import _write_plan
 
+pytestmark = pytest.mark.usefixtures("hermetic_git")
+
 PLAN = "2026-10-20-ops"
-
-
-@pytest.fixture(autouse=True)
-def _hermetic_git(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
 
 
 def _e(key: str, decision: str, **kw: object) -> PlanEntry:
