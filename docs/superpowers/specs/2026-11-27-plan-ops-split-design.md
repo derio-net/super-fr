@@ -38,8 +38,11 @@ path (active else archived), treat a missing file as no entries, and treat a
 directory is to be deleted once v1 migration is no longer needed. New code does not go
 there.
 
-Excluded on purpose (issue #1518): the raw `write_text` calls stay raw (making them atomic
-changes failure behaviour, #1524), and `tick`/`complete_phase` stay in `plan_ops.py`
+Every write in `plan_ops.py` already goes through `write_text_atomic`, and
+`tests/unit/test_run_durability.py:105` (`test_no_plain_write_text_in_the_cursor_and_plan_writers`)
+forbids a plain `write_text` there. The one raw write this change touches is
+`fr/migrate.py:761` (`spec_path.write_text(text)`); it stays raw (#1524 owns that class).
+Excluded on purpose (issue #1518): `tick`/`complete_phase` stay in `plan_ops.py`
 (retiring them is design 6.4, #1522).
 
 ## Requirements
@@ -52,12 +55,13 @@ R5. The spec "Implementation Plans" table code moves to a new module `fr/spec_ta
 R6. `worktree_of`, `_stage`, `_coerce_step_texts` and `_yaml_dump` move to a new private module `fr/_plan_io.py`.
 R7. Rework (`_REWORK_SUFFIX_RE` through `rework_list`, with `ReworkRecord`) moves to a new module `fr/plan_rework.py`.
 R8. No import cycle: `plan_errors`, `_plan_io`, `spec_table`, `plan_review` and `plan_rework` never import `fr.plan_ops`.
-R9. Every public name `fr.plan_ops` has today stays importable from it, and so do `_trailing_manual_block` and `_manual_placement_issues`.
-R10. Every caller under `packages/` imports a moved name from its new home, not through `fr.plan_ops`.
-R11. Tests that import or patch a moved private name import or patch it in its new home; no test assertion changes.
+R9. Every public name `fr.plan_ops` has today stays importable from it — `StepSpec`, `TaskSpec`, `PhaseSpec`, `PlanEditError`, `worktree_of`, `rewrite_phase_text`, `create`, `tick`, `complete_phase`, `set_tracking_issue`, `clear_tracking_issue`, `rework_create`, `rework_add_origin`, `rework_list`, `ReworkRecord`, `self_review`, `ReviewIssue`, `OPS_FR_FLOOR` — and so do `_trailing_manual_block` and `_manual_placement_issues`.
+R10. Every caller under `packages/` imports a moved name from its new home, not through `fr.plan_ops`, and a docstring under `packages/` that names a moved name's old path names its new one.
+R11. Tests that import or patch a moved private name import or patch it in its new home; no test assertion changes. The plain-`write_text` guard's parameter list widens to every new module holding a writer (`_plan_io.py`, `spec_table.py`, `plan_rework.py`), so the guard covers the same writes as before.
 R12. Behaviour is unchanged: self-review returns the same issues in the same order, and every writer writes and stages the same files.
 R13. The `plan_ops.py` budget in `test_tripwire_module_budget.py` drops to within its 400-line headroom of the new size; `plan_ops.py` stays a held module.
-R14. `docs/explainers/01-fr-goal.md` names `self_review`'s new path, and any page whose `covers:` named a moved path covers its new one.
+R14. `docs/explainers/01-fr-goal.md` names `self_review`'s new path; every page `fr docs check` reports for a file this change edits (no page covers `plan_ops.py` itself) gets its `reviewed` stamp moved with the note `still true: import-only change`, or an edit where a claim moved.
+R15. The PR adds the change fragment `.changes/feat-batch-arch-plan-ops-split.yaml` with `bump: patch`.
 
 ## Design
 
@@ -79,8 +83,7 @@ imports it from here.
 `fr/migrate.py` import from here.
 
 **`fr/plan_rework.py`** holds `_REWORK_SUFFIX_RE`, `_PLAN_HOMES`, `_feature_root_of`,
-`_next_rework_number`, `_scan` and the other private rework helpers, `rework_create`,
-`_find_prior_rework`, `rework_add_origin`, `ReworkRecord` and `rework_list`. It imports
+`_next_rework_number` (its nested `_scan` moves with it), `rework_create`, `_find_prior_rework`, `rework_add_origin`, `ReworkRecord` and `rework_list`. It imports
 `space_for` and the path helpers from `fr.artifacts.paths` itself, so the test that steered
 `_feature_root_of` patches `fr.plan_rework.space_for`.
 
@@ -93,27 +96,34 @@ imports it from here.
   file; `_spec_journal_entries(plan)` becomes a call to it;
 - `checks.py` — `ReviewIssue`, `_trailing_manual_block` and every sub-check, the ops floor
   (`OPS_FR_FLOOR`) among them;
-- `__init__.py` — `self_review` and the re-exports `ReviewIssue`, `_trailing_manual_block`
-  and `_manual_placement_issues`.
+- `__init__.py` — `self_review` and the re-exports `ReviewIssue`, `OPS_FR_FLOOR`,
+  `_trailing_manual_block` and `_manual_placement_issues`.
 
 The executor may split `checks.py` further along the sub-checks' lines if one module grows
 past about 800 lines; the package's `__init__` keeps the same names either way.
 
 **`fr/record/gates.py`** gains `_TASK_ID_RE` and `_refactor_justifications`, the latter
-reading the plan journal through `fr.plan_review.journal.journal_entries`.
+reading the plan journal through `fr.plan_review.journal.journal_entries`. It keeps its own
+name `_TASK_ID_RE`; `fr/record/model.py:112` has an unrelated anchored pattern of the same
+name, and the two are not merged.
 
 **`fr/plan_ops.py`** keeps the writers (`create` and its helpers, `tick`, `complete_phase`,
 the tracking-issue writers, `rewrite_phase_text`, `PhaseSpec`, `_now_iso`) and re-exports
 `PlanEditError`, `worktree_of`, `rework_create`, `rework_add_origin`, `rework_list`,
-`ReworkRecord`, `self_review`, `ReviewIssue`, `_trailing_manual_block` and
+`ReworkRecord`, `self_review`, `ReviewIssue`, `OPS_FR_FLOOR`, `_trailing_manual_block` and
 `_manual_placement_issues`. Its module docstring says where the rest went.
 
 **Callers** (R10): `fr/migrate.py` (`_stage`, the table names, `PlanEditError`),
 `fr/commands/plan_cmd.py` (its `plan_ops` import list and `worktree_of`),
 `fr/record/gates.py`, `fr/commands/run_cmd.py:5131` (`_manual_placement_issues`, from
 `fr.plan_review`), `fr/record/apply.py` (unchanged: `rewrite_phase_text` and `_now_iso`
-stay), `fr_dispatch/__init__.py` (`PlanEditError` from `fr.plan_errors`; its
-`plan_ops.set_tracking_issue` call stays, because tests patch it there).
+stay), `fr/commands/apply_cmd.py:47` and `fr/commands/undispatch_cmd.py:32` (`PlanEditError`
+from `fr.plan_errors`; their `plan_ops` module import stays, because tests patch
+`apply_cmd.plan_ops.set_tracking_issue`), `fr_dispatch/__init__.py` (`PlanEditError` from
+`fr.plan_errors`; its `plan_ops.set_tracking_issue` call stays, because tests patch it
+there). `plan_cmd.py` imports the rework names from `fr.plan_rework` and `self_review` from
+`fr.plan_review`. The docstrings at `run_cmd.py:798`, `run_cmd.py:5123` and `cli.py:7` name the
+new paths.
 
 **Order of the moves** keeps every intermediate commit importable: `plan_errors` and
 `_plan_io` first, then `spec_table`, then `plan_review` with the journal helper and the
@@ -135,22 +145,26 @@ packages/fr/src/fr/
     journal.py             journal_entries(root, scope, slug) — the one reader          R3
     checks.py              ReviewIssue, _trailing_manual_block, every sub-check
   record/gates.py        ~ + _TASK_ID_RE, _refactor_justifications (via journal_entries) R1
-  migrate.py, commands/plan_cmd.py, commands/run_cmd.py, record/gates.py,
+  migrate.py, cli.py, commands/{plan,run,apply,undispatch}_cmd.py,
   ../../fr-dispatch/src/fr_dispatch/__init__.py
-                         ~ import moved names from their new homes                     R10
+                         ~ import moved names from their new homes; docstrings         R10
 tests/unit/test_tripwire_module_budget.py   ~ plan_ops.py budget lowered               R13
 tests/unit/*                ~ private imports and the space_for patch repointed         R11
+tests/unit/test_run_durability.py           ~ write_text guard covers the new writers   R11
 docs/explainers/01-fr-goal.md               ~ self_review's path                        R14
+docs/** pages covering an edited caller     ~ reviewed stamp: import-only change        R14
+.changes/feat-batch-arch-plan-ops-split.yaml  + bump: patch                             R15
 ```
 
 ```
 import direction (no cycle, R8):
 
 _plan_io     imports none of the new modules
-plan_errors  <-  spec_table  <-  plan_rework  <-  plan_ops (re-export)
-plan_errors  <-  plan_ops
+plan_errors  <-  spec_table  <-  plan_rework  <-  plan_ops (re-export), plan_cmd
+plan_errors  <-  plan_ops, migrate, apply_cmd, undispatch_cmd, fr_dispatch
+spec_table   <-  plan_ops, migrate
 _plan_io     <-  plan_rework, plan_ops, migrate, plan_cmd
-plan_review  <-  plan_ops (re-export), record/gates, run_cmd
+plan_review  <-  plan_ops (re-export), plan_cmd, record/gates, run_cmd
 ```
 
 ## Verification
