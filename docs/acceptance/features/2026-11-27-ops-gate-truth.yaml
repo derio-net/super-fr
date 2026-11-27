@@ -70,7 +70,7 @@ rows:
     acceptance: 'fr plan self-review reports a devops or tester row no step of its gate
       names, and a (rows: ...) id that names no row of the spec'
     origin:
-    - spec:2026-11-27-ops-gate-truth#R13
+    - spec:2026-11-27-ops-gate-truth#R16
     levels: {}
     status: not-implemented
     notes: ''
