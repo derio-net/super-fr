@@ -46,14 +46,18 @@ def test_the_real_write_ledger_imports_no_cli_layer() -> None:
 
 
 def test_the_helper_reports_planted_cli_imports_and_accepts_clean_ones() -> None:
-    planted = (
-        "import typer\n"
-        "from rich.console import Console\n"
-        "def f():\n    from fr.commands import common\n"
-        "import rich as r\n"
-        "from fr import commands\n"
-        "from ..commands import common\n"
-    )
-    assert len(forbidden_imports(planted)) == 6
+    # Each spelling alone, so one that stops firing cannot hide behind another's hit.
+    planted = {
+        "import typer": ["typer"],
+        "from rich.console import Console": ["rich.console"],
+        "def f():\n    from fr.commands import common": ["fr.commands"],
+        "import rich as r": ["rich"],
+        "from fr import commands": ["fr.commands"],
+        "from ..commands import common": ["fr.commands"],
+        "from .. import commands": ["fr.commands"],
+        "import fr.commands as c": ["fr.commands"],
+    }
+    for source, expected in planted.items():
+        assert forbidden_imports(source) == expected, source
     clean = "from fr import run\nfrom fr.run.model import save_run_state\n"
     assert forbidden_imports(clean) == []

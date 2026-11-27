@@ -107,7 +107,6 @@ def test_a_record_fixing_an_out_of_scope_finding_as_operator_is_verified(
 def test_a_crash_at_the_commit_restores_everything_and_a_retry_converges(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-
     clean = _clean_apply(tmp_path)
     (tmp_path / "crash").mkdir()
     root = started_run(tmp_path / "crash")
