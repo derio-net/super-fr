@@ -1,0 +1,48 @@
+<!-- fr:journal-schema=4 -->
+# Journal: 2026-11-27-run-write-ledger
+
+<!-- fr:journal kind=discovery scope=spec id=operator-brief created=2026-11-27T09:01:50+00:00 input=true -->
+### operator-brief · discovery · Operator brief: batch arch-run-ledger (super-fr#1515)
+
+Batch `arch-run-ledger` of derio-net/super-fr: 1 issue, delivered as ONE pull request.
+Batch title: #1318: move the write ledger out of run_cmd.py into fr/run/writes.py
+
+#### super-fr#1515 — Move the write ledger out of commands/run_cmd.py into fr/run/writes.py (the one cheap run_cmd slice)
+
+Decomposition plan for `packages/fr/src/fr/commands/run_cmd.py` from the #1318 review (section 5.1). P3 refactor; no behaviour change. 8,862 lines; budget 8,900 in `tests/unit/test_tripwire_module_budget.py`. Line ranges at `39f06125`, unchanged on the #1318 branch.
+
+**Why only one slice is cheap.** No module under `fr/run/`, `fr/record/`, `fr/lenses/` or `fr/verification/` imports `typer` or a console today. The write ledger is the only cluster with neither a `raise typer.Exit` nor a console print (0 / 0); lookup (B, 5 / 7), provenance (C, 9 / 11), briefs (E, 7 / 15), deliver gates (H, 17 / 28) and evidence (D, 55 / 73) all refuse by printing and exiting. Those move only after the verdict design (#1519), which now carries them.
+
+**The slice (M):** `ResolveGuard`, `_RunWrites`, `_save_run_state`, `_commits_run_writes` ([`packages/fr/src/fr/commands/run_cmd.py:170-491`](https://github.com/derio-net/super-fr/blob/39f06125eb377a25526586fefcc14007dabbca7c/packages/fr/src/fr/commands/run_cmd.py#L170-L491)) and the run helpers `_now`, `_fr_version`, `_capture_usage`, `_capture_on_new_host` ([`packages/fr/src/fr/commands/run_cmd.py:492-543`](https://github.com/derio-net/super-fr/blob/39f06125eb377a25526586fefcc14007dabbca7c/packages/fr/src/fr/commands/run_cmd.py#L492-L543)), 374 lines, to a new `fr/run/writes.py`. Lines [`packages/fr/src/fr/commands/run_cmd.py:1-169`](https://github.com/derio-net/super-fr/blob/39f06125eb377a25526586fefcc14007dabbca7c/packages/fr/src/fr/commands/run_cmd.py#L1-L169) (docstring, imports, the `_run_group` callback) stay.
+
+**Preserved behaviour:** `_commit_run_writes_now` runs before a dispatch brief is printed ([`packages/fr/src/fr/commands/run_cmd.py:384-398`](https://github.com/derio-net/super-fr/blob/39f06125eb377a25526586fefcc14007dabbca7c/packages/fr/src/fr/commands/run_cmd.py#L384-L398)); the decorator commits in `finally` on refusals; the four `ContextVar`s keep their meaning; the tail of `_resolve_body` is not moved. Moved names stay importable from `run_cmd` (as it already re-imports `fr.run.liveness`'s, [`packages/fr/src/fr/commands/run_cmd.py:85-98`](https://github.com/derio-net/super-fr/blob/39f06125eb377a25526586fefcc14007dabbca7c/packages/fr/src/fr/commands/run_cmd.py#L85-L98)) until `record/apply.py` imports them from `fr/run`.
+
+**Callers to migrate:** `fr/record/apply.py:207` and `:1668` (`ResolveGuard` and the resolve path); tests that import `_save_run_state` or patch the ledger's names.
+
+**Guards:** lower the line budget; a test that `fr/run/writes.py` imports neither `typer` nor a console.
+
+**Shared with other open work:** #1500 (`save_run_state`, which `_save_run_state` calls) and the cursor-race issue #1511. Land #1500 first where they touch the same function.
+
+---
+
+Came out of the architecture review for #1318 (section 5.1 of `docs/superpowers/audits/2026-11-16-architecture-review.md`, which lands with that PR: https://github.com/derio-net/super-fr/blob/main/docs/superpowers/audits/2026-11-16-architecture-review.md).
+
+<!-- fr:journal kind=decision scope=spec id=d-conflict-refusal created=2026-11-27T09:01:50+00:00 decided_by=operator -->
+### d-conflict-refusal · decision · Cursor-conflict refusal stays in run_cmd as a thin wrapper
+
+Q1 (operator): writes.py's save_run_state_noted lets RunStateConflictError propagate; run_cmd._save_run_state catches it, prints and exits 2 (R3).
+
+<!-- fr:journal kind=decision scope=spec id=d-capture-on-new-host created=2026-11-27T09:01:50+00:00 decided_by=operator -->
+### d-capture-on-new-host · decision · _capture_on_new_host stays in run_cmd
+
+Q2 (operator): it needs fr.commands.common.resolve_repo_root; moving it would make fr/run import fr/commands. capture_usage moves (R1, R4).
+
+<!-- fr:journal kind=decision scope=spec id=d-verification created=2026-11-27T09:01:50+00:00 decided_by=operator -->
+### d-verification · decision · Verification: strategy none, gate developer
+
+Q3 (operator): CI unit suite plus the new guard test is the proof; nothing waits after merge.
+
+<!-- fr:journal kind=decision scope=spec id=d-migrate-callers created=2026-11-27T09:01:50+00:00 decided_by=operator -->
+### d-migrate-callers · decision · Migrate apply.py and tests to fr.run.writes now
+
+Q4 (operator): no compatibility-only re-exports in run_cmd; run_cmd imports only the aliases its body uses (R6).

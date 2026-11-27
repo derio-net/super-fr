@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-26-feat-batch-arch-run-ledger
+captures:
+- host: h-92b362ac
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-11-27T09:01:51+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 6e6722ab-f02b-4fa2-8efd-b25754ecc390
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 54
+        cache_write: 290564
+        cache_read: 3547857
+        output: 16710
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 7
+      other:
+        usd: null
+        turns: 8
+      paperwork:
+        usd: null
+        turns: 10
+    steps:
+      (outside run):
+        usd: null
+        turns: 4
+        input: 10
+        cache_write: 104430
+        cache_read: 395250
+        output: 1237
+      brainstorm:
+        usd: null
+        turns: 21
+        input: 44
+        cache_write: 186134
+        cache_read: 3152607
+        output: 15473
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 4
+          input: 10
+          cache_write: 104430
+          cache_read: 395250
+          output: 1237
+        brainstorm:
+          usd: null
+          turns: 21
+          input: 44
+          cache_write: 186134
+          cache_read: 3152607
+          output: 15473

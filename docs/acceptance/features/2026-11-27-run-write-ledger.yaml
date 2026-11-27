@@ -1,0 +1,32 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-27-run-write-ledger
+repo: derio-net/super-fr
+rows:
+  - id: run-write-ledger-cli-free
+    capability: run write ledger
+    acceptance: The run write ledger lives in fr/run/writes.py, which imports no CLI
+      framework, console library or command module, and CI fails a planted import of
+      any of them
+    origin:
+    - spec:2026-11-27-run-write-ledger#R1
+    - spec:2026-11-27-run-write-ledger#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: run-cursor-conflict-refusal-kept
+    capability: run cursor durability
+    acceptance: After the ledger moves, a run command whose cursor another command changed
+      on disk still refuses with exit 2, writes nothing and keeps the other write
+    origin:
+    - spec:2026-11-27-run-write-ledger#R3
+    - spec:2026-11-27-run-write-ledger#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
