@@ -142,8 +142,10 @@ steps:
           findings: l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4,l-errors-r5,l-errors-r6,l-docs-accuracy-r1,l-docs-accuracy-r2
           lenses: docs-accuracy=18:l-docs-accuracy-r1,l-docs-accuracy-r2;errors=11:l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4,l-errors-r5,l-errors-r6
   deliver:
-    state: running
-    at: '2026-11-27T21:25:24+00:00'
+    state: done
+    at: '2026-11-27T21:57:31+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1747
     units:
       step/deliver:
         attempts:
@@ -151,6 +153,15 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 164db869-0dd1-4fdb-8624-054c412af9ff
+          returned: '2026-11-27T21:57:00+00:00'
+          outcome: done
+        evidence:
+          tests: ci:656457eeed13ee00eac71906561ed0770fc3a897+unknown;tree=3cf932bcb50c0a076900cbb0acc5ed5cc436d373d66f9c3386e8a2f2756689c2
+          walk: 20261127T214453Z.log@2ebb1eabd955
+          proportionality: 085d1cbe90373c257709f84c72243d3b778480c4:4b4627cf7c89c8fc8aa52d39313c1b7defcc4116f8f747d4f7e5f68c45266bfb
+          docs: 085d1cbe90373c257709f84c72243d3b778480c4:f5cff4bd40642273853329941c8cdef2758295f816cff74af5c7b06b25392eea
+          visual: batch-card-waits-for:2:1967282e1ad0,batch-lane-owners:2:f4ba7bedee02,batch-card-dwell-line:1:9aa4bc05c8a4,batch-wave-time-summary:2:84524878ef9f
+          settle: managed
 fr_version: 9.1.0rc9
 issue: 1731
 pr: https://github.com/derio-net/super-fr/pull/1747
