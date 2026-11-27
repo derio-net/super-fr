@@ -75,3 +75,48 @@ the --orphaned flow lives in fr.triage.orphan; the command only calls it
 ### no-refactor-p2-t6 · discovery · no-refactor-because P2.T6 (phase 2)
 
 docs and stamps only
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-27T13:23:25+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · After cancel --orphaned, plan_sync owes claim releases every pass that fail on the departed repo (phase 2)
+
+Once cancelled, releasing() is true and owed_releases lists the members; execute fails each with 'its repo is not in this scope's facts' (claim_sync.py:201-204), setting failed_write so drive --once exits 1 every pass.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-27T13:23:25+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · build_driver loads facts.json strictly, so an unusable file makes drive exit 2 at startup (phase 2)
+
+load_scope_facts refuses an old-schema, corrupt or other-scope file; before this change build_driver read no facts and collect re-read such a file leniently (triage_cmd._previous_facts).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-27T13:23:25+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · Docstrings of is_open, wave_queue.is_terminal and finished_waves list the old closed sets (phase 2)
+
+batch.py:387, wave_queue.py:352, batch_drive.py:1245 omitted left-scope.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-27T13:23:25+00:00 phase=2 state=open review_scope=out -->
+### p2-r4 · finding [open] (reviewer: out of scope) · A batch that comes after a left-scope batch waits forever (phase 2)
+
+dependency_state gives waiting for left-scope (in neither meets_dependency nor UNSATISFIABLE). Unchanged from before: the batch derived dispatched, which also waited; the spec does not decide this case.
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-11-27T13:23:25+00:00 phase=2 -->
+### review-p2 · review · Phase 2 review: R4-R9 met apart from p2-r1..p2-r3 (in), p2-r4 (out) (phase 2)
+
+Independent reviewer checked the predicate, stage order, every closed set, board, build_driver and the checkout-map move, focus and cancel --orphaned, batch list, the changed plan_overlap test, the README regeneration, the tests and the explainer.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-27T13:23:25+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: After cancel --orphaned, plan_sync owes claim releases every pass that fail on the departed repo (phase 2)
+
+plan_sync drops every batch left_scope holds, whatever its stage; test_an_orphan_cancelled_batch_plans_no_release.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-27T13:23:25+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: build_driver loads facts.json strictly, so an unusable file makes drive exit 2 at startup (phase 2)
+
+build_driver reads facts through triage_cmd._previous_facts, so an unusable file counts as absent; test_unusable_facts_count_as_absent (old schema, corrupt, empty).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-27T13:23:25+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: Docstrings of is_open, wave_queue.is_terminal and finished_waves list the old closed sets (phase 2)
+
+The three docstrings name left-scope.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-27T13:23:25+00:00 phase=2 state=open resolves=p2-r4 out_of_scope=true -->
+### p2-r4-resolved · finding [out-of-scope] · resolves p2-r4: A batch that comes after a left-scope batch waits forever (phase 2)
+
+Pre-existing: a dependent of the batch waited the same way when it derived dispatched; deciding left-scope as unsatisfiable is a separate change.
