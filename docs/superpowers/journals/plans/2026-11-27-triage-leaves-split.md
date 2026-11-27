@@ -105,3 +105,8 @@ fr-wave-driver.md covers: now lists packages/fr/src/fr/triage/handback_rules.py.
 ### l-docs-accuracy-r2-resolved · finding [out-of-scope] · resolves l-docs-accuracy-r2: fr-wave-driver.md:113-114 'at most twice per dispatch' rests on HANDBACKS_PER_DISPATCH, which no covers: entry reached even before this change
 
 Not caused by this change (the gap predates the split); r1's covers line, added for the moved decisions, incidentally reaches HANDBACKS_PER_DISPATCH too, so nothing is left to track.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved-2 created=2026-11-27T21:39:43+00:00 state=fixed resolves=l-docs-accuracy-r2 answered_by=operator -->
+### l-docs-accuracy-r2-resolved-2 · finding [fixed] · resolves l-docs-accuracy-r2: fr-wave-driver.md:113-114 'at most twice per dispatch' rests on HANDBACKS_PER_DISPATCH, which no covers: entry reached even before this change
+
+Operator authorized: closed on this branch by r1's covers line, which adds packages/fr/src/fr/triage/handback_rules.py (holding HANDBACKS_PER_DISPATCH) to fr-wave-driver.md.
