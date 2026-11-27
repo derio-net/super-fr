@@ -12150,6 +12150,14 @@ batches:
   rationale: 'Epic #1652 sub-project S2; its only dependency, S1, merged in #1696.'
   wave: 26
   bump: minor
+- id: board-session-state
+  title: 'Batches page: session state, lane owners, time per column'
+  ids:
+  - super-fr#1731
+  rationale: 'Operator-requested: shows who each session waits for, and where waves lose time; needed
+    to orchestrate waves now.'
+  wave: 26
+  bump: minor
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
