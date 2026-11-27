@@ -1252,7 +1252,7 @@ def finished_waves(batches: Iterable[Batch], stages: Mapping[str, str]) -> froze
         if b.wave is None:
             continue
         event = closeout_event(b)
-        terminal = stages.get(b.id) in {"cancelled", "abandoned", "obsolete"} or (
+        terminal = stages.get(b.id) in {"cancelled", "abandoned", "obsolete", "left-scope"} or (
             event is not None and event.archived is not None
         )
         key = str(b.wave)
@@ -1778,7 +1778,12 @@ def drive_pass(snap: Snapshot) -> Pass:
         if not members:
             continue
         held_ids.add(batch.id)
-        if batch in chosen and stages.get(batch.id) not in ("cancelled", "abandoned", "obsolete"):
+        if batch in chosen and stages.get(batch.id) not in (
+            "cancelled",
+            "abandoned",
+            "obsolete",
+            "left-scope",
+        ):
             held_by.append((batch.id, tuple(sorted({c.signer for _, c in members}))))
             detail = "; ".join(held_line(k, c, snap.now) for k, c in members)
             actions.append(Action("held", batch.id, detail))

@@ -51,7 +51,15 @@ from fr.triage.model import (
 from fr.triage.timestamps import parse_aware
 
 BatchStage = Literal[
-    "proposed", "obsolete", "cancelled", "dispatched", "pr-open", "merged", "partial", "abandoned"
+    "proposed",
+    "obsolete",
+    "cancelled",
+    "dispatched",
+    "pr-open",
+    "merged",
+    "partial",
+    "abandoned",
+    "left-scope",
 ]
 BATCH_STAGES: tuple[BatchStage, ...] = (
     "proposed",
@@ -62,12 +70,14 @@ BATCH_STAGES: tuple[BatchStage, ...] = (
     "merged",
     "partial",
     "abandoned",
+    "left-scope",
 )
 # A batch at one of these no longer holds its members (spec §3.A): `partial` and
 # `abandoned` are terminal and release their still-open members, like a cancel. `obsolete`
-# (2026-11-22-triage-hardening R8) is a never-dispatched batch with nothing left to do.
+# (2026-11-22-triage-hardening R8) is a never-dispatched batch with nothing left to do;
+# `left-scope` (2026-11-27-closeout-state R4) is one whose repo left the scope's facts.
 CLOSED_OUT: frozenset[BatchStage] = frozenset(
-    {"cancelled", "merged", "partial", "abandoned", "obsolete"}
+    {"cancelled", "merged", "partial", "abandoned", "obsolete", "left-scope"}
 )
 
 BRANCH_PREFIX = "feat/batch-"
@@ -112,6 +122,15 @@ def batch_repo(batch: Batch, facts: Facts) -> str | None:
     return next(
         (r for r in facts.repos if r.split("/", 1)[1].lower() == batch.repo_name),
         None,
+    )
+
+
+def left_scope(batch: Batch, facts: Facts) -> bool:
+    """Whether the batch's repo left the scope: absent from the facts, and the facts hold no
+    truncation of the repo list (a list cut at its limit may only have lost the repo from
+    view; 2026-11-27-closeout-state R4)."""
+    return batch_repo(batch, facts) is None and not any(
+        w.source == "repos" for w in facts.warnings
     )
 
 
@@ -345,10 +364,12 @@ def _all_closed(batch: Batch, facts: Facts) -> bool:
 def derive_batch_stage(batch: Batch, facts: Facts) -> BatchStage:
     """The spec §3.A stage table, from the last event and the facts. Never stored."""
     events = lifecycle_events(batch)
+    if events and events[-1].kind == "cancel":
+        return "cancelled"
+    if left_scope(batch, facts):
+        return "left-scope"
     if not events:
         return "obsolete" if _all_closed(batch, facts) else "proposed"
-    if events[-1].kind == "cancel":
-        return "cancelled"
     pr = batch_pr(batch, facts)
     if pr is None:
         return "dispatched"
