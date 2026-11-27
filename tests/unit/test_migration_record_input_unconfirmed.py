@@ -14,6 +14,8 @@ import pytest
 from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
 from fr.record.model import parse_record
 
+from tests.unit.record_helpers import write_record
+
 pytestmark = pytest.mark.own_artifacts
 
 _V2_RECORD = """\
@@ -24,13 +26,6 @@ item: phase/1
 outcome: done
 ticks: [P1.T1.S1]
 """
-
-
-def _record_file(root: Path, text: str = _V2_RECORD, stem: str = "implement-phase__phase-1"):
-    path = root / "docs" / "superpowers" / "runs" / "r1.records" / f"{stem}.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    return path
 
 
 def test_a_two_to_three_migration_is_registered() -> None:
@@ -47,7 +42,7 @@ def test_a_v2_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
     """A v2 record now chains all the way to the current version (spec
     2026-09-28-ui-visual-evidence-design.md §G added a 3 -> 4 hop after this
     one); what this pins is that the body is untouched throughout."""
-    path = _record_file(tmp_path)
+    path = write_record(tmp_path, _V2_RECORD)
     before = path.read_text()
     kind = artifact_kind("record")
 
@@ -61,7 +56,7 @@ def test_a_v2_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
 
 
 def test_migrating_is_idempotent(tmp_path: Path) -> None:
-    path = _record_file(tmp_path)
+    path = write_record(tmp_path, _V2_RECORD)
     run_migrations(tmp_path, dry_run=False)
     once = path.read_text()
 
@@ -72,8 +67,8 @@ def test_migrating_is_idempotent(tmp_path: Path) -> None:
 
 
 def test_an_unreadable_v2_record_is_refused_byte_identical(tmp_path: Path) -> None:
-    broken = _record_file(tmp_path, "schema_version: 2\nticks: [nope]\n", stem="deliver")
-    healthy = _record_file(tmp_path)
+    broken = write_record(tmp_path, "schema_version: 2\nticks: [nope]\n", stem="deliver")
+    healthy = write_record(tmp_path, _V2_RECORD)
     before = broken.read_bytes()
 
     report = run_migrations(tmp_path, dry_run=False)
@@ -85,7 +80,7 @@ def test_an_unreadable_v2_record_is_refused_byte_identical(tmp_path: Path) -> No
 
 
 def test_a_truncated_v2_record_is_refused_byte_identical(tmp_path: Path) -> None:
-    broken = _record_file(tmp_path, "schema_version: 2\nticks: [P1.T1.S1\n", stem="deliver")
+    broken = write_record(tmp_path, "schema_version: 2\nticks: [P1.T1.S1\n", stem="deliver")
     before = broken.read_bytes()
 
     report = run_migrations(tmp_path, dry_run=False)
@@ -95,7 +90,7 @@ def test_a_truncated_v2_record_is_refused_byte_identical(tmp_path: Path) -> None
 
 
 def test_an_empty_v2_record_is_stamped(tmp_path: Path) -> None:
-    path = _record_file(tmp_path, "schema_version: 2\n")
+    path = write_record(tmp_path, "schema_version: 2\n")
 
     report = run_migrations(tmp_path, dry_run=False)
 
