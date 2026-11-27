@@ -107,7 +107,7 @@ def _cloud_pass(tmp_path: Path, max_inflight: int = 3) -> tuple[bool, Any, list[
         Scope(kind="repo", target=REPO),
         tmp_path,
         named=None,
-        checkouts={},
+        checkouts={REPO.lower(): None},
         max_inflight=max_inflight,
         yes=True,
         driver=CLOUD,

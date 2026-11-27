@@ -1,0 +1,69 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-27-closeout-state
+repo: derio-net/super-fr
+rows:
+  - id: closeout-takeback-both-errors
+    capability: triage wave driver close-out start
+    acceptance: When a close-out session fails to start and taking back its start record
+      fails too, the driver reports both errors in one line, keeps driving, and retries
+      the close-out on a later pass.
+    origin:
+    - spec:2026-11-27-closeout-state#R1
+    - spec:2026-11-27-closeout-state#R2
+    - spec:2026-11-27-closeout-state#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_closeout_takeback.py#test_a_collected_start_whose_takeback_fails_reports_both_errors_once
+      - super-fr:tests/unit/test_triage_closeout_takeback.py#test_a_takeback_that_first_fails_on_pass_two_is_said_on_pass_two
+      - super-fr:tests/unit/test_triage_closeout_takeback.py#test_a_per_batch_start_whose_takeback_fails_reports_both_and_prints_no_error
+      - super-fr:tests/unit/test_triage_closeout_takeback.py#test_a_collected_start_whose_takeback_succeeds_is_unchanged
+    status: ci
+    notes: Unit tests in CI drive both close-out starts with a failing dispatch and
+      a failing take-back (TriageError, fail_exit, VisibilityUnreadable), including
+      a real two-pass drive
+    verify: none
+  - id: batch-left-scope-stage
+    capability: triage batch board
+    acceptance: A batch whose repo left the triage scope shows as `left-scope` in Done
+      with a pill and no Jump, in both the board and `batch list`, and the driver neither
+      acts on it nor asks for its repo's checkout.
+    origin:
+    - spec:2026-11-27-closeout-state#R4
+    - spec:2026-11-27-closeout-state#R5
+    - spec:2026-11-27-closeout-state#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_left_scope.py#test_the_stage_is_left_scope_for_a_dispatched_batch
+      - super-fr:tests/unit/test_triage_left_scope.py#test_a_truncated_repo_list_keeps_today_s_stage
+      - super-fr:tests/unit/test_triage_left_scope_pass.py#test_the_pass_plans_no_action_for_a_left_scope_batch
+      - super-fr:tests/unit/test_triage_left_scope_pass.py#test_claim_sync_plans_nothing_for_a_left_scope_batch
+      - super-fr:tests/unit/test_triage_left_scope_drive.py#test_a_departed_repo_needs_no_checkout
+      - super-fr:tests/unit/test_triage_kanban_left_scope.py#test_the_card_is_terminal_with_no_jump
+      - super-fr:tests/unit/test_triage_kanban_left_scope.py#test_batch_list_marks_a_left_scope_batch_only_with_facts
+    status: ci
+    notes: Unit tests in CI over the stage (missing, truncated, never dispatched, returning
+      repo), claims, the pure pass, build_driver and the board render
+    verify: none
+  - id: batch-left-scope-cancel
+    capability: triage batch verbs
+    acceptance: '`fr triage batch cancel <id> --orphaned` retires a batch whose repo
+      left the scope without touching the forge, and `batch focus` on it names that
+      command instead of failing on the missing repo.'
+    origin:
+    - spec:2026-11-27-closeout-state#R7
+    - spec:2026-11-27-closeout-state#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_left_scope_verbs.py#test_cancel_without_the_flag_names_it
+      - super-fr:tests/unit/test_triage_left_scope_verbs.py#test_focus_refuses_a_left_scope_batch_naming_the_cancel
+      - super-fr:tests/unit/test_triage_left_scope_verbs.py#test_orphaned_yes_appends_only_the_cancel_event
+      - super-fr:tests/unit/test_triage_left_scope_verbs.py#test_orphaned_on_a_batch_whose_repo_is_present_is_refused
+    status: ci
+    notes: CLI tests in CI of batch focus and batch cancel --orphaned against facts
+      lacking the repo; no forge client or checkout is opened
+    verify: none

@@ -1,0 +1,2 @@
+bump: patch
+summary: "triage: a failed close-out take-back no longer hides the dispatch error, and a batch whose repo left the scope shows as left-scope and is retired with `batch cancel --orphaned`"

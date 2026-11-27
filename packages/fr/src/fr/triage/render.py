@@ -196,6 +196,7 @@ details.batch > .detail { padding: 4px 12px 10px; }
 .pill.bstage-merged { background: var(--accent); }
 .pill.bstage-partial { background: var(--sev-2); }
 .pill.bstage-cancelled, .pill.bstage-abandoned, .pill.bstage-obsolete { background: var(--sev-4); }
+.pill.bstage-left-scope { background: var(--muted); }
 .pill.bstage-proposed { background: transparent; color: var(--muted);
   border: 1px solid var(--line); }
 .merge-order { margin: 8px 0 0; padding-left: 22px; font-size: .9rem; }

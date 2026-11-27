@@ -18,7 +18,13 @@ from typing import Literal
 from fr.ghclient import GhClient, UnsupportedBatchOps
 from fr.hostclient import FORGE_ERRORS
 from fr.triage import claim_writes as cw
-from fr.triage.batch import BatchStage, claim_authors, closeout_state, derive_batch_stage
+from fr.triage.batch import (
+    BatchStage,
+    claim_authors,
+    closeout_state,
+    derive_batch_stage,
+    left_scope,
+)
 from fr.triage.claims import (
     Claim,
     closed_settlements,
@@ -130,7 +136,10 @@ def plan_sync(env: ClaimEnv, batches: Sequence[Batch], now: datetime) -> SyncPla
     A member another scope holds (R4, R6) is listed under `held`, never claimed. A member
     facts know nothing about (closed: collect reads no closed issue's comments) gets a
     refresh, which re-reads and writes only when this scope's marker is due.
+    A batch whose repo left the scope plans nothing, whatever its stage (an orphan-cancelled
+    one included): its repo is unreachable, so a release would fail every pass.
     """
+    batches = [b for b in batches if not left_scope(b, env.facts)]
     stages, archived = stages_of(batches, env.facts)
     plan = SyncPlan()
     for key, bid in owed_claims(batches, stages, archived):

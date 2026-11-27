@@ -102,7 +102,7 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
 .status-working { color: var(--accent); border-color: var(--accent); }
 .status-blocked { color: var(--sev-1); border-color: var(--sev-1); font-weight: 600; }
 .status-done { color: var(--live); border-color: var(--live); }
-.stage-cancelled, .stage-abandoned, .stage-partial {
+.stage-cancelled, .stage-abandoned, .stage-partial, .stage-left-scope {
   color: var(--sev-2); border-color: var(--sev-2); }
 .flag { color: var(--sev-1); }
 .hint { display: block; margin-top: 2px; }
@@ -440,6 +440,14 @@ def _timeline(card: Card) -> str:
     return f"<h4>Timeline</h4><ol>{items}</ol>"
 
 
+def _pill_class(card: Card) -> str:
+    """`stage-<stage>`; the stage's own words are the pill's, bar `left-scope`'s longer ones,
+    which also carry the stage pill class of the other pages."""
+    if card.stage == "left-scope":
+        return "stage-left-scope bstage-left-scope"
+    return f"stage-{esc(card.pill or '')}"
+
+
 def _body(card: Card, scope_args: Sequence[str], collected_at: str = "") -> str:
     bid = card.batch.id
     parts = []
@@ -495,7 +503,7 @@ def _card(
     if front_status is not None:
         pills += " " + _status(front_status)
     if card.pill:
-        pills += f' <span class="pill stage-{esc(card.pill)}">{esc(card.pill)}</span>'
+        pills += f' <span class="pill {_pill_class(card)}">{esc(card.pill)}</span>'
     if card.blocked:
         pills += ' <span class="pill flag">blocked</span>'
     show = card.show_closeout_jump if front_closeout else card.show_jump
