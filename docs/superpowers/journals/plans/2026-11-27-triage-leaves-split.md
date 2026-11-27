@@ -80,3 +80,28 @@ Comment now says fr.triage.readiness imports this module (readiness.py:59 still 
 ### p1-r3-resolved · finding [fixed] · resolves p1-r3: batch_merge.py:25-27 single-name import left on three lines (phase 1)
 
 Collapsed to `from fr.triage.batch_drive import checks_verdict`.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-27T21:06:05+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · fr-wave-driver.md covers: adds the two new leaves but not triage/handback_rules.py, where the hand-back decisions moved
+
+A later edit to the moved close-out and archive-conflict hand-back rules would no longer bring the page that describes them up for review.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-27T21:06:05+00:00 state=open review_scope=out -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: out of scope) · fr-wave-driver.md:113-114 'at most twice per dispatch' rests on HANDBACKS_PER_DISPATCH, which no covers: entry reached even before this change
+
+Pre-existing gap from the wave-queue-gaps §E move; not caused by this split.
+
+<!-- fr:journal kind=review scope=plan id=lens-review created=2026-11-27T21:06:05+00:00 -->
+### lens-review · review · lens review: docs-accuracy, 2 findings
+
+docs-accuracy reviewer: no false or stale claim on the five touched pages; the shape file matches the diff; fr docs check reports 33 pages current. One coverage finding in scope (fixed), one out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-27T21:06:05+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: fr-wave-driver.md covers: adds the two new leaves but not triage/handback_rules.py, where the hand-back decisions moved
+
+fr-wave-driver.md covers: now lists packages/fr/src/fr/triage/handback_rules.py.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-27T21:06:05+00:00 state=open resolves=l-docs-accuracy-r2 out_of_scope=true -->
+### l-docs-accuracy-r2-resolved · finding [out-of-scope] · resolves l-docs-accuracy-r2: fr-wave-driver.md:113-114 'at most twice per dispatch' rests on HANDBACKS_PER_DISPATCH, which no covers: entry reached even before this change
+
+Not caused by this change (the gap predates the split); r1's covers line, added for the moved decisions, incidentally reaches HANDBACKS_PER_DISPATCH too, so nothing is left to track.
