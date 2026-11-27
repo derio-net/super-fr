@@ -268,7 +268,7 @@ def _queue_refuses(
     def read(path: str) -> str | None:
         try:
             return wt.read(path)
-        except (OSError, UnicodeDecodeError):
+        except OSError, UnicodeDecodeError:
             return None  # no text there: a real conflict
 
     def stages(path: str) -> dict[int, str]:

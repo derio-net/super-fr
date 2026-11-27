@@ -757,13 +757,15 @@ def closeout_due(
     return merged_at is not None and now - merged_at >= CLOSEOUT_FALLBACK
 
 
-def _queue_landed_by_repo(snap: Snapshot) -> dict[str, frozenset[str]]:
-    """Per repo, the batches a `queue_land` record of that repo names (R5)."""
+def queue_landed_by_repo(records: Sequence[QueueRecord]) -> dict[str, frozenset[str]]:
+    """Per repo, the batches a `queue_land` record of that repo names
+    (`wave_queue.queue_landed`): due for close-out at once (R5, R7 of spec
+    2026-11-27-queue-followups)."""
     from fr.triage.wave_queue import queue_landed
 
-    repos = {r.repo for r in snap.queue_records}
     return {
-        repo: queue_landed([r for r in snap.queue_records if r.repo == repo]) for repo in repos
+        repo: queue_landed([r for r in records if r.repo == repo])
+        for repo in {r.repo for r in records}
     }
 
 
@@ -1842,18 +1844,18 @@ def drive_pass(snap: Snapshot) -> Pass:
     # 2026-11-27-queue-followups): not due, unverified or ledger-unread
     blocking: dict[tuple[str, int | None], list[tuple[str, str]]] = {}
     labelled: set[str] = set()  # issues an awaiting-live action already names this pass
-    queued = _queue_landed_by_repo(snap)
+    queued = queue_landed_by_repo(snap.queue_records)
     for batch in snap.batches:
         if stages.get(batch.id) not in LANDED or batch.id in held_ids:
             continue
         if closeout_of(batch, snap.closeouts) is not None:
             continue
         driven_now = snap.selected is None or batch.id in snap.selected
-        key = (snap.repos.get(batch.id, ""), _wave_of(batch))
+        wave_key = (snap.repos.get(batch.id, ""), _wave_of(batch))
         if batch.id in snap.unverified:
             closing += driven_now
             if driven_now:
-                blocking.setdefault(key, []).append((batch.id, "unverified"))
+                blocking.setdefault(wave_key, []).append((batch.id, "unverified"))
             continue
         # A close-out the driver did not start is recorded once, as an event: every
         # later pass, the board and `batch list` read it (gh#899, gh#900, gh#912).
@@ -1889,7 +1891,7 @@ def drive_pass(snap: Snapshot) -> Pass:
             post_planned.add(batch.id)
         if batch.id in snap.ledger_unknown:  # p4-r1: unknown is not ungated
             closing += 1
-            blocking.setdefault(key, []).append((batch.id, "ledger unread"))
+            blocking.setdefault(wave_key, []).append((batch.id, "ledger unread"))
             actions.append(Action("ledger-unread", batch.id, "its merged PR's labels were not "
                                   "read, so whether a gate holds it is unknown; no close-out "
                                   "until they are"))  # fmt: skip
@@ -1919,7 +1921,7 @@ def drive_pass(snap: Snapshot) -> Pass:
             continue
         if not due:
             if closeout_hold(batch) is None:
-                blocking.setdefault(key, []).append((batch.id, "not due"))
+                blocking.setdefault(wave_key, []).append((batch.id, "not due"))
             continue
         if item in snap.existing:  # a per-batch close-out started before R15: recorded
             actions.append(Action("closeout", batch.id, f"record the live {item}", recorded=True))

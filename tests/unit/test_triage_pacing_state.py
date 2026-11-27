@@ -102,8 +102,8 @@ def test_held_for_quota_round_trips_and_a_bad_value_is_false(tmp_path: Path) -> 
 def test_planned_at_round_trips_and_a_bad_value_is_none(tmp_path: Path) -> None:
     """R7 of spec 2026-11-27-queue-followups: `planned_at` is parsed on its own, so a bad
     value is unknown and the rest of the state is kept."""
-    state = PacingState(etags={"o/r": {"p": "e"}}, planned_at=AT,
-                        summary={"in_flight": 1, "merged": 2, "pending": 0, "closing": 0})  # fmt: skip
+    summary = {"in_flight": 1, "merged": 2, "pending": 0, "closing": 0}
+    state = PacingState(etags={"o/r": {"p": "e"}}, planned_at=AT, summary=summary)
     pacing_state.save(tmp_path, state)
     loaded, warning = pacing_state.load(tmp_path)
     assert loaded == state and warning is None

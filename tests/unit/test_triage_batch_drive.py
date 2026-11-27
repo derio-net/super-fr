@@ -1950,11 +1950,11 @@ def test_closeout_due_queued_is_due_at_once() -> None:
 def test_drive_pass_queue_landed_batch_closes_out_without_fallback() -> None:
     """R5: a batch a `queue_land` record of its repo names closes out a minute after."""
     b = _merged("x", 1, events=[_POST_MERGE])
-    snap = _snap([b], {"x": "merged"}, merged_at={"x": NOW - timedelta(minutes=1)},
-                 queue_records=(_landed_by_queue("x"),), post_merge_repos=frozenset({REPO}))  # fmt: skip
+    minute = {"x": NOW - timedelta(minutes=1)}
+    snap = _snap([b], {"x": "merged"}, merged_at=minute, queue_records=(_landed_by_queue("x"),),
+                 post_merge_repos=frozenset({REPO}))  # fmt: skip
     assert ("closeout", "x") in _kinds(drive_pass(snap).actions)
-    plain = _snap([b], {"x": "merged"}, merged_at={"x": NOW - timedelta(minutes=1)},
-                  post_merge_repos=frozenset({REPO}))  # fmt: skip
+    plain = _snap([b], {"x": "merged"}, merged_at=minute, post_merge_repos=frozenset({REPO}))
     assert ("closeout", "x") not in _kinds(drive_pass(plain).actions)
 
 

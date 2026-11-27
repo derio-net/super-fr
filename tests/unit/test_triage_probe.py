@@ -272,7 +272,9 @@ def test_the_judgements_digest_is_of_the_bytes(tmp_path: Path) -> None:
 # ------------------------- close-out deadlines wake a quiet pass (2026-11-27-queue-followups R7)
 
 
-def _landed(tmp_path: Path, *, merged_at: str | None, queued: bool = False) -> tuple[object, object]:
+def _landed(
+    tmp_path: Path, *, merged_at: str | None, queued: bool = False
+) -> tuple[object, object]:
     """REPO with batch b1 merged at *merged_at* and no close-out event; *queued*: a
     `queue_land` of REPO names it."""
     import yaml
@@ -284,7 +286,9 @@ def _landed(tmp_path: Path, *, merged_at: str | None, queued: bool = False) -> t
     world.issues[1] = "closed"
     kw = {"merged_at": merged_at} if merged_at is not None else {}
     world.pr(101, "feat/batch-b1", [1], state="MERGED", **kw)
-    path = _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1"))) / "judgements.yaml"
+    path = (
+        _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1"))) / "judgements.yaml"
+    )
     if queued:
         text = path.read_text("utf-8").replace("schema: 3\n", "schema: 14\n")
         land = {"kind": "queue_land", "at": NOW.isoformat(), "main": "m" * 40,

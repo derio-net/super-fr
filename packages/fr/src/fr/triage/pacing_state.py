@@ -66,7 +66,7 @@ def _parsed_or_none(value: object) -> datetime | None:
     """A time whose bad value is unknown, never a reset of the whole state (R7)."""
     try:
         return _parsed(value)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
 
 

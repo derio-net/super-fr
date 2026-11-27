@@ -21,7 +21,13 @@ from typing import Literal, Protocol
 
 from fr.triage.batch import batch_pr, batch_repo, derive_batch_stage
 from fr.triage.batch_dispatch import LIVE_STAGES
-from fr.triage.batch_drive import ARCHIVE_PREFIXES, CLOSEOUT_FALLBACK, LANDED, closeout_event
+from fr.triage.batch_drive import (
+    ARCHIVE_PREFIXES,
+    CLOSEOUT_FALLBACK,
+    LANDED,
+    closeout_event,
+    queue_landed_by_repo,
+)
 from fr.triage.errors import ForgeError
 from fr.triage.model import Facts, Judgements
 from fr.triage.pacing_state import PacingState
@@ -95,10 +101,9 @@ def deadline_repos(
     its repo names (a queue landing is due at once). Fails open: an unknown *since*, or a
     landed batch with no readable `merged_at`, reads its repo (R7 of spec
     2026-11-27-queue-followups)."""
-    from fr.triage.wave_queue import queue_landed
-
     if facts is None or judgements is None:
         return set()
+    landed = queue_landed_by_repo(judgements.queues)
     out: set[str] = set()
     for batch in judgements.batches:
         repo = batch_repo(batch, facts)
@@ -106,7 +111,7 @@ def deadline_repos(
             continue
         if derive_batch_stage(batch, facts) not in LANDED:
             continue
-        if batch.id in queue_landed([r for r in judgements.queues if r.repo == repo]):
+        if batch.id in landed.get(repo, frozenset()):
             continue
         pr = batch_pr(batch, facts)
         merged = parse_aware(pr.merged_at if pr is not None else None)
