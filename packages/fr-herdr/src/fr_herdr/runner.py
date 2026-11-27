@@ -115,7 +115,7 @@ HARNESSES: dict[str, Harness] = {
 
 def stable_checkout(path: str) -> str:
     """Normalize through fr's isolation seam; never launch in a disposable checkout."""
-    from fr.isolation.local import _main_worktree_root
+    from fr.isolation.branchrefs import _main_worktree_root
 
     root = Path(path).resolve()
     if not root.is_dir() or not (root / ".git").exists():

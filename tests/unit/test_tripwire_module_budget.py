@@ -25,7 +25,8 @@ BUDGETS: dict[str, int] = {
     # +25 to 8250) merged with S1's (event-driven-a-la-carte) guarded-key and state-home
     # reads; the merged module is 8292 lines.
     f"{SRC}commands/triage_batch_cmd.py": 8300,
-    f"{SRC}isolation/local.py": 3200,
+    # isolation/local.py: 3200 -> 2125 after runner, reap, branchrefs and landing left it (#1517).
+    f"{SRC}isolation/local.py": 2125,
     f"{SRC}plan_ops.py": 2600,
     f"{SRC}triage/batch_drive.py": 2275,
 }

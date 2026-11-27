@@ -34,7 +34,7 @@ import pytest
 from fr.cli import app
 from fr.commands import archive_cmd, isolation_cmd
 from fr.isolation.hostworktree import HostWorktreeTarget
-from fr.isolation.local import subprocess_runner
+from fr.isolation.runner import subprocess_runner
 from fr.isolation.types import IsolationState, save_state
 from typer.testing import CliRunner
 
