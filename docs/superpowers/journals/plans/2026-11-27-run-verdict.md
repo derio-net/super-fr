@@ -168,3 +168,38 @@ Removed _ALIASES and sym in 07ba9b646; the module parameter stays as the one inj
 ### p3-r2-resolved · finding [out-of-scope] · resolves p3-r2: tests/unit/test_deliver_local_stamp.py:508 docstring still names removed _deliver_exit_guard (cosmetic) (phase 3)
 
 Cosmetic docstring only; the reviewer tagged it out of scope. The docstring was updated in passing in 07ba9b646 to name fr.run.deliver.deliver_exit_guard.
+
+<!-- fr:journal kind=decision scope=plan id=p4-warn-and-refusal-plumbing created=2026-11-27T23:00:16+00:00 phase=4 -->
+### p4-warn-and-refusal-plumbing · decision · the dispatch-record helpers take a `warn` callable and raise RunRefusal; run_cmd's call sites wrap them in `_refusals()` (phase 4) (phase 4)
+
+`merge_claim`, `claimed_identity`, `close_on_resolve` and `observed_model` print a warning (`Say`, markup and wrap as before) through a `warn` parameter run_cmd fills with `_say`; `claimed_identity`, `tests_brief`, `manual_placement_preflight` and `lens_set_or_refuse` raise `RunRefusal`. The call sites in `_advance_group`, `_advance_step`, `_resolve_member`, `_resolve_body`, `_claim_identity` and `_print_member_dispatch` run them inside `with _refusals():`, so `resolve_in_process` and `_advance_once` still see `typer.Exit`. `_print_member_dispatch` takes `repo_root`, which `_advance_group` already holds.
+
+<!-- fr:journal kind=decision scope=plan id=p4-phase-executor-agent-lives-in-brief created=2026-11-27T23:00:16+00:00 phase=4 -->
+### p4-phase-executor-agent-lives-in-brief · decision · PHASE_EXECUTOR_AGENT moved to fr/run/brief.py with the briefs (phase 4) (phase 4)
+
+`tests_brief` keys on it and fr/run cannot import run_cmd, so the constant is defined in brief.py and run_cmd imports it for the reviewer check that still uses it (slice 5 moves that check).
+
+<!-- fr:journal kind=discovery scope=plan id=p4-brief-capture created=2026-11-27T23:00:16+00:00 phase=4 -->
+### p4-brief-capture · discovery · the brief capture drives one 22-case table through run_cmd's old functions once and now through the moved ones (phase 4) (phase 4)
+
+tests/unit/test_run_verdict_brief.py holds the cases; fixtures in tests/fixtures/run_verdict/brief/ (stderr, exit code, and the returned value as JSON, covering one flat brief and one grouped member brief) were taken by a throwaway driver (not committed) calling the pre-move `_`-named functions with `resolve_repo_root` patched to the test's root, in the commit before the move. The test drives only fr.run.brief and fr.run.evidence.lenses.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-docs-check-clean created=2026-11-27T23:00:16+00:00 phase=4 -->
+### p4-docs-check-clean · discovery · fr docs check reported every page current after the brief move (phase 4) (phase 4)
+
+Earlier phases stamped the pages that cover run_cmd.py; no page names a moved function, so nothing needed a new stamp.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-fast-tier-run created=2026-11-27T23:00:16+00:00 phase=4 -->
+### p4-fast-tier-run · discovery · the fast tier ran 9908 passed, 118 skipped; its one collection error (test_git_policy_briefs importing commit_templates_brief from run_cmd) was fixed after and the file re-run green (phase 4) (phase 4)
+
+The re-point grep matched `_name` and `run_cmd.<name>` spellings but not a public name imported with `from fr.commands.run_cmd import commit_templates_brief`; the run's only error was that file, and it passes alone (2 passed).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-11-27T23:00:16+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+a capture task: fixtures and a test, nothing pre-existing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-11-27T23:00:16+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+a verbatim move that must keep its bytes; the only cleanup (imports left unused in run_cmd, the re-pointed tests) was done in the green step
