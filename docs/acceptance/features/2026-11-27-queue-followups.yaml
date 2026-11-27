@@ -38,9 +38,13 @@ rows:
       build would refuse, so a stamp or generated-file conflict costs no hand-back.
     origin:
     - spec:2026-11-27-queue-followups#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_drive_conflict_probe.py#test_the_probe_skips_the_conflicts_the_queue_resolves_with_mirrors
+      - super-fr:tests/unit/test_triage_drive_conflict_probe.py#test_the_probe_keeps_owed_generated_paths_without_mirrors
+    status: ci
+    notes: trial_conflicts classifies with regen.classify_conflicts; scratch-repo unit
+      tests in CI (R4)
     verify: none
   - id: queue-closeout-due-at-landing
     capability: wave driver close-out
