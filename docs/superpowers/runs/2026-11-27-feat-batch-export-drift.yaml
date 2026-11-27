@@ -3,7 +3,7 @@ run: 2026-11-27-feat-batch-export-drift
 workflow: fr-goal@1
 branch: feat/batch-export-drift
 started: '2026-11-27T12:56:12+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -52,8 +52,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-11-27T16:29:19+00:00'
+    state: done
+    at: '2026-11-27T16:41:22+00:00'
     members:
     - implement-phase
     - review-phase
@@ -74,13 +74,20 @@ steps:
         evidence:
           visual: none
       phase/1/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-27T16:29:19+00:00'
           agent: ae51ce99bc1962048
           harness: claude-code
           model: claude-sonnet-5
           session: e93ee8b9-d840-4dd9-b01a-439138b37e11
+          returned: '2026-11-27T16:41:22+00:00'
+          outcome: done
+        evidence:
+          review: review-p1-1
+          reviewer: ae51ce99bc1962048
+          visual: none
+          findings: p1-bootstrap-repo-only-files-drift-forever,p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6,p1-r7,p1-r8
   journal-check:
     state: pending
   lens-review:
