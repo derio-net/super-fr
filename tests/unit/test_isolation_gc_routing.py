@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 from fr.isolation import local as local_mod
 from fr.isolation import routing
+from fr.isolation.gc import GcSweeper
 from fr.isolation.hostworktree import HostWorktreeTarget
 from fr.isolation.local import LocalWorktreeDevcontainerTarget
 from fr.isolation.runner import _detached_gc_spawn
@@ -87,7 +88,7 @@ def test_worktree_sweep_never_reaps_an_external_recorded_state(
     sweeper = HostWorktreeTarget(repo, runner=runner)
 
     for dry_run in (True, False):
-        action = sweeper._reap_or_classify(str(repo), state, "merged", dry_run)
+        action = GcSweeper(sweeper)._reap_or_classify(str(repo), state, "merged", dry_run)
         assert (action.verdict, action.action) == ("external", "skipped"), action
         assert "preparer" in (action.detail or "")
     assert load_state(repo, "feat/ext") is not None
