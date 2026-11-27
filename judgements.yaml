@@ -11284,6 +11284,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T17:54:48.793669Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T17:55:26.056205Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -12365,6 +12380,10 @@ batches:
     patch_id: b773c4d801c0b6205241c8702c0a852d8e426443
   - kind: post_merge
     at: '2026-11-27T17:50:26.488644Z'
+  - kind: claims_released
+    at: '2026-11-27T17:55:26.056205Z'
+    keys:
+    - super-fr#1667
 - id: arch-shared-helpers
   title: '#1318: shared duplicate-key YAML detector, record placement and hermetic-git fixtures, small
     duplicate readers'
@@ -12552,6 +12571,12 @@ batches:
   - queue-followups
   - closeout-state
   - export-drift
+  events:
+  - kind: dispatch
+    at: '2026-11-27T17:55:03.767841Z'
+    runner: herdr
+    handle: w3X:p4
+    branch: feat/batch-arch-triage-leaves
 - id: arch-run-verdict
   title: '#1318: run_cmd.py refuses through a typed verdict; its clusters move to fr/run'
   ids:
@@ -13694,6 +13719,19 @@ closeouts:
   planned:
   - merge-readiness
   closed: true
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-27-1
+  branch: chore/closeout-2026-11-27-1
+  at: '2026-11-27T17:54:52.256330Z'
+  runner: herdr
+  handle: w3V:p8
+  planned:
+  - queue-followups
+  - closeout-state
+  - arch-shared-helpers
+  - arch-run-ledger
+  - arch-isolation-split
+  - arch-plan-ops-split
 queues:
 - repo: derio-net/super-fr
   wave: 22
