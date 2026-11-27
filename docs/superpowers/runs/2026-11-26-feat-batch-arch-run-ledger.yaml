@@ -3,7 +3,7 @@ run: 2026-11-26-feat-batch-arch-run-ledger
 workflow: fr-goal-light@1
 branch: feat/batch-arch-run-ledger
 started: '2026-11-26T18:28:12+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -48,7 +48,11 @@ steps:
           reviewer: a016da84d0beebf63
           findings: spr-r1,spr-r2,spr-r3,spr-r4,spr-r5
   plan-review:
-    state: pending
+    state: done
+    at: '2026-11-27T09:08:26+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
