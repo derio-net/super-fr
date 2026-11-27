@@ -11181,6 +11181,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T17:02:23.310809Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T17:02:51.773504Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -12218,6 +12233,13 @@ batches:
     patch_id: 326af7b8cf1d7a799d896f1270c1755a3756ad17
   - kind: post_merge
     at: '2026-11-27T16:57:35.715597Z'
+  - kind: claims_released
+    at: '2026-11-27T17:02:51.773504Z'
+    keys:
+    - super-fr#1663
+    - super-fr#1676
+    - super-fr#1680
+    - super-fr#1695
 - id: closeout-state
   title: Close-outs and batches never stuck as started or Running
   ids:
@@ -12526,6 +12548,12 @@ batches:
     to orchestrate waves now.'
   wave: 26
   bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-11-27T17:02:29.449658Z'
+    runner: herdr
+    handle: w3X:p3
+    branch: feat/batch-board-session-state
 - id: s1-followups
   title: 'S1 follow-ups: refuse old paths, config-branch executables, test sites, import-time home'
   ids:
