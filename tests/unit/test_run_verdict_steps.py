@@ -183,3 +183,16 @@ def test_the_moved_lookup_prints_the_captured_bytes(
     stderr, code = run_case(monkeypatch, case, call, steps)
     assert stderr == (FIXTURES / f"{case.name}.txt").read_text(encoding="utf-8")
     assert code == _exit_codes()[case.name]
+
+
+def test_pickup_prints_the_drift_warning_unhighlighted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """pickup's warning printed through run_cmd's highlight=False console before the move;
+    its own console highlights, so `_say` must turn highlighting off (review p2-r1)."""
+    from fr.commands import pickup_cmd
+    from fr.run.verdict import Say
+
+    out = StringIO()
+    console = Console(file=out, width=80, force_terminal=True, color_system="standard")
+    monkeypatch.setattr(pickup_cmd, "err_console", console)
+    pickup_cmd._say(Say("warning: /repo/a.yaml changed at step 12", markup=False, soft_wrap=True))
+    assert out.getvalue() == "warning: /repo/a.yaml changed at step 12\n"

@@ -284,7 +284,11 @@ def _record_section(plan: object, phase: int) -> list[str]:
 
 
 def _say(line: Say) -> None:
-    err_console.print(line.text, markup=line.markup, soft_wrap=line.soft_wrap, style=line.style)
+    # highlight=False: the drift warning used to print through run_cmd's console, which
+    # never highlights, so a path or number in it stays uncoloured (spec 2026-11-27-run-verdict R9).
+    err_console.print(
+        line.text, markup=line.markup, soft_wrap=line.soft_wrap, style=line.style, highlight=False
+    )
 
 
 def _run_unit_record(plan: object, phase: int) -> RecordBrief | None:
