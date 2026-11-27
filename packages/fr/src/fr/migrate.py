@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from fr import plan_ops, refs
+from fr import _plan_io, refs, spec_table
 from fr._urls import is_cross_repo_spec
 from fr._yaml import LiteralStr, dump_plan_yaml
 from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
@@ -36,6 +36,7 @@ from fr.parser import parse as _parse_v2
 from fr.plan.parser import _RE_STEP, _strip_fenced_regions
 from fr.plan.parser import parse_plan as _parse_v1
 from fr.plan_config import strip_dead_keys
+from fr.plan_errors import PlanEditError
 from fr.version_floor import CEILING_VERSION
 
 
@@ -349,7 +350,7 @@ def _migrate_one(
     plan_files = [new_folder / "_meta.yaml", new_folder / "_prose.md"] + [
         new_folder / f"{phase.number:02d}.yaml" for phase in phases_to_emit
     ]
-    plan_ops._stage(repo_root, plan_files)
+    _plan_io._stage(repo_root, plan_files)
 
     # Move original .md to .v1-archive sibling
     archive = md_path.with_suffix(".md.v1-archive")
@@ -756,20 +757,20 @@ def _ensure_spec_plan_row(
     else None.
     """
     text = spec_path.read_text()
-    if plan_ops._SPEC_TABLE_HEADER_RE.search(text):
+    if spec_table._SPEC_TABLE_HEADER_RE.search(text):
         return None
 
-    text = plan_ops._ensure_section_text(text)
+    text = spec_table._ensure_section_text(text)
     spec_path.write_text(text)
 
     try:
-        plan_ops._append_spec_row(
+        spec_table._append_spec_row(
             spec_path, plan_name=slug, repo=target_repo, file=slug, depends_on="—"
         )
-    except plan_ops.PlanEditError as e:  # pragma: no cover - defensive
+    except PlanEditError as e:  # pragma: no cover - defensive
         return f"{spec_path}: failed to append Implementation Plans row for {slug!r}: {e}"
 
-    plan_ops._stage(repo_root, [spec_path])
+    _plan_io._stage(repo_root, [spec_path])
     return None
 
 
