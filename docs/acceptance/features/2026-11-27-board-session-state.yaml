@@ -55,9 +55,13 @@ rows:
       differ, and a lane card names them; an unknown lane key is refused.
     origin:
     - spec:2026-11-27-board-session-state#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_lane_owners.py#test_the_header_names_the_owners_or_says_unassigned
+      - super-fr:tests/unit/test_triage_lane_owners.py#test_an_unknown_lane_key_is_ignored_and_never_refuses_the_config
+    status: ci
+    notes: config model, column header, lane card wait line and the ignored-key note
+      are unit-tested
     verify: none
     visual:
       states:
