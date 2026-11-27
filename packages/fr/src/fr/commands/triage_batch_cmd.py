@@ -163,6 +163,7 @@ from fr.triage.batch import (
     effective_handle,
     foreign_batch_prs,
     last_dispatch,
+    left_scope,
     left_scope_note,
     lifecycle_events,
     mixed_themes,
@@ -259,6 +260,7 @@ from fr.triage.batch_merge import (
 )
 from fr.triage.batch_version import read_source, reserve
 from fr.triage.check import batch_awaits_live
+from fr.triage.checkouts import checkout_map
 from fr.triage.claim_sync import (
     ClaimEnv,
     ClaimOp,
@@ -4001,40 +4003,8 @@ def _batch_slug(scope: Scope, repo_name: str) -> str:
     return scope.target
 
 
-def _checkout_map(
-    values: list[str] | None, scope: Scope, repos: set[str]
-) -> dict[str, Path | None]:
-    """`--checkout REPO=PATH`, repeatable, keyed by lower-cased OWNER/REPO.
-
-    A single-repo scope defaults to the current git toplevel (None), as `batch
-    dispatch` does; any other scope needs a mapping for every repo with a batch to
-    drive, refused before anything runs."""
-    out: dict[str, Path | None] = {}
-    for value in values or []:
-        name, sep, where = value.partition("=")
-        if not sep or name.count("/") != 1 or not where:
-            _fail(f"--checkout takes REPO=PATH (OWNER/REPO=/path/to/clone), got {value!r}")
-        out[name.lower()] = Path(where).expanduser()
-    if scope.kind == "repo":
-        stray = sorted(set(out) - {scope.target.lower()})
-        if stray:
-            _fail(
-                f"--checkout names {', '.join(stray)}, which is not this scope's repo "
-                f"{scope.target}"
-            )
-        out.setdefault(scope.target.lower(), None)
-        return out
-    if scope.kind == "group":
-        stray = sorted(set(out) - {r.lower() for r in scope.repos})
-        if stray:
-            _fail(f"--checkout names {', '.join(stray)}, which is not in this scope's group")
-        repos = set(
-            scope.repos
-        )  # a group needs a clone for EVERY repo, not only those with batches
-    missing = sorted(r for r in repos if r.lower() not in out)
-    if missing:
-        _fail(f"give --checkout REPO=PATH for {', '.join(missing)}: no clone is known for it")
-    return out
+def _left(batch: Batch, facts: Facts | None) -> bool:
+    return facts is not None and left_scope(batch, facts)
 
 
 def _chosen(batches: list[Batch], named: list[str] | None) -> list[Batch]:
@@ -8146,12 +8116,19 @@ def build_driver(
     except TriageError as exc:
         _fail(str(exc))
     chosen = _chosen(known, batch_ids) if known else []
-    names = {_batch_slug(scope, b.repo_name) for b in chosen}
+    facts_path = target / "facts.json"
+    try:
+        facts = load_scope_facts(facts_path, scope) if facts_path.exists() else None
+        # a batch whose repo left the scope is driven no more: no clone is asked for it
+        names = {_batch_slug(scope, b.repo_name) for b in chosen if not _left(b, facts)}
+        checkouts = checkout_map(checkout, scope, names)
+    except TriageError as exc:
+        _fail(str(exc))
     return _Driver(
         scope,
         target,
         named=batch_ids,
-        checkouts=_checkout_map(checkout, scope, names),
+        checkouts=checkouts,
         max_inflight=max_inflight,
         yes=yes,
         workspace_prefix=workspace_prefix,
