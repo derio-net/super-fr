@@ -109,7 +109,9 @@ anything, so it cannot undo that edit, and it names each file. To keep the edit,
 the state first: `fr triage state import --from <dir> --only <path>` moves only the paths you
 name, even over a newer state file, and removes one the repo deleted. To keep the state's
 version instead, run `fr triage state export --force`. With no record yet, the export goes
-ahead and writes the first one.
+ahead and writes the first one. A damaged record (not JSON, the wrong shape, a link, or a
+name that is not a durable file) also stops the export, with no import to offer: mend or
+remove it in the repo, or run the `--force` export, which rewrites it.
 
 The state branch lives in a repo that fr picks once per scope. A scope first collected from a
 stealth workspace uses its tracking repo. Otherwise a scope of one repo uses that repo, and fr

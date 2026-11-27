@@ -1090,3 +1090,96 @@ def test_the_export_verbs_remedy_carries_its_own_scope_options(tmp_path: Path) -
     scope = f"--repo {SCOPE} --dir {state.resolve()}"
     assert f"fr triage state import {scope} --from {out}" in flat, flat
     assert f"fr triage state export {scope} --to {out} --force" in flat, flat
+
+
+# --------------------------------------------- lens review: errors and security
+
+
+def test_a_control_character_in_a_drifted_name_never_reaches_the_text_raw(
+    tmp_path: Path,
+) -> None:
+    """l-security-r1: a repo-supplied file name holding an escape sequence or a line
+    break is printed ANSI-C quoted, which a shell reads back to the same name."""
+    import subprocess
+
+    from fr.triage.state_sync import shown
+
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "repo" / SCOPE_NAME
+    export_state(state, *_at(dest), owner=HOST)
+    hostile = "history/x\x1b]0;pwned\x07\nnext.html"
+    (dest / hostile).write_text("repo\n", encoding="utf-8")
+
+    with pytest.raises(ExportDrift) as caught:
+        export_state(state, *_at(dest), owner=HOST)
+
+    text = str(caught.value)
+    assert "\x1b" not in text and "\x07" not in text and "\n" not in text
+    assert shown(hostile) in text
+    echoed = subprocess.run(
+        ["bash", "-c", f"printf %s {shown(hostile)}"], capture_output=True, check=True
+    ).stdout.decode()
+    assert echoed == hostile
+    assert shown("board/it's.html") == "'board/it'\"'\"'s.html'"  # printable: shlex.quote
+
+
+def test_a_non_regular_record_or_unreadable_file_is_an_export_blocked(tmp_path: Path) -> None:
+    """l-errors-r2: every refusal only the operator can mend in the repo copy is an
+    ExportBlocked, which the driver turns into its stop and Need."""
+    from fr.triage.state_sync import ExportBlocked
+
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "repo" / SCOPE_NAME
+    export_state(state, *_at(dest), owner=HOST)
+    (dest / RECORD_FILE).unlink()
+    (dest / RECORD_FILE).mkdir()
+    with pytest.raises(ExportBlocked):
+        export_state(state, *_at(dest), owner=HOST, force=True)
+    (dest / RECORD_FILE).rmdir()
+    export_state(state, *_at(dest), owner=HOST)
+    unreadable = dest / "board" / "manifest.yaml"
+    unreadable.write_text("edited\n", encoding="utf-8")
+    unreadable.chmod(0)
+    try:
+        if os.access(unreadable, os.R_OK):
+            pytest.skip("running as a user that reads a 000 file")
+        with pytest.raises(ExportBlocked, match="mend it, then export again"):
+            export_state(state, *_at(dest), owner=HOST)
+    finally:
+        unreadable.chmod(0o644)
+
+
+def test_stop_on_records_a_stop_only_for_an_export_blocked(tmp_path: Path) -> None:
+    from fr.triage.merge_stops import load_stops
+    from fr.triage.state_sync import ExportBlocked, clear_drift_stop, stop_on
+
+    target = tmp_path / "state"
+    target.mkdir()
+    plain = stop_on(TriageError("foreign stamp"), target, SCOPE, [], path="docs/triage", at="abc")
+    assert plain == "foreign stamp" and load_stops(target) == {}
+
+    blocked = ExportBlocked("x is not a regular file", root=tmp_path / SCOPE_NAME)
+    text = stop_on(blocked, target, SCOPE, ["--repo", SCOPE], path="docs/triage", at="abc")
+    assert load_stops(target)[f"export-drift:{SCOPE}"].reason == text
+    assert "at or after abc" in text
+    assert clear_drift_stop(target, SCOPE) is None and load_stops(target) == {}
+
+
+def test_a_stop_file_that_cannot_be_written_keeps_the_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p1-r5, l-errors-r1: an OSError writing or clearing the stop is said, never raised."""
+    from fr.triage import state_sync
+    from fr.triage.state_sync import ExportBlocked, clear_drift_stop, stop_on
+
+    def refuse(*_a: object, **_k: object) -> None:
+        raise OSError(30, "Read-only file system")
+
+    monkeypatch.setattr(state_sync, "record_stop", refuse)
+    monkeypatch.setattr(state_sync, "clear_stop", refuse)
+    blocked = ExportBlocked("broken", root=tmp_path / SCOPE_NAME)
+    text = stop_on(blocked, tmp_path, SCOPE, [], path="docs/triage", at="abc")
+    assert "its Need was not recorded: Read-only file system" in text
+    assert clear_drift_stop(tmp_path, SCOPE) == (
+        "could not clear the export-drift stop: Read-only file system"
+    )

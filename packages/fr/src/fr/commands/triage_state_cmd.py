@@ -34,8 +34,7 @@ from fr.triage.privacy import guard_state
 from fr.triage.scope_config import load_durable, scope_id
 from fr.triage.state_ref import fetch_state, push_state, read_base, ref_name
 from fr.triage.state_sync import (
-    BadRecord,
-    ExportDrift,
+    ExportBlocked,
     SyncReport,
     check_scope_name,
     drift_stop_text,
@@ -117,7 +116,7 @@ def export_command(
             take_over=take_over,
             force=force,
         )
-    except (ExportDrift, BadRecord) as exc:  # the remedy names this command's scope (p1-r3)
+    except ExportBlocked as exc:  # the remedy names this command's scope (p1-r3)
         from fr.commands.triage_kanban_cmd import scope_args
 
         args = scope_args(repo, org, dir_override, workspace)

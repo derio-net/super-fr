@@ -61,7 +61,7 @@ from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
 from fr.triage.errors import TriageError
-from fr.triage.merge_stops import MergeStop, export_drift_stop_key, record_stop
+from fr.triage.merge_stops import MergeStop, clear_stop, export_drift_stop_key, record_stop
 
 # The export set: a subset of `fr.triage.state_ref.REF_FILES` (the state ref carries more:
 # merge stops, the lease, durable settings, the cloud mailbox), pinned by test_triage_state_ref.
@@ -86,17 +86,28 @@ RECORD_FILE = "exported-files"  # what the root held after the last export (R1)
 _RECORD_SCHEMA = 1
 
 
-class BadRecord(TriageError):  # noqa: N818 - a refusal, beside TriageError
+class ExportBlocked(TriageError):  # noqa: N818 - a refusal, beside TriageError
+    """An export refused before any write over something only the operator can mend in the
+    repo-side *root*: drift, a bad record, a stamp or record that is not a regular file, a
+    durable file the drift check cannot read. The driver turns every one into its
+    `export-drift:<repo>` stop and Need (R4, l-errors-r2)."""
+
+    def __init__(self, message: str, *, root: Path) -> None:
+        self.root = root
+        super().__init__(message)
+
+
+class BadRecord(ExportBlocked):
     """The repo-side record is a symlink, not a regular file, or does not parse (R3)."""
 
     def __init__(self, path: Path, why: str, *, forceable: bool = True) -> None:
-        self.why, self.root, self.forceable = why, path.parent, forceable
+        self.why, self.forceable = why, forceable
         fix = (
             "`fr triage state export --force` rewrites it"
             if forceable
             else "remove it by hand, then export again (`--force` writes only a regular file)"
         )
-        super().__init__(f"{path} {why}; {fix}")
+        super().__init__(f"{path} {why}; {fix}", root=path.parent)
 
 
 class Drift(NamedTuple):
@@ -104,6 +115,32 @@ class Drift(NamedTuple):
 
     path: str  # POSIX, relative to the repo-side root
     kind: str  # changed | deleted | added
+
+
+def shown(arg: str) -> str:
+    """*arg* quoted for a shell and safe to print: `shlex.quote` when every character is
+    printable, else ANSI-C quoting (`$'...'`, which bash and zsh read back to the same
+    bytes) with every control or non-printable character escaped, so a repo-supplied file
+    name never puts an escape sequence or a line break on a terminal or in a one-line
+    stop (l-security-r1)."""
+    if arg.isprintable():
+        return shlex.quote(arg)
+    out = []
+    for ch in arg:
+        if ch in "\\'":
+            out.append("\\" + ch)
+        elif ch.isprintable():
+            out.append(ch)
+        elif ord(ch) < 0x100:
+            out.append(f"\\x{ord(ch):02x}")
+        else:
+            out.append(f"\\u{ord(ch):04x}" if ord(ch) < 0x10000 else f"\\U{ord(ch):08x}")
+    return "$'" + "".join(out) + "'"
+
+
+def shown_argv(argv: Sequence[str]) -> str:
+    """`shlex.join`, through `shown`: every argument quoted and printable."""
+    return " ".join(shown(a) for a in argv)
 
 
 def drift_text(
@@ -116,29 +153,31 @@ def drift_text(
     """The one operator text for *drift* (R3, R4): the paths with their kinds, then the
     import that keeps the repo's edit (one `--only` per path, *import_argv* first) and the
     forced export that keeps the state's; *at*, a default-branch sha the checkout must be at
-    or after. Every argument is shell-quoted. One line, so a Need row can carry it."""
-    listed = ", ".join(f"{d.kind} {shlex.quote(d.path)}" for d in drift)
+    or after. Every argument is shell-quoted and printable (`shown`). One line, so a Need
+    row can carry it."""
+    listed = ", ".join(f"{d.kind} {shown(d.path)}" for d in drift)
     only = [arg for d in drift for arg in ("--only", d.path)]
     where = "in a checkout of the default branch" + (f" at or after {at}" if at else "")
     return (
         f"changed in the repo since the last export: {listed}. To keep the repo's edit, run "
-        f"`{shlex.join([*import_argv, *only])}` {where}, then export again; to keep the "
-        f"state's version, run `{shlex.join(force_argv)}`, which overwrites them"
+        f"`{shown_argv([*import_argv, *only])}` {where}, then export again; to keep the "
+        f"state's version, run `{shown_argv(force_argv)}`, which overwrites them"
     )
 
 
-class ExportDrift(TriageError):  # noqa: N818 - a refusal, beside TriageError
+class ExportDrift(ExportBlocked):
     """An export that would overwrite a repo-side edit, refused before any write (R3)."""
 
     def __init__(self, drift: tuple[Drift, ...], *, base: Path, root: Path) -> None:
-        self.drift, self.root = drift, root
+        self.drift = drift
         super().__init__(
             f"{root} was "
             + drift_text(
                 drift,
                 import_argv=["fr", "triage", "state", "import", "--from", str(base)],
                 force_argv=["fr", "triage", "state", "export", "--to", str(base), "--force"],
-            )
+            ),
+            root=root,
         )
 
 
@@ -366,26 +405,44 @@ def read_record(root: Path) -> dict[str, str] | None:
 
 
 def stop_on(
-    exc: ExportDrift | BadRecord,
+    exc: TriageError,
     target: Path,
     repo: str,
-    *,
     scope_args: Sequence[str],
+    *,
     path: str,
     at: str,
 ) -> str:
-    """Record the driver's `export-drift:<repo>` stop in the state directory *target* and
-    return its reason (R4): the whole operator text, for *repo*'s export into *path*
-    refused at default-branch sha *at*. The commands carry the driver's own scope options
-    (*scope_args*), each argument quoted. The driver never forces."""
+    """The driver's refusal text for an export into *path* refused at default-branch sha
+    *at*. An `ExportBlocked` (the repo copy needs the operator) also records *repo*'s
+    `export-drift:<repo>` stop in the state directory *target* with that text, the whole
+    operator text whose commands carry the driver's own scope options (R4); a stop file
+    that cannot be written leaves the refusal and says so (p1-r5). Any other refusal is its
+    own message, with no stop. The driver never forces."""
+    if not isinstance(exc, ExportBlocked):
+        return str(exc)
     text = drift_stop_text(exc, scope_args=scope_args or ["--repo", repo], path=path, at=at)
     stamp = datetime.now(UTC).isoformat(timespec="seconds")
-    record_stop(target, export_drift_stop_key(repo), MergeStop(at, text, stamp))
+    try:
+        record_stop(target, export_drift_stop_key(repo), MergeStop(at, text, stamp))
+    except OSError as err:
+        return f"{text} (its Need was not recorded: {err.strerror or err})"
     return text
 
 
+def clear_drift_stop(target: Path, repo: str) -> str | None:
+    """Clear *repo*'s `export-drift:<repo>` stop in the state directory *target* once an
+    export passed the drift check (R4); the warning to print when the stop file cannot be
+    written, None otherwise. The export itself goes on either way (l-errors-r1)."""
+    try:
+        clear_stop(target, export_drift_stop_key(repo))
+    except OSError as err:
+        return f"could not clear the export-drift stop: {err.strerror or err}"
+    return None
+
+
 def drift_stop_text(
-    exc: ExportDrift | BadRecord, *, scope_args: Sequence[str], path: str, at: str | None
+    exc: ExportBlocked, *, scope_args: Sequence[str], path: str, at: str | None
 ) -> str:
     """The operator text for a refused export into *path* (R3, R4): for drift, `drift_text`
     with commands that carry *scope_args* (the caller's own scope options, so they paste as
@@ -398,11 +455,13 @@ def drift_stop_text(
         imp = ["fr", "triage", "state", "import", *scope_args, "--from", path]
         return f"{rel} was " + drift_text(exc.drift, import_argv=imp, force_argv=force, at=at)
     where = "a checkout of the default branch" + (f" at or after {at}" if at else "")
+    if not isinstance(exc, BadRecord):  # a non-regular stamp, an unreadable file
+        return f"{rel}: {shown(str(exc))} (in {where})"
     if not exc.forceable:
         return f"{rel}/{RECORD_FILE} {exc.why}: remove it in {where}, then export again"
     return (
         f"{rel}/{RECORD_FILE} {exc.why}: mend or remove it in {where}, "
-        f"or run `{shlex.join(force)}` there, which rewrites it"
+        f"or run `{shown_argv(force)}` there, which rewrites it"
     )
 
 
@@ -419,7 +478,10 @@ def find_drift(state_dir: Path, root: Path, record: Mapping[str, str]) -> tuple[
             continue
         if _symlinked_dest(state_dir, rel):
             continue
-        mine, theirs = _hash(root, rel), _hash(state_dir, rel)
+        try:
+            mine, theirs = _hash(root, rel), _hash(state_dir, rel)
+        except TriageError as exc:  # unreadable: the drift cannot be judged (l-errors-r2)
+            raise ExportBlocked(f"{exc}; mend it, then export again", root=root) from exc
         if mine == theirs:
             continue
         known = record.get(rel)
@@ -577,8 +639,9 @@ def _refuse_non_regular(root: Path, name: str) -> None:
     except FileNotFoundError, NotADirectoryError:
         return
     if not (stat.S_ISREG(mode) or stat.S_ISLNK(mode)):
-        raise TriageError(
-            f"{root / name} is not a regular file; remove it by hand, then export again"
+        raise ExportBlocked(
+            f"{root / name} is not a regular file; remove it by hand, then export again",
+            root=root,
         )
 
 

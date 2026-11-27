@@ -291,7 +291,6 @@ from fr.triage.merge_stops import (
     MergeStop,
     archive_stop_key,
     clear_stop,
-    export_drift_stop_key,
     export_stop_key,
     record_stop,
 )
@@ -369,7 +368,7 @@ from fr.triage.quota import Pace
 from fr.triage.readiness import fact_cursor_details, fact_cursors, merge_refusal
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
-from fr.triage.state_sync import BadRecord, ExportDrift, check_scope_name, export_state, stop_on
+from fr.triage.state_sync import check_scope_name, clear_drift_stop, export_state, stop_on
 from fr.triage.timestamps import parse_aware
 from fr.triage.wave_overlap import overlap_lines
 from fr.triage.wave_queue import REPORT_KINDS as QUEUE_REPORT_KINDS
@@ -7895,18 +7894,12 @@ class _Driver:
                 report = export_state(
                     self.target, worktree.path, rel, owner=scope_id(self.scope)
                 )  # never takes over another scope's export (gh#1101), never forced (R4)
-            except (ExportDrift, BadRecord) as exc:  # the repo changed it: the operator's
+            except TriageError as exc:  # an ExportBlocked records its stop and Need (R4)
                 self._export_refusals += 1
-                args = self.scope_args
-                try:
-                    text = stop_on(exc, self.target, repo, scope_args=args, path=config.path, at=at)
-                except OSError as err:  # the stop is not written: still a refusal (p1-r5)
-                    text = f"{exc} (its Need was not recorded: {err.strerror or err})"
+                text = stop_on(exc, self.target, repo, self.scope_args, path=config.path, at=at)
                 return f"refused, nothing committed or pushed: {text}"
-            except TriageError as exc:
-                self._export_refusals += 1
-                return f"refused, nothing committed or pushed: {exc}"
-            clear_stop(self.target, export_drift_stop_key(repo))  # no drift now (R4)
+            if (why := clear_drift_stop(self.target, repo)) is not None:  # R4, l-errors-r1
+                _say(action_line(Action("warn", repo, why, wave=wave)))
             try:
                 # Never forced past the repo's .gitignore (p4-r9): named, not staged.
                 left = worktree.ignored([f"{rel}/{p}" for p in report.copied])
