@@ -13,7 +13,7 @@ covers:
   - packages/fr/src/fr/ops/gate.py
   - packages/fr/src/fr/commands/ops_gate_cmd.py
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-25 under quiet and stealth the gate reads `.fr/triage.yaml` and `.fr/ops.yaml` at the configuration branch's fetched tip and needs its protection for a `queue:` (S1 R7); 2026-11-24 still true after ci-economy phase 1 (a cancelled check now reads as pending, never failing, in every check reader; no claim here names how a cancelled check is read); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-21 stage 4 needs a marker comment beside the label; 2026-11-20 stage 2 releases the PR to the merge queue by label and merges nothing, stage 4 lifts the queue's barrier (wave merge queue R26); 2026-11-19 still true after a failed forge read of the default branch became a named refusal (batch consumer-followups, gh#1554); 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
+reviewed: 2026-11-27 stages 4 to 7 first bring a stale ops workspace up to date with the default branch (a confirmed merge, never a rebase); changed ops are trusted again and reopened, and a refresh after stage 4 goes back to stage 4 (ops-gate-truth R1-R6, gh#1617); 2026-11-25 under quiet and stealth the gate reads `.fr/triage.yaml` and `.fr/ops.yaml` at the configuration branch's fetched tip and needs its protection for a `queue:` (S1 R7); 2026-11-24 still true after ci-economy phase 1 (a cancelled check now reads as pending, never failing, in every check reader; no claim here names how a cancelled check is read); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-21 stage 4 needs a marker comment beside the label; 2026-11-20 stage 2 releases the PR to the merge queue by label and merges nothing, stage 4 lifts the queue's barrier (wave merge queue R26); 2026-11-19 still true after a failed forge read of the default branch became a named refusal (batch consumer-followups, gh#1554); 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
 ---
 
 ## Why can a delivered PR still have work left?
@@ -87,6 +87,32 @@ is done only when the forge reads the PR as merged. fr never records it. A repo 
 hand. A PR you merged by hand counts as stage 2 done. Under the quiet and stealth placements
 that file is on the configuration branch. The gate releases to a `queue:` there only while
 the forge enforces a pull-request rule on that branch, and refuses otherwise.
+
+## What if the default branch moves after the merge?
+
+Stage 3 moves the ops workspace onto the default branch once. A fix can land on the default
+branch after that, for example a corrected op. Without a check, a rerun of a failed stage would
+still apply the old op, and the old trust grant would still match it. So stages 4, 5, 6 and 7
+first compare the ops workspace with `origin/<default>`, every time they run. They compare two
+things: each op of the run's plan, on its whole definition, and the run's Test Plan steps.
+
+When both match, the stage goes on and says nothing. When something differs, the stage names
+each op added, removed or changed, and says whether the Test Plan changed. Then it asks you to
+confirm, even under `--yes`. If you say no, the stage stops and nothing changes. If you say
+yes, fr commits the stage records in the workspace, merges the default branch into the ops
+branch and pushes it. A merge that conflicts is undone, and the stage names the files and the
+commands to merge by hand.
+
+fr merges and never rebases here, because the ops branch is already pushed. A merge only adds
+a commit on top, so the next push still matches the sha fr last pushed. A rebase would rewrite
+the commits that hold your evidence.
+
+After the merge, fr asks you to trust the op set again before any probe runs, so you see the
+new commands. Each changed or added op is reopened: a closure recorded before the merge no
+longer closes it. Only its live check, or evidence recorded after the merge, does. If this
+happens at stage 5, 6 or 7, the run goes back to stage 4 and applies those ops again before
+anything later runs. If the plan directory is not on the default branch, the stage stops and
+names it.
 
 ## How does the merge queue land the PR?
 

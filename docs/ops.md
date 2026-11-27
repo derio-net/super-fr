@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/ops/**
   - packages/fr/src/fr/commands/ops_cmd.py
-reviewed: 2026-11-25 under quiet and stealth `.fr/ops.yaml` is read from the protected configuration branch's fetched tip or refused, and the ops gate's first stage also stops on `.fr/profiles.yaml` (S1 R7, R9); 2026-11-24 still true after ci-economy phase 1 (a cancelled check now reads as pending, never failing, in every check reader; 2026-11-24 still true; the trust tree also leaves out a run shape file as fr bookkeeping, which this page does not list (show-me-visuals R12); no claim here names how a cancelled check is read); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-21 gh#1614 a print-only apply is refused and never counted applied; a done entry says if the apply ran; 2026-11-19 a failed forge read of the default branch is an exit-2 refusal that names the error (batch consumer-followups, gh#1554); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth); 2026-11-21 stage 4 posts a marker comment beside the postmerge-done label, and the queue needs both; 2026-11-20 stage 2 adds `fr-queue:release` and merges nothing, stage 4 adds `fr-queue:postmerge-done`, `--method` removed (wave merge queue R26)
+reviewed: 2026-11-27 stages 4 to 7 compare the ops workspace with the default branch first and merge it after a confirmation, never a rebase; changed ops are trusted again and reopened, and a refresh after stage 4 goes back to stage 4 (ops-gate-truth R1-R6, gh#1617); 2026-11-25 under quiet and stealth `.fr/ops.yaml` is read from the protected configuration branch's fetched tip or refused, and the ops gate's first stage also stops on `.fr/profiles.yaml` (S1 R7, R9); 2026-11-24 still true after ci-economy phase 1 (a cancelled check now reads as pending, never failing, in every check reader; 2026-11-24 still true; the trust tree also leaves out a run shape file as fr bookkeeping, which this page does not list (show-me-visuals R12); no claim here names how a cancelled check is read); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-21 gh#1614 a print-only apply is refused and never counted applied; a done entry says if the apply ran; 2026-11-19 a failed forge read of the default branch is an exit-2 refusal that names the error (batch consumer-followups, gh#1554); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth); 2026-11-21 stage 4 posts a marker comment beside the postmerge-done label, and the queue needs both; 2026-11-20 stage 2 adds `fr-queue:release` and merges nothing, stage 4 adds `fr-queue:postmerge-done`, `--method` removed (wave merge queue R26)
 ---
 
 # fr ops — manual operations you can check and run
@@ -293,6 +293,45 @@ The first failure stops the run, and names the stage (exit 1). This includes an 
 is not trusted when the stage asks. A refusal such as a moved head or a changed ops profile
 exits 2. Pre-merge evidence never lands on the PR head, so the reviewed head and its checks
 stay valid.
+
+### When the default branch moved
+
+Stages 4, 5, 6 and 7 first compare the ops workspace with `origin/<default>`. They do this
+each time they run, reruns too. They compare two things:
+
+- each op that the run's plan loads, by id, on its full definition;
+- the Test Plan steps of the run's spec.
+
+Rows are not compared. The ops branch records row walks that the default branch does not have
+yet.
+
+When both are the same, the stage continues and prints nothing. When one differs, the stage
+names each op that was added, removed or changed. It also tells you if the Test Plan changed.
+Then it asks you to confirm the update. It asks even under `--yes`. If you do not confirm, the
+stage stops and changes nothing.
+
+If you confirm, the stage does these steps in order:
+
+1. It commits the workspace's records under `docs/` on the ops branch.
+2. It merges `origin/<default>` into the ops branch with a merge commit.
+3. It pushes the ops branch, leased on the sha that fr last pushed.
+4. It reopens each changed or added op.
+5. It asks for trust again, on the merged content, before a probe or an apply runs.
+
+The stage uses a merge, not a rebase, because the ops branch is already pushed. A merge
+only adds a commit, so the pushed branch moves forward only and the lease stays correct.
+
+A merge that conflicts is aborted. The workspace stays at the records commit, and the stage
+stops. It names the conflicted paths and the commands to merge by hand.
+
+A reopened op is open until stage 4 completes again. A closure recorded before the update
+does not close it. Only its live status, or evidence recorded after the update, closes it.
+If the update occurs at stage 5, 6 or 7 and reopens an op, the host state forgets stage 4 and
+the stages after it. The same run then goes back to stage 4, which applies the reopened ops
+again. A change to the Test Plan only reopens nothing.
+
+If the run's plan directory is not on `origin/<default>`, the stage stops and names the
+directory. It does not update the workspace.
 
 ### When a devops step is owed
 
