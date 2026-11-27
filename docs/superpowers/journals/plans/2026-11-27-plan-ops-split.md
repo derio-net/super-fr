@@ -192,3 +192,8 @@ The writers test checks __module__ == "fr.plan_ops".
 ### l-tests-r5-resolved · finding [out-of-scope] · resolves l-tests-r5: plan_review/ is not in the write_text guard list
 
 plan_review writes nothing, so the guard has nothing to cover; this change adds no write there.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r2-resolved-2 created=2026-11-27T13:10:15+00:00 state=open resolves=l-simplicity-r2 tracked_by=derio-net/super-fr#1727 -->
+### l-simplicity-r2-resolved-2 · finding [deferred → derio-net/super-fr#1727] · resolves l-simplicity-r2: journal_entries is a generic reader housed in plan_review; four modules hand-roll the same read
+
+Filed as #1727: move journal_entries to fr.journal and adopt it in the hand-rolled readers.
