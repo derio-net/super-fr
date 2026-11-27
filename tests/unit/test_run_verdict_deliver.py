@@ -453,7 +453,7 @@ def _fragment(
 def _local_cases() -> list[Case]:
     from fr.acceptance.model import AcceptanceError
 
-    args = lambda t: (t, "spec", "suite.log")  # noqa: E731
+    args = lambda t: (ROOT, "spec", "suite.log")  # noqa: E731
 
     def frag(**kw: Any) -> Any:
         return lambda mp, m, t: _fragment(mp, m, t, **kw)
