@@ -21,6 +21,7 @@ from fr.record import apply as engine
 from fr.record.model import RECORD_SCHEMA_VERSION, JournalItem, StepRecord, parse_record
 from pydantic import ValidationError
 
+from tests.unit.record_helpers import write_record as write_record_text
 from tests.unit.record_support import (
     RUN,
     SLUG,
@@ -168,13 +169,6 @@ journal:
 """
 
 
-def _record_file(root: Path, text: str = _V11) -> Path:
-    path = root / "docs" / "superpowers" / "runs" / "r1.records" / "implement-phase__phase-1.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
-    return path
-
-
 def test_the_record_kind_is_at_version_twelve() -> None:
     assert RECORD_SCHEMA_VERSION == 12
     assert artifact_kind("record").current_version == 12
@@ -190,7 +184,7 @@ def test_the_record_chain_from_one_reaches_twelve_hop_by_hop() -> None:
 
 
 def test_a_v11_record_is_stamped_with_no_body_rewrite(tmp_path: Path) -> None:
-    path = _record_file(tmp_path)
+    path = write_record_text(tmp_path, _V11)
 
     report = run_migrations(tmp_path, dry_run=False)
 
@@ -205,7 +199,7 @@ def test_a_v11_record_carrying_a_lens_item_is_not_a_v11_record_and_is_left_alone
     """The hop reads with version 11's shape: no fr at record 11 knew `kind: lens`, so
     a v11 record carrying one is refused rather than certified by the live model."""
     text = _V11 + "  - {kind: lens, lens: security, title: why}\n"
-    path = _record_file(tmp_path, text)
+    path = write_record_text(tmp_path, text)
 
     report = run_migrations(tmp_path, dry_run=False)
 
@@ -215,7 +209,7 @@ def test_a_v11_record_carrying_a_lens_item_is_not_a_v11_record_and_is_left_alone
 
 def test_an_unreadable_v11_record_is_refused_and_left_alone(tmp_path: Path) -> None:
     bad = _V11.replace("outcome: done", "outcome: done\nnot_a_field: 1")
-    path = _record_file(tmp_path, bad)
+    path = write_record_text(tmp_path, bad)
 
     report = run_migrations(tmp_path, dry_run=False)
 
@@ -227,7 +221,7 @@ def test_the_validator_accepts_a_lens_item(tmp_path: Path) -> None:
     data = yaml.safe_load(_V11)
     data["schema_version"] = 12
     data["journal"].append(LENS_ITEM)
-    path = _record_file(tmp_path, yaml.safe_dump(data))
+    path = write_record_text(tmp_path, yaml.safe_dump(data))
     assert artifact_kind("record").validate(path) == []
 
 

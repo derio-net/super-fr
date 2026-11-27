@@ -21,7 +21,6 @@ closed state back to `open`.
 
 from __future__ import annotations
 
-import datetime as _dt
 import re
 import statistics
 from collections.abc import Iterable, Mapping
@@ -42,6 +41,7 @@ from fr.run.cost import effective_entries, load_run_usage, plus_figure, summariz
 from fr.run.model import archived_run_path, run_path
 from fr.usage.file import Figure, UsageFile, UsageFileError
 from fr.usage.split import MAIN, SUBAGENT
+from fr.utc_time import parse_as_utc
 
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:\d{2})?)?$")
 _PHASE_KEY = re.compile(r"^phase/(\d+)(/|$)")
@@ -170,24 +170,16 @@ def _all_runs(repo: Path) -> dict[str, str | None]:
     return found
 
 
-def _instant(text: str) -> _dt.datetime | None:
-    try:
-        at = _dt.datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return at if at.tzinfo else at.replace(tzinfo=_dt.UTC)
-
-
 def select_runs(repo: Path, selector: str, *, before: bool) -> list[str]:
     """An ISO date or timestamp (a bare date is midnight UTC) selects runs
     started before it (`before=True`) or at or after it; a run id selects that
     one run. Sorted by run id."""
     runs = _all_runs(repo)
-    cut = _instant(selector) if _DATE.match(selector) else None
+    cut = parse_as_utc(selector) if _DATE.match(selector) else None
     if cut is not None:
         picked = []
         for run, started in runs.items():
-            at = _instant(started) if started else None
+            at = parse_as_utc(started) if started else None
             if at is not None and (at < cut if before else at >= cut):
                 picked.append(run)
         return sorted(picked)

@@ -20,17 +20,14 @@ from tests.unit.gatebackfill_fixtures import (
     make_repo,
     publish,
 )
+from tests.unit.hermetic_git import hermetic_git  # noqa: F401
 from tests.unit.test_merge_evidence import _write_plan
+
+pytestmark = pytest.mark.usefixtures("hermetic_git")
 
 PLAN = "2026-10-20-ops"
 KEY = f"plan:{PLAN}#p1"
 REF = "origin/main"
-
-
-@pytest.fixture(autouse=True)
-def _hermetic_git(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
 
 
 def _cand(**kw: object) -> Candidate:

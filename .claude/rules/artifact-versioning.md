@@ -259,7 +259,7 @@ patch the file by hand.
 - A **duplicate YAML key** in any of the three YAML-carried kinds fails
   `fr validate artifacts`. PyYAML keeps the last occurrence silently, which is
   how `docs/acceptance/matrix.yaml` lost a test ref that nothing reported
-  missing; `fr.artifacts.structure._StrictLoader` is the detector.
+  missing; `fr.yamlio.StrictLoader` is the detector.
 
 ## What this rule does not cover
 

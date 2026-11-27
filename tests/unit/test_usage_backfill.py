@@ -361,3 +361,39 @@ def test_a_staged_but_unedited_usage_file_is_refreshed_and_a_worktree_edit_is_sk
     target.write_bytes(staged)
     report = refresh_archived(repo, os.environ, skip=skip, max_age_days=30)
     assert report.refreshed == [target] and report.dirty == []
+
+
+@pytest.mark.parametrize(
+    ("captured_at", "worth"),
+    [
+        ("not a time", True),  # unreadable: worth reading
+        ("2000-01-01T00:00:00", False),  # naive and old, read as UTC: out of the bound
+        ("NOW-NAIVE", True),  # naive and recent, read as UTC: inside the bound
+        ("2000-01-01T00:00:00Z", False),
+    ],
+)
+def test_worth_reading_reads_captured_at_naive_as_utc(
+    repo: Path, tmp_path: Path, captured_at: str, worth: bool
+) -> None:
+    import datetime as _dt
+    import os
+
+    from fr.usage.backfill import _worth_reading
+    from fr.usage.capture import this_host
+
+    _unpriced_then_exited(repo, tmp_path)
+    usage = load_usage(archived_usage_path(repo, "2026-09-21-feat-new"))
+    assert usage is not None
+    mine = usage.host(this_host(usage.run, os.environ))
+    assert mine is not None
+    if captured_at == "NOW-NAIVE":
+        captured_at = _dt.datetime.now(_dt.UTC).replace(tzinfo=None).isoformat()
+    moved = usage.model_copy(
+        update={
+            "captures": tuple(
+                c.model_copy(update={"captured_at": captured_at}) if c is mine else c
+                for c in usage.captures
+            )
+        }
+    )
+    assert _worth_reading(moved, os.environ, 1) is worth
