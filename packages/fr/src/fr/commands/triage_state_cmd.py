@@ -3,8 +3,10 @@
 The same scope options as every `fr triage` verb. `<dir>/<scope>/` is the repo-side
 root: `export --to <dir>` writes it, `import --from <dir>` reads it. Both print every
 file they copied and every file they skipped. Neither reads or writes a registered
-artifact, so `triage` stays in `READ_ONLY_COMMANDS`. Exit codes: 0 success; 2 usage, or a
-repo-side root that is a symlink or leaves the given directory (nothing is read or written).
+artifact, so `triage` stays in `READ_ONLY_COMMANDS`. Exit codes: 0 success; 2 usage, a
+repo-side root that is a symlink or leaves the given directory, an export over a file changed
+in the repo since the last export or over a bad record (spec 2026-11-27-export-drift R3), or
+an `--only` path that is not plain or names no durable file (R5): nothing is read or written.
 """
 
 from __future__ import annotations
@@ -72,6 +74,13 @@ def export_command(
             "exported <dir>/<scope>/, and stamp it as this scope's from now on.",
         ),
     ] = False,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            help="Overwrite files changed in the repo since the last export, and a bad record.",
+        ),
+    ] = False,
     repo: RepoOpt = None,
     org: OrgOpt = None,
     dir_override: DirOpt = None,
@@ -79,7 +88,9 @@ def export_command(
 ) -> None:
     """Copy the scope's durable state to <dir>/<scope>/. Facts and pages never travel.
     With a state repo, the privacy guard runs first (cloud-triage R8). Refused when
-    another scope id exported that directory, unless --take-over (gh#1101)."""
+    another scope id exported that directory, unless --take-over (gh#1101), and when a
+    file there changed in the repo since the last export (its record, exported-files),
+    unless --force: import that file first to keep the repo's edit."""
     scope = triage_cmd._scope(repo, org)
     target = resolve_state_dir(scope, dir_override, workspace)
     try:
@@ -88,7 +99,12 @@ def export_command(
             client = triage_cmd.make_visibility_client()
             guard_state(target, scope=scope, state_repo=state_repo, client_for=lambda _r: client)
         report = export_state(
-            target, to, check_scope_name(scope.name), owner=scope_id(scope), take_over=take_over
+            target,
+            to,
+            check_scope_name(scope.name),
+            owner=scope_id(scope),
+            take_over=take_over,
+            force=force,
         )
     except TriageError as exc:
         _refuse(exc)

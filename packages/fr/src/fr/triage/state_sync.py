@@ -50,9 +50,10 @@ import filecmp
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import stat
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
@@ -84,6 +85,49 @@ _RECORD_SCHEMA = 1
 
 class BadRecord(TriageError):  # noqa: N818 - a refusal, beside TriageError
     """The repo-side record is a symlink, not a regular file, or does not parse (R3)."""
+
+
+class Drift(NamedTuple):
+    """A durable path the repo changed since the last export (R2)."""
+
+    path: str  # POSIX, relative to the repo-side root
+    kind: str  # changed | deleted | added
+
+
+def drift_text(
+    drift: Sequence[Drift],
+    *,
+    import_argv: Sequence[str],
+    force_argv: Sequence[str],
+    at: str | None = None,
+) -> str:
+    """The one operator text for *drift* (R3, R4): the paths with their kinds, then the
+    import that keeps the repo's edit (one `--only` per path, *import_argv* first) and the
+    forced export that keeps the state's; *at*, a default-branch sha the checkout must be at
+    or after. Every argument is shell-quoted. One line, so a Need row can carry it."""
+    listed = ", ".join(f"{d.kind} {shlex.quote(d.path)}" for d in drift)
+    only = [arg for d in drift for arg in ("--only", d.path)]
+    where = "in a checkout of the default branch" + (f" at or after {at}" if at else "")
+    return (
+        f"changed in the repo since the last export: {listed}. To keep the repo's edit, run "
+        f"`{shlex.join([*import_argv, *only])}` {where}, then export again; to keep the "
+        f"state's version, run `{shlex.join(force_argv)}`, which overwrites them"
+    )
+
+
+class ExportDrift(TriageError):  # noqa: N818 - a refusal, beside TriageError
+    """An export that would overwrite a repo-side edit, refused before any write (R3)."""
+
+    def __init__(self, drift: tuple[Drift, ...], *, base: Path, root: Path) -> None:
+        self.drift = drift
+        super().__init__(
+            f"{root} was "
+            + drift_text(
+                drift,
+                import_argv=["fr", "triage", "state", "import", "--from", str(base)],
+                force_argv=["fr", "triage", "state", "export", "--to", str(base), "--force"],
+            )
+        )
 
 
 class Skipped(NamedTuple):
@@ -299,6 +343,34 @@ def read_record(root: Path) -> dict[str, str] | None:
     return dict(files)
 
 
+def find_drift(state_dir: Path, root: Path, record: Mapping[str, str]) -> tuple[Drift, ...]:
+    """Every durable path whose repo copy differs from the state's and that the repo
+    changed (the record names another sha256), deleted (the record names it, the state
+    has it) or added (the record does not name it) since the export *record* describes
+    (R2). A symlink on either side, or under one in the repo, is left out: the copy skips
+    it and reports it."""
+    state, repo = dict(durable_entries(state_dir)), dict(durable_entries(root))
+    out: list[Drift] = []
+    for rel in sorted({*state, *repo, *record}):
+        if state.get(rel) or repo.get(rel) or _symlinked_dest(root, rel):
+            continue
+        if _symlinked_dest(state_dir, rel):
+            continue
+        mine, theirs = _hash(root, rel), _hash(state_dir, rel)
+        if mine == theirs:
+            continue
+        known = record.get(rel)
+        if known is None:
+            kind = "added" if mine is not None else None
+        elif mine is None:
+            kind = "deleted" if theirs is not None else None
+        else:
+            kind = "changed" if mine != known else None
+        if kind is not None:
+            out.append(Drift(rel, kind))
+    return tuple(out)
+
+
 def _copy(src: Path, dest: Path, rel: str) -> str | None:
     """Copy `src/rel` to `dest/rel` from descriptors, keeping the source's mode and
     times as `shutil.copy2` did; the skip reason when a component is a symlink by the
@@ -435,9 +507,14 @@ def export_state(
     """Copy *state_dir*'s durable state into the repo-side root `contained(base, rel)`
     (`<dir>/<scope>/`), overwriting what is there, stamp it with *owner*, the exporting
     scope's id, and write the record of what it left equal to the state (R1). Refused
-    before a byte moves when another scope id stamped the root, unless *take_over*."""
+    before a byte moves when another scope id stamped the root, unless *take_over*, and,
+    unless *force*, when the record is bad (`BadRecord`) or the repo changed a file since
+    it was written (`ExportDrift`, R2, R3)."""
     root = contained(base, rel)
     restamp = _stamp(root, owner, take_over=take_over)
+    if not force and (record := read_record(root)) is not None:
+        if drift := find_drift(state_dir, root, record):
+            raise ExportDrift(drift, base=base, root=root)
     report = _sync(state_dir, root, keep_newer=False)
     copied = list(report.copied)
     if restamp:
