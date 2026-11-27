@@ -594,6 +594,49 @@ def test_a_label_on_a_head_with_a_real_conflict_waits() -> None:
     assert said == ["approval of PR #7 at H not recorded: waits for a conflict-free head"]
 
 
+def test_a_wait_is_said_each_call_by_default_and_once_per_set_the_driver_keeps(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r3: the default is a fresh set per call (nothing process-global), and the driver
+    passes one set of its own to every pass, so a head's wait is said once per driver."""
+    from fr.commands import triage_batch_cmd
+
+    from tests.unit.triage_board_fixtures import DELIVERED, dispatch, facts, issue, j, judgements
+    from tests.unit.triage_board_fixtures import REPO as BOARD_REPO
+    from tests.unit.triage_board_fixtures import batch as mk_batch
+    from tests.unit.triage_board_fixtures import pr as mk_pr
+
+    conflicting = {"state": "OPEN", "head_oid": "H", "labels": [LABEL], "mergeable": "CONFLICTING"}
+    batch = _batch(_conflict("H"))
+    line = "approval of PR #7 at H not recorded: waits for a conflict-free head"
+    said: list[str] = []
+    for _ in range(2):
+        settle_approvals(_Lifecycle(conflicting), lambda b, e: None, REPO, [(batch, 7)],
+                         said.append, now=NOW)  # fmt: skip
+    assert said == [line, line]
+
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(BOARD_REPO, None), tmp_path, named=None, checkouts={},
+        max_inflight=4, yes=True,
+    )  # fmt: skip
+    sets: list[object] = []
+
+    def fake_settle(*args: Any, said: Any = None, **kw: Any) -> dict[str, Any]:
+        sets.append(said)
+        return {}
+
+    monkeypatch.setattr(triage_batch_cmd, "settle_approvals", fake_settle)
+    monkeypatch.setattr(triage_batch_cmd, "ensure_approval_label", lambda *a, **k: None)
+    monkeypatch.setattr(driver, "client", lambda facts, repo: object())
+    monkeypatch.setattr(driver, "_patch_id_of", lambda facts, repo: None)
+    f = facts([issue(1, prs=[mk_pr(11, "feat/batch-a", **DELIVERED)])], schema=12)
+    jd = judgements({"widgets#1": j(1)}, [mk_batch("a", [1], events=[dispatch("a")])])
+    driver._label_seen = set()
+    for _ in range(2):
+        driver._settle_approvals(f, jd)
+    assert len(sets) == 2 and sets[0] is sets[1] is driver._waiting_said
+
+
 @pytest.mark.parametrize(
     ("view", "events"),
     [

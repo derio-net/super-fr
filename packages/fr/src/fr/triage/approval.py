@@ -299,11 +299,12 @@ def settle_approvals(
     approval is never read again, even while the forge still reads it open (R12, R35).
 
     A live approval whose label is gone is ended (queue-followups R1); a first label on a
-    head with a real conflict waits (R2), said once per head per *said* (default: this
-    process); a void's label removal is explained on the PR (R3) and its PR number added to
-    *removed*: an ended approval is no label fr removed, so it is never in it."""
+    head with a real conflict waits (R2), said once per head per *said* (default: a fresh
+    set, so once per call; the driver passes one it keeps across passes); a void's label
+    removal is explained on the PR (R3) and its PR number added to *removed*: an ended
+    approval is no label fr removed, so it is never in it."""
     out: dict[str, ApprovalVerdict] = {}
-    said = _WAITING_SAID if said is None else said
+    said = set() if said is None else said
     for batch, number in batches:
         if batch.id in landed:
             continue
@@ -380,10 +381,6 @@ def settle_approvals(
                 verdict = Unlabelled()
         out[batch.id] = verdict
     return out
-
-
-_WAITING_SAID: set[tuple[str, int, str]] = set()
-"""The `(repo, PR, head)` whose wait `settle_approvals` said in this process (R2: once)."""
 
 
 def _ended(events: Sequence[BatchEvent], pr: int, view: Mapping[str, Any]) -> ApprovalEvent | None:

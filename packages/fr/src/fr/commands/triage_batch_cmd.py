@@ -4228,6 +4228,7 @@ class _Driver:
         # pass, so a wave already finished at start is never reported (R10).
         self._unfinished: frozenset[str] | None = None
         self._observed_last = False  # the one extra pass `observation_owed` grants
+        self._waiting_said: set[tuple[str, int, str]] = set()  # R2: a wait said once
         self._export_refusals = 0  # per pass: owed exports refused before any write
         self._after_lines: list[str] = []  # output lines owed after the current action's
         self._export_failures = 0  # per pass: export writes that failed, retried (gh#1025)
@@ -5609,6 +5610,7 @@ class _Driver:
                 settle_approvals(
                     client, record, repo, open_prs, _say, now=_now(),
                     patch_id_of=self._patch_id_of(facts, repo), landed=landed, removed=removed,
+                    said=self._waiting_said,
                 )  # fmt: skip
                 voided |= {(repo, n) for n in removed}
         except FORGE_ERRORS as exc:

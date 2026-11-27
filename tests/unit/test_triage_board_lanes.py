@@ -125,6 +125,20 @@ def test_deliver_done_and_approved_stays_pr_open() -> None:
     assert _col(f, jd) == "pr-open"
 
 
+def test_deliver_done_labelled_and_waiting_on_a_real_conflict_is_no_reviewer_lane() -> None:
+    """queue-followups R2 (p2-r2): the label is on but waits for a conflict-free head; the
+    reviewer has nothing to do, so the card is in no lane."""
+    conflict = {"kind": "conflict", "at": "2026-10-01T12:00:00Z", "head": "sha-11",
+                "paths": ["a.py"], "delivered": "session"}  # fmt: skip
+    f, _ = _open(_cursor("deliver-done", "deliver"), labels=["approved-fr"],
+                 mergeable="CONFLICTING")  # fmt: skip
+    jd = judgements(
+        {"widgets#1": j(1)}, [mk_batch("a", [1], events=[dispatch("a"), conflict])], schema=9
+    )
+    assert lane_of(jd.batches[0], f) is None
+    assert _col(f, jd) not in LANES
+
+
 def test_a_cursor_mid_run_is_pr_open_and_an_unknown_cursor_too() -> None:
     assert _col(*_open(_cursor("none"))) == "pr-open"
     assert _col(*_open(None)) == "pr-open"
