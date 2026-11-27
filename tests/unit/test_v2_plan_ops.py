@@ -722,7 +722,8 @@ def test_yaml_dump_coerces_step_text_to_literal_block(tmp_path):
     being re-imposed on every write.
     """
     import yaml
-    from fr.plan_ops import _yaml_dump, tick
+    from fr._plan_io import _yaml_dump
+    from fr.plan_ops import tick
 
     fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
     dest = tmp_path / "v2_plan_minimal"

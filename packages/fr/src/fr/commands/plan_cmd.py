@@ -15,14 +15,9 @@ from fr.commands.common import require_migrated_layout
 from fr.journal.model import journal_path
 from fr.parser import Plan, PlanSchemaError
 from fr.plan_errors import PlanEditError
-from fr.plan_ops import (
-    PhaseSpec,
-    create,
-    rework_add_origin,
-    rework_create,
-    rework_list,
-)
+from fr.plan_ops import PhaseSpec, create
 from fr.plan_review import self_review
+from fr.plan_rework import rework_add_origin, rework_create, rework_list
 from fr.plan_validator_wrapper import validator_wrapper_path
 from fr.records_commit import commit_records
 from fr.version_floor import CEILING_VERSION, PRE_4_20_PROBES, PRE_4_PROBES, admits_below
