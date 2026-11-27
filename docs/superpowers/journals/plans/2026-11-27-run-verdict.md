@@ -203,3 +203,8 @@ a capture task: fixtures and a test, nothing pre-existing to clean
 ### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
 
 a verbatim move that must keep its bytes; the only cleanup (imports left unused in run_cmd, the re-pointed tests) was done in the green step
+
+<!-- fr:journal kind=review scope=plan id=review-p4-1 created=2026-11-27T23:04:36+00:00 phase=4 -->
+### review-p4-1 · review · phase 4 reviewed by an independent reviewer; no findings (phase 4)
+
+Reviewer compared every moved function and constant in fr/run/brief.py with the pre-move run_cmd by an AST script: differences are only the underscore renames, docstring names, repo_root for resolve_repo_root(), a threaded warn, and RunRefusal for typer.Exit(2). Every Say keeps text and kwargs; lens_set_or_refuse keeps its cause; brief dicts identical in key order and values; every repo_root caller passes a root it held; every refusing call sits in _refusals(); the binding guard and its helpers and _print_member_dispatch stay; layering clean; no stale old names in packages, tests, plugins, scripts, docs, AGENTS.md or the mirrors; capture test has no pre-move driver or alias shim; budget +20; docs current; 34 focused tests pass. No findings raised.
