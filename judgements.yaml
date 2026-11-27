@@ -12589,6 +12589,10 @@ batches:
     run: 2026-11-27-feat-batch-export-drift
     archive: chore/closeout-2026-11-27-2
     archived: 1744
+  - kind: claims_released
+    at: '2026-11-27T19:11:30.399287Z'
+    keys:
+    - super-fr#1667
 - id: arch-shared-helpers
   title: '#1318: shared duplicate-key YAML detector, record placement and hermetic-git fixtures, small
     duplicate readers'
