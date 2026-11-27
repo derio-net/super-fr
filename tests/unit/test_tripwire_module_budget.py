@@ -31,7 +31,8 @@ BUDGETS: dict[str, int] = {
     f"{SRC}isolation/local.py": 2125,
     # #1518 split self-review, the spec table, rework and the refactor-gate read out.
     f"{SRC}plan_ops.py": 700,
-    f"{SRC}triage/batch_drive.py": 2275,
+    # #1516 split the value types, the wave-export leaf and the hand-back decisions out.
+    f"{SRC}triage/batch_drive.py": 1900,
 }
 
 HELD: frozenset[str] = frozenset(
