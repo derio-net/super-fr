@@ -30,7 +30,10 @@ rows:
     origin:
     - spec:2026-11-27-run-write-ledger#R3
     - spec:2026-11-27-run-write-ledger#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_durability.py#test_the_cli_refuses_a_lost_update_with_exit_2_and_keeps_the_other_write
+    status: ci
+    notes: the CLI wrapper still refuses a lost cursor update with exit 2 after the
+      ledger move
     verify: none
