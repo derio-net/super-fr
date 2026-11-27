@@ -1,0 +1,111 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Approval lifecycle — ended labels, waiting on real conflicts, void comments
+    (R1-R3)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - queue-approval-label-lifecycle
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/approval.py
+  - packages/fr/src/fr/triage/operator_entries.py
+  - packages/fr/src/fr/triage/readiness.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/*
+  - docs/explainers/fr-wave-driver.md
+  - docs/explainers/fr-triage.md
+  - docs/explainers/index.md
+  - docs/herdr-control-sessions.md
+  - docs/reference/cli.md
+  - docs/acceptance/features/2026-11-27-queue-followups.yaml
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: R1 — an approval whose label is gone is ended
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_triage_approval.py: (a) events = [ApprovalEvent(head=A, patch_id=p)], pr_view labels [] at head B → `settle_approvals` writes one ApprovalEvent(head=A, voided_at=B, patch_id=p), calls no `edit_issue_labels` and no comment, says `ended: label removed`; then labels [approved-fr] at head C → `First`, an approval recorded at C (patch-id of C). (b) `labels=None` ends nothing. (c) the same for `settle_entry_approval`. (d) dry_run says `would end` and writes nothing. Run: fails.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: in both settle functions, before the verdict branches, when `view.get("labels") is not None`, `APPROVED_FR.name not in labels` and `_live_approval(...)` is not None: write the ended event (dry_run: say `would end approval of PR #n at <A>: label removed`), say `approval of PR #n at <A[:12]> ended: label removed`, record `Unlabelled`. In triage_batch_cmd `_settle_approvals` (:5595) count into `voided` only PRs whose label fr removed: have `settle_approvals` return or report the removed set (e.g. a `removed: set[int]` out-parameter or a field on its return), not every event with `voided_at`. Run the approval tests and tests/unit/test_merge_train_approval.py: green.
+- number: 2
+  title: R2 — Waiting on a head with a real conflict
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: test_triage_approval.py: `approval_verdict(events=[], pr, head=H, labels=[approved-fr], waits=True)` is `Waiting(H, "waits for a conflict-free head")` and `is_approved` is False; `settle_approvals` with pr_view mergeable CONFLICTING at H and a batch ConflictEvent(head=H) records nothing and says it once per head (a second call in the same process says nothing); with mergeable CONFLICTING and no ConflictEvent at H → First recorded; mergeable UNKNOWN with a ConflictEvent → First; then the same PR at head H2 mergeable MERGEABLE → First recorded at H2. `settle_entry_approval` never waits. tests/unit/test_triage_readiness.py: the approval fact for Waiting reads `approved, waits for a conflict-free head`. A `needs_you` test (tests/unit/test_merge_train_label_board.py): a green Waiting PR gets no `approve-pr` Need. Run: fails.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: add `@dataclass(frozen=True) class Waiting: head: str; why: str` to approval.py and to `ApprovalVerdict`; update the module docstring's rule. `approval_verdict(..., waits: bool = False)`: label on, no live approval, `waits` → Waiting. `judge_approval` takes and passes `waits`. `settle_approvals` computes `waits = conflicting(view.get("mergeable"), view.get("merge_state")) and any(isinstance(e, ConflictEvent) and e.head == head for e in batch.events)`; a Waiting verdict is said once per (repo, pr, head) per process (a module-level or caller-held set; prefer a `said: set` parameter defaulting to a fresh set, with the drive passing a long-lived one). readiness `_approval_fact` and `_voided_sha` handle Waiting (no void); views.needs_you skips Waiting for approve-pr. Run approval, readiness and board tests: green.
+- number: 3
+  title: R1 wording — an ended approval is not a push-void on the board
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: board test: after an ended event recorded with the label removed at the approved head (ApprovalEvent head=A, voided_at=A) the approve-pr Need reads `PR #n: approval ended (label removed): label it approved-fr to merge`; after a push-void (voided_at B != A) it keeps `changed since you approved it at A: re-label to merge`. Readiness: the ended case's fact does not say `voided by a push`. Run: fails.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: add `approval.ended_by_label(events, pr) -> bool` (last approval event voided with `voided_at == head`) and use it in views.needs_you and readiness `_approval_fact` (fact `ended: label removed`). Note: the ended event of R1 stores `voided_at` = live head, so it reads as ended only when the head did not move; a label removed after a push reads as a push-void, which is also true. State that in the helper's docstring. Run: green.
+- number: 4
+  title: R3 — every removal posts its reason once
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: test_triage_approval.py with a fake client recording calls: a Void in `settle_approvals` removes the label, records the void, then posts one comment whose body starts `<!-- fr-queue:approval-voided head=<live head> -->` and names the reason and `label it approved-fr again`; a trusted existing marker for that head suppresses the post; a comments-off policy (`client_policy(...).block("comments")` returns a reason) posts nothing; an unreadable policy posts nothing; `comment_pr` raising is a said warning and the void stays recorded. Same for `settle_entry_approval`. Run: fails.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: move `_comments_off` from operator_entries.py (:309) to approval.py beside `_labels_off` and re-export it from operator_entries. Add `VOID_MARKER_PREFIX = "<!-- fr-queue:approval-voided"`, its regex, and `void_comment(client, repo, number, head, why, say)`: return when `_comments_off`; read `client.list_issue_comments(repo, number)` and return when `_trusted_markers` finds one for `head` (wrap the read; a failure is a warning and posts nothing); else `client.comment_pr(repo, number, body)` with body `<marker>\n**Merge queue:** approval voided: <why>. Review the new head and label it approved-fr again.`; any exception → `say("warning: ...")`. Call it after each void's event is recorded. Check the client method names against real_ghclient.py and the fakes used by tests. Run: green.
+- number: 5
+  title: Docs, rows and refactor
+  steps:
+  - id: P2.T5.S1
+    text: |-
+      REFACTOR + docs: in docs/explainers/fr-wave-driver.md add a short plain-language paragraph where approvals and close-outs are described: a removed label ends the approval; a label on a head with a real conflict waits and is recorded once the conflict is fixed; fr says on the PR why it removed a label; a queued wave's one close-out starts once every landing's post_merge succeeded, without waiting for a release. Prepend a dated `reviewed` note on that page and stamp fr-triage.md, index.md, herdr-control-sessions.md and reference/cli.md `2026-11-27 still true after queue-followups (...)` as each still holds. Run `uv run fr docs check` until clean. Move `queue-approval-label-lifecycle` to `ci` with its test refs. Run ruff format, ruff check, mypy, then the repo's fast tier last.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

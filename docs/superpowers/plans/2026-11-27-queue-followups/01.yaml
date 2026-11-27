@@ -1,0 +1,128 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Driver close-out timing, conflict probe classification and repo-name case
+    (R4-R8)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - wave-overlap-repo-case
+  - conflict-probe-matches-queue-resolution
+  - queue-closeout-due-at-landing
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/plan_overlap.py
+  - packages/fr/src/fr/triage/batch_merge.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/probe.py
+  - packages/fr/src/fr/triage/pacing.py
+  - packages/fr/src/fr/triage/pacing_state.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/*
+  - docs/acceptance/features/2026-11-27-queue-followups.yaml
+  - .changes/feat-batch-queue-followups.yaml
+  estimate_lines: 650
+tasks:
+- number: 1
+  title: Smoke and R8 — overlaps compares repos case-insensitively
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_triage_plan_overlap.py add `test_overlaps_compares_repo_names_case_insensitively`: two `Entry` values whose `repo` is `derio-net/super-fr` and `Derio-Net/Super-FR`, sharing one literal path, no `after` link; assert `overlaps([...], ignore=())` returns one `Overlap`. Run `uv run pytest tests/unit/test_triage_plan_overlap.py -q --no-cov`: the new test fails.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/triage/plan_overlap.py `overlaps` (:201) compare `a.repo.lower() != b.repo.lower()`. Add `.changes/feat-batch-queue-followups.yaml` with `bump: patch` and `summary: The wave merge queue ends an approval whose label was removed, holds an approval on a really conflicting head until it is fixed, says why it removed a label, starts a queued wave's one close-out at once, and the conflict probe skips conflicts the queue resolves.` Re-run the test: green. Commit and push (`uv run fr push`) so CI runs on a trivial change first.
+- number: 2
+  title: R4 — the conflict probe classifies like the queue's build
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_triage_drive_conflict_probe.py (or a new tests/unit/test_trial_conflicts_regen.py) build a real scratch git repo with `git init` in tmp_path: main and a PR branch that both edit (a) one Markdown page's front-matter `reviewed: <date> ...` line, (b) a file matching a `generated:` glob, (c) a plain source line. Call `batch_merge.trial_conflicts(Checkout(repo), "main", None, pr_head, scratch_root=tmp_path/"probe", generated=("gen/*",), mirrors=True)` and assert only the plain source path is returned; with `mirrors=False` assert the generated path is returned too and the stamp path is not. Run it: fails (unknown keyword).
+  - id: P1.T2.S2
+    text: |-
+      GREEN: extend `WorktreeSeam` (batch_merge.py:57) with `unmerged_stages()` and `read(path)`. `trial_conflicts` takes `generated: Sequence[str] = ()`, `mirrors: bool = False`. After `merge_main`, when `refused` is non-empty, run `regen.classify_conflicts(refused, generated, read, stages)`, where `read` returns None on OSError/UnicodeDecodeError and `stages` swaps 2 and 3 in `wt.unmerged_stages()`'s mapping for that path (the probe's ours is the PR head; the combination's side is main). Return `[*kinds.real, *([] if mirrors else [*kinds.whole, *kinds.regenerate])]`, in the order the paths came. Keep the abort and cleanup as they are. At triage_batch_cmd.py:6442 pass `generated=facts.config_for(repo).generated` and `mirrors=bool(facts.config_for(repo).mirrors)`; include both in the `_probed` cache key. Fix any fake `WorktreeSeam` in tests. Run the probe tests: green.
+- number: 3
+  title: R5 — a queue-landed batch is due at once
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: in tests/unit/test_triage_batch_drive.py add `test_closeout_due_queued_is_due_at_once` (`closeout_due(released=False, merged_at=now, now=now, queued=True)` is True; `queued=False` is False) and `test_drive_pass_queue_landed_batch_closes_out_without_fallback`: a Snapshot with one landed batch of a wave, `merged_at` one minute before `now`, a `post_merge` event, and a `QueueRecord` for its repo whose `queue_land` names it; assert `drive_pass` plans a `closeout` action. Add the same for the command's due list in tests/unit/test_triage_batch_drive_cmd.py if a harness exists there for `closeout_due` at :4640. Run: fails.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: `closeout_due(*, released, merged_at, now, queued=False)` returns True when `queued`. In `drive_pass` compute, once per repo, `wave_queue.queue_landed(r for r in snap.queue_records if r.repo == repo)` and pass `queued=batch.id in that set`. At triage_batch_cmd.py:4640 pass `queued=b.id in queue_landed(r for r in judgements.queues if r.repo == repo)` (check the records' repo attribute name; reuse the set the command already builds at :5587 if it is in scope). Update `closeout_due`'s docstring: a queue landing waits for no release (the hold blocks one) and the same value also starts `post_merge`. Run the drive tests: green.
+- number: 4
+  title: R6 — one collected close-out per wave, held with a named Need
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: test_triage_batch_drive.py `test_wave_closeout_waits_for_every_member_due`: a wave with two landed ungated batches, neither queue-landed, one merged 11 minutes ago and one 2 minutes ago, both with `post_merge` recorded. Assert `drive_pass` starts no close-out and emits one `held` action naming the not-due batch; at `now + 9 min` assert one collected close-out takes both. Add `test_wave_closeout_held_for_unverified_member` (one member in `snap.unverified`): no close-out, a `held` action names it. Run: fails.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: in `drive_pass`'s close-out loop (batch_drive.py ~:1823) keep `blocking: dict[(repo, wave), list[tuple[id, why]]]`. Append `(id, "unverified")` at the `snap.unverified` branch, `(id, "ledger unread")` at the `ledger_unknown` branch, and `(id, "not due")` where `not due` currently `continue`s (only for driven, ungated, hand-is-None members). Members not selected or held by `closeout_hold` add nothing. In the start loop (:1912), before `post_owed`, a key with blockers emits `Action("held", <first id>, "the wave's close-out waits for <id (why), ...>")` and `continue`s. Run all of tests/unit/test_triage_batch_drive.py: green (adjust no existing assertion without saying why in the record).
+- number: 5
+  title: R7 — a close-out deadline wakes a quiet paced pass
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests/unit/test_triage_pacing_state.py: `planned_at` round-trips through save/load; a `pacing.json` whose `planned_at` is `"garbage"` loads with `planned_at=None` and keeps its ETags and summary. tests/unit/test_triage_probe.py: `deadline_repos(facts, judgements, since, now)` returns a repo whose landed batch (no close-out event, not queue-landed) merged at `now - 10m30s` with `since = now - 1m`; not when `since = now - 20s`; returns it for `since=None`; returns it for a landed batch with no `merged_at`; never for a queue-landed batch. And `plan_pass(..., deadline={repo})` on a would-be quiet state is `partial` reading only that repo. Run: fails.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: `PacingState.planned_at: datetime | None = None`; add it to `_TIMES`; in `load` parse it on its own (a bad value is None, the rest kept). Add `probe.deadline_repos` (import `CLOSEOUT_FALLBACK`, `closeout_event`, `batch_repo`, `queue_landed` lazily if a cycle appears); landed means the batch's stage is one of `batch_drive.LANDED` as the facts give it (reuse whatever `closing_repos`/`_live_heads` use to read stages; read `merged_at` from the batch's PR in facts). `plan_pass` takes `deadline: set[str] | frozenset[str] = frozenset()` and unions it into `reading`. `Pacer.plan` (pacing.py:127) passes `deadline=probe.deadline_repos(facts, judgements, self.state.planned_at, now)`; the planned-pass save in pacing.py stamps `planned_at=now`. Run the pacing, probe and kanban pacing tests: green.
+- number: 6
+  title: Rows and refactor
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      REFACTOR: tidy the new code (no duplicate queue-landed computations between pass and command; docstrings name R4-R8 of spec 2026-11-27-queue-followups). Move rows `wave-overlap-repo-case`, `conflict-probe-matches-queue-resolution` and `queue-closeout-due-at-landing` to `ci` with level refs to the tests above (`fr acceptance set-status --id <row> --status ci --notes "<why>" --level unit=derio-net/super-fr:tests/unit/<file>.py#<test>` — or as `acceptance:` entries of the phase's step record). Run ruff format, ruff check, mypy on the touched packages, then the repo's fast tier last.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T6.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

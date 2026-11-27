@@ -149,3 +149,9 @@ needs a released build to show.
 - An approval already recorded and then voided by a hand-resolved conflict repair keeps
   R12's rule (l-security-r1 of the wave-merge-queue spec): its patch-id changed, so the
   operator approves again. R2 covers only an approval that was never recorded.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-27-queue-followups | `derio-net/super-fr` | `2026-11-27-queue-followups` | — |
