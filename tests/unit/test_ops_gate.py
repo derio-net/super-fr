@@ -181,6 +181,19 @@ class FakeTree:
             raise RuntimeError(self.push_error)
 
 
+def _write_edits(root: Path, edits: dict[str, str | None]) -> None:
+    for rel, text in edits.items():
+        target = root / rel
+        if text is None:
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink(missing_ok=True)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+
+
 class FakeHost:
     def __init__(self, tree: FakeTree, *, up: bool = False) -> None:
         self.tree = tree
@@ -200,6 +213,8 @@ class FakeHost:
         self.materialised: list[Path] = []
         # `fr ops status <id> --json`, scripted per op: each call pops (exit, rows | text)
         self.by_id: dict[str, list[tuple[int, Any]]] = {}
+        # what origin/<default> carries beyond the ops workspace: path -> text (None: absent)
+        self.default_edits: dict[str, str | None] = {}
 
     def materialise(self, ref: str, paths: Sequence[str]) -> Path:
         """*paths* as the PR head carries them: copied from the fake's own tree."""
@@ -215,6 +230,7 @@ class FakeHost:
             elif src.is_file():
                 (out / rel).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, out / rel)
+        _write_edits(out, self.default_edits)
         return out
 
     def changed_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
@@ -1471,3 +1487,133 @@ def test_stage_4_clears_the_reopened_ops(ops_root: Path) -> None:
     gate_mod.stage_4(gate)
     assert 4 in _host(ops_root).stages()
     assert _host(ops_root).reopened() == (frozenset(), frozenset())
+
+
+# -------------------------- ops-gate-truth R1–R6: stages 4–7 refresh the ops workspace
+
+FIXED_OPS = OPS.replace("phase: post-merge, check: 'false', apply: 'true',",
+                        "phase: post-merge, check: 'false', apply: 'echo fixed',")  # fmt: skip
+NEW_OP = "  - {id: extra, summary: n, phase: pre-merge, check: 'false', apply: 'true'}\n"
+
+
+def _drifted(ops_root: Path, *stages: int, ops: str | None = FIXED_OPS, spec: str | None = None,
+             confirms: Sequence[bool] = ()) -> tuple[Gate, FakeHost, FakeTree, FakePrompt]:  # fmt: skip
+    """A run with *stages* recorded whose default branch moved since stage 3: its ops
+    (*ops*) and/or its Test Plan (*spec*). A clean merge brings the change in."""
+    _record_stages(ops_root, *stages)
+    gate, host, tree, _, prompt, _ = _gate(
+        ops_root, up=True, forge=FakeForge(state="MERGED"), prompt=FakePrompt(confirms)
+    )
+    edits: dict[str, str | None] = {}
+    if ops is not None:
+        edits[f"{PLAN}/ops.yaml"] = ops
+    if spec is not None:
+        edits[SPEC] = spec
+    host.default_edits = edits
+    tree.on_merge = lambda: _write_edits(ops_root, edits)
+    return gate, host, tree, prompt
+
+
+def _refresh_q(prompt: FakePrompt) -> list[str]:
+    return [a for a in prompt.asked if a.startswith("REFRESH")]
+
+
+def test_no_drift_asks_nothing_merges_nothing_and_the_stage_acts(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, ops=None)
+    gate_mod.stage_4(gate)
+    assert _refresh_q(prompt) == [] and not [c for c in tree.calls if c[0] == "merge"]
+    assert ["fetch", "main"] in [a for a, _ in host.calls]
+    assert 4 in _host(ops_root).stages()
+    assert host.materialised and not any(p.exists() for p in host.materialised)
+
+
+def test_a_declined_refresh_fails_the_stage_and_changes_nothing(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, confirms=[False])
+    before = _host(ops_root).path.read_text()
+    with pytest.raises(gate_mod.StageFailed, match="declined"):
+        gate_mod.stage_4(gate)
+    assert [c[0] for c in tree.calls] == []  # no commit, no merge, no push
+    assert _host(ops_root).path.read_text() == before
+    assert not _post_applies(host)
+
+
+def test_a_confirmed_refresh_commits_merges_pushes_then_trusts_before_any_apply(
+    ops_root: Path,
+) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    order: list[str] = []
+    tree_fr, host_fr = tree.fr, host.fr
+
+    def tfr(args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
+        order.append(" ".join(args[:2]))
+        return tree_fr(args, terminal=terminal)
+
+    def hfr(args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
+        if "apply" in args:
+            order.append("ops apply")
+        return host_fr(args, terminal=terminal)
+
+    tree.fr, host.fr = tfr, hfr  # type: ignore[method-assign]
+    gate_mod.stage_4(gate)
+    kinds = [k for k, _ in tree.calls if k in ("commit", "merge", "push")]
+    assert kinds[:3] == ["commit", "merge", "push"]
+    assert tree.calls[[k for k, _ in tree.calls].index("merge")][1][0] == "origin/main"
+    assert order.index("ops trust") < order.index("ops apply")
+    assert _host(ops_root).pushed() == HEAD
+    (q,) = _refresh_q(prompt)
+    assert "changed: post" in q and "Test Plan" not in q
+
+
+def test_the_confirmation_names_every_op_and_a_changed_test_plan(ops_root: Path) -> None:
+    spec = (ops_root / SPEC).read_text().replace("walk the stage", "walk it twice")
+    ops = FIXED_OPS.replace("  - id: mut\n", NEW_OP + "  - id: mut\n").replace(
+        "  - {id: pre, summary: create the thing, phase: pre-merge, check: 'false', "
+        "apply: 'true'}\n", "")
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, ops=ops, spec=spec)
+    gate_mod.stage_4(gate)
+    (q,) = _refresh_q(prompt)
+    for part in ("added: extra", "removed: pre", "changed: post", "Test Plan changed",
+                 "origin/main"):  # fmt: skip
+        assert part in q, q
+
+
+def test_a_conflicting_refresh_names_the_paths_and_the_manual_merge(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    tree.merge_conflict = (f"{PLAN}/ops.yaml", "docs/x.md")
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_4(gate)
+    why = exc.value.why
+    assert f"{PLAN}/ops.yaml" in why and "docs/x.md" in why
+    assert f"git -C {ops_root} merge origin/main" in why
+    assert not [c for c in tree.calls if c[0] == "push"]
+    assert 4 not in _host(ops_root).stages()
+
+
+def test_a_refresh_at_stage_5_goes_back_to_stage_4_and_reapplies(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4)
+    record_op(ops_root, "p", op="post", result="done", phase="post-merge")
+    host.live["post"] = "DONE"
+    result = run(gate)
+    assert result.ok, result.why
+    assert result.ran == (4, 5, 6, 7, 8)
+    assert _post_applies(host) == [["fr", "ops", "apply", "post", "--plan", PLAN, "--yes"]]
+    assert _host(ops_root).reopened() == (frozenset(), frozenset())
+    assert len(_refresh_q(prompt)) == 1
+
+
+def test_a_test_plan_only_refresh_reopens_and_forgets_nothing(ops_root: Path) -> None:
+    spec = (ops_root / SPEC).read_text().replace("click the page", "click it twice")
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4, ops=None, spec=spec)
+    gate_mod.stage_5(gate)
+    assert len(_refresh_q(prompt)) == 1 and [k for k, _ in tree.calls if k == "merge"]
+    assert _host(ops_root).reopened() == (frozenset(), frozenset())
+    assert {1, 3, 4, 5} <= _host(ops_root).stages()
+
+
+def test_a_default_branch_without_the_plan_dir_is_refused(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, ops=None)
+    host.default_edits = {PLAN: None}
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_4(gate)
+    assert PLAN in exc.value.why and exc.value.code == 2
+    assert _refresh_q(prompt) == [] and not tree.calls

@@ -22,12 +22,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fr.ops.gate import StageFailed
+from fr.ops.gate import MergeConflict, Restart, StageFailed
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from fr.ops.gate import GateState
+    from fr.ops.gate import Gate, GateState, OpsTree
     from fr.ops.model import Op
     from fr.spec import Step
 
@@ -102,3 +102,87 @@ def closure_exclusions(state: GateState, at_head: set[str]) -> Callable[[str], s
     Only its live status, or evidence recorded after the refresh, closes it (R6)."""
     reopened, before = state.reopened()
     return lambda op_id: at_head | before if op_id in reopened else at_head
+
+
+def _question(d: Drift, ref: str, branch: str) -> str:
+    moved = [f"{what}: {', '.join(ids)}" for what, ids in
+             (("added", d.added), ("removed", d.removed), ("changed", d.changed)) if ids]  # fmt: skip
+    if d.test_plan:
+        moved.append("Test Plan changed")
+    return (
+        f"REFRESH {branch} from {ref}? The ops workspace is behind it ({'; '.join(moved)}). "
+        f"fr commits the workspace's records, merges {ref} with a merge commit (never a "
+        "rebase), pushes the ops branch, reopens the changed and added ops and asks for "
+        "trust again"
+    )
+
+
+def _entry_ids(tree: OpsTree, slug: str) -> set[str]:
+    """The ids of the entries the ops workspace's plan journal holds now."""
+    from fr.journal.model import JournalParseError, parse_journal, resolve_journal_read_path
+
+    path = resolve_journal_read_path(tree.path, "plan", slug)
+    try:
+        return {e.id for e in parse_journal(path.read_text())} if path.is_file() else set()
+    except (OSError, JournalParseError) as exc:  # never an empty `before`: a refusal
+        raise StageFailed(f"the plan journal {path} cannot be read: {exc}", code=2) from exc
+
+
+def _merge_by_hand(gate: Gate, tree: OpsTree, ref: str, paths: tuple[str, ...]) -> str:
+    where = tree.path
+    return (
+        f"merging {ref} into {gate.target.ops_branch} conflicts on {', '.join(paths)}; the "
+        "merge was aborted and nothing was pushed. Merge by hand, then re-run the stage: "
+        f"`git -C {where} merge {ref}`, resolve each path, `git -C {where} add <path>`, "
+        f"`git -C {where} commit --no-edit`, then `fr ops gate --run {gate.target.run.run} --yes`"
+    )
+
+
+def refresh(gate: Gate, tree: OpsTree, stage: int) -> None:
+    """Bring the ops workspace up to date with the default branch before stage *stage* acts
+    (R1–R6); says nothing when nothing moved. Raises `Restart` when a refresh after stage 4
+    reopened an op, so the run goes back to stage 4 and applies it again."""
+    import shutil
+
+    from fr.artifacts.paths import KIND_DIRS
+    from fr.ops.gate import _head_paths
+    from fr.requirements import run_spec
+
+    t = gate.target
+    gate.host.fetch(gate.default)
+    ref = f"origin/{gate.default}"
+    spec_rel = run_spec(t.run)
+    scratch = gate.host.materialise(ref, _head_paths(t, spec_rel or f"{KIND_DIRS['spec']}/"))
+    try:
+        d = drift(tree.path, scratch, t.plan_rel, spec_rel)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    if not d.differs:
+        return
+    if not gate.prompt.confirm(_question(d, ref, t.ops_branch)):  # asked under --yes too (R2)
+        raise StageFailed(f"bringing {t.ops_branch} up to date with {ref} declined; nothing done")
+    try:
+        tree.commit_paths(["docs"], f"chore(ops): {t.slug} records before merging {ref}")
+    except Exception as exc:  # noqa: BLE001 — git's own words
+        raise StageFailed(f"cannot commit the records on {t.ops_branch}: {exc}") from exc
+    # Reopened before the merge, so a conflict merged by hand still re-applies them (R6).
+    reopen = {*d.changed, *d.added}
+    if reopen:
+        ops, _ = gate.state.reopened()
+        gate.state.set_reopened(ops | reopen, _entry_ids(tree, t.slug))
+        if stage > 4:
+            gate.state.forget(4)
+    try:
+        tree.merge_commit(ref, f"chore(ops): merge {ref} into {t.ops_branch}")
+    except MergeConflict as exc:
+        raise StageFailed(_merge_by_hand(gate, tree, ref, exc.paths)) from exc
+    except Exception as exc:  # noqa: BLE001 — git's own words
+        raise StageFailed(f"cannot merge {ref} into {t.ops_branch}: {exc}") from exc
+    try:
+        gate.publish(tree)
+    except Exception as exc:  # noqa: BLE001 — git's own words
+        raise StageFailed(f"cannot push {t.ops_branch}: {exc}") from exc
+    gate.say(f"{t.ops_branch} brought up to date with {ref}")
+    gate.trust(tree)  # R4: the merged content, before any probe or apply
+    if reopen and stage > 4:
+        raise Restart(f"ops reopened ({', '.join(sorted(reopen))}); back to stage 4")

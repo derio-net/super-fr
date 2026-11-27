@@ -76,6 +76,15 @@ class StageFailed(Exception):  # noqa: N818 — a stage's stop, not a fault
 # --------------------------------------------------------------------------- ports
 
 
+class Restart(Exception):  # noqa: N818 — a signal to `run`, not a fault
+    """A stage forgot later stages (a refresh reopened ops): `run` goes back to the first
+    stage the host state does not record (spec 2026-11-27-ops-gate-truth R6)."""
+
+    def __init__(self, why: str) -> None:
+        super().__init__(why)
+        self.why = why
+
+
 class MergeConflict(Exception):  # noqa: N818 — git's verdict, carried to the stage
     """A merge into the ops branch conflicted and was aborted: the conflicted paths."""
 
@@ -1033,9 +1042,18 @@ def stage_3(gate: Gate) -> None:
     gate.finish(tree, 3, f"merge verified; {t.ops_branch} rebased onto {gate.default}; ready")
 
 
+def _refresh(gate: Gate, n: int) -> None:
+    """Stages 4–7 first bring the ops workspace up to date with the default branch
+    (spec 2026-11-27-ops-gate-truth R1, `fr.ops.refresh`)."""
+    from fr.ops.refresh import refresh
+
+    refresh(gate, gate.tree(), n)
+
+
 def stage_4(gate: Gate) -> None:
     """Post-merge ops. Their completion lifts the queue's barrier (R26): the label
     `fr-queue:postmerge-done`, which the driver settles into `queue_postmerge_done`."""
+    _refresh(gate, 4)
     apply_phase(gate, "post-merge")
     view = gate.view(fresh=True)
     write_postmerge_marker(gate, str(view.get("head_oid") or ""))  # first: label implies marker
@@ -1156,6 +1174,7 @@ def stage_5(gate: Gate) -> None:
     stage 6 then refuses)."""
     from fr.ops.holds import gated_steps
 
+    _refresh(gate, 5)
     t = gate.target
     tree = gate.tree()
     spec_slug = _spec_slug(t.run)
@@ -1193,6 +1212,7 @@ def tester_steps(gate: Gate, tree: OpsTree) -> list[TestPlanStep]:
 def stage_6(gate: Gate) -> None:
     """`fr gate pass --gate devops --run <id>` from the ops workspace; the comment lists
     the steps the Tester gate still owns."""
+    _refresh(gate, 6)
     t = gate.target
     tree = gate.tree()
     notes = f"DevOps stage of run {t.run.run}: ops and devops steps recorded on {t.ops_branch}"
@@ -1261,6 +1281,7 @@ def stage_7(gate: Gate) -> None:
     passes devops, so the PR does not wait on a gate nobody owes."""
     from fr.labels import held_gates
 
+    _refresh(gate, 7)
     t = gate.target
     tree = gate.tree()
     owed = tester_steps(gate, tree)
@@ -1415,12 +1436,19 @@ def preview(gate: Gate) -> list[str]:
     return lines
 
 
+MAX_RESTARTS = 2  # a refresh merges the default branch, so a second one is a moving target
+
+
 def run(gate: Gate) -> GateResult:
     """Every stage not yet done, in order; stop at the first failure, naming it."""
     from fr.spec import TestPlanHeadingError
 
     ran: list[int] = []
-    for s in STAGES:
+    restarts = 0
+    i = 0
+    while i < len(STAGES):
+        s = STAGES[i]
+        i += 1
         if s.done(gate, gate.recorded()):
             continue
         gate.say(f"stage {s.number} ({s.name}) …")
@@ -1431,6 +1459,15 @@ def run(gate: Gate) -> GateResult:
                 # The spec's Test Plan heading is a near-miss: its steps cannot be read,
                 # so no stage may decide them (super-fr#1315). A refusal, not a traceback.
                 raise StageFailed(str(exc), code=2) from exc
+            except Restart as exc:
+                restarts += 1
+                if restarts > MAX_RESTARTS:
+                    raise StageFailed(
+                        f"{exc.why}, again: the default branch keeps moving; re-run later"
+                    ) from exc
+                gate.say(f"stage {s.number} ({s.name}): {exc.why}")
+                i = 0  # the first stage the host state does not record (R6)
+                continue
         except StageFailed as exc:
             why = f"stage {s.number} ({s.name}) failed: {exc.why}"
             gate.say(why)
