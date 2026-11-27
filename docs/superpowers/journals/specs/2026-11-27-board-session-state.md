@@ -160,3 +160,6 @@ row_kinds:
 run_gate: developer
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-board-session-state-p2 created=2026-11-27T20:07:50+00:00 -->
+### phase-split-2026-11-27-board-session-state-p2 · decision · ask: the dwell ledger and its displays (R5-R7) are an ask of their own, built on phase 1's Card.wait
