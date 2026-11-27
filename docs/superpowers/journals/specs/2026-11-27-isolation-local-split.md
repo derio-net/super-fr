@@ -133,3 +133,6 @@ run_kind: none
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-isolation-local-split-p4 created=2026-11-27T09:09:02+00:00 -->
 ### phase-split-2026-11-27-isolation-local-split-p4 · decision · ask: slice 4 of #1517 is its own module move, one phase each (operator decision q-scope)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-isolation-local-split-p1 created=2026-11-27T09:09:33+00:00 -->
+### phase-split-2026-11-27-isolation-local-split-p1 · decision · review-size: the four module moves together are ~2,500 diff lines; the operator chose one reviewed phase per slice (q-scope)
