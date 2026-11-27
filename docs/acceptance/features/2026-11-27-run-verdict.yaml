@@ -34,7 +34,9 @@ rows:
       - super-fr:tests/unit/test_run_writes_layering.py#test_every_run_engine_module_imports_no_cli_layer
       - super-fr:tests/unit/test_run_writes_layering.py#test_the_helper_reports_planted_cli_imports_and_accepts_clean_ones
     status: ci
-    notes: every fr/run module checked by its syntax tree; slice 1
+    notes: every fr/run module checked by its syntax tree (slice 1); until slice 2 the
+      test also allows fr/run/adopt.py's import of fr.commands.run_cmd.derive_run_id,
+      which slice 2 removes, leaving the one named allowance
     verify: none
   - id: run-cmd-clusters-in-fr-run
     capability: run engine layering
