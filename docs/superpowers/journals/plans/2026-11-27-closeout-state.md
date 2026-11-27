@@ -120,3 +120,93 @@ The three docstrings name left-scope.
 ### p2-r4-resolved · finding [out-of-scope] · resolves p2-r4: A batch that comes after a left-scope batch waits forever (phase 2)
 
 Pre-existing: a dependent of the batch waited the same way when it derived dispatched; deciding left-scope as unsatisfiable is a separate change.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-27T14:31:27+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · A batch whose after names a left-scope batch waits forever
+
+dependency_state gave waiting for left-scope (batch.py:406, 439-454); a cross-repo dependent never showed blocked.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-27T14:31:27+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · A take-back that first fails on a repeat dispatch failure was never said
+
+_dispatch_failed dropped `also` once the dispatch key was reported.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-27T14:31:27+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · The take-back failure line named no consequence
+
+takeback_failed gave only the error text.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-27T14:31:27+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · Direct left_scope callers had no truncated-repo-list fixture
+
+build_driver, plan_sync, the batch list note and the verbs were tested only with complete facts.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-27T14:31:27+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · The said-once test hand-built _Driver
+
+No real two-pass drive exercised the dedupe.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-27T14:31:27+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · Two assertions could not fail
+
+`assert batch_mod` and a stylesheet source grep.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-27T14:31:27+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · A repo back mid-drive had no clone and opened the cwd
+
+build_driver dropped it from the checkout map; path_of None led to _open_checkout(None).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-27T14:31:27+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · cancel --orphaned's 'no checkout' was unasserted
+
+no_forge patched only make_client.
+
+<!-- fr:journal kind=discovery scope=plan id=lens-fix-budget created=2026-11-27T14:31:27+00:00 -->
+### lens-fix-budget · discovery · triage_batch_cmd.py budget raised 8300 -> 8320
+
+The l-tests-r4 hold and the l-errors-r1 key needed a few lines in the command module (now 8309); the budget moved in tests/unit/test_tripwire_module_budget.py with a reason comment.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-27T14:31:27+00:00 -->
+### lens-review-1 · review · Lens review: docs-accuracy, errors, tests — 8 findings, all fixed
+
+docs-accuracy raised l-docs-accuracy-r1; errors raised l-errors-r1..r2; tests raised l-tests-r1..r5. Each fixed with a test; fast tier green after the last fix.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-27T14:31:27+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: A batch whose after names a left-scope batch waits forever
+
+UNSATISFIABLE holds left-scope; fr-wave-driver.md names it; test_a_dependency_on_a_left_scope_batch_is_unsatisfiable.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-27T14:31:27+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: A take-back that first fails on a repeat dispatch failure was never said
+
+`also` dedupes on its own key and joins the 'stopped again' line when new; real two-pass drive test plus unit test.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-27T14:31:27+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: The take-back failure line named no consequence
+
+takeback_failed takes COLLECTED_TAKEBACK / PER_BATCH_TAKEBACK consequences; asserted in the take-back tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-27T14:31:27+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: Direct left_scope callers had no truncated-repo-list fixture
+
+Truncated twins for build_driver, plan_sync, batch list, cancel --orphaned and focus.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-27T14:31:27+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: The said-once test hand-built _Driver
+
+A real two-pass drive (--interval, _sleep patched); the unit test builds `also` through takeback_failed.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-27T14:31:27+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: Two assertions could not fail
+
+Removed the first; the second asserts the rendered backlog and history pages carry the rule.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-27T14:31:27+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: A repo back mid-drive had no clone and opened the cwd
+
+checkouts.unclone_reasons feeds the snapshot's unread hold: one report-once line naming --checkout, nothing opened; test_a_repo_back_mid_drive_with_no_clone_is_held_not_opened_at_the_cwd.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-27T14:31:27+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: cancel --orphaned's 'no checkout' was unasserted
+
+no_forge also patches make_checkout, _open_checkout and _tracking_gate; plan and --yes paths assert none called.
