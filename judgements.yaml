@@ -11733,6 +11733,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T21:25:14.388293Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -13104,6 +13111,12 @@ batches:
   - super-fr#1621
   rationale: '#1621 is L and changes gate semantics: spec first.'
   wave: 26
+  events:
+  - kind: dispatch
+    at: '2026-11-27T21:25:18.951200Z'
+    runner: herdr
+    handle: w3X:p6
+    branch: feat/batch-ops-gate-truth
 - id: silent-failures
   title: 'Silent failures: errors that report success or lose their reason'
   ids:
@@ -13135,6 +13148,15 @@ batches:
     patch_id: f540ac23d5d89a57db6aaeebb7e90645de9cdb2c
   - kind: post_merge
     at: '2026-11-27T21:20:26.480725Z'
+  - kind: claims_released
+    at: '2026-11-27T21:25:50.570480Z'
+    keys:
+    - super-fr#1594
+    - super-fr#1595
+    - super-fr#1596
+    - super-fr#1598
+    - super-fr#1605
+    - super-fr#1675
 - id: arch-triage-leaves
   title: '#1318: split the wave-export and hand-back leaves out of triage/batch_drive.py'
   ids:
