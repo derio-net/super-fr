@@ -132,3 +132,8 @@ row_kinds: {}
 run_gate: developer
 run_kind: none
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-plan-ops-split-p1 created=2026-11-27T09:15:47+00:00 -->
+### phase-split-2026-11-27-plan-ops-split-p1 · decision · tier: the plan's one standard-tier phase; the spec carries no acceptance rows (operator decision 'verification': a no-behaviour refactor), so no row can name its ask
+
+R1-R15 are all served by this single phase.
