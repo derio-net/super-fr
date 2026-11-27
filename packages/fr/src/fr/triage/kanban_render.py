@@ -104,6 +104,7 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
 .status-working { color: var(--accent); border-color: var(--accent); }
 .status-blocked { color: var(--sev-1); border-color: var(--sev-1); font-weight: 600; }
 .status-done { color: var(--live); border-color: var(--live); }
+.pill[class*="wait-"] { white-space: normal; overflow-wrap: anywhere; }
 .wait-you { color: var(--sev-1); border-color: var(--sev-1); font-weight: 600; }
 .wait-agent, .wait-background { color: var(--accent); border-color: var(--accent); }
 .wait-ci, .wait-queue, .wait-dependency { color: var(--muted); border-color: var(--line); }
