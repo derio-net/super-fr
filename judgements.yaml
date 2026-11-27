@@ -11512,6 +11512,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T20:02:35.267874Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T20:03:54.935707Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -12901,6 +12916,12 @@ batches:
   - super-fr#1605
   - super-fr#1675
   wave: 26
+  events:
+  - kind: dispatch
+    at: '2026-11-27T20:02:44.964061Z'
+    runner: herdr
+    handle: w3X:p5
+    branch: feat/batch-ci-hygiene
 - id: arch-triage-leaves
   title: '#1318: split the wave-export and hand-back leaves out of triage/batch_drive.py'
   ids:
@@ -12955,6 +12976,10 @@ batches:
     patch_id: 20bfc093e4784759ac510561341cb14ca06b7bc8
   - kind: post_merge
     at: '2026-11-27T19:59:33.063125Z'
+  - kind: claims_released
+    at: '2026-11-27T20:03:54.935707Z'
+    keys:
+    - super-fr#1521
 - id: arch-triage-ports
   title: '#1318: the triage driver takes every command-layer effect through one ports object'
   ids:
