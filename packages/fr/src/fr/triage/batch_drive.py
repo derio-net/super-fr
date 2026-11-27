@@ -1244,9 +1244,10 @@ def closeout_event(batch: Batch) -> CloseoutEvent | None:
 def finished_waves(batches: Iterable[Batch], stages: Mapping[str, str]) -> frozenset[str]:
     """The wave keys (`str(batch.wave)`) whose every batch is terminal: derived stage
     `cancelled`, `abandoned`, `obsolete` or `left-scope`, or a close-out event whose
-    `archived` is set. *stages* maps batch id to its derived stage. A batch with no wave never makes one, and a
-    wave with a batch that is not terminal (a merged one still owed its archive, say) is not
-    finished. The board, the history page and the driver all read this one predicate."""
+    `archived` is set. *stages* maps batch id to its derived stage. A batch with no wave never
+    makes one, and a wave with a batch that is not terminal (a merged one still owed its
+    archive, say) is not finished. The board, the history page and the driver all read this
+    one predicate."""
     wave_ok: dict[str, bool] = {}
     for b in batches:
         if b.wave is None:
