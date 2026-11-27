@@ -512,8 +512,8 @@ def export_state(
     it was written (`ExportDrift`, R2, R3)."""
     root = contained(base, rel)
     restamp = _stamp(root, owner, take_over=take_over)
-    if not force and (record := read_record(root)) is not None:
-        if drift := find_drift(state_dir, root, record):
+    if not force and (recorded := read_record(root)) is not None:
+        if drift := find_drift(state_dir, root, recorded):
             raise ExportDrift(drift, base=base, root=root)
     report = _sync(state_dir, root, keep_newer=False)
     copied = list(report.copied)
