@@ -197,17 +197,17 @@ def test_every_agent_type_comparison_folds_the_opencode_tier() -> None:
 
 
 def test_why_unobservable_on_opencode_names_the_missing_session_id(monkeypatch) -> None:
-    from fr.commands.run_cmd import _why_unobservable
+    from fr.run.unobserved import why_unobservable
 
     monkeypatch.setenv("FR_HARNESS", "opencode")
-    why = _why_unobservable("questions")
+    why = why_unobservable("questions")
     # OpenCode 2 sets OPENCODE_SESSION_ID itself (2026-10-20 review p1-r2), so
     # the wording names that variable and never a plugin export that is gone.
     assert "OPENCODE_SESSION_ID is unset" in why
     assert "super-fr OpenCode plugin" not in why
     assert "no transcript reader" not in why
     monkeypatch.setenv("FR_HARNESS", "hermes")
-    assert "hermes" in _why_unobservable("questions")
+    assert "hermes" in why_unobservable("questions")
 
 
 def test_an_unexported_session_warns_with_the_session_id_wording(tmp_path: Path) -> None:

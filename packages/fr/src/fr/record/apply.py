@@ -57,6 +57,7 @@ from fr.journal.model import (
 )
 from fr.record.model import AmendmentItem, StepRecord, allowed_sections, present_sections
 from fr.run.debug_journal import debug_slug
+from fr.run.steps import emitted_plan
 from fr.workflow.artifacts import journal_scope
 
 _SESSION_START = "1970-01-01T00:00:00+00:00"
@@ -236,7 +237,7 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
             raise RecordRefusedError(str(e)) from e
     owner_emits = tuple(step.emits) or (tuple(parent.emits) if parent is not None else ())
     scope = journal_scope(owner_emits)
-    plan_rel = run_cmd._emitted_plan(state) or record.emitted.get("plan")
+    plan_rel = emitted_plan(state) or record.emitted.get("plan")
     plan_dir = emitted_path(repo_root, plan_rel) if plan_rel else None
     slug: str | None = None
     if scope == "plan" and plan_dir is not None:

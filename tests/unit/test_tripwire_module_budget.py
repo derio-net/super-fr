@@ -19,7 +19,8 @@ MAX_HEADROOM = 400
 
 BUDGETS: dict[str, int] = {
     # run-write-ledger (#1515): the write ledger moved to fr/run/writes.py
-    f"{SRC}commands/run_cmd.py": 8895,
+    # run-verdict (#1519) slice 1: verdict types and the derived verifiers moved to fr/run
+    f"{SRC}commands/run_cmd.py": 8715,
     # +25 each: batch closeout-truth (gh#1494/#1496/#1497/#1569) changes the close-out steps
     # these modules hold; the split they need is #1516 (hand-back and close-out leaves).
     # triage_batch_cmd.py, 8300: main's landing-method `_landing_hold` (spec 2026-11-26 R2,

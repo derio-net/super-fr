@@ -13,6 +13,7 @@ import pytest
 from click.exceptions import Exit
 from fr.commands import run_cmd
 from fr.run.model import load_run_state
+from fr.run.unobserved import take_unobserved
 from fr.workflow.model import Step
 
 from tests.unit.test_verification_walk import RUN, SPEC, _git, _home, _logs, _repo, _walk
@@ -281,11 +282,11 @@ def test_an_unreadable_transcript_records_the_walk_unobserved(
 ) -> None:
     root = _owed_good(tmp_path)
     log = _forged(root, _home)
-    run_cmd._take_unobserved()  # a gate an earlier test noted is not this one's
+    take_unobserved()  # a gate an earlier test noted is not this one's
 
     assert _gate(root, log).startswith("forged.log@")
 
-    assert run_cmd._take_unobserved() == {"unobserved": "walk"}
+    assert take_unobserved() == {"unobserved": "walk"}
     assert "unobserved=walk" in capsys.readouterr().err.replace("\n", " ")
 
 

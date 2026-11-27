@@ -242,11 +242,12 @@ def test_another_derived_refusal_is_reported_before_the_settle_hold(
     at_deliver: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from fr.commands import run_cmd
+    from fr.run.verdict import Say, Verdict
 
-    def refuse(*_a: object, **_k: object) -> str:
-        run_cmd.err_console.print("proportionality: refused for the test")
-        raise typer.Exit(2)
+    def refuse(*_a: object, **_k: object) -> Verdict[str]:
+        return Verdict(None, refusal=(Say("proportionality: refused for the test"),))
 
+    # The name `derive` reads (fr.run.evidence.derived.proportionality_witness, imported).
     monkeypatch.setattr(run_cmd, "_proportionality_witness", refuse)
     _use(monkeypatch, Forge(checks=[{"name": "ci-ok", "bucket": "pending"}]))
 

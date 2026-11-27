@@ -1,4 +1,4 @@
-"""The derived delivery verifiers print what they printed before the move (spec 2026-11-27-run-verdict R7, R9).
+"""The derived verifiers print what they printed before the move (spec 2026-11-27-run-verdict R9).
 
 Each refusal path of `proportionality_witness`, `docs_witness` and `witness_base` is driven
 with the same faked inputs that drove the pre-move `run_cmd` functions, settled through
@@ -20,9 +20,8 @@ from typing import Any
 
 import pytest
 import typer
-from rich.console import Console
-
 from fr.commands import run_cmd
+from rich.console import Console
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures/run_verdict/derived"
 KEY = "deliver"
@@ -229,8 +228,9 @@ def _cases() -> list[Case]:
         ),
         Case(
             "docs_witness-target-error",
-            lambda mp: (_docs(mp), _target(mp, error="base branch [main] does not resolve"))
-            and None,
+            lambda mp: (
+                (_docs(mp), _target(mp, error="base branch [main] does not resolve")) and None
+            ),
             _old("_docs_witness", KEY, ROOT, announce=False, state=targeted),
             _new_docs(targeted, announce=False),
         ),

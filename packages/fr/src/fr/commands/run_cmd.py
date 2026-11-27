@@ -137,8 +137,12 @@ if TYPE_CHECKING:
     from fr.run.telemetry import Round
     from fr.verification.walk import WalkOwed
 from fr.artifacts.paths import KIND_DIRS, artifact_root, emitted_path
+from fr.run.evidence.derived import derived_refusal_lines as _derived_refusal_lines
+from fr.run.evidence.derived import docs_witness as _docs_witness
+from fr.run.evidence.derived import proportionality_witness as _proportionality_witness
 from fr.run.provenance import cleared_gates, gates
 from fr.run.reshape import ReshapeError, diff_ids, reshape
+from fr.run.steps import emitted_plan as _emitted_plan
 from fr.run.units import UnitAttempt
 from fr.run.unobserved import UNOBSERVED as _UNOBSERVED
 from fr.run.unobserved import note_unobserved as _note_unobserved
@@ -456,14 +460,6 @@ def _unit_key(
             )
         raise typer.Exit(2)
     return _liveness.flat_unit_key(step.id)
-
-
-def _emitted_plan(state: RunState) -> str | None:
-    """The recorded repo-relative plan path, wherever the shape put it."""
-    for record in state.steps.values():
-        if record.emitted and "plan" in record.emitted:
-            return record.emitted["plan"]
-    return None
 
 
 def _group_phases(repo_root: Path, state: RunState) -> tuple[list[int], list[int]]:
@@ -1892,19 +1888,27 @@ def _verified_evidence(
     # remote) used to exit first and hide each witness declared after it.
     refused: list[str] = []
 
-    def derive(name: str, witness: Callable[[], str]) -> None:
+    def derive(name: str, witness: Callable[[], str | None]) -> None:
         try:
-            verified[name] = witness()
+            found = witness()
         except typer.Exit:
             refused.append(name)
+            return
+        assert found is not None  # a settled verdict with no refusal carries its witness
+        verified[name] = found
 
     if state_value == "done" and "proportionality" in step.evidence:
-        derive("proportionality", lambda: _proportionality_witness(key, repo_root, state))
+        derive(
+            "proportionality",
+            lambda: _settle(_proportionality_witness(key, repo_root, state)),
+        )
     if state_value == "done" and "docs" in step.evidence:
         derive(
             "docs",
-            lambda: _docs_witness(
-                key, repo_root, announce="proportionality" not in step.evidence, state=state
+            lambda: _settle(
+                _docs_witness(
+                    key, repo_root, announce="proportionality" not in step.evidence, state=state
+                )
             ),
         )
     if state_value == "done" and "single-phase" in step.evidence:
@@ -2138,165 +2142,10 @@ def _single_phase_witness(
     return f"phase {agentic[0]}"
 
 
-def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
-    """`<merge-base-sha>:<sha256-of-report>` for this run's plan — or exit 2.
-
-    The report itself never blocks (spec §C, report first); what fails closed
-    is only the witness. A report with no merge-base is the single line naming
-    `--base`, and hashing it would record "proportionality checked" over a
-    diff nobody computed, so the resolve is refused with that line instead.
-    """
-    import hashlib
-
-    from fr.parser import PlanSchemaError, parse
-    from fr.proportionality import run_report
-
-    plan_rel = _emitted_plan(state)
-    if plan_rel is None:
-        err_console.print(
-            f"[red]{key}: cannot derive proportionality evidence — no plan recorded "
-            "yet (resolve the step that emits `plan` first)[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    try:
-        plan = parse(emitted_path(repo_root, plan_rel))
-    except PlanSchemaError as e:
-        err_console.print(
-            f"[red]{key}: cannot derive proportionality evidence — plan {plan_rel} "
-            f"does not parse: {escape(str(e))}[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    base = _witness_base(key, repo_root, "proportionality", announce=True, state=state)
-    report = run_report(repo_root, plan, base)
-    if report.merge_base is None:
-        err_console.print(
-            f"{key}: cannot derive proportionality evidence — {report.text.strip()}",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    return f"{report.merge_base}:{hashlib.sha256(report.text.encode()).hexdigest()}"
-
-
-def _docs_witness(
-    key: str, repo_root: Path, *, announce: bool, state: RunState | None = None
-) -> str:
-    """`<merge-base-sha>:<sha256>` of the current pages, `none` with no
-    `.fr/docs.yaml` — or exit 2 with the check's own findings (R9).
-
-    The base is `_witness_base`'s, so both derived witnesses diff
-    against the same commit, the isolation start commit included; a fallback
-    base is named once, by proportionality when the step declares both.
-    """
-    import hashlib
-
-    from fr.docs import render
-    from fr.docs.gate import evaluate
-    from fr.docs.load import DocsEnvError, load_config, merge_base_of
-
-    try:
-        config = load_config(repo_root)
-        if config is None:
-            return "none"
-        base = _witness_base(key, repo_root, "docs", announce=announce, state=state)
-        outcome = evaluate(repo_root, config, base)
-        merge_base = merge_base_of(repo_root, base)
-    except DocsEnvError as e:
-        _derived_refusal(key, [f"cannot derive docs evidence — fr docs: {e}"])
-    if outcome.findings:
-        _derived_refusal(
-            key,
-            [
-                f"refused — `fr docs check` fails ({len(outcome.findings)} finding(s)):",
-                *render.findings_text(outcome.findings).splitlines(),
-            ],
-        )
-    current = render.status_json(outcome.pages, [])
-    return f"{merge_base}:{hashlib.sha256(current.encode()).hexdigest()}"
-
-
-def _witness_base(
-    key: str, repo_root: Path, name: str, *, announce: bool, state: RunState | None = None
-) -> str:
-    """The base a derived delivery witness diffs against, or exit 2 naming why.
-
-    `proportionality` and `docs` share it, so both diff against one commit.
-    `announce` prints the fallback used when the remote default branch did not
-    resolve.
-    """
-    from fr.run.target import TargetError, target_ref
-
-    if state is not None and state.base_branch is not None:
-        try:
-            explicit = target_ref(repo_root, state.base_branch)
-        except TargetError as error:
-            _derived_refusal(key, [f"cannot derive {name} evidence — {error}"])
-        assert explicit is not None
-        return explicit
-    base, label = _proportionality_base(repo_root)
-    if base is None:
-        err_console.print(
-            f"{key}: cannot derive {name} evidence — no base: {label}. Fetch the "
-            "remote so its default branch resolves, or create the local default branch.",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if announce and label is not None:
-        err_console.print(
-            f"{key}: {name}: no remote default branch; using base {label}",
-            markup=False,
-            soft_wrap=True,
-        )
-    return base
-
-
-def _proportionality_base(repo_root: Path) -> tuple[str | None, str | None]:
-    """The base `deliver`'s proportionality witness diffs against (gh#768).
-
-    `fr run resolve` takes no `--base`, so a repo whose remote default branch
-    does not resolve could never resolve `deliver`. In order: the remote
-    default branch (`(ref, None)` — the ordinary case, nothing printed); the
-    commit `fr isolation up` cut this branch from; the local default branch.
-    `(ref, label)` names a fallback; `(None, why)` means none is left.
-    """
-    from fr.git import GitRefusal, GitUnavailableError, git_answer, remote_default_ref
-    from fr.isolation.types import load_state
-
-    try:
-        found = remote_default_ref(repo_root)
-        if found is not None and not isinstance(found, GitRefusal):
-            return found, None
-        head = git_answer(repo_root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
-        try:
-            recorded = load_state(repo_root, head)
-        except OSError, ValueError:
-            recorded = None
-        if recorded is not None and recorded.base_sha:
-            ok = git_answer(repo_root, "cat-file", "-e", f"{recorded.base_sha}^{{commit}}")
-            if ok.returncode == 0:
-                return recorded.base_sha, f"{recorded.base_sha[:12]} (isolation start commit)"
-        for name in ("main", "master"):
-            if name == head:
-                continue
-            ok = git_answer(repo_root, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}")
-            if ok.returncode == 0:
-                return name, f"{name} (local default branch)"
-    except GitUnavailableError as e:
-        return None, f"git could not answer ({e}); retry"
-    return None, (
-        "no remote default branch, no isolation start commit, and no local default branch"
-    )
-
-
 def _derived_refusal(key: str, lines: list[str]) -> NoReturn:
-    """A derived witness's refusal: its first line after the unit key, the
-    rest indented beneath it."""
-    err_console.print(f"{key}: {lines[0]}", markup=False, soft_wrap=True)
-    for line in lines[1:]:
-        err_console.print(f"  {line}", markup=False, soft_wrap=True)
+    """Print a derived witness's refusal (`fr.run.evidence.derived`'s lines) and exit 2."""
+    for line in _derived_refusal_lines(key, lines):
+        _say(line)
     raise typer.Exit(2)
 
 
