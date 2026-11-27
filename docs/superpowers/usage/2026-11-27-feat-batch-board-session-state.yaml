@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-27-feat-batch-board-session-state
+captures:
+- host: h-cfa930bd
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-27T19:57:12+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 164db869-0dd1-4fdb-8624-054c412af9ff
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 64
+        cache_write: 317610
+        cache_read: 4699491
+        output: 22486
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 18
+      other:
+        usd: null
+        turns: 4
+      paperwork:
+        usd: null
+        turns: 8
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+        input: 6
+        cache_write: 104917
+        cache_read: 137960
+        output: 424
+      brainstorm:
+        usd: null
+        turns: 28
+        input: 58
+        cache_write: 212693
+        cache_read: 4561531
+        output: 22062
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 2
+          input: 6
+          cache_write: 104917
+          cache_read: 137960
+          output: 424
+        brainstorm:
+          usd: null
+          turns: 28
+          input: 58
+          cache_write: 212693
+          cache_read: 4561531
+          output: 22062

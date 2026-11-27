@@ -1,0 +1,119 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-27-board-session-state
+repo: derio-net/super-fr
+rows:
+  - id: batch-card-waits-for
+    capability: Triage Batches page
+    acceptance: Every non-terminal card on the Batches page names the one party it waits
+      for (you with the lane role, agent, background, ci, queue, dependency), decided
+      by a fixed precedence after the column, which it never changes.
+    origin:
+    - spec:2026-11-27-board-session-state#R1
+    - spec:2026-11-27-board-session-state#R2
+    - spec:2026-11-27-board-session-state#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - wait-you-reviewer
+      - wait-agent
+      - wait-background
+      - wait-ci
+      - wait-queue
+      - wait-dependency
+      - terminal-no-wait
+      - phone-width-long-ids
+  - id: batch-card-background-wait
+    capability: Triage Batches page
+    acceptance: An idle Claude batch session under the herdr runner whose screen shows
+      running shells, monitors or subagents waits for background; another runner, agent
+      kind or a failed read reports no background, and a failed read adds a page note.
+    origin:
+    - spec:2026-11-27-board-session-state#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: batch-lane-owners
+    capability: Triage Batches page
+    acceptance: A repo's .fr/triage.yaml lane_owners names owners per Needs-you lane;
+      each Needs-you column header shows them or 'owner unassigned', per repo when they
+      differ, and a lane card names them; an unknown lane key is refused.
+    origin:
+    - spec:2026-11-27-board-session-state#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - owners-named
+      - owner-unassigned
+      - owners-per-repo
+      - lane-card-owners
+  - id: batch-dwell-ledger
+    capability: Triage Batches page
+    acceptance: Every Batches page write records, in a dwell ledger carried by the state
+      ref, when each batch entered its current column and wait, closing the previous
+      interval; a first sighting is marked, a departed batch is dropped, and an unreadable
+      ledger is an empty one plus a note.
+    origin:
+    - spec:2026-11-27-board-session-state#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: batch-card-dwell-line
+    capability: Triage Batches page
+    acceptance: Each card shows how long it has been in its column and waiting for its
+      party, marked 'at least' when first seen in that state; a terminal card shows
+      only its column time.
+    origin:
+    - spec:2026-11-27-board-session-state#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - dwell-minutes
+      - dwell-hours
+      - dwell-days
+      - dwell-first-seen
+      - terminal-column-only
+  - id: batch-wave-time-summary
+    capability: Triage Batches page
+    acceptance: The Batches page shows per wave the time its batches spent per column
+      and per wait party and the longest batch per column, hidden with the waves the
+      cutoff hides.
+    origin:
+    - spec:2026-11-27-board-session-state#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+    visual:
+      states:
+      - wave-one-batch
+      - wave-several-batches
+      interactions:
+      - expand-wave-block
+      - toggle-cutoff
+  - id: batch-background-live
+    capability: Triage Batches page
+    acceptance: On a live herdr, a dispatched Claude batch session idle at its prompt
+      with a background shell shows 'waits for background' on the next Batches page,
+      and 'waits for agent' after the shell ends.
+    origin:
+    - spec:2026-11-27-board-session-state#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
