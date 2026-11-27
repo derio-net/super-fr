@@ -1,0 +1,15 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-arch-isolation-gc
+step: lens-review
+outcome: done
+journal:
+  - kind: review
+    id: lens-review
+    global: true
+    title: "lens review: docs-accuracy, no findings"
+    body: |
+      docs-accuracy examined docs/explainers/fr-isolation.md, packages/fr/src/fr/isolation/gc.py, packages/fr/src/fr/isolation/local.py, .changes/feat-batch-arch-isolation-gc.yaml. The new reviewed note (line 18), the background-sweep claim (lines 277-280: _spawn_gc still called from local.py and hostworktree.py:62) and the agent-worktree gc claim (line 91: gc.py:454 → agent_worktrees.sweep_agent_worktrees) are true. The shape file matches the diff (line counts, kept methods, the six target call-throughs, TYPE_CHECKING import). No findings.
+resolves: []
+evidence:
+  review: lens-review
+  reviewer: "docs-accuracy=a30a6918e27e1fddb"
