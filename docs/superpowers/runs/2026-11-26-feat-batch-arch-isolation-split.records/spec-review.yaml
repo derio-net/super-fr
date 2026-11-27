@@ -1,0 +1,56 @@
+schema_version: 12
+run: 2026-11-26-feat-batch-arch-isolation-split
+step: spec-review
+outcome: done
+journal:
+  - kind: finding
+    id: s-r1
+    review_scope: in
+    title: Seven docs-currency pages cover paths this change edits, and the spec plans no page edit or reviewed-stamp bump
+    body: "docs/explainers/fr-isolation.md:16, fr-dispatch.md:17, docs/reference/dispatch-lifecycle.md:9, docs/herdr-control-sessions.md:7, fr-progress.md:15, fr-triage.md:15, docs/reference/cli.md:8 cover edited paths; none names a moved function, so each needs a reviewed-stamp bump."
+  - kind: finding
+    id: s-r2
+    review_scope: in
+    title: The dependency graph says runner <- reap, but reap reads no runner name, and its stated imports leave out KIND_DIRS and IsolationState
+    body: "local.py:172-297 names no runner symbol; reap reads IsolationState (:192), KIND_DIRS (:294), datetime (:250), Any (:242)."
+  - kind: finding
+    id: s-r3
+    review_scope: in
+    title: The branchrefs range 839-1176 takes the VK refusal's leading comment with it
+    body: "local.py:1174-1176 is the comment documenting _VK_PROFILE_NEEDLE at :1177; branchrefs ends at :1172."
+  - kind: finding
+    id: s-r4
+    review_scope: in
+    title: The gc-routing Popen patch needs no retargeting, and the two scenario scripts need no edit; the spec says both change
+    body: "test_isolation_gc_routing.py:128-129,146 patch the shared subprocess module; fr-ops-gate-{probes,stage}.sh patch only client_for, which stays."
+  - kind: finding
+    id: s-r5
+    review_scope: in
+    title: Two line citations in Background are off
+    body: "Budget at test_tripwire_module_budget.py:27 (not :25); VK allowlist at test_vk_compat_removed.py:263-274 (not 262-270)."
+  - kind: finding
+    id: s-r6
+    review_scope: in
+    title: The Verification section has a row bullet for a row that does not exist
+    body: "Reviewer read that the spec creates no acceptance row, so the per-row override dangles."
+  - kind: finding
+    id: s-r7
+    review_scope: in
+    title: _UP_REMEDY and _FR_OWNED_EXCLUDES are not reap types; only the class reads them
+    body: "_UP_REMEDY read at local.py:1274,1553,1590,2688,2695,2710; _FR_OWNED_EXCLUDES at :2932, all in the class."
+  - kind: review
+    id: spec-review-1
+    title: "independent spec review: 7 findings (s-r1 to s-r7)"
+    body: "Findings s-r1..s-r7 raised by the dispatched fr-spec-reviewer. All three operator decisions (q-scope, q-callers, q-verify) honoured. Six fixed in the spec; s-r6 refuted."
+resolves:
+  - {id: s-r1, state: fixed, body: "Background lists the seven covered pages; R8 and Design phase 4 move each page's reviewed stamp."}
+  - {id: s-r2, state: fixed, body: "Background states one graph (runner and reap leaves; branchrefs -> runner; landing -> runner, reap, branchrefs) and reap's imports; the table and Design shape agree."}
+  - {id: s-r3, state: fixed, body: "branchrefs is 839-1172; the VK refusal with its comment (1174-1202) stays."}
+  - {id: s-r4, state: fixed, body: "Background and Design phase 1 say the Popen patch and the scenario scripts need no edit; only the import at :20 moves."}
+  - {id: s-r5, state: fixed, body: "Citations corrected to :27 and 263-274."}
+  - {id: s-r6, state: refuted, body: "The row exists: brainstorm added isolation-local-split-guards to docs/acceptance/features/2026-11-27-isolation-local-split.yaml (spec origins R1, R2, R5, R6). The bullet is that row's override to `none`, as the precedent spec 2026-11-25-wave-plan-file-overlap does for its rows."}
+  - {id: s-r7, state: fixed, body: "_UP_REMEDY and _FR_OWNED_EXCLUDES stay in local.py beside their only reader; reap is 172-297; REMEDY_FILES gains no entry (R5 says so)."}
+acceptance: []
+evidence:
+  review: spec-review-1
+  reviewer: ab699b104306b3beb
