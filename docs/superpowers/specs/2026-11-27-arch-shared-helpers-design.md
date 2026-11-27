@@ -165,3 +165,9 @@ This is a refactor with no behaviour change. The unit suite in this PR's CI prov
 existing duplicate-key, timestamp and migration tests, plus the new guards. It adds no
 acceptance rows (operator decision): no product behaviour changes, and the guards are tests,
 not business claims.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-27-arch-shared-helpers | `derio-net/super-fr` | `2026-11-27-arch-shared-helpers` | — |
