@@ -1,0 +1,101 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-closeout-state
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: s-r1
+  title: 'R5''s ''asks for no checkout'' unreachable: build_driver asks before reading facts'
+  body: build_driver (triage_batch_cmd.py:8140) names a checkout for every chosen batch's repo from the
+    scope alone, before facts are read.
+  review_scope: in
+- kind: finding
+  id: s-r2
+  title: A repo can be absent from facts.repos because the org list was truncated
+  body: collect.py:273-280 caps the org repo list; a truncated list drops repos that are still in the
+    org.
+  review_scope: in
+- kind: finding
+  id: s-r3
+  title: R4 contradicts the Design's ordering for a batch with no lifecycle events
+  body: Design put the check after the no-events return; column_of/lane_of branch on `not batch.events`
+    first.
+  review_scope: in
+- kind: finding
+  id: s-r4
+  title: Closed stage sets the Design did not list
+  body: claims.releasing/owed_claims, wave_queue.TERMINAL_STAGES, kanban._TERMINAL_STAGES, preselected_wave,
+    cancelled_waves, drive_pass held filter, pill CSS.
+  review_scope: in
+- kind: finding
+  id: s-r5
+  title: batch list prints no stage
+  body: batch_list_command (:898) prints no stage column.
+  review_scope: in
+- kind: finding
+  id: s-r6
+  title: Per-batch take-back prints its error twice via _fail
+  body: _write turns TriageError into _fail, which prints before raising.
+  review_scope: in
+- kind: finding
+  id: s-r7
+  title: R2's retry rests on closeout-abandoned, which covers only collected markers
+  body: A per-batch CloseoutEvent left behind is not re-owed by any rule.
+  review_scope: in
+- kind: finding
+  id: s-r8
+  title: PILL_STAGES cannot hold the pill text
+  body: pill_of returns the stage name.
+  review_scope: in
+- kind: finding
+  id: s-r9
+  title: fr-triage.md currency flagged but no Design item
+  body: Background named the page; no design bullet.
+  review_scope: in
+- kind: review
+  id: spec-review-1
+  title: 'independent spec review: 9 findings'
+  body: Reviewer checked the four operator decisions (all honoured) and every cited file:line; raised
+    s-r1 to s-r9, all in scope.
+- kind: lens
+  lens: tests
+  title: R4, R5 and R8 reach several readers and verbs; each needs a facts fixture lacking the repo, plus
+    a truncated one
+resolves:
+- id: s-r1
+  state: fixed
+  body: Design now filters build_driver's names through left_scope using facts.json when present; R5 says
+    drive asks for no checkout.
+- id: s-r2
+  state: fixed
+  body: R4 and the left_scope predicate require no `repos` truncation warning; truncated facts keep today's
+    stage; tested.
+- id: s-r3
+  state: fixed
+  body: Order is now cancel > left-scope > no-events > PR-derived; column_of and lane_of read the stage
+    first.
+- id: s-r4
+  state: fixed
+  body: 'Design names each set and its decided behaviour: owes and releases no claims, terminal for waves
+    and cards, delivered for cancelled_waves, CSS rule added.'
+- id: s-r5
+  state: fixed
+  body: 'R6 and Design: with facts, the row ends `repo left this scope`.'
+- id: s-r6
+  state: fixed
+  body: _close_out's take-back calls the non-printing _save; fail_text in drive_errors reads FAIL_MESSAGE.
+- id: s-r7
+  state: fixed
+  body: R2 now limits the retry to the collected start and states that a leftover per-batch event reads
+    as close-out started (that start is no longer planned).
+- id: s-r8
+  state: fixed
+  body: 'Design: pill_of maps stages to text through a mapping defaulting to the name; left-scope -> ''repo
+    left this scope''.'
+- id: s-r9
+  state: fixed
+  body: R9 and a Design bullet update docs/explainers/fr-triage.md.
+acceptance: []
+evidence:
+  review: spec-review-1
+  reviewer: a90444264dcb0e3da
