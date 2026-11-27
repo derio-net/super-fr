@@ -10939,6 +10939,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T15:15:20.503823Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -11979,6 +11986,8 @@ batches:
     keys:
     - super-fr#1601
     - super-fr#1626
+  - kind: post_merge
+    at: '2026-11-27T15:15:49.091116Z'
 - id: export-drift
   title: Triage export refuses to overwrite a repo-side edit; targeted import
   ids:
