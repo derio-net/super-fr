@@ -164,8 +164,9 @@ class OpsTree(Protocol):
         """Merge exactly the commit *sha* (a full object id, the one the refresh diffed and
         the operator confirmed; never a ref a later fetch could move, review p1-sec-r1) into
         the ops branch with a merge commit; the new head. Never a rebase: the pushed ops
-        branch moves forward only, so its lease holds (spec 2026-11-27-ops-gate-truth R3). A conflict is aborted, leaving HEAD and the
-        working tree as they were, and raised as `MergeConflict`."""
+        branch moves forward only, so its lease holds (spec 2026-11-27-ops-gate-truth R3).
+        A conflict is aborted, leaving HEAD and the working tree as they were, and raised
+        as `MergeConflict`."""
         ...
 
     def push(self, branch: str, lease: str | None = None) -> None:
