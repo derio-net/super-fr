@@ -26,7 +26,7 @@ from fr.commands import isolation_cmd
 from fr.isolation import preserve
 from fr.isolation.external import ExternalTarget
 from fr.isolation.hostworktree import HostWorktreeTarget
-from fr.isolation.local import ReapRefused, _hazard_detail
+from fr.isolation.reap import ReapRefused, _hazard_detail
 from fr.isolation.types import IsolationError, IsolationState, load_state
 from typer.testing import CliRunner
 

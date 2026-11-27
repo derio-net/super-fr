@@ -52,7 +52,7 @@ SKILLS: list[tuple[str, str, str]] = [
         "fr-triage",
         "Rank a repo's or an org's open issues onto a re-runnable board (skill).",
         "fr triage {collect,check,render}  ·  judgements.yaml in the scope's state directory "
-        "(<workspace>/.fr/triage-state/<scope>/, or ~/.cache/fr/triage/<scope>/ outside a clone)",
+        "(~/.cache/fr/triage/<scope>/)",
     ),
     (
         "fr-origins",

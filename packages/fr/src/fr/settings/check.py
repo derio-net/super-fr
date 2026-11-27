@@ -15,11 +15,11 @@ from typing import Final
 import yaml
 
 from fr.artifacts.paths import KIND_DIRS, feature_roots, space_for
+from fr.config.space import config_space, rel
 from fr.settings import SettingsError, load_settings
-from fr.settings.load import read_at_default
 from fr.settings.model import Settings
 
-TRIAGE_PATH: Final = ".fr/triage.yaml"
+TRIAGE_PATH: Final = rel("triage")
 
 Predicate = Callable[[Path, Settings], tuple[str, ...]]
 
@@ -53,7 +53,7 @@ def _driven_triage(root: Path, settings: Settings) -> tuple[str, ...]:
     """The driven-scope keys `.fr/triage.yaml` sets, read from the default ref's commit."""
     if settings.git.push != "ask":
         return ()
-    text = read_at_default(root, TRIAGE_PATH)
+    text = config_space(root).at_default(TRIAGE_PATH)
     if text is None:
         return ()
     from fr.triage.model import parse_triage_config

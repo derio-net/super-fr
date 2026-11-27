@@ -4,7 +4,7 @@ definition of "live, but its PR already merged" that `fr status` and
 `fr archive --all` both iterate.
 
 `branch_artifacts` makes no git calls: it only reads `changed` (repo-relative
-paths, e.g. from `fr.isolation.local.branch_changed_paths`) against the
+paths, e.g. from `fr.isolation.landing.branch_changed_paths`) against the
 working tree, so it needs no git repo to be unit-tested. `owed_artifacts`
 does read the working tree and `evidence` (a `MergeEvidence` the CALLER
 already fetched) but makes no forge call and mutates nothing.

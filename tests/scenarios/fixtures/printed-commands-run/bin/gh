@@ -62,9 +62,15 @@ elif head == ["pr", "view"]:
                       "baseRefName": "main", "mergeable": "UNKNOWN", "mergeStateStatus": "UNKNOWN",
                       "mergeCommit": {"oid": ""}, "title": "feat: widget", "body": "",
                       "labels": [{"name": x} for x in pr["labels"]]}))
-elif argv[:2] == ["api", "repos/example-org/widgets/contents/.fr/settings.yaml"]:
+elif argv[:2] == ["api", "repos/example-org/widgets/contents/.fr/settings.yaml"] or argv == [
+    "api", "-H", "Accept: application/vnd.github.raw+json",
+    "repos/example-org/widgets/contents/.fr/settings.yaml?ref=fr-config",
+]:
     # No `.fr/settings.yaml` on the default branch: the contents API's captured 404 for a
     # missing path (R9: absent means the defaults), as merge-train-label-gate's double answers.
+    # The quiet switch probe (spec 2026-11-19-event-driven-a-la-carte R1) reads it at
+    # `fr-config`, a branch this repo lacks: the same captured 404, derived only in its path,
+    # as cloud-triage-driver's double answers it.
     caps = Path(__file__).resolve().parents[4] / "fixtures" / "github_rest"
     err = json.loads((caps / "repo_contents_docs_no-such-path.error.json").read_text())
     sys.stdout.write(err["stdout"])

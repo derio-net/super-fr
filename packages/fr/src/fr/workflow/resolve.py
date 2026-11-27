@@ -2,38 +2,36 @@
 
 Mirrors `fr.models`' repo-over-user precedent:
 
-    docs/superpowers/workflows/<name>.yaml     # repo override / repo-authored
-    plugins/super-fr/workflows/<name>.yaml     # shipped
+    .fr/workflows/<name>.yaml                          # repo override / repo-authored
+    plugins/super-fr/defaults/workflows/<name>.yaml    # shipped
 
 `fr-goal` with no argument resolves `fr-goal`; `fr-goal ux-research`
 resolves that name through the same order. Override is WHOLESALE — a repo
 file of a given name is used exactly as parsed, never merged field-by-field
 or step-by-step with the shipped manifest of the same name.
 
-**Where "shipped" lives at runtime — three places, in this order.** Unlike
-`fr.models` (a small harness→tier→model dict a repo or operator can plausibly
-hand-author), shipped *workflow manifests* travel with the super-fr plugin's
-own source tree (`plugins/super-fr/workflows/` — see the CI tripwire in
-`tests/unit/test_tripwire_shipped_workflows.py`) and are not something a
-consumer repo's checkout contains. So the lookup is:
+**Where "shipped" lives at runtime.** Shipped manifests travel with the super-fr
+plugin's own defaults tree (`plugins/super-fr/defaults/workflows/`, spec
+2026-11-19-event-driven-a-la-carte R15; CI tripwire
+`tests/unit/test_tripwire_shipped_defaults.py`) and are not something a consumer
+repo's checkout contains. The walk is `fr._shipped`'s, one for every kind:
 
-1. `docs/superpowers/workflows/<name>.yaml` — the repo's own override, which
-   wins wholesale;
-2. `$FR_SHIPPED_WORKFLOWS_DIR/<name>.yaml` when that variable is set — the
-   explicit escape, for tests and for any harness that is not Claude Code;
-3. the copy **inside the `fr` wheel** (`fr/workflows/`,
+1. `.fr/workflows/<name>.yaml` in the repo's configuration space — the repo's own
+   override, which wins wholesale (under quiet/stealth only from the protected
+   branch's reviewed tip, else the shipped shape is used: `fr.config.degraded`);
+2. `$FR_SHIPPED_DEFAULTS_DIR/workflows/<name>.yaml`, then the older
+   `$FR_SHIPPED_WORKFLOWS_DIR/<name>.yaml` (R16, with a notice) — the explicit
+   escape, for tests and for any harness that is not Claude Code;
+3. the copy **inside the `fr` wheel** (`fr/defaults/workflows/`,
    `packaged_shipped_workflows_dir()`) — version-matched with the running
    `fr` by construction;
 4. `~/.claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/
-   workflows/<name>.yaml` — the Claude Code plugin clone
-   (`default_shipped_workflows_dir()`, the same marketplace-clone convention
-   `fr.plan_validator_wrapper` and `fr.isolation.local` use).
+   defaults/workflows/<name>.yaml` — the Claude Code plugin clone.
 
 **Step 3 exists because steps 1, 2 and 4 are all absent by default on a
 non-Claude-Code host** (review r5-b5). A hermes pod gets hooks and a SOUL
 block from `fr hermes install`, not a marketplace clone; an OpenCode consumer
-never has one either; and `$FR_SHIPPED_WORKFLOWS_DIR` was documented nowhere
-operator-facing. Verified on a clean `uv tool install` with an empty `HOME`:
+never has one either. Verified on a clean `uv tool install` with an empty `HOME`:
 `fr run start fr-goal` failed with "unknown workflow shape", and `fr workflow
 check --all` reported "no workflow shapes found" *and exited 0*, so smoke step
 §8.0.3 passed while nothing was installed.
@@ -49,12 +47,10 @@ cannot surprise anyone.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fr import _shipped
-from fr._shipped import MARKETPLACE_ROOT
 from fr.artifacts.paths import KIND_DIRS
 from fr.workflow.model import WorkflowError, WorkflowManifest, parse_manifest
 
@@ -62,33 +58,16 @@ if TYPE_CHECKING:
     from fr.parser import Plan
 
 REPO_WORKFLOWS_REL = Path(KIND_DIRS["workflow"])
-SHIPPED_WORKFLOWS_REL = Path("plugins") / "super-fr" / "workflows"
+SHIPPED_WORKFLOWS_REL = _shipped.plugin_rel("workflows")
 
 
-def default_shipped_workflows_dir() -> Path:
-    """Where shipped manifests live once the plugin is installed.
+def repo_workflows_dir(repo_root: Path) -> Path:
+    """The repo's own workflow manifests for the product checkout *repo_root*:
+    `.fr/workflows/` in its configuration space, or the old `docs/superpowers/workflows/`
+    while only that one exists (spec 2026-11-19-event-driven-a-la-carte R9, R13)."""
+    from fr.config.space import located
 
-    Honors `$FR_SHIPPED_WORKFLOWS_DIR` first — tests, and any harness that
-    is not Claude Code, can point this anywhere — then falls back to the
-    marketplace clone path every other "shipped resource" lookup in this
-    package already uses.
-    """
-    override = os.environ.get("FR_SHIPPED_WORKFLOWS_DIR")
-    if override:
-        return Path(override)
-    return Path.home() / MARKETPLACE_ROOT / SHIPPED_WORKFLOWS_REL
-
-
-PACKAGED_WORKFLOWS_DIRNAME = "workflows"
-"""The wheel-internal copy of `plugins/super-fr/workflows/`, as `fr/workflows/`.
-
-Generated, never hand-edited — `packages/fr/src/fr/workflows/README.md` says
-so and `tests/unit/test_tripwire_shipped_workflows.py` fails when it diverges
-from the plugin directory. Addressed as a data DIRECTORY under the `fr`
-package rather than as `fr.workflows`: it carries no `__init__.py` (it is
-data, not code), so `resources.files("fr.workflows")` would raise
-`ModuleNotFoundError` on a normal install.
-"""
+    return located(Path(repo_root), "workflow")
 
 
 def packaged_shipped_workflows_dir() -> Path | None:
@@ -98,16 +77,16 @@ def packaged_shipped_workflows_dir() -> Path | None:
     `fr._shipped.packaged_dir`'s; `None` means "this source contributes
     nothing", never an error.
     """
-    return _shipped.packaged_dir(PACKAGED_WORKFLOWS_DIRNAME)
+    return _shipped.packaged_kind_dir("workflows")
 
 
 def shipped_workflow_dirs(shipped_root: Path | None = None) -> list[Path]:
     """The shipped sources, in lookup order (see the module docstring).
 
-    An explicit `shipped_root` (or `$FR_SHIPPED_WORKFLOWS_DIR`) wins outright:
-    it is what a test or a non-Claude-Code harness set on purpose. Otherwise
-    the wheel's own copy comes first and the marketplace clone last, so an
-    `fr` upgrade cannot be shadowed by a clone nobody re-installed.
+    An explicit `shipped_root` replaces the variables; otherwise
+    `$FR_SHIPPED_DEFAULTS_DIR/workflows` and `$FR_SHIPPED_WORKFLOWS_DIR` come first,
+    then the wheel's own copy, and the marketplace clone last, so an `fr` upgrade
+    cannot be shadowed by a clone nobody re-installed (`fr._shipped`).
 
     One list, built once, so `resolve_workflow` and `fr workflow check --all`
     cannot search different places — a discovery that finds a shape the
@@ -115,8 +94,7 @@ def shipped_workflow_dirs(shipped_root: Path | None = None) -> list[Path]:
     the run fails" happens.
     """
     return _shipped.shipped_dirs(
-        env_var="FR_SHIPPED_WORKFLOWS_DIR",
-        plugin_rel=SHIPPED_WORKFLOWS_REL,
+        "workflows",
         packaged=packaged_shipped_workflows_dir(),
         shipped_root=shipped_root,
     )
@@ -132,12 +110,21 @@ def resolve_workflow(
     the operator sees exactly where to put an override — and, when the shape
     was expected to be shipped, which installation is missing it.
     """
-    candidates = _shipped.lookup_candidates(
-        name, repo_root / REPO_WORKFLOWS_REL, shipped_workflow_dirs(shipped_root)
-    )
+    repo_dir = repo_workflows_dir(repo_root)
+    candidates = _shipped.lookup_candidates(name, repo_dir, shipped_workflow_dirs(shipped_root))
 
     for path in candidates:
         if path.is_file():
+            if path.parent == repo_dir:
+                from fr.config.degraded import usable_bytes
+
+                # The whole manifest is executable configuration (its `kind: cli` argv,
+                # R7): under quiet and stealth, the protected branch's reviewed tip, or
+                # ignored for the shipped shape while that branch is not protected.
+                data = usable_bytes(repo_root, path, f"run workflow shape {name!r}")
+                if data is None:
+                    continue
+                return parse_manifest(data.decode("utf-8"))
             return parse_manifest(path.read_text())
 
     searched = " and ".join(str(p) for p in candidates)

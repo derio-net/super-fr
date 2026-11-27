@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 from fr.isolation.hostworktree import HostWorktreeTarget
-from fr.isolation.local import subprocess_runner
+from fr.isolation.runner import subprocess_runner
 from fr.isolation.types import IsolationError, IsolationState, load_state
 
 from tests.unit.test_isolation import (

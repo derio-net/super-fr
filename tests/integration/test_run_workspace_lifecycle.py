@@ -24,7 +24,7 @@ from typing import Any
 import pytest
 from fr.cli import app
 from fr.commands import isolation_cmd
-from fr.isolation.local import subprocess_runner
+from fr.isolation.runner import subprocess_runner
 from fr.isolation.types import load_state
 from fr.run.model import load_run_state, run_path
 from typer.testing import CliRunner

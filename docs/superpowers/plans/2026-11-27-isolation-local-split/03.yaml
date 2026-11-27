@@ -1,0 +1,52 @@
+schema_version: 2
+phase:
+  number: 3
+  title: branchrefs.py — network env and branch classification leave local.py (R1-R6)
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - isolation-local-split-guards
+  tier: standard
+  files:
+  - packages/fr/src/fr/isolation/local.py
+  - packages/fr/src/fr/isolation/branchrefs.py
+  - packages/fr/src/fr/isolation/*.py
+  - packages/fr/src/fr/commands/*.py
+  - packages/fr/src/fr/triage/gitseam.py
+  - packages/fr-herdr/src/fr_herdr/runner.py
+  - tests/unit/*.py
+  - tests/integration/*.py
+  estimate_lines: 760
+tasks:
+- number: 1
+  title: Guard first, then the move
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: add `"fr.isolation.branchrefs"` to `ISOLATION_MODULES`; the new case fails.
+  - id: P3.T1.S2
+    text: |-
+      GREEN: create `packages/fr/src/fr/isolation/branchrefs.py` (docstring, #1517) holding the branchrefs group byte-identical (`local.py` lines 839-1172 at the branch base): `_realpath`, `_main_worktree_root`, `RemoteView`, `BranchDecision`, `_NETWORK_TIMEOUT_S`, `_BATCH_SSH`, `network_env`, `fetch_placement`, `run_network`, `_forge_runner`, `resolve_branch_refs`, `_why`, `_short`, `_plural`, `_local_row`, `classify_branch`. It imports `Runner` from `fr.isolation.runner`, `CommandRunner` from `fr.ghclient`, and whatever else those bodies name; never `fr.isolation.local`. The VK comment and refusal stay in `local.py`. `local.py` imports what its code uses. Guard passes.
+  - id: P3.T1.S3
+    text: |-
+      REFACTOR: migrate every caller (src incl. `external.py`, `isolation_cmd.py`, `archive_cmd.py`, the lazy import in `triage/gitseam.py`, `fr-herdr/src/fr_herdr/runner.py:118`; tests incl. lazy imports) to `fr.isolation.branchrefs`. Lower the budget. ruff, format, mypy (incl. `packages/fr-herdr/src`) clean; fast tier green.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-11-27T10:07:12+00:00'
+      note: null
+    P3.T1.S2:
+      state: x
+      ticked_at: '2026-11-27T10:07:12+00:00'
+      note: null
+    P3.T1.S3:
+      state: x
+      ticked_at: '2026-11-27T10:07:12+00:00'
+      note: null
+  completion:
+    at: '2026-11-27T10:07:12+00:00'
+    note: null
+    observed_prs: []

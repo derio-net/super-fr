@@ -1,0 +1,8 @@
+#!/bin/sh
+# A local `ssh` for tests/scenarios/config-homes.sh (GIT_SSH_COMMAND): git runs
+# `ssh [options] <host> "<git-upload-pack|git-receive-pack> '<path>'"`; this runs that
+# command against $FAKE_SSH_ROOT instead of a host, so an origin spelled
+# git@github.com:example-org/demo.git (which fr asks the forge about) is a local bare repo.
+for last; do :; done
+cd "$FAKE_SSH_ROOT" || exit 128
+exec sh -c "$last"

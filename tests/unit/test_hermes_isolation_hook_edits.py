@@ -242,3 +242,44 @@ def test_a_repo_with_only_legacy_archived_plans_blocks_a_base_edit(tmp_path: Pat
     (d / "_meta.yaml").write_text("plan: x\n")
     assert not (repo / "docs" / "superpowers" / "plans").exists()
     assert blocked(run_hook(payload(repo / "a.py"), env={"PATH": "/usr/bin:/bin"}))
+
+
+# --- S1 (spec 2026-11-19-event-driven-a-la-carte R5, R8): the same library decides ------
+
+
+def test_hermes_reads_the_new_switch_targets_and_allowlist(tmp_path: Path) -> None:
+    from tests.unit.test_isolation_decision_core import (
+        quiet_config_worktree,
+        stealth_config_setup,
+    )
+
+    home = tmp_path / "home"
+    wt = quiet_config_worktree(tmp_path, home)
+    env = {"HOME": str(home), "PATH": "/usr/bin:/bin"}
+    assert allowed(run_hook(payload(wt / ".fr" / "ci.yaml"), env))
+    result = run_hook(payload(tmp_path / "q" / "prod" / "src.py"), env)
+    assert blocked(result)
+    assert "'.fr/isolation-allow'" in json.loads(result.stdout)["reason"]
+    (tmp_path / "q" / "prod" / ".fr").mkdir()
+    (tmp_path / "q" / "prod" / ".fr" / "isolation-allow").write_text("src.py\n")
+    assert allowed(run_hook(payload(tmp_path / "q" / "prod" / "src.py"), env))
+
+    shome = tmp_path / "shome"
+    (tmp_path / "s").mkdir()
+    config = stealth_config_setup(tmp_path / "s", shome)
+    assert allowed(run_hook(payload(config / "target" / ".fr" / "ci.yaml"), {"HOME": str(shome)}))
+
+
+def test_hermes_never_lets_the_allowlist_unlock_itself(tmp_path: Path) -> None:
+    """Review p2-r5: the same library, so Hermes refuses an edit to either allowlist."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    (repo / ".devcontainer" / "dev").mkdir(parents=True)
+    (repo / ".devcontainer" / "dev" / "devcontainer.json").write_text("{}\n")
+    (repo / ".fr").mkdir()
+    (repo / ".fr" / "isolation-allow").write_text("*\n")
+    env = {"PATH": "/usr/bin:/bin"}
+    assert allowed(run_hook(payload(repo / "x.py"), env))
+    assert blocked(run_hook(payload(repo / ".fr" / "isolation-allow"), env))
+    assert blocked(run_hook(payload(repo / ".fr-isolation-allow"), env))

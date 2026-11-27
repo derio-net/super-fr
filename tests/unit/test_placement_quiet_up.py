@@ -167,3 +167,113 @@ def test_up_again_on_a_quiet_workspace_with_a_plan_needs_no_validator_wrapper(
     assert made.exit_code == 0, made.output
     assert not (state.worktree / "scripts/validate-plans.sh").exists()
     assert _target(repo).up(profile=None, branch="feat/q").worktree == state.worktree
+
+
+# --- S1 (spec 2026-11-19-event-driven-a-la-carte §B, R5): entering fetches, never pushes ---
+#
+# Plan-journal decision p2-create-at-init-and-migration: fr creates `fr-config` only at the
+# migration and at `fr settings init`. `up` and `run start` adopt one that exists.
+
+
+def _origin_heads(tmp_path: Path) -> str:
+    return git(tmp_path / "origin.git", "for-each-ref", "--format=%(refname) %(objectname)")
+
+
+def test_up_on_an_old_quiet_repo_pushes_nothing_and_names_the_remedies(tmp_path: Path) -> None:
+    """A quiet repo whose switch is only the old root settings.yaml on `fr`: `up` reads it
+    (R13) and pushes nothing; a configuration read refuses, naming how to create the space."""
+    from fr.config.space import config_space
+
+    repo = _quiet_origin(tmp_path)
+    before = _origin_heads(tmp_path)
+    state = _target(repo).up(profile=None, branch="feat/q")
+    assert state.placement == "quiet"
+    assert _origin_heads(tmp_path) == before
+    assert git(tmp_path / "origin.git", "branch", "--list", "fr-config").strip() == ""
+    home = Path(os.environ["HOME"])
+    assert not (home / ".cache/fr/worktrees/work/fr-config").exists()
+    with pytest.raises(SettingsError) as caught:
+        config_space(state.worktree).at_default("settings")
+    message = str(caught.value)
+    assert "fr migrate artifacts --yes" in message and "fr settings init" in message
+
+
+def test_up_adopts_an_existing_fr_config_into_its_worktree(tmp_path: Path) -> None:
+    from fr.config.space import config_space
+
+    from tests.unit.test_placement_quiet import push_config_branch
+
+    repo = _quiet_origin(tmp_path)
+    push_config_branch(repo, QUIET)
+    git(repo, "update-ref", "-d", "refs/remotes/origin/fr-config")
+    before = _origin_heads(tmp_path)
+    state = _target(repo).up(profile=None, branch="feat/q")
+    assert _origin_heads(tmp_path) == before
+    wt = Path(os.environ["HOME"]) / ".cache/fr/worktrees/work/fr-config"
+    assert git(wt, "symbolic-ref", "--short", "HEAD").strip() == "fr-config"
+    assert (wt / ".fr" / "settings.yaml").read_text() == QUIET
+    space = config_space(state.worktree)
+    assert space.checkout == wt and space.at_default("settings") == QUIET
+
+
+@pytest.mark.parametrize("with_config", [False, True], ids=["old-switch", "fr-config"])
+def test_up_no_fetch_never_pushes(tmp_path: Path, with_config: bool) -> None:
+    from tests.unit.test_placement_quiet import push_config_branch
+
+    repo = make_repo(tmp_path)
+    push_fr_branch(repo, QUIET)
+    if with_config:
+        push_config_branch(repo, QUIET)
+    before = _origin_heads(tmp_path)
+    state = _target(repo).up(profile=None, branch="feat/n", no_fetch=True)
+    assert state.placement == "quiet"
+    assert _origin_heads(tmp_path) == before
+
+
+# --- review p2-r2: fr adopts only a configuration branch (orphan, tree `.fr/`) -----------
+
+
+def _push_fr_config_from_main(repo: Path, keep_product: bool) -> None:
+    """An `fr-config` on origin cut from `main` (shares the product's history); with
+    *keep_product* its tree still holds the product's files, else only `.fr/`."""
+    git(repo, "checkout", "-q", "-b", "fr-config", "main")
+    if not keep_product:
+        git(repo, "rm", "-rqf", ".")
+    (repo / ".fr").mkdir(exist_ok=True)
+    (repo / ".fr" / "settings.yaml").write_text(QUIET)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "not a configuration branch")
+    git(repo, "push", "-q", "origin", "fr-config")
+    git(repo, "checkout", "-q", "main")
+    git(repo, "branch", "-q", "-D", "fr-config")
+
+
+@pytest.mark.parametrize(
+    ("keep_product", "why"),
+    [(True, "README.md"), (False, "shares history")],
+    ids=["product-tree", "product-history"],
+)
+def test_up_refuses_to_adopt_a_foreign_fr_config(
+    tmp_path: Path, keep_product: bool, why: str
+) -> None:
+    repo = _quiet_origin(tmp_path)
+    _push_fr_config_from_main(repo, keep_product)
+    with pytest.raises(IsolationError) as caught:
+        _target(repo).up(profile=None, branch="feat/q")
+    message = str(caught.value)
+    assert "fr-config" in message and why in message
+    assert not (Path(os.environ["HOME"]) / ".cache/fr/worktrees/work/fr-config").exists()
+
+
+def test_fr_never_pushes_an_unrelated_local_fr_config(tmp_path: Path) -> None:
+    """A local `fr-config` cut from the product, origin having none: creating the space
+    (`fr settings init --quiet` on an old quiet repo) refuses rather than push it."""
+    from fr.placement.quiet import ensure_config_branch
+
+    repo = make_repo(tmp_path)
+    push_fr_branch(repo, QUIET)
+    git(repo, "branch", "-q", "fr-config", "main")
+    with pytest.raises(SettingsError) as caught:
+        ensure_config_branch(repo)
+    assert "fr-config" in str(caught.value)
+    assert git(tmp_path / "origin.git", "branch", "--list", "fr-config").strip() == ""

@@ -16,7 +16,8 @@ from __future__ import annotations
 
 from fr.isolation.external import ExternalTarget
 from fr.isolation.hostworktree import HostWorktreeTarget
-from fr.isolation.local import GcSpawner, LocalWorktreeDevcontainerTarget, Runner
+from fr.isolation.local import LocalWorktreeDevcontainerTarget
+from fr.isolation.runner import GcSpawner, Runner
 from fr.isolation.types import IsolationError, IsolationState, Target, recorded_mode
 
 

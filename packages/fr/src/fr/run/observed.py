@@ -573,7 +573,7 @@ def walks_run(command: str, run: str) -> bool:
     where `<fr>` is ONLY `fr` or `uv run fr`, and the args hold exactly one
     `--run`, equal to `run`. A command that ran a different program cannot
     vouch for the walk, so there is no env-assignment prefix (`PATH=…`,
-    `FR_SHIPPED_VERIFICATIONS_DIR=…`), no `env`, no path to some `fr`, no uv
+    `FR_SHIPPED_DEFAULTS_DIR=…`), no `env`, no path to some `fr`, no uv
     flag (`--project`, `--with`, `--python`). Anything else is not a walk:
     another segment, any other operator (redirect, pipe, `;`, `||`, background
     `&`, subshell, braces), command substitution, a here-doc, a comment,

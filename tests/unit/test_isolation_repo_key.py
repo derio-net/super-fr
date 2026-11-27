@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 from fr.isolation.hostworktree import HostWorktreeTarget
-from fr.isolation.local import subprocess_runner
+from fr.isolation.runner import subprocess_runner
 from fr.isolation.types import repo_cache_name
 
 

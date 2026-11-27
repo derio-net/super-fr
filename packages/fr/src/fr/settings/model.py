@@ -6,6 +6,7 @@ them, so the file's documentation cannot drift from the schema.
 
 from __future__ import annotations
 
+import re
 import string
 from collections.abc import Callable
 from typing import Annotated, Any, Final, Literal, cast
@@ -18,12 +19,16 @@ from pydantic import (
     Field,
     ValidationError,
     field_validator,
+    model_validator,
 )
 from pydantic.config import JsonDict
 
 from fr.settings import SettingsError
 
-SCHEMA_VERSION: Final = 1
+SCHEMA_VERSION: Final = 2
+SCHEMAS: Final = (1, 2)
+"""The settings schemas this fr reads. Schema 2 adds the `triage` section (spec 2026-11-19
+R20); a file that sets no key of it may stay at schema 1."""
 
 
 PLACEMENTS: Final = frozenset({"repo", "quiet", "stealth"})
@@ -72,7 +77,18 @@ def _choice(default: str, vocab: frozenset[str], description: str) -> Any:
 
 def _strict_int(v: Any) -> Any:
     if isinstance(v, bool) or not isinstance(v, int):
-        raise ValueError(f"must be the integer 1, got {v!r}")
+        raise ValueError(f"must be the integer 1 or 2, got {v!r}")
+    return v
+
+
+_SLUG = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+
+
+def _slug(v: Any) -> Any:
+    if v is None:
+        return v
+    if not isinstance(v, str) or not _SLUG.fullmatch(v) or v.split("/")[1] in (".", ".."):
+        raise ValueError(f"must be OWNER/REPO, got {v!r}")
     return v
 
 
@@ -232,8 +248,20 @@ class Git(_Closed):
     )
 
 
+class Triage(_Closed):
+    state_repo: Annotated[str | None, AfterValidator(_slug)] = Field(
+        None,
+        description="Default: none; a triage scope of this one repo keeps its state ref in this\n"
+        "repo (or, collected from a stealth workspace, in its tracking repo).\n"
+        "OWNER/REPO: the repo that keeps the scope's `fr-triage/<scope-id>` branch, used\n"
+        "when the scope records none yet. Needs `schema: 2`. Read from the configuration\n"
+        "space; under quiet it counts only while fr-config is protected. The privacy\n"
+        "guard still refuses a private issue to a public state repo.",
+    )
+
+
 class Settings(_Closed):
-    schema_: Annotated[Literal[1], BeforeValidator(_strict_int)] = Field(
+    schema_: Annotated[Literal[1, 2], BeforeValidator(_strict_int)] = Field(
         1, alias="schema", description="The settings schema version this file is written for."
     )
     placement: PlacementType = _choice(
@@ -250,6 +278,16 @@ class Settings(_Closed):
     )
     forge: Forge = Field(default_factory=Forge, description="What fr writes to the forge.")
     git: Git = Field(default_factory=Git, description="How fr drives git.")
+    triage: Triage = Field(
+        default_factory=lambda: Triage.model_validate({}),
+        description="Triage of this repo (schema 2 only).",
+    )
+
+    @model_validator(mode="after")
+    def _triage_needs_schema_2(self) -> Settings:
+        if self.triage.state_repo is not None and self.schema_ < 2:
+            raise ValueError("triage.state_repo needs `schema: 2` (R20)")
+        return self
 
 
 def _dotted(loc: tuple[Any, ...]) -> str:
@@ -263,7 +301,7 @@ def parse_settings(data: object, *, source: str) -> Settings:
     if not isinstance(data, dict):
         raise SettingsError(f"{source}: settings must be a mapping, got {type(data).__name__}")
     schema = data.get("schema")
-    if isinstance(schema, int) and not isinstance(schema, bool) and schema > SCHEMA_VERSION:
+    if isinstance(schema, int) and not isinstance(schema, bool) and schema > max(SCHEMAS):
         raise SettingsError(
             f"{source}: schema: {schema} is newer than this fr understands "
             f"(schema {SCHEMA_VERSION}); upgrade fr"

@@ -17,13 +17,9 @@ from typing import Any
 import pytest
 from fr.cli import app
 from fr.commands import isolation_cmd
+from fr.isolation.branchrefs import BranchDecision, RemoteView, classify_branch
 from fr.isolation.hostworktree import HostWorktreeTarget
-from fr.isolation.local import (
-    BranchDecision,
-    RemoteView,
-    classify_branch,
-    subprocess_runner,
-)
+from fr.isolation.runner import subprocess_runner
 from fr.isolation.types import IsolationError
 from typer.testing import CliRunner
 
@@ -100,7 +96,8 @@ class GitRunner:
 
 SWITCH_PROBE = "refs/heads/fr"
 NO_FETCH_SWITCH_LINE = (
-    "fr: --no-fetch: reading the last fetched origin/fr for the placement "
+    "fr: --no-fetch: reading the last fetched origin/fr-config and origin/fr for the "
+    "placement "
     "(not a reachability check)"
 )
 

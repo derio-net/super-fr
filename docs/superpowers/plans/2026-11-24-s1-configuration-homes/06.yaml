@@ -1,0 +1,78 @@
+schema_version: 2
+phase:
+  number: 6
+  title: Triage state in a host-cache repository (R17-R21)
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  tracking_issue: null
+  acceptance:
+  - s1-triage-state-home
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/**
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/triage_state_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/settings/**
+  - tests/**/*.py
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: The cache repository syncs alone (R17)
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      RED: with HOME at tmp and no product clone as cwd, `state_dir(scope)` is `~/.cache/fr/triage/<scope>/`, the first use makes it a git repository whose `info/exclude` is `*`, and a scope with a `state_repo` (a local bare remote) fetches and pushes `refs/heads/fr-triage/<scope-id>` from it, compare-and-swap as today.
+  - id: P6.T1.S2
+    text: |-
+      GREEN: `fr.triage.model.state_dir` returns the cache dir; `_sync_with_ref`, `push_now`, `fetch_now` and `state_ref.local_tree` take the cache repository as the object store; `--dir` keeps working.
+- number: 2
+  title: The move (R18)
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      RED: one test per rule: a live pid in the cache's `drive.lock` refuses the move with "stop the driver first"; an occupied cache dir is renamed `<scope>.pre-s1` and the clone's copy moves in; `merge/` worktrees are removed and pruned, not moved; the clone's `STATE_EXCLUDE` line is removed; a second clone whose `REF_FILES` equal the cache's is removed, one that differs refuses naming both directories.
+  - id: P6.T2.S2
+    text: |-
+      GREEN: implement the move in `fr/triage/model.py` (or a new `fr/triage/state_home.py` if `model.py` would grow past readability), called from `resolve_state_dir` before any read.
+- number: 3
+  title: Default state repo and the override (R19-R21)
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      RED: `decide_state_repo` picks the stealth marker's tracking repo for a scope first collected from a stealth workspace, else the single repo, else asks as today; collect reads `triage.state_repo` for a one-repo scope through the forge from its configuration space and applies it only when `scope-durable.yaml` records none; `fr triage check` lists a `state repo mismatch` set; `fr.settings.model` accepts `schema: 2` with `triage.state_repo`, refuses `triage` under `schema: 1`; `privacy.guard_state` still refuses a private issue to a public state repo chosen by each rule.
+  - id: P6.T3.S2
+    text: |-
+      GREEN: implement in `state_ref.py`, `triage_cmd._settle_state_repo`, the check sets and `settings/model.py` (`SCHEMA_VERSION` accepts 1 and 2, the `Triage` section closed, `fr settings show` lists `triage.state_repo`). `uv run pytest --fr-scope -n 2 -q --no-cov` green.
+state:
+  steps:
+    P6.T1.S1:
+      state: x
+      ticked_at: '2026-11-25T10:29:35+00:00'
+      note: null
+    P6.T1.S2:
+      state: x
+      ticked_at: '2026-11-25T10:29:35+00:00'
+      note: null
+    P6.T2.S1:
+      state: x
+      ticked_at: '2026-11-25T10:29:35+00:00'
+      note: null
+    P6.T2.S2:
+      state: x
+      ticked_at: '2026-11-25T10:29:35+00:00'
+      note: null
+    P6.T3.S1:
+      state: x
+      ticked_at: '2026-11-25T10:29:35+00:00'
+      note: null
+    P6.T3.S2:
+      state: x
+      ticked_at: '2026-11-25T10:29:35+00:00'
+      note: null
+  completion:
+    at: '2026-11-25T10:29:35+00:00'
+    note: null
+    observed_prs: []

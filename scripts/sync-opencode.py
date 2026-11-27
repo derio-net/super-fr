@@ -79,7 +79,9 @@ AGENTS_MIRROR_DIR = REPO_ROOT / ".opencode" / "agent"
 # The repo-committed tier->model bindings, same file `fr models` itself
 # reads (fr.commands.models_cmd.REPO_MODELS_REL) — kept in sync by using the
 # same loader, `fr.models.load_models`, rather than a second parser.
-AGENTS_MODELS_REL = Path("docs") / "superpowers" / "models.yaml"
+AGENTS_MODELS_REL = Path(".fr") / "models.yaml"
+"""This repo's own tier bindings (S1 R9); the old path is read while only it exists."""
+LEGACY_AGENTS_MODELS_REL = Path("docs") / "superpowers" / "models.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -425,12 +427,14 @@ def canonical_agents(*, models_path: Path | None = None) -> dict[str, str]:
     from fr.types, never re-listed here, so a fourth tier needs no edit in
     this file.
 
-    `models_path` defaults to this repo's own docs/superpowers/models.yaml
+    `models_path` defaults to this repo's own .fr/models.yaml
     and exists as a parameter purely so callers (tests) can point it at a
     fixture instead of the real repo file.
     """
     if models_path is None:
         models_path = REPO_ROOT / AGENTS_MODELS_REL
+        if not models_path.exists() and (REPO_ROOT / LEGACY_AGENTS_MODELS_REL).exists():
+            models_path = REPO_ROOT / LEGACY_AGENTS_MODELS_REL
 
     result: dict[str, str] = {}
     # Which canonical file claimed each generated name, so a collision can

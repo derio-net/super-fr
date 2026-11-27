@@ -1,5 +1,6 @@
-"""A scope's state lives in the workspace that runs the driver (spec
-2026-10-07-cloud-triage R4, §B, Test Plan 4).
+"""`--workspace` beside `--dir`, and the per-host drive lock (spec 2026-10-07-cloud-triage
+R4, §B, p3-r3), now that the state itself lives in `~/.cache/fr/triage/<scope>/` (spec
+2026-11-19 R17; the move and the cache repository are `test_triage_state_home.py`).
 
 Every repo here is a throwaway under `tmp_path`; nothing touches the checkout under
 test (the cwd is moved into the sandbox before any default resolves).
@@ -46,53 +47,8 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _exclude(main: Path) -> str:
-    return (main / ".git" / "info" / "exclude").read_text()
-
-
-def test_state_lives_in_the_workspace_and_is_excluded_through_the_common_dir(
-    tmp_path: Path, home: Path
-) -> None:
-    main, wt = _main_and_worktree(tmp_path)
-
-    got = state_dir(SCOPE, workspace=wt)
-
-    assert got == wt / ".fr" / "triage-state" / SCOPE.name
-    assert STATE_EXCLUDE == ".fr/triage-state/"
-    assert _exclude(main).splitlines().count(STATE_EXCLUDE) == 1
-    got.mkdir(parents=True, exist_ok=True)
-    (got / "judgements.yaml").write_text("schema: 6\n")
-    assert _git(wt, "status", "--porcelain", "--untracked-files=all") == ""
-    assert _git(main, "status", "--porcelain", "--untracked-files=all") == ""
-
-
-def test_the_exclude_entry_is_written_once(tmp_path: Path, home: Path) -> None:
-    main, wt = _main_and_worktree(tmp_path)
-
-    state_dir(SCOPE, workspace=wt)
-    state_dir(SCOPE, workspace=wt)
-    state_dir(SCOPE, workspace=main)
-
-    assert _exclude(main).splitlines().count(STATE_EXCLUDE) == 1
-
-
-def test_the_workspace_defaults_to_the_toplevel_of_the_working_directory(
-    tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, wt = _main_and_worktree(tmp_path)
-    sub = wt / "deep" / "er"
-    sub.mkdir(parents=True)
-    monkeypatch.chdir(sub)
-
-    assert state_dir(SCOPE) == wt / ".fr" / "triage-state" / SCOPE.name
-
-
-def test_a_workspace_given_below_its_toplevel_resolves_to_the_toplevel(
-    tmp_path: Path, home: Path
-) -> None:
-    _, wt = _main_and_worktree(tmp_path)
-    (wt / "sub").mkdir()
-
-    assert state_dir(SCOPE, workspace=wt / "sub") == wt / ".fr" / "triage-state" / SCOPE.name
+    path = main / ".git" / "info" / "exclude"
+    return path.read_text() if path.exists() else ""
 
 
 def test_dir_keeps_winning_and_touches_no_exclude(tmp_path: Path, home: Path) -> None:
@@ -101,89 +57,6 @@ def test_dir_keeps_winning_and_touches_no_exclude(tmp_path: Path, home: Path) ->
 
     assert state_dir(SCOPE, tmp_path / "elsewhere", workspace=wt) == tmp_path / "elsewhere"
     assert _exclude(main) == before
-
-
-def test_the_home_cache_is_imported_once_and_left_in_place(tmp_path: Path, home: Path) -> None:
-    _, wt = _main_and_worktree(tmp_path)
-    cache = home / ".cache" / "fr" / "triage" / SCOPE.name
-    (cache / "board").mkdir(parents=True)
-    (cache / "judgements.yaml").write_text("schema: 6\nissues: {}\n")
-    (cache / "board" / "manifest.yaml").write_text("fragments: []\n")
-
-    got = state_dir(SCOPE, workspace=wt)
-
-    assert (got / "judgements.yaml").read_text() == "schema: 6\nissues: {}\n"
-    assert (got / "board" / "manifest.yaml").read_text() == "fragments: []\n"
-    assert (cache / "judgements.yaml").read_text() == "schema: 6\nissues: {}\n"  # left in place
-
-    (got / "judgements.yaml").write_text("schema: 6\nissues: {edited: true}\n")
-    (cache / "judgements.yaml").write_text("schema: 6\nissues: {later: true}\n")
-    state_dir(SCOPE, workspace=wt)
-
-    assert (got / "judgements.yaml").read_text() == "schema: 6\nissues: {edited: true}\n"
-
-
-def test_no_cache_means_nothing_is_created_beyond_the_exclude(tmp_path: Path, home: Path) -> None:
-    _, wt = _main_and_worktree(tmp_path)
-
-    got = state_dir(SCOPE, workspace=wt)
-
-    assert not got.exists()
-
-
-@pytest.mark.parametrize(
-    "scope",
-    [
-        Scope(kind="org", target="derio-net"),
-        Scope.group(["derio-net/a", "derio-net/b"]),
-        SCOPE,
-    ],
-)
-def test_outside_any_clone_with_no_workspace_the_legacy_cache_is_used_unchanged(
-    tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch, scope: Scope
-) -> None:
-    """p3-r3: a host command typed from `$HOME` keeps working, for every scope kind."""
-    outside = tmp_path / "not-a-clone"
-    outside.mkdir()
-    monkeypatch.chdir(outside)
-    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
-
-    assert state_dir(scope) == home / ".cache" / "fr" / "triage" / scope.name
-    assert state_dir(scope) == legacy_state_dir(scope)
-
-
-def test_the_import_copies_only_the_durable_files(tmp_path: Path, home: Path) -> None:
-    """p3-r2: the REF_FILES that exist, facts.json and scope.yaml; never the merge
-    scratch worktrees, a drive.lock or the rendered pages."""
-    _, wt = _main_and_worktree(tmp_path)
-    cache = legacy_state_dir(SCOPE)
-    files = {
-        "judgements.yaml": "j\n",
-        "facts.json": "{}\n",
-        "scope.yaml": "claim_expiry_hours: 12\n",
-        "lease.yaml": "l\n",
-        "board/manifest.yaml": "fragments: []\n",
-        "drive.lock": '{"pid": 1}\n',
-        "backlog.html": "<html></html>\n",
-        "batches.html": "<html></html>\n",
-        "merge/b1/.git": "gitdir: /elsewhere\n",
-        "merge/b1/src.py": "x = 1\n",
-    }
-    for rel, text in files.items():
-        (cache / rel).parent.mkdir(parents=True, exist_ok=True)
-        (cache / rel).write_text(text)
-
-    got = state_dir(SCOPE, workspace=wt)
-
-    copied = sorted(str(p.relative_to(got)) for p in got.rglob("*") if p.is_file())
-    assert copied == [
-        "board/manifest.yaml",
-        "facts.json",
-        "judgements.yaml",
-        "lease.yaml",
-        "scope.yaml",
-    ]
-    assert (cache / "drive.lock").exists() and (cache / "merge" / "b1" / "src.py").exists()
 
 
 def test_a_workspace_that_is_no_clone_is_refused(
@@ -208,10 +81,12 @@ def test_the_commands_take_workspace_beside_dir(tmp_path: Path, home: Path) -> N
 
     assert result.exit_code == 0, result.output
     assert "no batches" in result.output
-    assert STATE_EXCLUDE in _exclude(main).splitlines()
+    assert STATE_EXCLUDE not in _exclude(main).splitlines()  # S1: nothing in the clone
+    assert not (wt / ".fr" / "triage-state").exists()
+    assert (legacy_state_dir(SCOPE) / ".git").is_dir()
 
 
-def test_a_command_outside_any_clone_uses_the_legacy_cache(
+def test_a_command_outside_any_clone_uses_the_cache(
     tmp_path: Path, home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from fr.cli import app

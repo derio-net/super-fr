@@ -35,8 +35,14 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return r
 
 
+def _declarations(repo: Path) -> Path:
+    """Where scaffold wrote them: `.fr/profiles.yaml` (S1 R9), or the old path a test seeded."""
+    new = repo / ".fr/profiles.yaml"
+    return new if new.exists() else repo / ".devcontainer/fr-profiles.yaml"
+
+
 def _profiles(repo: Path) -> dict:
-    return yaml.safe_load((repo / ".devcontainer/fr-profiles.yaml").read_text())
+    return yaml.safe_load(_declarations(repo).read_text())
 
 
 def _declare(repo: Path, *, ops: bool = True) -> None:
@@ -105,7 +111,7 @@ def test_scaffold_ops_creates_the_store_dir_on_the_host(repo: Path, tmp_path: Pa
 
 def test_rescaffold_keeps_keys_it_does_not_own(repo: Path) -> None:
     scaffold_profile(repo, "ops", "operate", [], [], ops=True)
-    path = repo / ".devcontainer/fr-profiles.yaml"
+    path = _declarations(repo)
     data = yaml.safe_load(path.read_text())
     data["profiles"]["ops"]["custom"] = "keep me"
     path.write_text(yaml.safe_dump(data))

@@ -1,0 +1,70 @@
+schema_version: 2
+phase:
+  number: 5
+  title: One home for shipped defaults (R15, R16)
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - s1-shipped-defaults
+  tier: standard
+  files:
+  - plugins/super-fr/defaults/**
+  - plugins/super-fr/workflows/**
+  - plugins/super-fr/verifications/**
+  - plugins/super-fr/lenses/**
+  - packages/fr/src/fr/defaults/**
+  - packages/fr/src/fr/workflows/**
+  - packages/fr/src/fr/verifications/**
+  - packages/fr/src/fr/lens_manifests/**
+  - packages/fr/src/fr/_shipped.py
+  - packages/fr/src/fr/workflow/resolve.py
+  - packages/fr/src/fr/verification/resolve.py
+  - packages/fr/src/fr/lenses/resolve.py
+  - packages/fr/src/fr/run/observed.py
+  - scripts/sync-defaults-data.py
+  - scripts/sync-lenses-data.py
+  - tests/**/*.py
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: Move the trees and the sync
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: `tests/unit/test_tripwire_shipped_defaults.py` asserts `plugins/super-fr/defaults/{workflows,verifications,lenses}/` exist with the same files as today, every workflow passes `check_workflow`, the four strategies keep their `when`/`driver`, the four lenses exist, the wheel copy `fr/defaults/<kind>/` is byte-equal and importlib-reachable, and `scripts/sync-defaults-data.py --check` exits 0.
+  - id: P5.T1.S2
+    text: |-
+      GREEN: `git mv` the three plugin dirs under `plugins/super-fr/defaults/` and the three wheel dirs under `packages/fr/src/fr/defaults/`; write `scripts/sync-defaults-data.py` (copy, delete stale, `--check` exits 1 on drift); delete `scripts/sync-lenses-data.py` and the three old tripwires, carrying their assertions into the new one; update `test_install_copies_workflows.py`, `test_install_copies_lenses.py` and add a verifications case.
+- number: 2
+  title: One resolver order
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      RED: resolver tests: `.fr/workflows/<name>.yaml` beats shipped; `FR_SHIPPED_DEFAULTS_DIR=<root>` resolves `<root>/workflows/<name>.yaml` before the per-kind variables, which still work; the wheel beats the marketplace path `plugins/super-fr/defaults/<kind>`; lenses never read a repo directory and keep `.fr/lenses.yaml` overrides.
+  - id: P5.T2.S2
+    text: |-
+      GREEN: `fr/_shipped.py` takes a kind name and builds `[repo .fr/<kind> (workflows, verifications), $FR_SHIPPED_DEFAULTS_DIR/<kind>, $FR_SHIPPED_<KIND>_DIR, wheel fr/defaults/<kind>, marketplace .../plugins/super-fr/defaults/<kind>]`; the three resolvers and `run/observed.py` call it. `uv run pytest --fr-scope -n 2 -q --no-cov` green.
+state:
+  steps:
+    P5.T1.S1:
+      state: x
+      ticked_at: '2026-11-25T08:40:39+00:00'
+      note: null
+    P5.T1.S2:
+      state: x
+      ticked_at: '2026-11-25T08:40:39+00:00'
+      note: null
+    P5.T2.S1:
+      state: x
+      ticked_at: '2026-11-25T08:40:39+00:00'
+      note: null
+    P5.T2.S2:
+      state: x
+      ticked_at: '2026-11-25T08:40:39+00:00'
+      note: null
+  completion:
+    at: '2026-11-25T08:40:39+00:00'
+    note: null
+    observed_prs: []

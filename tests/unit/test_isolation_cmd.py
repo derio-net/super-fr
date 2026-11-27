@@ -1479,7 +1479,7 @@ def test_status_default_makes_no_push_check_call(
 
 
 def _stub_gc(monkeypatch: pytest.MonkeyPatch, actions, captured=None):
-    from fr.isolation.local import GcAction  # noqa: F401 (referenced by callers)
+    from fr.isolation.reap import GcAction  # noqa: F401 (referenced by callers)
 
     class StubTarget:
         def gc(self, dry_run=False):
@@ -1491,7 +1491,7 @@ def _stub_gc(monkeypatch: pytest.MonkeyPatch, actions, captured=None):
 
 
 def test_gc_cli_reports(monkeypatch: pytest.MonkeyPatch) -> None:
-    from fr.isolation.local import GcAction
+    from fr.isolation.reap import GcAction
 
     captured: dict = {}
     _stub_gc(
@@ -1512,7 +1512,7 @@ def test_gc_cli_reports(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_gc_cli_json(monkeypatch: pytest.MonkeyPatch) -> None:
     import json
 
-    from fr.isolation.local import GcAction
+    from fr.isolation.reap import GcAction
 
     _stub_gc(monkeypatch, [GcAction("/wt/m", "feat/m", "merged", "reaped", "cX")])
     res = runner.invoke(app, ["isolation", "gc", "--format", "json"])

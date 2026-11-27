@@ -10,7 +10,8 @@
 #     returns 0  -> ALLOW (edit may proceed)
 #     returns 1  -> BLOCK (edit is outside a valid fr-isolation workspace)
 #
-# Honors FR_BASE_OK=1 and a `.fr-isolation-allow` globlist at the repo root.
+# Honors FR_BASE_OK=1 and a `.fr/isolation-allow` globlist in the repo's working tree
+# (`.fr-isolation-allow` at the root is its fallback; spec 2026-11-19 S1 R8, R13).
 # Shared by the Claude Code PreToolUse hook (plugins/super-fr/hooks/
 # fr-isolation-required.sh) and the Hermes pre_tool_call hook
 # (plugins/super-fr/hooks/hermes/fr-isolation-required.sh) so the marker /
@@ -377,23 +378,50 @@ _fr_common_dir_of() {
   printf '%s\n' "$_fr_gd"
 }
 
+# The quiet switch's locations, newest first (spec 2026-11-19-event-driven-a-la-carte
+# S1 R5, R13): `.fr/settings.yaml` on `fr-config`, then the old root `settings.yaml` on
+# `fr`. The OpenCode plugin's `SWITCH_LOCATIONS` (marker.ts) is the same list, and
+# tests/unit/test_isolation_decision_core.py keeps the two from drifting.
+FR_SWITCH_NEW='refs/remotes/origin/fr-config:.fr/settings.yaml' # fr-switch-location
+FR_SWITCH_OLD='refs/remotes/origin/fr:settings.yaml'             # fr-switch-location
+
 # fr_switch_ref_maybe <toplevel>
-#   0 when `refs/remotes/origin/fr` may exist: a loose ref, a packed-refs line, a
-#   reftable store (not readable without git, so "maybe"), or a git dir that cannot be
-#   read at all. 1 only when the filesystem says positively that it does not. NO
-#   subprocess (review p6-r8): it is the precondition that keeps a plain repo's nag and
-#   gate from spawning `fr` (review p6-r1). It never decides fr-enabled by itself.
+#   0 when `refs/remotes/origin/fr-config` or `refs/remotes/origin/fr` may exist: a loose
+#   ref, a packed-refs line, a reftable store (not readable without git, so "maybe"), or
+#   a git dir that cannot be read at all. 1 only when the filesystem says positively that
+#   neither does. NO subprocess (review p6-r8): it is the precondition that keeps a plain
+#   repo's nag and gate from spawning `fr` (review p6-r1). It never decides fr-enabled by
+#   itself.
 fr_switch_ref_maybe() {
   _fr_common=$(_fr_common_dir_of "$1") || return 0
   [ -d "$_fr_common" ] || return 0
   [ -e "$_fr_common/refs/remotes/origin/fr" ] && return 0
+  [ -e "$_fr_common/refs/remotes/origin/fr-config" ] && return 0
   [ -d "$_fr_common/reftable" ] && return 0
   if [ -f "$_fr_common/packed-refs" ]; then
     while IFS= read -r _fr_line || [ -n "$_fr_line" ]; do
-      case "$_fr_line" in *" refs/remotes/origin/fr") return 0 ;; esac
+      case "$_fr_line" in *" refs/remotes/origin/fr" | *" refs/remotes/origin/fr-config") return 0 ;; esac
     done < "$_fr_common/packed-refs"
   fi
   return 1
+}
+
+# _fr_read_switch <toplevel> — sets `_fr_switch` to the switch's text: the file at
+# `FR_SWITCH_NEW`, else the one at `FR_SWITCH_OLD` (R13). Non-zero when neither can be
+# read. Two files that are both there and differ (by blob, so byte for byte, as fr
+# compares them, R6) set a text `_fr_switch_enabled` reads as fr-enabled and never as
+# canonical quiet: the repo is gated and no quiet worktree is a write target (fail
+# closed, as for an unreadable spelling). Needs `fr_git_resolve` done.
+_fr_read_switch() {
+  _fr_snew=$("$FR_GIT_BIN" -C "$1" rev-parse --verify --quiet "$FR_SWITCH_NEW" 2>/dev/null) || _fr_snew=""
+  _fr_sold=$("$FR_GIT_BIN" -C "$1" rev-parse --verify --quiet "$FR_SWITCH_OLD" 2>/dev/null) || _fr_sold=""
+  if [ -n "$_fr_snew" ] && [ -n "$_fr_sold" ] && [ "$_fr_snew" != "$_fr_sold" ]; then
+    _fr_switch='placement: two switches that differ'
+    return 0
+  fi
+  _fr_sblob=${_fr_snew:-$_fr_sold}
+  [ -n "$_fr_sblob" ] || return 1
+  _fr_switch=$("$FR_GIT_BIN" -C "$1" cat-file -p "$_fr_sblob" 2>/dev/null) || return 1
 }
 
 # Return 0 if the given resolved toplevel is fr-enabled, else 1 (spec 2026-11-04
@@ -403,10 +431,11 @@ fr_switch_ref_maybe() {
 #     archive, or the legacy archived-plans dir (super-fr#1277; the legacy test; it
 #     runs whether or not `fr` resolves, plan-journal decision p6-plans-test-always);
 #   - a workspace whose `.fr-isolation` marker records `placement` quiet or stealth;
-#   - the QUIET switch: the last fetched `refs/remotes/origin/fr:settings.yaml`, with
+#   - the QUIET switch: the last fetched `refs/remotes/origin/fr-config:.fr/settings.yaml`
+#     (or the old `refs/remotes/origin/fr:settings.yaml`, `_fr_read_switch`), with
 #     an origin remote (R23: no origin is `repo`), that cannot be read positively as
 #     `repo` (`_fr_switch_enabled`).
-# The switch is read only when `refs/remotes/origin/fr` may exist (`fr_switch_ref_maybe`,
+# The switch is read only when either ref may exist (`fr_switch_ref_maybe`,
 # filesystem only), so a plain repo spawns neither git nor `fr` for placement (review
 # p6-r1, pr1431-n6). Only then the resolver is asked, bounded, whether
 # it names a quiet/stealth placement or an existing FR_PLANS_DIR. A missing, failing,
@@ -434,8 +463,7 @@ _fr_placement_enabled() {
   fr_switch_ref_maybe "$1" || return 1
   fr_git_resolve || return 1
   "$FR_GIT_BIN" -C "$1" config --get remote.origin.url >/dev/null 2>&1 || return 1
-  _fr_switch=$("$FR_GIT_BIN" -C "$1" cat-file -p refs/remotes/origin/fr:settings.yaml 2>/dev/null) ||
-    return 1
+  _fr_read_switch "$1" || return 1
   _fr_switch_enabled "$_fr_switch"
 }
 
@@ -535,17 +563,23 @@ _fr_marker_valid() {
 
 # --- the placement's own write targets (review pr1431-r6) -----------------
 #
-# Under quiet fr keeps a feature's artifacts in the repo's `fr` worktree, and under
-# stealth in the tracking clone (spec 2026-11-04 R1, R23, R24). Neither carries a marker,
-# and both can be fr-enabled (the `fr` worktree shares the quiet switch), so without this
-# the edit gate refused every edit-tool write where the artifacts live. They are allowed
-# by STRUCTURE, never by name alone, and only once the context is otherwise blocked:
+# Under quiet fr keeps a feature's artifacts in the repo's `fr` worktree and its
+# configuration in the `fr-config` worktree, and under stealth in the tracking clone and
+# the configuration clone (spec 2026-11-04 R1, R23, R24; 2026-11-19 S1 R1, R5). None
+# carries a marker, and each can be fr-enabled (they share the quiet switch), so without
+# this the edit gate refused every edit-tool write where fr's files live. They are
+# allowed by STRUCTURE, never by name alone, and only once the context is otherwise
+# blocked:
 #   - quiet: a LINKED worktree at exactly the path `fr.placement.quiet.worktree_path`
-#     computes from its own common dir, `$HOME/.cache/fr/worktrees/<main checkout>/fr`,
-#     with HEAD `refs/heads/fr` and the switch reading canonically `placement: quiet`;
+#     computes from its own common dir, `$HOME/.cache/fr/worktrees/<main checkout>/fr`
+#     with HEAD `refs/heads/fr`, or its sibling `.../fr-config` with HEAD
+#     `refs/heads/fr-config`, and the switch (`_fr_read_switch`) reading canonically
+#     `placement: quiet`;
 #   - stealth: a CLONE named `stealth--*` beside a workspace whose `.fr-isolation`
 #     marker is valid, records `placement: stealth`, and names this clone's origin and
-#     HEAD branch as its `tracking.ref` (`fr.placement.stealth.ensure_worktree`'s check).
+#     HEAD branch as its `tracking.ref` (`fr.placement.stealth.ensure_worktree`'s check),
+#     or a clone named `stealth--*-config` whose HEAD is that branch plus `-config` (the
+#     configuration clone, `fr.placement.stealth.config_ref`).
 # The OpenCode plugin's marker.ts `placementWriteTarget` is the same rule.
 
 # _fr_resolved_dir <dir> — `pwd -P` of an existing directory, or non-zero.
@@ -561,21 +595,58 @@ _fr_quiet_worktree_path() {
   printf '%s\n' "$HOME/.cache/fr/worktrees/${_fr_qmain##*/}/fr"
 }
 
-# _fr_is_quiet_fr_worktree <resolved toplevel>
+# _fr_config_tree_ok <depth> — 0 when every path on stdin (`git ls-tree -r --name-only
+# HEAD` of a configuration checkout) lies below `.fr/` (depth 0: quiet's `fr-config`) or
+# below `<one segment>/.fr/` (depth 1: a stealth `<branch>-config`). Spec §B: the
+# configuration branch is an orphan whose tree is `.fr/`; a checkout holding anything else
+# (a product branch that happens to carry the name) is no write target (review p2-r2).
+# A quoted (unusual) name matches neither shape: refused. marker.ts `configTreeOk`.
+_fr_config_tree_ok() {
+  while IFS= read -r _fr_tline || [ -n "$_fr_tline" ]; do
+    [ -n "$_fr_tline" ] || continue
+    case "$1" in
+      0) case "$_fr_tline" in .fr/?*) ;; *) return 1 ;; esac ;;
+      *)
+        case "$_fr_tline" in ?*/.fr/?*) ;; *) return 1 ;; esac
+        _fr_tpre=${_fr_tline%%/.fr/*}
+        case "$_fr_tpre" in */* | "") return 1 ;; esac
+        ;;
+    esac
+  done
+  return 0
+}
+
+# _fr_config_checkout_ok <toplevel> <depth> — the checkout's HEAD tree passes
+# `_fr_config_tree_ok`; an unreadable or empty tree (no HEAD commit, git failing, no
+# file at all) does not.
+_fr_config_checkout_ok() {
+  _fr_ctree=$("$FR_GIT_BIN" -C "$1" ls-tree -r --name-only HEAD 2>/dev/null) || return 1
+  [ -n "$_fr_ctree" ] || return 1 # an empty tree holds no configuration: as marker.ts
+  printf '%s\n' "$_fr_ctree" | _fr_config_tree_ok "$2"
+}
+
+# _fr_is_quiet_fr_worktree <resolved toplevel> — the `fr` or the `fr-config` worktree.
 _fr_is_quiet_fr_worktree() {
   [ -f "$1/.git" ] || return 1 # a linked worktree, never a primary checkout
   _fr_qcommon=$(_fr_common_dir_of "$1") || return 1
   _fr_qcommon=$(_fr_resolved_dir "$_fr_qcommon") || return 1
   _fr_qwant=$(_fr_quiet_worktree_path "$_fr_qcommon") || return 1
-  _fr_qwant=$(_fr_resolved_dir "$_fr_qwant") || return 1
-  [ "$_fr_qwant" = "$1" ] || return 1
+  _fr_qbranch=""
+  for _fr_qname in fr fr-config; do
+    _fr_qpath=$(_fr_resolved_dir "${_fr_qwant%/fr}/$_fr_qname") || continue
+    if [ "$_fr_qpath" = "$1" ]; then
+      _fr_qbranch=$_fr_qname
+      break
+    fi
+  done
+  [ -n "$_fr_qbranch" ] || return 1
   fr_git_resolve || return 1
-  [ "$("$FR_GIT_BIN" -C "$1" symbolic-ref --quiet HEAD 2>/dev/null)" = "refs/heads/fr" ] ||
+  [ "$("$FR_GIT_BIN" -C "$1" symbolic-ref --quiet HEAD 2>/dev/null)" = "refs/heads/$_fr_qbranch" ] ||
     return 1
+  if [ "$_fr_qbranch" = fr-config ]; then _fr_config_checkout_ok "$1" 0 || return 1; fi
   "$FR_GIT_BIN" -C "$1" config --get remote.origin.url >/dev/null 2>&1 || return 1
-  _fr_qswitch=$("$FR_GIT_BIN" -C "$1" cat-file -p refs/remotes/origin/fr:settings.yaml 2>/dev/null) ||
-    return 1
-  _fr_switch_enabled "$_fr_qswitch" || return 1
+  _fr_read_switch "$1" || return 1
+  _fr_switch_enabled "$_fr_switch" || return 1
   [ "$_fr_live" -eq 1 ] && [ "$_fr_canon" = "placement: quiet" ]
 }
 
@@ -601,6 +672,18 @@ _fr_same_repo() {
   fi
 }
 
+# _fr_stealth_head_ok <clone name> <marker branch> <clone HEAD branch> — 0 for the
+# tracking clone (`stealth--*` on the marker's branch) or the configuration clone
+# (`stealth--*-config` on that branch plus `-config`, S1 R5, `fr.placement.stealth.
+# config_ref`). marker.ts `stealthHeadMatches`; tests/fixtures/isolation-decision-cases.json.
+_fr_stealth_head_ok() {
+  case "$1" in stealth--?*) ;; *) return 1 ;; esac
+  [ "$2" = "$3" ] && return 0
+  [ "$2-config" = "$3" ] || return 1
+  case "$1" in stealth--?*-config) return 0 ;; esac
+  return 1
+}
+
 # _fr_is_stealth_clone <resolved toplevel>
 _fr_is_stealth_clone() {
   [ -d "$1/.git" ] || return 1 # the tracking clone is a clone, never a worktree
@@ -616,7 +699,10 @@ _fr_is_stealth_clone() {
     case "$_fr_sref" in __HOOK_PARSE_ERROR__ | "" | *@ | @*) continue ;; *@*) ;; *) continue ;; esac
     _fr_sbranch=${_fr_sref##*@}
     case "$_fr_sbranch" in *:* | -*) continue ;; esac
-    [ "$_fr_sbranch" = "$_fr_shead" ] || continue
+    _fr_stealth_head_ok "${1##*/}" "$_fr_sbranch" "$_fr_shead" || continue
+    if [ "$_fr_sbranch" != "$_fr_shead" ]; then
+      _fr_config_checkout_ok "$1" 1 || continue
+    fi
     _fr_same_repo "${_fr_sref%@*}" "$_fr_surl" || continue
     _fr_swtop=$(_fr_resolved_dir "$_fr_sws") || continue
     (_fr_marker_valid "$_fr_swtop") && return 0
@@ -662,6 +748,26 @@ fr_isolation_drift_reason() {
   case "$_fr_mode" in worktree | "") ;; *) return 0 ;; esac
   _fr_branch_drift "$_fr_rtop" || return 0
   printf '%s\n' "this workspace was registered for $_fr_marker_branch but has $_fr_head_branch checked out, so fr's state no longer describes it. Switch back with \`git switch $_fr_marker_branch\`; to keep working on $_fr_head_branch, then give it its own workspace with \`fr isolation up --branch $_fr_head_branch\`."
+}
+
+# FR_SWITCH_DIFFER_NOTE — the sentence a deny appends when the two quiet switches differ
+# (spec 2026-11-19-event-driven-a-la-carte R6): the hooks cannot write, so they name the fr
+# command that brings the old copy in step. marker.ts `SWITCH_DIFFER_NOTE` is the same text.
+FR_SWITCH_DIFFER_NOTE="The two quiet switches (origin/fr-config:.fr/settings.yaml and origin/fr:settings.yaml) differ, so this repo is gated: preview the move with \`fr settings sync\` (first), then bring the old copy in step with \`fr settings sync --yes --expect <tip>\`, or, if neither matches, make the two identical by hand."
+
+# fr_switch_differ_note <file> — prints FR_SWITCH_DIFFER_NOTE when the file's repo has
+# both switches and they differ by blob (as `_fr_read_switch` reads them), else nothing.
+fr_switch_differ_note() {
+  _fr_dir=$(dirname "$1")
+  while [ ! -d "$_fr_dir" ] && [ "$_fr_dir" != "/" ] && [ "$_fr_dir" != "." ]; do
+    _fr_dir=$(dirname "$_fr_dir")
+  done
+  _fr_rtop=$(_fr_toplevel_of "$_fr_dir") || return 0
+  fr_switch_ref_maybe "$_fr_rtop" || return 0
+  fr_git_resolve || return 0
+  _fr_read_switch "$_fr_rtop" || return 0
+  [ "$_fr_switch" = 'placement: two switches that differ' ] || return 0
+  printf '%s\n' "$FR_SWITCH_DIFFER_NOTE"
 }
 
 # fr_isolation_marker_valid <dir>
@@ -768,9 +874,43 @@ fr_sentinel_unlock() {
   rmdir "$1.lock" 2>/dev/null || true
 }
 
+# _fr_allowlist_protected <toplevel> <file> <repo-relative path> — 0 when no allowlist may
+# exempt the edit (review p2-r5): the isolation marker `.fr-isolation` and either allowlist
+# file (`.fr/isolation-allow`, `.fr-isolation-allow`) are never exempted, since a `*` or
+# `.fr/**` line would otherwise let an edit tool rewrite the gate's own inputs. Fail closed
+# on every way a filesystem can name the same file differently:
+#   1. a path holding an empty, `.` or `..` segment (the glob matches it unnormalised);
+#   2. the name, ASCII case-folded (a case-insensitive filesystem writes the same file);
+#   3. file identity: an existing target that IS (dev+inode, `-ef`, through symlinks) one
+#      of the protected files that exist at the toplevel;
+#   4. a name holding any non-ASCII byte whose parent is the toplevel or its `.fr`, by
+#      name or by identity (Unicode case folding or normalisation could name one of them).
+# The OpenCode plugin's marker.ts `allowlistProtected` is the same rule, and
+# tests/fixtures/isolation-decision-cases.json drives both.
+_fr_allowlist_protected() (
+  LC_ALL=C
+  _fr_top=$1 _fr_pfile=$2 _fr_lc=$(printf '%s' "$3" | tr '[:upper:]' '[:lower:]')
+  case "/$_fr_lc/" in *//* | */./* | */../*) exit 0 ;; esac
+  case "$_fr_lc" in .fr/isolation-allow | .fr-isolation-allow | .fr-isolation) exit 0 ;; esac
+  if [ -e "$_fr_pfile" ]; then
+    for _fr_p in .fr/isolation-allow .fr-isolation-allow .fr-isolation; do
+      [ -e "$_fr_top/$_fr_p" ] && [ "$_fr_pfile" -ef "$_fr_top/$_fr_p" ] && exit 0
+    done
+  fi
+  _fr_name=${_fr_lc##*/}
+  case "$_fr_name" in *[!\ -~]*) ;; *) exit 1 ;; esac
+  case "$_fr_lc" in */*/*) ;; */*) [ "${_fr_lc%%/*}" = .fr ] && exit 0 ;; *) exit 0 ;; esac
+  _fr_parent=${_fr_pfile%/*}
+  [ -d "$_fr_parent" ] || exit 1
+  [ "$_fr_parent" -ef "$_fr_top" ] && exit 0
+  [ -d "$_fr_top/.fr" ] && [ "$_fr_parent" -ef "$_fr_top/.fr" ] && exit 0
+  exit 1
+)
+
 # fr_isolation_decide_edit <file>
 #   0 -> ALLOW the edit; 1 -> BLOCK it.
-# An fr-enabled base-clone edit is blocked unless `.fr-isolation-allow` exempts
+# An fr-enabled base-clone edit is blocked unless `.fr/isolation-allow` (or the old
+# `.fr-isolation-allow`) exempts
 # the specific repo-relative path.
 fr_isolation_decide_edit() {
   _fr_file=$1
@@ -819,20 +959,23 @@ fr_isolation_decide_edit() {
     return 0
   fi
 
-  # Blocked context — but the placement's own write targets (the quiet `fr` worktree, the
-  # stealth tracking clone) are allowed by structure (review pr1431-r6). A subshell keeps
-  # their globals from clobbering this function's.
+  # Blocked context — but the placement's own write targets (the quiet `fr` and
+  # `fr-config` worktrees, the stealth tracking and configuration clones) are allowed by
+  # structure (review pr1431-r6). A subshell keeps their globals from clobbering this
+  # function's.
   _fr_rtop=$(_fr_toplevel_of "$_fr_dir") || return 1
   if (_fr_placement_write_target "$_fr_rtop"); then return 0; fi
 
-  # `.fr-isolation-allow` can exempt specific paths.
-  _fr_allow="$_fr_rtop/.fr-isolation-allow"
+  # `.fr/isolation-allow` can exempt specific paths (S1 R8), read from the working tree
+  # only, never a ref; `.fr-isolation-allow` is the fallback while it is absent (R13).
+  _fr_allow="$_fr_rtop/.fr/isolation-allow"
+  [ -f "$_fr_allow" ] || _fr_allow="$_fr_rtop/.fr-isolation-allow"
   if [ -f "$_fr_allow" ]; then
     _fr_rdir=$(cd "$_fr_dir" 2>/dev/null && pwd -P) || _fr_rdir="$_fr_dir"
     _fr_rfile="$_fr_rdir${_fr_file#"$_fr_dir"}"
     _fr_rel=""
     case "$_fr_rfile" in "$_fr_rtop"/*) _fr_rel=${_fr_rfile#"$_fr_rtop"/} ;; esac
-    if [ -n "$_fr_rel" ]; then
+    if [ -n "$_fr_rel" ] && ! _fr_allowlist_protected "$_fr_rtop" "$_fr_rfile" "$_fr_rel"; then
       while IFS= read -r _fr_pattern || [ -n "$_fr_pattern" ]; do
         [ -n "$_fr_pattern" ] || continue
         case "$_fr_pattern" in \#*) continue ;; esac
