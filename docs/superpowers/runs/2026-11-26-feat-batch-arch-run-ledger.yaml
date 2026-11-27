@@ -85,8 +85,9 @@ steps:
           returned: '2026-11-27T09:27:15+00:00'
           outcome: abandoned
         - dispatched: '2026-11-27T09:27:15+00:00'
+          agent: aad61136945d93f9b
           harness: claude-code
-          model: claude-opus-5-5
+          model: claude-sonnet-5-5
           session: 6e6722ab-f02b-4fa2-8efd-b25754ecc390
   journal-check:
     state: pending
