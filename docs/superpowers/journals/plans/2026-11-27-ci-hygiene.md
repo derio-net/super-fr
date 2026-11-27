@@ -20,3 +20,13 @@ nothing to clean: whole-file deletions and sentence removals
 ### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
 
 nothing to clean: docstring and token-set edits are the change itself
+
+<!-- fr:journal kind=review scope=plan id=review-p1-1 created=2026-11-27T20:42:54+00:00 phase=1 -->
+### review-p1-1 · review · phase 1 code review: no findings (phase 1)
+
+Independent reviewer checked R1-R5 against spec, plan and the 21-file diff: both workflows and
+every live mention retired; floors.py token set identical on 3.14, regex unchanged; shard test reads
+the matrix; the UV_PYTHON and permissions tests read workflow-level keys only (job blocks cannot
+satisfy them; `on:` quirk handled); no ci.yml job loses a permission it uses; level refs resolve.
+Raised none. Orchestrator ran sync-opencode.py --check and sync-hermes.py --check: clean.
+Notes below threshold: tests glob *.yml only (spec says *.yml); .test_durations keeps one deleted id (harmless).
