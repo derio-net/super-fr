@@ -1,0 +1,9 @@
+schema_version: 12
+run: 2026-11-26-feat-batch-arch-run-ledger
+step: plan
+outcome: done
+journal: []
+resolves: []
+emitted:
+  plan: docs/superpowers/plans/2026-11-27-run-write-ledger
+evidence: {}
