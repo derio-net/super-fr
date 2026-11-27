@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-27-feat-batch-ops-gate-truth
+captures:
+- host: h-afbf9b3e
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-27T21:50:02+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 64e2d633-498c-4be1-b393-977810844749
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 68
+        cache_write: 195744
+        cache_read: 5477782
+        output: 30027
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 20
+      other:
+        usd: null
+        turns: 7
+      paperwork:
+        usd: null
+        turns: 5
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+        input: 6
+        cache_write: 105165
+        cache_read: 138079
+        output: 493
+      brainstorm:
+        usd: null
+        turns: 30
+        input: 62
+        cache_write: 90579
+        cache_read: 5339703
+        output: 29534
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 2
+          input: 6
+          cache_write: 105165
+          cache_read: 138079
+          output: 493
+        brainstorm:
+          usd: null
+          turns: 30
+          input: 62
+          cache_write: 90579
+          cache_read: 5339703
+          output: 29534

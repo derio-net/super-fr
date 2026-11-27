@@ -1,0 +1,86 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-27-ops-gate-truth
+repo: derio-net/super-fr
+rows:
+  - id: ops-gate-refreshes-a-stale-ops-workspace
+    capability: 'fr ops gate: stale ops workspace'
+    acceptance: Before stages 4-7 act, fr ops gate detects an op set or Test Plan that
+      changed on the default branch, names the changed ops, and on confirmation brings
+      the ops workspace up to date by a merge that keeps its gate records, then re-checks
+      trust
+    origin:
+    - spec:2026-11-27-ops-gate-truth#R1
+    - spec:2026-11-27-ops-gate-truth#R2
+    - spec:2026-11-27-ops-gate-truth#R3
+    - spec:2026-11-27-ops-gate-truth#R4
+    - spec:2026-11-27-ops-gate-truth#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: closeout-outcome-walks-the-rows-a-step-names
+    capability: 'fr closeout outcome: step-to-row walks'
+    acceptance: 'A Test Plan step names the rows it proves with (rows: ...), and recording
+      it ran walks each of those rows with the step''s evidence in the same commit'
+    origin:
+    - spec:2026-11-27-ops-gate-truth#R6
+    - spec:2026-11-27-ops-gate-truth#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: gate-pass-refuses-unwalked-gated-rows
+    capability: 'fr gate pass: rows hold their gate'
+    acceptance: fr gate pass refuses a devops or tester gate while a row that gate owns
+      is not walk-verified, or a step it owns has no ran/n/a outcome
+    origin:
+    - spec:2026-11-27-ops-gate-truth#R8
+    - spec:2026-11-27-ops-gate-truth#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: ops-gate-walks-and-reports-its-own-rows
+    capability: 'fr ops gate: its own rows'
+    acceptance: The DevOps stage asks the operator to walk each devops row no step covers,
+      and its gate-pass and tester hand-off stages report what their own gate still
+      owes
+    origin:
+    - spec:2026-11-27-ops-gate-truth#R10
+    - spec:2026-11-27-ops-gate-truth#R11
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: ops-gate-reports-a-held-archive
+    capability: 'fr ops gate: honest archive stage'
+    acceptance: The DevOps stage reports archived only when the plan moved, and reports
+      the hold and its reasons when fr archive held it
+    origin:
+    - spec:2026-11-27-ops-gate-truth#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: self-review-flags-uncovered-gated-rows
+    capability: 'fr plan self-review: gated-row coverage'
+    acceptance: 'fr plan self-review reports a devops or tester row no step of its gate
+      names, and a (rows: ...) id that names no row of the spec'
+    origin:
+    - spec:2026-11-27-ops-gate-truth#R13
+    levels: {}
+    status: not-implemented
+    notes: ''
+  - id: run-definition-of-done
+    capability: 'fr run dod: derived Definition of Done'
+    acceptance: fr derives a run's Definition of Done (each post-merge gate's ops, steps
+      and rows, manual phases, owed entries), prints it with fr run dod and in the close-out
+      brief, and the DevOps stage says complete only when its devops items are discharged
+    origin:
+    - spec:2026-11-27-ops-gate-truth#R14
+    - spec:2026-11-27-ops-gate-truth#R15
+    - spec:2026-11-27-ops-gate-truth#R16
+    - spec:2026-11-27-ops-gate-truth#R17
+    levels: {}
+    status: not-implemented
+    notes: ''

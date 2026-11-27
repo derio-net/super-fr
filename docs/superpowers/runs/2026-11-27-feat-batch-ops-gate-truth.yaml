@@ -3,11 +3,14 @@ run: 2026-11-27-feat-batch-ops-gate-truth
 workflow: fr-goal@1
 branch: feat/batch-ops-gate-truth
 started: '2026-11-27T21:26:29+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-27T21:26:42+00:00'
+    state: done
+    at: '2026-11-27T21:50:01+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-27-ops-gate-truth-design.md
   spec-review:
     state: pending
   plan:
