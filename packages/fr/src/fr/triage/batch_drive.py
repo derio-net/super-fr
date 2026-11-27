@@ -106,7 +106,7 @@ from fr.triage.model import (
     QueueRecord,
 )
 
-if TYPE_CHECKING:  # `fr.triage.wave_queue` imports this module: read at run time lazily
+if TYPE_CHECKING:  # `fr.triage.readiness` imports this module; both read at run time lazily
     from fr.triage.readiness import Refused
     from fr.triage.wave_queue import (
         BuildConflict,

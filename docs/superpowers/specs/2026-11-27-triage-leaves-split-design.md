@@ -36,8 +36,9 @@ and also by the collected close-out step (`:1156`) and by `drive_pass` (`:2044`,
 command, and stays where it is.
 
 Callers outside the module (`fr/commands/triage_batch_cmd.py`, `fr/triage/views.py`,
-`kanban.py`, `wave_queue.py`, and tests) import the moved names from `fr.triage.batch_drive`
-and keep doing so through the re-export. `tests/unit/test_triage_batch_drive.py:717`
+`kanban.py`, `wave_queue.py`, and tests) import the moved names from `fr.triage.batch_drive`.
+mypy runs with `no_implicit_reexport`, so a source module may not import a name through a
+module that only imports it; tests are not type-checked. `tests/unit/test_triage_batch_drive.py:717`
 (`test_the_pass_module_reaches_no_runner_git_process_or_clock`) and
 `tests/unit/test_triage_drive_purity.py:39`
 (`test_the_drive_pass_reads_no_clock_and_starts_no_process`) check one file each.
@@ -53,8 +54,9 @@ R6. Every name `fr.triage.batch_drive` defines or re-exports today stays importa
 R7. Behaviour is unchanged: `drive_pass` returns the same actions in the same order for every snapshot, and every moved function keeps its name, signature, body and docstring (only import lines change).
 R8. The two purity guards cover every module of the pass: `test_the_pass_module_reaches_no_runner_git_process_or_clock` and `test_the_drive_pass_reads_no_clock_and_starts_no_process` check every `fr/triage/batch_drive*.py` file and `fr/triage/handback_rules.py`, and each fails if its file set is empty.
 R9. No test assertion changes other than R8's and R10's; tests keep importing from `fr.triage.batch_drive`.
+R9a. A source module under `packages/` that imports a moved name imports it from its new home (strict mypy refuses an implicit re-export), changing only that import line; `batch_drive` keeps the re-export for R6 and the tests.
 R10. The `batch_drive.py` budget in `test_tripwire_module_budget.py` drops to no more than 50 lines above its new size; `batch_drive.py` stays a held module.
-R11. The pages `fr docs check` reports for this change — `docs/explainers/fr-wave-driver.md` and `docs/explainers/index.md` (they cover `batch_drive.py`), `docs/explainers/fr-triage.md` (covers `fr/triage/**`) and `docs/herdr-control-sessions.md` (covers `fr/triage/batch*.py`) — get their `reviewed` stamp moved with the note `still true, module split only`, and `fr-wave-driver.md`'s `covers:` adds the two new modules (the other two pages' globs already match them).
+R11. The pages `fr docs check` reports for this change — `docs/explainers/fr-wave-driver.md` and `docs/explainers/index.md` (they cover `batch_drive.py`), `docs/explainers/fr-triage.md` (covers `fr/triage/**`), `docs/herdr-control-sessions.md` (covers `fr/triage/batch*.py`) and `docs/reference/cli.md` (covers `triage_batch_cmd.py`, edited by R9a) — get their `reviewed` stamp moved with the note `still true, module split only`, and `fr-wave-driver.md`'s `covers:` adds the two new modules (the other two pages' globs already match them).
 R12. The PR adds the change fragment `.changes/feat-batch-arch-triage-leaves.yaml` with `bump: patch`.
 
 ## Design
@@ -102,10 +104,14 @@ packages/fr/src/fr/triage/
   batch_drive_export.py  + EXPORT_PREFIX … _stale_orphans (wave export, §I 3b)     R2
   handback_rules.py      ~ + conflict_at, fresh_conflicts, conflict_item_id,
                            archive-conflict decisions, closeout_handback_decision  R3
+  {batch_merge,kanban,operator_entries,queue_reports,readiness,views,wave_queue}.py
+                         ~ moved names imported from their new homes               R9a
+packages/fr/src/fr/commands/triage_batch_cmd.py, packages/fr/src/fr/settle/managed.py
+                         ~ the same import repointing                              R9a
 tests/unit/test_triage_batch_drive.py   ~ purity guard over batch_drive*.py + handback_rules  R8
 tests/unit/test_triage_drive_purity.py  ~ the same file set                                   R8
 tests/unit/test_tripwire_module_budget.py ~ batch_drive.py budget lowered                     R10
-docs/explainers/{fr-wave-driver,index,fr-triage}.md, docs/herdr-control-sessions.md
+docs/explainers/{fr-wave-driver,index,fr-triage}.md, docs/herdr-control-sessions.md, docs/reference/cli.md
                                         ~ reviewed stamp; fr-wave-driver covers the new modules R11
 .changes/feat-batch-arch-triage-leaves.yaml + bump: patch                                     R12
 ```
