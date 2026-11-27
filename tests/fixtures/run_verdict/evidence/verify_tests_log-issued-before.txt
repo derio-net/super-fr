@@ -1,0 +1,1 @@
+[31mstep/deliver: --evidence tests=suite.log: the command of yours that wrote it was issued before this unit opened at 2026-01-01T12:00:30+00:00 (in the same call as the `fr run advance` that opened it?). Run the suite again as its own command, now that the unit is open, and name that log.[0m

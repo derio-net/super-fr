@@ -1,0 +1,2 @@
+phase/1/implement-phase: visual: refused [x]
+  row r-1 has no shot

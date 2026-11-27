@@ -1,0 +1,4 @@
+{
+  "returned": "raised RunStateError: cannot verify evidence \u2014 no debug journal recorded yet (resolve the step that emits `debug` first)",
+  "unobserved": {}
+}

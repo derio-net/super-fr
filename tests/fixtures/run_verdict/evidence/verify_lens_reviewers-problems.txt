@@ -1,0 +1,17 @@
+step/lens-review: refused — the lens reviewers named do not cover the lens set:
+  - 'bogus' is not <lens>=<dispatch-id>: on the lens review, --evidence reviewer= is a map, one <lens>=<dispatch-id> per lens in the feature's set, comma-separated
+  - lens security is named twice
+  - docs not in this feature's lens set (security, tests, errors)
+  - a1 is named for two lenses (security, tests) — one reviewer per lens, each given only its own lens
+  - lens errors has no reviewer named for it; dispatch one with:
+      lens errors: errors title
+        in the set because: path rule src/** (matches src/a.py)
+        look at errors
+        Review the feature's whole diff through the errors lens only. End your return with a fenced review-lens block naming your lens and the files the feature changed that you examined, then a fenced review-findings block, one line per finding, `<id> | in|out | <one-line summary>`, ids l-errors-r<k> (k from 1), or the single line `none` when you raised nothing. `in` = this change is wrong, incomplete or worse than it needs to be; `out` = true, but not caused by this change. fr refuses the lens-review resolve while your block names another lens, names no file the feature changed or a file it did not change, or a returned id is missing from the plan journal or carries another scope there. When the brief names a `shape` file, read it: any way it contradicts the diff is a finding of your lens; do not list the shape file under `examined` (the feature diff leaves it out):
+        ```review-lens
+        lens: errors
+        examined: <changed file>, <changed file>
+        ```
+        ```review-findings
+        l-errors-r1 | in | <one-line summary>
+        ```

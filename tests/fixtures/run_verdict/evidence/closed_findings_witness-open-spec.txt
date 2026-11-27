@@ -1,0 +1,4 @@
+[31mstep/spec-review: refused — 1 finding(s) filed against the spec are still open: s-r1.[0m
+  A review is received, not just requested (`superpowers:receiving-code-review`): verify each finding, then fix it with a test or refute it with reasoning — never drop it. Close each one:
+  fr journal resolve --scope spec --slug s --id s-r1 --state fixed --note "<what changed, and the test that pins it>"
+  (or `--state refuted` with the reasoning, when the finding is wrong; `--state out-of-scope` when this change did not cause it). `--state failed` needs no evidence.

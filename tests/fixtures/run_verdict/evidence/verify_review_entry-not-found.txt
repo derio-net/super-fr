@@ -1,0 +1,2 @@
+[31mphase/1/review-phase: --evidence review=r-x names no entry in the plan journal for p[0m
+  fr journal add --scope plan --slug p --kind review --phase 1 --title "phase 1 review" --body "<findings raised, by id; or 'no findings'>"

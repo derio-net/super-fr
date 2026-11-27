@@ -1,0 +1,1 @@
+[31mstep/spec-review: --evidence reviewer=rev-1 is a 'general-purpose' dispatch — this step's reviewer is super-fr:fr-spec-reviewer. Dispatch that agent and name its id.[0m

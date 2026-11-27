@@ -1,0 +1,1 @@
+[31mphase/1/review-phase: --evidence review=d1 is a 'discovery' entry with no phase — evidence must be a `kind=review` entry carrying `phase=1`, the same rule `fr journal check --require-reviews` applies[0m

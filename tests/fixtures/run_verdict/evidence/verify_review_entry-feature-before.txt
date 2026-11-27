@@ -1,0 +1,1 @@
+[31mstep/lens-review: --evidence review=sr-1 was created 2025-12-01T00:00:00+00:00, before this step opened at 2026-01-01T00:00:00+00:00 — a review recorded before this step opened is not a review of it. Record the reviewer's findings, then a new `kind=review` entry.[0m

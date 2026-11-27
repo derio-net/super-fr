@@ -1,0 +1,4 @@
+{
+  "returned": "raised RunStateError: --emitted plan='docs/superpowers/plans/nope' does not exist (<ROOT>/docs/superpowers/plans/nope). A run records artifacts that were actually written; recording one that is not there is the silent-wrong-state this cursor exists to prevent.",
+  "unobserved": {}
+}

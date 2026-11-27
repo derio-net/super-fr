@@ -1,0 +1,1 @@
+[31mphase/1/review-phase: --evidence review=p1-r1 is a 'finding' entry for phase 2 — evidence must be a `kind=review` entry carrying `phase=1`, the same rule `fr journal check --require-reviews` applies[0m

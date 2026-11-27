@@ -1,0 +1,2 @@
+[31mphase/1/review-phase: refused — 1 unauthorized fix(es) against phase 1: p1-r3 — moved from out-of-scope to fixed without `answered_by=operator`. Ask the operator, then:[0m
+  fr journal resolve --scope plan --slug p --id p1-r3 --state fixed --answered-by operator --note "<what the operator decided>"
