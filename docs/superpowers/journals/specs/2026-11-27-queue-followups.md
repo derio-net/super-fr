@@ -210,3 +210,6 @@ row_kinds:
 run_gate: developer
 run_kind: none
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-queue-followups-p2 created=2026-11-27T14:38:23+00:00 -->
+### phase-split-2026-11-27-queue-followups-p2 · decision · ask: #1680's approval lifecycle (R1-R3) is its own reviewable ask, separate from the driver timing and probe fixes
