@@ -80,10 +80,10 @@ rows:
       and rows, manual phases, owed entries), prints it with fr run dod and in the close-out
       brief, and the DevOps stage says complete only when its devops items are discharged
     origin:
-    - spec:2026-11-27-ops-gate-truth#R14
-    - spec:2026-11-27-ops-gate-truth#R15
-    - spec:2026-11-27-ops-gate-truth#R16
     - spec:2026-11-27-ops-gate-truth#R17
+    - spec:2026-11-27-ops-gate-truth#R18
+    - spec:2026-11-27-ops-gate-truth#R19
+    - spec:2026-11-27-ops-gate-truth#R20
     levels: {}
     status: not-implemented
     notes: ''
