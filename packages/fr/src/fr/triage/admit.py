@@ -77,9 +77,8 @@ def latest_admit(comments: Iterable[Mapping[str, object]], trusted: Collection[s
         digest = parse_admit(str(comment.get("body") or ""))
         if digest is None or not trusted_author(comment, allowed):
             continue
-        at = parse_as_utc(
-            comment.get("created_at")
-        )  # the claim reader's: a marker no time orders counts for nothing
+        # the claim reader's contract: a marker no time orders counts for nothing
+        at = parse_as_utc(comment.get("created_at"))
         if at is None:
             continue
         if best is None or at >= best[0]:

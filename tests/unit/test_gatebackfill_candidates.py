@@ -21,7 +21,7 @@ from tests.unit.gatebackfill_fixtures import (
     row,
     write_matrix,
 )
-from tests.unit.hermetic_git import apply_hermetic_git, hermetic_git  # noqa: F401
+from tests.unit.hermetic_git import hermetic_git  # noqa: F401
 from tests.unit.test_merge_evidence import _write_plan
 
 pytestmark = pytest.mark.usefixtures("hermetic_git")

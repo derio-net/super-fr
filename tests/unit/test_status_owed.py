@@ -20,7 +20,7 @@ from fr.commands import status_cmd
 from typer.testing import CliRunner
 
 from tests.unit.fakes import FakeGhClient
-from tests.unit.hermetic_git import apply_hermetic_git, hermetic_git  # noqa: F401
+from tests.unit.hermetic_git import hermetic_git  # noqa: F401
 from tests.unit.test_merge_evidence import _add_remote, _commit, _init, _publish, _write_plan
 
 pytestmark = pytest.mark.usefixtures("hermetic_git")
