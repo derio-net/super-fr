@@ -278,25 +278,64 @@ def test_local_py_holds_no_forge_cli_argv(module: str) -> None:
     assert argvs == [], f"forge CLI argv in {module} at lines {argvs}"
 
 
+def _local_imports(source: str, package: str = "fr.isolation") -> list[int]:
+    """Lines of `source` (a module of `package`) that import `fr.isolation.local`,
+    absolute or relative (`from .local import x`, `from . import local`)."""
+    import ast
+
+    target = "fr.isolation.local"
+    offenders = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom):
+            if node.level:
+                parts = package.split(".")
+                base = ".".join(parts[: len(parts) - node.level + 1])
+                module = f"{base}.{node.module}" if node.module else base
+            else:
+                module = node.module or ""
+            names = {a.name for a in node.names}
+            if (
+                module == target
+                or module.startswith(f"{target}.")
+                or (f"{module}.local" == target and "local" in names)
+            ):
+                offenders.append(node.lineno)
+        elif isinstance(node, ast.Import):
+            offenders += [node.lineno for a in node.names if a.name == target]
+    return offenders
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from fr.isolation.local import X\n",
+        "from fr.isolation import local\n",
+        "import fr.isolation.local\n",
+        "import fr.isolation.local as L\n",
+        "from .local import X\n",
+        "from . import local\n",
+        "from .. import isolation\nfrom ..isolation.local import X\n",
+        "def f():\n    from .local import X\n",
+    ],
+)
+def test_local_imports_sees_every_import_form(source: str) -> None:
+    assert _local_imports(source) != []
+
+
+def test_local_imports_passes_sibling_imports() -> None:
+    assert (
+        _local_imports("from .reap import GcAction\nfrom fr.isolation.runner import Runner\n") == []
+    )
+
+
 @pytest.mark.parametrize(
     "module",
     ["fr.isolation.runner", "fr.isolation.reap", "fr.isolation.branchrefs", "fr.isolation.landing"],
 )
 def test_split_modules_never_import_local(module: str) -> None:
     """R2 (#1517): the modules split out of local.py never import it back."""
-    import ast
     import importlib
 
     mod = importlib.import_module(module)
-    tree = ast.parse(Path(mod.__file__).read_text(encoding="utf-8"))
-    offenders = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            names = {a.name for a in node.names}
-            if node.module == "fr.isolation.local" or (
-                node.module == "fr.isolation" and "local" in names
-            ):
-                offenders.append(node.lineno)
-        elif isinstance(node, ast.Import):
-            offenders += [node.lineno for a in node.names if a.name == "fr.isolation.local"]
+    offenders = _local_imports(Path(mod.__file__).read_text(encoding="utf-8"))
     assert not offenders, f"{module} imports fr.isolation.local at lines {offenders}"
