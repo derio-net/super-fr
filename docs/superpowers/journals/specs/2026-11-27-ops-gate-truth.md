@@ -335,3 +335,8 @@ Phase 3 serves its own ask: the derived DoD, fr run dod, the briefs and the fina
 ### tier-2026-11-27-ops-gate-truth-p1 · decision · hard: changes the DevOps gate's stage sequencing and op-closure rules
 
 Phase 1 reopens ops already closed, forgets recorded stages and merges into the pushed ops branch: a change to a gate path every devops-gated run relies on.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-27-ops-gate-truth-p2 created=2026-11-27T22:05:08+00:00 -->
+### tier-2026-11-27-ops-gate-truth-p2 · decision · hard: changes what passes a post-merge gate and the driver's walked rule
+
+Phase 2 changes gate pass refusals for both post-merge gates and the rows-walked rule the wave driver reads, plus a PR-head exclusion with security weight.
