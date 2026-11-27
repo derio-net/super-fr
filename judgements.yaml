@@ -1,5 +1,5 @@
 schema: 14
-ranked_at: 2026-11-26
+ranked_at: 2026-11-27
 tiers:
 - n: 1
   title: Work can be lost
@@ -3951,6 +3951,33 @@ issues:
     verified: false
     detail: About 20 test sites still set the old `FR_SHIPPED_*_DIR` variables after S1 moved shipped-asset homes; they exercise a retired knob.
     note: 'Batches with #1701 and the S1 leftovers (#1699, #1697); wait for #1696 to merge.'
+  super-fr#1698:
+    tier: 4
+    theme: run-contracts
+    cx: S
+    severity: med
+    kind: defect
+    verified: false
+    detail: 'Owed S1 acceptance: old configuration paths must be refused with a pointer to the new home.'
+    note: 'S1 follow-up; batches with #1699-#1701.'
+  super-fr#1730:
+    tier: 4
+    theme: run-contracts
+    cx: L
+    severity: med
+    kind: feature
+    verified: true
+    detail: 'S5 of epic #1652: the Orchestrator Station (independent, resilient, Opus-or-better, resourceful) and Stations that learn with repo-level memory. Needs S4 (#1656).'
+    note: 'Feature group with the epic; spec after S4.'
+  super-fr#1731:
+    tier: 3
+    theme: triage-board
+    cx: M
+    severity: med
+    kind: feature
+    verified: true
+    detail: 'Batches page: session state within the existing columns (who waits for whom), an owner per Needs-you lane, and time per column and state. Builds on `fr_herdr.restart.has_background_work`; columns stay decided by `lanes.lane_of`.'
+    note: 'Works without Stations; helps orchestrating today.'
   super-fr#1699:
     tier: 4
     theme: run-contracts
@@ -12116,6 +12143,13 @@ batches:
   - super-fr#1604
   - super-fr#1607
   wave: 27
+- id: s2-alacarte-settings
+  title: 'S2: à la carte .fr/settings.yaml'
+  ids:
+  - super-fr#1654
+  rationale: 'Epic #1652 sub-project S2; its only dependency, S1, merged in #1696.'
+  wave: 26
+  bump: minor
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
@@ -12377,6 +12411,7 @@ features:
   - super-fr#1656
   - super-fr#1657
   - super-fr#1651
+  - super-fr#1730
   why: 'Epic #1652: configuration homes (S1), à la carte settings (S2), every flow a workflow (S3), stations and the Router (S4); #1657 makes split tracking structural; #1651 cncd retirement.'
   start: '/fr-brainstorming #1653 (S1), from branch feat/event-driven-a-la-carte'
 exports:
