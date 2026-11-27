@@ -206,3 +206,8 @@ One phase per slice, operator decision scope-all-six-slices.
 ### tier-2026-11-27-run-verdict-p1 · decision · hard: phase 1 sets the refusal contract (Verdict, RunRefusal, _refusals) every later phase and the resolve gate path rely on
 
 A wrong adapter changes refusal bytes or exit codes on every run command.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-27-run-verdict-p5 created=2026-11-27T15:27:52+00:00 -->
+### tier-2026-11-27-run-verdict-p5 · decision · hard: phase 5 converts about 56 refusals of the evidence gate path, with the verifier merge rule and the gh#768 accumulation
+
+The evidence verifiers are the resolve gate every run step passes.
