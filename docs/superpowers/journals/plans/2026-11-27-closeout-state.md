@@ -210,3 +210,8 @@ checkouts.unclone_reasons feeds the snapshot's unread hold: one report-once line
 ### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: cancel --orphaned's 'no checkout' was unasserted
 
 no_forge also patches make_checkout, _open_checkout and _tracking_gate; plan and --yes paths assert none called.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved-2 created=2026-11-27T14:34:51+00:00 state=fixed resolves=p2-r4 answered_by=operator -->
+### p2-r4-resolved-2 · finding [fixed] · resolves p2-r4: A batch that comes after a left-scope batch waits forever
+
+Fixed in this PR by l-docs-accuracy-r1: left-scope is in UNSATISFIABLE, so a dependent shows blocked (test_a_dependency_on_a_left_scope_batch_is_unsatisfiable). Operator approved marking it fixed.
