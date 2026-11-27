@@ -36,9 +36,18 @@ rows:
     - spec:2026-11-27-closeout-state#R4
     - spec:2026-11-27-closeout-state#R5
     - spec:2026-11-27-closeout-state#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_left_scope.py#test_the_stage_is_left_scope_for_a_dispatched_batch
+      - super-fr:tests/unit/test_triage_left_scope.py#test_a_truncated_repo_list_keeps_today_s_stage
+      - super-fr:tests/unit/test_triage_left_scope_pass.py#test_the_pass_plans_no_action_for_a_left_scope_batch
+      - super-fr:tests/unit/test_triage_left_scope_pass.py#test_claim_sync_plans_nothing_for_a_left_scope_batch
+      - super-fr:tests/unit/test_triage_left_scope_drive.py#test_a_departed_repo_needs_no_checkout
+      - super-fr:tests/unit/test_triage_kanban_left_scope.py#test_the_card_is_terminal_with_no_jump
+      - super-fr:tests/unit/test_triage_kanban_left_scope.py#test_batch_list_marks_a_left_scope_batch_only_with_facts
+    status: ci
+    notes: Unit tests in CI over the stage (missing, truncated, never dispatched, returning
+      repo), claims, the pure pass, build_driver and the board render
     verify: none
   - id: batch-left-scope-cancel
     capability: triage batch verbs
