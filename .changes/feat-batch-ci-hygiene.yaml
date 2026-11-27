@@ -1,0 +1,2 @@
+bump: patch
+summary: Retire the stale fr-spec-status workflow; every CI workflow pins its Python and declares its token permissions

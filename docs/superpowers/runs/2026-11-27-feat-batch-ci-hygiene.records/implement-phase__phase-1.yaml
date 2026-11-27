@@ -1,0 +1,14 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-ci-hygiene
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T2.S1, P1.T2.S2, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T5.S1, P1.T5.S2]
+refactor:
+  P1.T2: "nothing to clean: one permissions block added to ci.yml"
+  P1.T3: "nothing to clean: whole-file deletions and sentence removals"
+  P1.T4: "nothing to clean: docstring and token-set edits are the change itself"
+journal:
+  - {kind: discovery, id: ci-shards-partition-green-at-once, title: "test_ci_shards partition test was green at once", body: "P1.T4.S1 pins the coupling of the partition test to the ci.yml matrix shard count rather than catching a bug, so it passed immediately by design.", phase: 1}
+resolves: []
+evidence: {}

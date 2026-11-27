@@ -1,15 +1,15 @@
 """Pins the CI `test` job's shard layout and partition (spec 2026-09-26
 ci-time-budget §3.A, Test Plan §7.1/§7.8).
 
-(a) `.github/workflows/ci.yml` shape: the `test` job is a 6-way matrix with
+(a) `.github/workflows/ci.yml` shape: the `test` job is a 7-way matrix with
 `fail-fast: false`, its pytest step clears `addopts` and re-adds
 `--strict-markers`, every shard measures coverage (`--cov --cov-report=`,
 one leg on 3.14, #1589), and a `coverage` job (`needs: test`) combines the
 shards and gates at 75.
 
 (b) Partition: pytest-split's `least_duration` grouping must place every
-test in exactly one of the 6 groups. This calls pytest-split's own algorithm
-in process over the real node ids in `.test_durations`, plus ids absent from
+test in exactly one of the matrix's groups (its shard count). This calls
+pytest-split's own algorithm in process over the real node ids in `.test_durations`, plus ids absent from
 it (a new test gets the average duration), so the check exercises the real
 algorithm and costs milliseconds. Earlier versions of this test ran five
 full-suite `--collect-only` subprocesses, which took 30-90s inside a change
@@ -99,7 +99,7 @@ def test_coverage_job_combines_and_gates() -> None:
     assert "coverage report --fail-under=75" in run_steps
 
 
-# ── (b) partition: every collected test exactly once across 6 groups ──
+# ── (b) partition: every collected test exactly once across the matrix's shards ──
 
 
 class _Item:
@@ -115,10 +115,11 @@ def test_shard_partition_is_disjoint_and_complete() -> None:
     node_ids = [*durations, *(f"tests/unit/test_new_{i}.py::test_x" for i in range(7))]
     items = [_Item(n) for n in node_ids]
 
-    groups_raw = LeastDurationAlgorithm()(6, items, durations)
+    shards = _load_ci_workflow()["jobs"]["test"]["strategy"]["matrix"]["shard"]
+    groups_raw = LeastDurationAlgorithm()(len(shards), items, durations)
     groups = [{it.nodeid for it in g.selected} for g in groups_raw]
 
-    assert len(groups) == 6
+    assert len(groups) == len(shards)
     assert all(groups), "an empty shard means the matrix is wider than the suite"
     for i in range(len(groups)):
         for j in range(i + 1, len(groups)):

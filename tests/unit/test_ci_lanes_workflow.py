@@ -180,3 +180,13 @@ def test_the_lane_jobs_keep_no_credential_in_their_checkout(job: str) -> None:
     assert _checkout(job)["with"]["persist-credentials"] is False
     assert JOBS[job]["permissions"].get("contents") == "read"
     assert set(JOBS[job]["permissions"].values()) == {"read"}
+
+
+def test_ci_yml_default_token_is_read_only_contents() -> None:
+    assert WORKFLOW.get("permissions") == {"contents": "read"}
+
+
+def test_every_workflow_declares_workflow_level_permissions() -> None:
+    for path in sorted(CI.parent.glob("*.yml")):
+        doc = yaml.safe_load(path.read_text("utf-8"))
+        assert "permissions" in doc, f"{path.name} has no workflow-level permissions"

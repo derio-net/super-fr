@@ -25,6 +25,9 @@ permissions:
   contents: read
   pages: write
   id-token: write
+env:
+  UV_PYTHON: "3.14"
+
 # A newer push queues behind a running deploy rather than cancelling it halfway
 # (only the newest queued run is kept, so the site still converges on main).
 concurrency:

@@ -17,7 +17,6 @@ on:
       - acceptance-report
       - Release
       - Deploy explainers to Pages
-      - PR spec status (self)
       - Pinned CLIs
       - Prerelease
     types: [completed]
@@ -34,6 +33,9 @@ permissions:
   actions: read
   issues: write
   contents: read
+
+env:
+  UV_PYTHON: "3.14"
 
 # One group per watched workflow file, so two runs of the same file can never
 # race on the same issue. A manual dispatch carries only `run_id` — no
