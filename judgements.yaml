@@ -11130,6 +11130,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T16:42:04.620277Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -12160,6 +12167,11 @@ batches:
     checks:
     - 1 failing check(s)
     delivered: none
+  - kind: approval
+    at: '2026-11-27T16:41:19.954182Z'
+    pr: 1735
+    head: b51633bae9c64afbc107550e32df967ca9c547fe
+    patch_id: 326af7b8cf1d7a799d896f1270c1755a3756ad17
 - id: closeout-state
   title: Close-outs and batches never stuck as started or Running
   ids:
@@ -12409,6 +12421,11 @@ batches:
     paths:
     - tests/unit/test_tripwire_module_budget.py
     delivered: held
+  - kind: approval
+    at: '2026-11-27T16:41:19.954182Z'
+    pr: 1734
+    head: 023073a577601244c5f664c9462f84edb63e7fed
+    patch_id: 20bfc093e4784759ac510561341cb14ca06b7bc8
 - id: arch-triage-ports
   title: '#1318: the triage driver takes every command-layer effect through one ports object'
   ids:
@@ -13734,7 +13751,10 @@ queues:
   - kind: queue_halt
     at: '2026-11-25T10:40:48.211228Z'
     state: held
-    detail: "hold write refused: the drained hold: `git push --quiet --no-verify --force-with-lease=refs/heads/fr-hold/queue:6ef97a116af493a5e9473bdec8d7f7a77ba6f68d origin fae6f7ffa97cc7afa703a9148e1727061dab5954:refs/heads/fr-hold/queue` failed in /Users/idermitzakis/Docs/projects/super-fr: To https://github.com/derio-net/super-fr\n ! [remote rejected]     fae6f7ffa97cc7afa703a9148e1727061dab5954 -> fr-hold/queue (failed)\nerror: failed to push some refs to 'https://github.com/derio-net/super-fr'"
+    detail: "hold write refused: the drained hold: `git push --quiet --no-verify --force-with-lease=refs/heads/fr-hold/queue:6ef97a116af493a5e9473bdec8d7f7a77ba6f68d\
+      \ origin fae6f7ffa97cc7afa703a9148e1727061dab5954:refs/heads/fr-hold/queue` failed in /Users/idermitzakis/Docs/projects/super-fr:\
+      \ To https://github.com/derio-net/super-fr\n ! [remote rejected]     fae6f7ffa97cc7afa703a9148e1727061dab5954\
+      \ -> fr-hold/queue (failed)\nerror: failed to push some refs to 'https://github.com/derio-net/super-fr'"
     land: push
     main: e7564c69e9eb50a1a7074f7baba0dac5a6a5167a
   - kind: queue_cleared
@@ -13769,6 +13789,13 @@ queues:
   - kind: queue_cleared
     at: '2026-11-25T20:55:27.918282Z'
     detail: the release cleared the hold
+- repo: derio-net/super-fr
+  wave: 25
+  scope: s-f7ea4061
+  base: 00101f661f7bd41d2d6789ed2b8376f076f3f96f
+  events:
+  - kind: queue_open
+    at: '2026-11-27T16:41:59.184708Z'
 queue_requests:
 - kind: queue_add
   at: '2026-11-27T15:25:05.595235Z'
