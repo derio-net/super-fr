@@ -194,11 +194,12 @@ def _shared(a: Entry, b: Entry, ignore: Sequence[str]) -> tuple[str, ...]:
 
 def overlaps(entries: Sequence[Entry], *, ignore: Sequence[str]) -> list[Overlap]:
     """The overlapping pairs among *entries*: same repo, no `after` link either way, at
-    least one shared path outside *ignore*."""
+    least one shared path outside *ignore*. Repo names compare case-insensitively (R8 of
+    spec 2026-11-27-queue-followups)."""
     found: list[Overlap] = []
     for i, a in enumerate(entries):
         for b in entries[i + 1 :]:
-            if a.repo != b.repo or b.batch in a.before or a.batch in b.before:
+            if a.repo.lower() != b.repo.lower() or b.batch in a.before or a.batch in b.before:
                 continue
             if paths := _shared(a, b, ignore):
                 found.append(Overlap(a.batch, b.batch, a.repo, a.wave, b.wave, paths))

@@ -259,6 +259,13 @@ def test_batches_of_different_repos_are_never_paired() -> None:
     assert found == []
 
 
+def test_overlaps_compares_repo_names_case_insensitively() -> None:
+    """R8 of spec 2026-11-27-queue-followups: two spellings of one repo overlap."""
+    a = entry("a", ["x.py"], repo="derio-net/super-fr")
+    b = entry("b", ["x.py"], repo="Derio-Net/Super-FR")
+    assert len(overlaps([a, b], ignore=())) == 1
+
+
 def test_the_pair_is_reported_with_both_waves_and_the_repo() -> None:
     found = overlaps([entry("a", ["x.py"], wave=1), entry("b", ["x.py"], wave=3)], ignore=())
     assert found == [Overlap("a", "b", REPO, 1, 3, ("x.py",))]
