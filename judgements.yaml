@@ -11049,6 +11049,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T16:13:23.309955Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T16:13:25.520789Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -12072,6 +12087,13 @@ batches:
     runner: herdr
     handle: w3V:p7
     branch: feat/batch-queue-followups
+  - kind: red_handback
+    at: '2026-11-27T16:13:21.000271Z'
+    pr: 1735
+    head: 6745722c04954cbdb83c52d6515a0e856f4133b9
+    checks:
+    - 1 failing check(s)
+    delivered: none
 - id: closeout-state
   title: Close-outs and batches never stuck as started or Running
   ids:
