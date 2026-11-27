@@ -10464,6 +10464,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T12:09:40.589644Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -11591,6 +11598,16 @@ batches:
   - kind: conflict
     at: '2026-11-27T11:35:30.588976Z'
     head: e32ccb491013a63dbe5855cfdc8b3ccf294cc151
+    paths:
+    - docs/explainers/fr-dispatch.md
+    - docs/reference/cli.md
+    - docs/reference/dispatch-lifecycle.md
+    - docs/reference/workflow-shapes.md
+    - tests/unit/test_tripwire_module_budget.py
+    delivered: held
+  - kind: conflict
+    at: '2026-11-27T12:09:44.825709Z'
+    head: a987a53d246ba18e876e0851cab6b6b9c14bfcf9
     paths:
     - docs/explainers/fr-dispatch.md
     - docs/reference/cli.md
