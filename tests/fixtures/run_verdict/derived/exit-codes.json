@@ -1,0 +1,14 @@
+{
+  "docs_witness-env-error": 2,
+  "docs_witness-fallback-then-findings": 2,
+  "docs_witness-findings": 2,
+  "docs_witness-target-error": 2,
+  "proportionality_witness-fallback-then-no-merge-base": 2,
+  "proportionality_witness-no-base": 2,
+  "proportionality_witness-no-merge-base": 2,
+  "proportionality_witness-no-plan": 2,
+  "proportionality_witness-plan-does-not-parse": 2,
+  "witness_base-fallback-announced": 0,
+  "witness_base-no-base": 2,
+  "witness_base-target-error": 2
+}

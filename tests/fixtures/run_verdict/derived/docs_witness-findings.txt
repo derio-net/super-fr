@@ -1,0 +1,3 @@
+deliver: refused — `fr docs check` fails (2 finding(s)):
+  docs/a.md: [covers] changed, page did not
+    covers: packages/**
