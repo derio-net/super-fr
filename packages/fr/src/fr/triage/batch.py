@@ -403,7 +403,9 @@ def check_open_membership(batches: Sequence[Batch], facts: Facts) -> None:
 
 DependencyState = Literal["satisfied", "waiting", "unsatisfiable", "unknown"]
 
-UNSATISFIABLE: frozenset[BatchStage] = frozenset({"cancelled", "abandoned", "partial"})
+UNSATISFIABLE: frozenset[BatchStage] = frozenset(
+    {"cancelled", "abandoned", "partial", "left-scope"}
+)
 """A dependency that can never become `merged`: withdrawn, closed unmerged, or merged
 with members still open (wave-driver §A). The dependent is blocked, never dispatched."""
 

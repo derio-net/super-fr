@@ -56,9 +56,17 @@ def fail_text(exc: BaseException, who: str = "") -> str:
     return str(exc) or type(exc).__name__
 
 
-def takeback_failed(back: BaseException) -> str:
-    """What a failed dispatch's report adds when taking its start record back failed too."""
-    return f"; taking back its start record failed too: {fail_text(back)}"
+COLLECTED_TAKEBACK = (
+    "its start marker stays, so this repo's close-outs wait until it is owed again "
+    "(about 15 minutes)"
+)
+PER_BATCH_TAKEBACK = "its close-out event stays, so the batch reads as close-out started"
+
+
+def takeback_failed(back: BaseException, consequence: str) -> str:
+    """What a failed dispatch's report adds when taking its start record back failed too,
+    with what that leaves behind (*consequence*, per close-out path)."""
+    return f"; taking back its start record failed too: {fail_text(back)} ({consequence})"
 
 
 class DriverRefusal(Exception):  # noqa: N818 - the name the spec gives it

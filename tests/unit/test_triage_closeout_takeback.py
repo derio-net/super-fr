@@ -24,8 +24,12 @@ from pathlib import Path  # noqa: E402
 
 import pytest  # noqa: E402
 from fr.commands import triage_batch_cmd  # noqa: E402
-from fr.triage import batch as batch_mod  # noqa: E402
-from fr.triage.drive_errors import fail_exit  # noqa: E402
+from fr.triage.drive_errors import (  # noqa: E402
+    COLLECTED_TAKEBACK,
+    PER_BATCH_TAKEBACK,
+    fail_exit,
+    takeback_failed,
+)
 from fr.triage.errors import TriageError  # noqa: E402
 from fr.triage.model import load_judgements  # noqa: E402
 from fr.triage.privacy import VisibilityUnreadable  # noqa: E402
@@ -76,26 +80,82 @@ def test_a_collected_start_whose_takeback_fails_reports_both_errors_once(
 
     (line,) = _lines(out, "closeout")
     assert "tab refused" in line and "store moved" in line
+    assert COLLECTED_TAKEBACK in line
     assert "exited 2" not in line  # a `fail_exit`'s carried text, never its code
     assert code == 1, out  # failed_write: --once exits 1, nothing escaped the action
     assert "Traceback" not in out
 
 
-def test_a_takeback_that_keeps_failing_is_said_once() -> None:
-    """The dedupe key is the dispatch error's, so the take-back's words never re-say it."""
+def _bare_driver() -> object:
     driver = object.__new__(triage_batch_cmd._Driver)
     driver.reported, driver.failed_write = set(), False
+    return driver
+
+
+def test_a_takeback_that_keeps_failing_is_said_once() -> None:
+    """The take-back's text has its own key: it is said once, then never re-said."""
+    driver = _bare_driver()
     batch = type("B", (), {"id": "b1"})()
     exc = RuntimeError("tab refused")
+    x = takeback_failed(TriageError("x"), COLLECTED_TAKEBACK)
+    y = takeback_failed(TriageError("y"), COLLECTED_TAKEBACK)
 
-    first = driver._dispatch_failed(batch, "m", exc, "; taking back its start record failed too: x")
-    second = driver._dispatch_failed(
-        batch, "m", exc, "; taking back its start record failed too: y"
-    )
+    first = driver._dispatch_failed(batch, "m", exc, x)  # type: ignore[attr-defined]
+    second = driver._dispatch_failed(batch, "m", exc, y)  # type: ignore[attr-defined]
 
-    assert first.startswith("stopped: ") and second.startswith("stopped again")
-    assert first.endswith("failed too: x")
-    assert driver.failed_write
+    assert first.startswith("stopped: ") and first.endswith(x)
+    assert second.startswith("stopped again") and "failed too" not in second
+    assert driver.failed_write  # type: ignore[attr-defined]
+
+
+def test_a_takeback_that_first_fails_on_a_repeat_dispatch_failure_is_said() -> None:
+    driver = _bare_driver()
+    batch = type("B", (), {"id": "b1"})()
+    exc = RuntimeError("tab refused")
+    x = takeback_failed(TriageError("x"), PER_BATCH_TAKEBACK)
+
+    first = driver._dispatch_failed(batch, "m", exc, "")  # type: ignore[attr-defined]
+    second = driver._dispatch_failed(batch, "m", exc, x)  # type: ignore[attr-defined]
+    third = driver._dispatch_failed(batch, "m", exc, x)  # type: ignore[attr-defined]
+
+    assert first == "stopped: m"
+    assert second.startswith("stopped again") and second.endswith(x)
+    assert third.startswith("stopped again") and "failed too" not in third
+
+
+def test_a_takeback_that_first_fails_on_pass_two_is_said_on_pass_two(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """A real two-pass drive: pass 1's take-back works, pass 2's fails and is said."""
+    _world_landed(world, tmp_path, "b1")
+    checkout.released = True
+    runner.fail = RuntimeError("tab refused")
+    real = triage_batch_cmd.save_closeouts
+    seen: list[int] = []
+
+    def wrapped(path: Path, closeouts: list, *, read: list) -> object:
+        seen.append(1)
+        if len(seen) == 4:  # pass 1: marker, take-back; pass 2: marker, then the take-back
+            raise TriageError("store moved")
+        return real(path, closeouts, read=read)
+
+    monkeypatch.setattr(triage_batch_cmd, "save_closeouts", wrapped)
+    sleeps: list[float] = []
+
+    def stop_after_two(seconds: float) -> None:
+        sleeps.append(seconds)
+        if len(sleeps) == 2:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(triage_batch_cmd, "_sleep", stop_after_two)
+
+    _, out = _drive(tmp_path, "--yes", "--interval", "5")
+
+    first, second = _lines(out, "closeout")[:2]
+    assert "tab refused" in first and "taking back" not in first
+    assert second.startswith("closeout") and "stopped again" in second
+    assert "store moved" in second and COLLECTED_TAKEBACK in second
 
 
 def test_a_collected_start_whose_takeback_succeeds_is_unchanged(
@@ -150,8 +210,8 @@ def test_a_per_batch_start_whose_takeback_fails_reports_both_and_prints_no_error
 
     (line,) = _lines(out, "closeout")
     assert "tab refused" in line and "store moved" in line
+    assert PER_BATCH_TAKEBACK in line
     assert "error:" not in out and "error:" not in capsys.readouterr().err
-    assert batch_mod  # the module the take-back's writer lives beside
 
 
 def test_a_per_batch_start_whose_takeback_succeeds_removes_the_event(

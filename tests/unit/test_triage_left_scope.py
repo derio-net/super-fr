@@ -87,3 +87,11 @@ def test_a_left_scope_batch_is_not_open() -> None:
     f = facts([issue(1)])
     assert is_open(_b(), f) is True
     assert is_open(_b(), _gone(f)) is False
+
+
+def test_a_dependency_on_a_left_scope_batch_is_unsatisfiable() -> None:
+    from fr.triage.batch import dependency_state
+
+    f = _gone(facts([issue(1)]))
+    dep = _b("a", events=[dispatch("a")])
+    assert dependency_state("a", [dep, _b("b", after=["a"])], f) == "unsatisfiable"

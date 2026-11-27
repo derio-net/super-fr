@@ -275,7 +275,14 @@ from fr.triage.claims import stale as claim_stale
 from fr.triage.components import page
 from fr.triage.cursor import answer_at
 from fr.triage.dedupe import candidates
-from fr.triage.drive_errors import DriverRefusal, TransientPassFailure, classify, takeback_failed
+from fr.triage.drive_errors import (
+    COLLECTED_TAKEBACK,
+    PER_BATCH_TAKEBACK,
+    DriverRefusal,
+    TransientPassFailure,
+    classify,
+    takeback_failed,
+)
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
 from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
@@ -7460,7 +7467,7 @@ class _Driver:
             try:  # its own guard: a failing take-back never hides the dispatch error
                 _save(self.target, judgements.batches, facts, read=after)
             except Exception as back:  # noqa: BLE001
-                also = takeback_failed(back)
+                also = takeback_failed(back, PER_BATCH_TAKEBACK)
             return self._dispatch_failed(batch, message, exc, also), False
         if handle and handle != item.id:  # the runner's own handle, once it is known
             known = started.model_copy(update={"handle": handle})
@@ -7547,7 +7554,7 @@ class _Driver:
             try:  # its own guard: a failing take-back never hides the dispatch error
                 save_closeouts(path, read, read=[*read, marker])
             except Exception as back:  # noqa: BLE001
-                also = takeback_failed(back)
+                also = takeback_failed(back, COLLECTED_TAKEBACK)
             return self._dispatch_failed(members[0], message, exc, also), False
         if handle and handle != item.id:  # the runner's own handle, once it is known
             save_closeouts(path, [*read, marker.model_copy(update={"handle": handle})],
@@ -7675,12 +7682,18 @@ class _Driver:
 
         The cause is the runner error's `code` when it carries one: each retry opens a
         new tab, so herdr's words name a different pane every pass. *also* (a failed
-        take-back, gh#1601) is said once and never keyed."""
+        take-back, gh#1601) is deduped on its own key: said once, even when it first fails
+        on a repeat dispatch failure."""
         self.failed_write = True
         code = getattr(cause, "code", None)
         key = f"dispatch\0{batch.id}\0{code if isinstance(code, str) else message}"
+        new_also = bool(also) and f"{key}\0takeback" not in self.reported
+        if new_also:
+            self.reported.add(f"{key}\0takeback")
+        else:
+            also = ""
         if key in self.reported:
-            return "stopped again: the runner failed to dispatch (reported above)"
+            return f"stopped again: the runner failed to dispatch (reported above){also}"
         self.reported.add(key)
         return f"stopped: {message}{also}"
 
