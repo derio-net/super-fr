@@ -261,7 +261,7 @@ from fr.triage.batch_merge import (
 )
 from fr.triage.batch_version import read_source, reserve
 from fr.triage.check import batch_awaits_live
-from fr.triage.checkouts import checkout_map
+from fr.triage.checkouts import checkout_map, unclone_reasons
 from fr.triage.claim_sync import (
     ClaimEnv,
     ClaimOp,
@@ -4539,6 +4539,7 @@ class _Driver:
         # as dispatched and a proposed one dispatch on default config. Its batches sit
         # this pass out; the in-flight cap and dependencies still count them (gh#921).
         unread = {s.repo: s.reason for s in facts.skipped}
+        unread = {**unclone_reasons(repos.values(), self.checkout_paths), **unread}
         chosen = _chosen(judgements.batches, self.named)
         self._unread = {r: why for r, why in unread.items()
                         if any(repos.get(b.id) == r for b in chosen)}  # fmt: skip

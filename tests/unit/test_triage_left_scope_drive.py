@@ -93,3 +93,45 @@ def test_a_truncated_repo_list_does_not_hide_a_missing_clone(
     assert "give --checkout REPO=PATH for example-org/gone" in capsys.readouterr().err.replace(
         "\n", ""
     )
+
+
+def test_a_given_checkout_of_a_departed_repo_is_kept(tmp_path: Path) -> None:
+    target = _state(tmp_path, ["example-org/kept"])
+    driver = _build(target, ["example-org/kept=/tmp/kept", "example-org/gone=/tmp/gone"])
+    assert set(driver.checkout_paths) == {"example-org/kept", "example-org/gone"}
+
+
+def test_a_repo_back_mid_drive_with_no_clone_is_held_not_opened_at_the_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import UTC, datetime
+    from unittest.mock import MagicMock
+
+    from fr.triage.model import load_judgements
+
+    paths: list[object] = []
+
+    def opened(path: object, *a: object, **kw: object) -> object:
+        paths.append(path)
+        return MagicMock()
+
+    monkeypatch.setattr(triage_batch_cmd, "make_checkout", opened)
+    monkeypatch.setattr(triage_batch_cmd, "_open_checkout", opened)
+    target = _state(tmp_path, ["example-org/kept"])
+    driver = triage_batch_cmd.build_driver(  # `gone` had left: no clone was asked for
+        SCOPE, target, batch_ids=["a"], checkout=["example-org/kept=/tmp/kept"],
+        max_inflight=2, yes=False,
+    )  # fmt: skip
+    back = _state(tmp_path, ["example-org/gone"])
+    facts = triage_batch_cmd._previous_facts(back / "facts.json", SCOPE)
+    assert facts is not None
+    judgements = load_judgements(back / "judgements.yaml")
+
+    driver.snapshot(facts, judgements, datetime(2026, 10, 2, 12, tzinfo=UTC))
+
+    assert set(driver._unread) == {"example-org/gone"}
+    why = driver._unread["example-org/gone"]
+    assert "drive has no clone of it" in why
+    assert "restart drive with --checkout example-org/gone=PATH" in why
+    assert driver._left_out == {"a": "example-org/gone"}
+    assert paths == []  # nothing opened, least of all the current directory's clone

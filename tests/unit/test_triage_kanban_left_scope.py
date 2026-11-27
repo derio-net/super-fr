@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 from fr.cli import app
-from fr.triage import history, kanban_render, render
+from fr.triage import kanban_render, render
 from fr.triage.batch import left_scope
 from fr.triage.kanban import PILL_STAGES, build_board, column_of, fallback_hint, pill_of
 from fr.triage.lanes import lane_of
@@ -108,7 +108,5 @@ def test_batch_list_does_not_mark_a_batch_when_the_repo_list_was_truncated(
     from fr.triage.model import Truncation
 
     warn = Truncation(source="repos", target="example-org", limit=100)
-    f = facts([issue(1)]).model_copy(
-        update={"scope": "example-org--widgets", "warnings": [warn]}
-    )
+    f = facts([issue(1)]).model_copy(update={"scope": "example-org--widgets", "warnings": [warn]})
     assert TEXT not in _list(tmp_path, f)

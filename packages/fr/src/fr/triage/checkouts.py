@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from fr.triage.errors import TriageError
@@ -47,3 +48,14 @@ def checkout_map(values: list[str] | None, scope: Scope, repos: set[str]) -> dic
             f"give --checkout REPO=PATH for {', '.join(missing)}: no clone is known for it"
         )
     return out
+
+
+def unclone_reasons(repos: Iterable[str], known: Mapping[str, Path | None]) -> dict[str, str]:
+    """Why each of *repos* with no entry in *known* cannot be driven: a repo that left the
+    scope at startup (no clone was asked for) and is back now. Drive never guesses its
+    clone (the current directory's may be another repo's), so its batches sit out."""
+    return {
+        r: f"back in the scope but drive has no clone of it: restart drive with --checkout {r}=PATH"
+        for r in set(repos)
+        if r.lower() not in known
+    }

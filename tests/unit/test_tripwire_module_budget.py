@@ -24,7 +24,8 @@ BUDGETS: dict[str, int] = {
     # triage_batch_cmd.py, 8300: main's landing-method `_landing_hold` (spec 2026-11-26 R2,
     # +25 to 8250) merged with S1's (event-driven-a-la-carte) guarded-key and state-home
     # reads; the merged module is 8292 lines.
-    f"{SRC}commands/triage_batch_cmd.py": 8300,
+    # 8320: closeout-state lens fixes (take-back dedupe, a returned repo with no clone is held).
+    f"{SRC}commands/triage_batch_cmd.py": 8320,
     # isolation/local.py: 3200 -> 2125 after runner, reap, branchrefs and landing left it (#1517).
     f"{SRC}isolation/local.py": 2125,
     f"{SRC}plan_ops.py": 2600,
