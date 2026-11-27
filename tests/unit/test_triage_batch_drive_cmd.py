@@ -3532,6 +3532,7 @@ def test_export_commits_only_the_scope_dir_force_pushes_and_records_the_pr(
     assert sorted(changed) == [
         f"{SCOPE_DIR}/board/manifest.yaml",
         f"{SCOPE_DIR}/exported-by",  # the scope id that exported it (gh#1101)
+        f"{SCOPE_DIR}/exported-files",  # what it wrote (spec 2026-11-27-export-drift R1)
         f"{SCOPE_DIR}/judgements.yaml",
     ]
     assert not (state / "export" / "1").exists()  # the scratch worktree is gone

@@ -32,12 +32,23 @@ shares; only the scope id tells them apart. So export stamps the root with the s
 that wrote it (`OWNER_FILE`) and refuses a root another scope id stamped unless told to
 take it over: a second scope's export would otherwise replace the first's judgements,
 origins and snapshots (gh#1101). The stamp is not durable state; import never reads it.
+
+Every export also writes `RECORD_FILE` beside the stamp: JSON naming each durable file it
+left equal to the state's copy with that copy's sha256 (spec 2026-11-27-export-drift R1).
+The next export compares the repo-side root with it, so a file someone edited, deleted or
+added in the repo since is drift, and the export refuses before a byte moves instead of
+reverting the edit (R2, R3); `force` overwrites. With no record nothing is drift, and the
+first export writes one. Like the stamp, it is not durable state: import never copies it.
+A targeted import (`only`) takes in named paths alone, removing a named one the repo lacks
+(R5), so a direct edit in the repo can reach the state before the next export.
 """
 
 from __future__ import annotations
 
 import errno
 import filecmp
+import hashlib
+import json
 import os
 import shutil
 import stat
@@ -67,6 +78,12 @@ SYMLINK_DEST = "the destination is a symlink, not written through"
 NEWER = "newer in the state directory; --force overwrites it"
 IDENTICAL = "identical"
 OWNER_FILE = "exported-by"  # the scope id that exports into this root (gh#1101)
+RECORD_FILE = "exported-files"  # what the last export left equal to the state (R1)
+_RECORD_SCHEMA = 1
+
+
+class BadRecord(TriageError):  # noqa: N818 - a refusal, beside TriageError
+    """The repo-side record is a symlink, not a regular file, or does not parse (R3)."""
 
 
 class Skipped(NamedTuple):
@@ -206,6 +223,82 @@ def _open_dir(root: Path, parts: tuple[str, ...], *, create: bool) -> int:
     return fd
 
 
+def _open_file(root: Path, rel: str) -> int:
+    """A read descriptor for `root/rel`, every component opened with `O_NOFOLLOW` from its
+    parent's descriptor: `_SymlinkError` when one is a symlink, `FileNotFoundError` (or
+    another `OSError`) as `os.open` raises it."""
+    *dirs, name = PurePosixPath(rel).parts
+    parent = _open_dir(root, tuple(dirs), create=False)
+    try:  # O_NONBLOCK: a fifo swapped in must not hang the open
+        return _open(name, os.O_RDONLY | os.O_NONBLOCK, dir_fd=parent)
+    finally:
+        os.close(parent)
+
+
+def _read(root: Path, rel: str) -> bytes | None:
+    """The bytes of `root/rel` through `_open_file`; None when it (or a directory above it)
+    is absent. `_SymlinkError` for a symlink, `OSError(EINVAL)` for a non-regular file."""
+    try:
+        fd = _open_file(root, rel)
+    except FileNotFoundError, NotADirectoryError:
+        return None
+    with os.fdopen(fd, "rb") as reader:
+        if not stat.S_ISREG(os.fstat(reader.fileno()).st_mode):
+            raise OSError(errno.EINVAL, "not a regular file")
+        return reader.read()
+
+
+def _hash(root: Path, rel: str) -> str | None:
+    """The sha256 of `root/rel` read through descriptors; None when absent or a symlink.
+    A file that cannot be read is a `TriageError` naming it."""
+    try:
+        data = _read(root, rel)
+    except _SymlinkError:
+        return None
+    except OSError as exc:
+        raise TriageError(f"cannot read {root / rel}: {exc.strerror or exc}") from exc
+    return None if data is None else hashlib.sha256(data).hexdigest()
+
+
+def _record_path(rel: object) -> bool:
+    """Whether a record key is a plain relative path to a durable file."""
+    if not isinstance(rel, str) or not rel or rel.startswith("/"):
+        return False
+    parts = rel.split("/")
+    if any(p in ("", ".", "..") for p in parts):
+        return False
+    return rel in DURABLE_FILES or (len(parts) > 1 and parts[0] in DURABLE_DIRS)
+
+
+def read_record(root: Path) -> dict[str, str] | None:
+    """The record's files (path -> sha256) in the repo-side *root*; None when it has none.
+    `BadRecord`, naming the file, when it is a symlink, not a regular file, or does not
+    hold `{"schema": 1, "files": {<durable path>: <sha256>}}`."""
+    path = root / RECORD_FILE
+    fix = "`fr triage state export --force` rewrites it"
+    try:
+        data = _read(root, RECORD_FILE)
+    except _SymlinkError:
+        raise BadRecord(f"{path} is a symlink, not read; {fix}") from None
+    except OSError as exc:
+        raise BadRecord(f"{path} cannot be read ({exc.strerror or exc}); {fix}") from exc
+    if data is None:
+        return None
+    try:
+        body = json.loads(data.decode("utf-8"))
+    except UnicodeDecodeError, ValueError:
+        raise BadRecord(f"{path} is not JSON; {fix}") from None
+    files = body.get("files") if isinstance(body, dict) else None
+    if (
+        not isinstance(body, dict)
+        or body.get("schema") != _RECORD_SCHEMA
+        or not isinstance(files, dict)
+        or not all(_record_path(k) and isinstance(v, str) for k, v in files.items())
+    ):
+        raise BadRecord(f"{path} is not a schema {_RECORD_SCHEMA} export record; {fix}")
+    return dict(files)
+
+
 def _copy(src: Path, dest: Path, rel: str) -> str | None:
     """Copy `src/rel` to `dest/rel` from descriptors, keeping the source's mode and
     times as `shutil.copy2` did; the skip reason when a component is a symlink by the
@@ -213,11 +306,7 @@ def _copy(src: Path, dest: Path, rel: str) -> str | None:
     so a path swapped after them must still never be followed (gh#1003)."""
     *dirs, name = PurePosixPath(rel).parts
     try:
-        parent = _open_dir(src, tuple(dirs), create=False)
-        try:  # O_NONBLOCK: a fifo swapped in must not hang the open
-            source = _open(name, os.O_RDONLY | os.O_NONBLOCK, dir_fd=parent)
-        finally:
-            os.close(parent)
+        source = _open_file(src, rel)
     except _SymlinkError:
         return SYMLINK
     with os.fdopen(source, "rb") as reader:
@@ -297,30 +386,68 @@ def _stamp(root: Path, owner: str, *, take_over: bool) -> bool:
     return True
 
 
+def _write_root_file(root: Path, name: str, data: bytes, *, replace_link: bool = False) -> None:
+    """Write *name* in *root* from the root's descriptor with `O_NOFOLLOW`: a name swapped
+    for a symlink is refused (`TriageError`), or unlinked first when *replace_link*."""
+    parent = _open_dir(root, (), create=True)
+    try:
+        try:
+            fd = _open(name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, dir_fd=parent, mode=0o644)
+        except _SymlinkError:
+            if not replace_link:
+                raise TriageError(f"{root / name} is a symlink; refusing to write it") from None
+            os.unlink(name, dir_fd=parent)  # the link itself, never what it points at
+            fd = _open(name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, dir_fd=parent, mode=0o644)
+    except _SymlinkError:
+        raise TriageError(f"{root / name} is a symlink; refusing to write it") from None
+    except OSError as exc:
+        raise TriageError(f"cannot write {root / name}: {exc.strerror or exc}") from exc
+    finally:
+        os.close(parent)
+    with os.fdopen(fd, "wb") as writer:
+        writer.write(data)
+
+
+def _record_bytes(root: Path, report: SyncReport) -> bytes:
+    """The record of *report*: every path it copied or found identical, hashed from *root*."""
+    equal = [*report.copied, *(s.path for s in report.skipped if s.reason == IDENTICAL)]
+    files = {rel: digest for rel in sorted(equal) if (digest := _hash(root, rel)) is not None}
+    body = {"schema": _RECORD_SCHEMA, "files": files}
+    return (json.dumps(body, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def _old_record(root: Path) -> bytes | None:
+    try:
+        return _read(root, RECORD_FILE)
+    except _SymlinkError, OSError:
+        return None  # unreadable: rewritten (only `force` gets here with a bad record)
+
+
 def export_state(
-    state_dir: Path, base: Path, rel: str, *, owner: str, take_over: bool = False
+    state_dir: Path,
+    base: Path,
+    rel: str,
+    *,
+    owner: str,
+    take_over: bool = False,
+    force: bool = False,
 ) -> SyncReport:
     """Copy *state_dir*'s durable state into the repo-side root `contained(base, rel)`
-    (`<dir>/<scope>/`), overwriting what is there, and stamp it with *owner*, the
-    exporting scope's id. Refused before a byte moves when another scope id stamped
-    the root, unless *take_over*."""
+    (`<dir>/<scope>/`), overwriting what is there, stamp it with *owner*, the exporting
+    scope's id, and write the record of what it left equal to the state (R1). Refused
+    before a byte moves when another scope id stamped the root, unless *take_over*."""
     root = contained(base, rel)
     restamp = _stamp(root, owner, take_over=take_over)
     report = _sync(state_dir, root, keep_newer=False)
-    if not restamp:
-        return report
-    parent = _open_dir(root, (), create=True)
-    try:  # O_NOFOLLOW from the root's descriptor: a stamp swapped for a symlink is refused
-        fd = _open(OWNER_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, dir_fd=parent, mode=0o644)
-    except _SymlinkError:
-        raise TriageError(f"{root / OWNER_FILE} is a symlink; refusing to write it") from None
-    except OSError as exc:
-        raise TriageError(f"cannot write {root / OWNER_FILE}: {exc.strerror or exc}") from exc
-    finally:
-        os.close(parent)
-    with os.fdopen(fd, "w", encoding="utf-8") as writer:
-        writer.write(f"{owner}\n")
-    return SyncReport(copied=(*report.copied, OWNER_FILE), skipped=report.skipped)
+    copied = list(report.copied)
+    if restamp:
+        _write_root_file(root, OWNER_FILE, f"{owner}\n".encode())
+        copied.append(OWNER_FILE)
+    record = _record_bytes(root, report)
+    if _old_record(root) != record:
+        _write_root_file(root, RECORD_FILE, record, replace_link=force)
+        copied.append(RECORD_FILE)
+    return SyncReport(copied=tuple(copied), skipped=report.skipped)
 
 
 def import_state(base: Path, rel: str, state_dir: Path, *, force: bool) -> SyncReport:

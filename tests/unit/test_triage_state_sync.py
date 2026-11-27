@@ -19,12 +19,14 @@ from fr.triage.state_sync import (
     DURABLE_DIRS,
     DURABLE_FILES,
     OWNER_FILE,
+    RECORD_FILE,
     SYMLINK,
     SYMLINK_DEST,
     SyncReport,
     contained,
     export_state,
     import_state,
+    read_record,
 )
 from typer.testing import CliRunner
 
@@ -78,7 +80,8 @@ DURABLE = sorted(
         "authored-src/build.py",
     ]
 )
-EXPORTED = sorted([*DURABLE, OWNER_FILE])  # a repo-side root also holds the scope id stamp
+# a repo-side root also holds the scope id stamp and the record of what the export wrote
+EXPORTED = sorted([*DURABLE, OWNER_FILE, RECORD_FILE])
 
 
 def _at(root: Path) -> tuple[Path, str]:
@@ -641,3 +644,58 @@ def test_the_export_verb_refuses_another_scopes_directory_until_take_over(
     assert taken.exit_code == 0, taken.output  # type: ignore[attr-defined]
     stamp = (out / SCOPE_NAME / OWNER_FILE).read_text(encoding="utf-8")
     assert stamp == f"{scope_id(SCOPE_NAME)}\n"
+
+
+# ------------------------------------------------ the export record (spec 2026-11-27 R1)
+
+
+def _sha(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_an_export_records_every_durable_file_it_left_equal_to_the_state(tmp_path: Path) -> None:
+    import json
+
+    state = _state(tmp_path / "state")
+    odd = "board/we\nird\\name.html"  # a newline and a backslash in one file name
+    (state / odd).write_text("odd\n", encoding="utf-8")
+    dest = tmp_path / "dest"
+    (dest / "origins.yaml").parent.mkdir(parents=True)
+    (dest / "origins.yaml").write_text("schema: 2\n", encoding="utf-8")  # skipped: identical
+
+    report = export_state(state, *_at(dest), owner=HOST)
+
+    body = json.loads((dest / RECORD_FILE).read_text(encoding="utf-8"))
+    assert body["schema"] == 1
+    assert sorted(body["files"]) == sorted([*DURABLE, odd])
+    assert body["files"]["origins.yaml"] == _sha(dest / "origins.yaml")
+    assert body["files"][odd] == _sha(dest / odd)
+    assert read_record(dest) == body["files"]
+    assert RECORD_FILE in report.copied and "origins.yaml" not in report.copied
+
+
+def test_an_unchanged_record_is_not_copied_again(tmp_path: Path) -> None:
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "dest"
+    export_state(state, *_at(dest), owner=HOST)
+
+    again = export_state(state, *_at(dest), owner=HOST)
+
+    assert again.copied == ()  # nothing new: the driver records no PR
+    (state / "origins.yaml").write_text("schema: 2\n# more\n", encoding="utf-8")
+    third = export_state(state, *_at(dest), owner=HOST)
+    assert sorted(third.copied) == sorted(["origins.yaml", RECORD_FILE])
+
+
+def test_import_never_carries_the_record_into_the_state(tmp_path: Path) -> None:
+    src = tmp_path / "repo-copy"
+    export_state(_state(tmp_path / "old"), *_at(src), owner=HOST)
+    state = tmp_path / "new"
+
+    report = import_state(*_at(src), state, force=True)
+
+    assert not (state / RECORD_FILE).exists()
+    assert RECORD_FILE not in report.copied
+    assert read_record(tmp_path / "nowhere") is None
