@@ -11350,6 +11350,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T18:27:14.558139Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T18:27:20.940204Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -14223,6 +14238,12 @@ queues:
     patch_id: 2dcb6193d8b69cdf037b98d8c529a81b8ecd61e9
     base: 897eca5b528e287ec64c6cabd32dadf45c68e997
     parent: 897eca5b528e287ec64c6cabd32dadf45c68e997
+  - kind: queue_land
+    at: '2026-11-27T18:27:05.933666Z'
+    main: cedee39e6855c14110747261b3d6eb515117d2d4
+    entries:
+    - pr: 1743
+      kind: closeout
 queue_requests:
 - kind: queue_add
   at: '2026-11-27T15:25:05.595235Z'
