@@ -3,7 +3,7 @@ run: 2026-11-27-feat-batch-arch-isolation-gc
 workflow: fr-goal-light@1
 branch: feat/batch-arch-isolation-gc
 started: '2026-11-27T14:04:56+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -48,7 +48,11 @@ steps:
           reviewer: afde572b2d17b1ff7
           findings: s1,s2,s3,s4
   plan-review:
-    state: pending
+    state: done
+    at: '2026-11-27T14:33:44+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
