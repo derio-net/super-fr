@@ -10530,6 +10530,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T12:50:25.774636Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T12:50:36.194370Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -11609,6 +11624,13 @@ batches:
     - docs/reference/cli.md
     delivered: session
     handle: derio-net/super-fr/run/batch-arch-shared-helpers
+  - kind: claims_released
+    at: '2026-11-27T12:50:36.194370Z'
+    keys:
+    - super-fr#1512
+    - super-fr#1513
+    - super-fr#1514
+    - super-fr#1523
 - id: arch-run-ledger
   title: '#1318: move the write ledger out of run_cmd.py into fr/run/writes.py'
   ids:
@@ -11673,6 +11695,13 @@ batches:
     - docs/reference/dispatch-lifecycle.md
     - docs/reference/workflow-shapes.md
     - tests/unit/test_tripwire_module_budget.py
+    delivered: held
+  - kind: conflict
+    at: '2026-11-27T12:50:32.569906Z'
+    head: d4ecf14cffb3105e1be76b7bc765ebd561d2564b
+    paths:
+    - docs/reference/cli.md
+    - docs/reference/workflow-shapes.md
     delivered: held
 - id: triage-privacy
   title: 'Triage privacy: outsider text never reaches worker sessions or the state ref unfenced'
