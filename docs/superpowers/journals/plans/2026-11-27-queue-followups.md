@@ -130,3 +130,53 @@ all blockers go through _can_hold_wave; parametrised blocking tests, queue_lande
 ### p1-r6-resolved · finding [out-of-scope] · resolves p1-r6: wave_overlap.py:75 compares repo_name exactly, the same case bug as #1695 in a sibling module (phase 1)
 
 Not caused by this change: wave_overlap.py predates it and the spec scopes R8 to plan_overlap; repo_name there is already lower-cased at its source in most paths.
+
+<!-- fr:journal kind=decision scope=plan id=p2-waits-at-every-first-reader created=2026-11-27T15:35:38+00:00 phase=2 -->
+### p2-waits-at-every-first-reader · decision · R2's waits is passed wherever a first label would read as approved, not only in settle_approvals (phase 2)
+
+A Waiting PR records nothing, so the drive's live snapshot (`judge_approval` in
+triage_batch_cmd's queue read) would otherwise judge it `First`, which `is_approved`
+admits to the queue. The snapshot, `views.fact_approvals` and `lanes` (the board's
+"delivered: approve it" line) all compute waits with `approval.conflict_waits`, so a
+Waiting PR is never a queue member and the board never asks for its label.
+
+<!-- fr:journal kind=decision scope=plan id=p2-waiting-said-once-per-process created=2026-11-27T15:35:38+00:00 phase=2 -->
+### p2-waiting-said-once-per-process · decision · The Waiting line is said once per (repo, PR, head) through a module-level set by default (phase 2)
+
+`settle_approvals(said=...)` takes the set; its default is a module-level set, so the
+long-lived drive process says it once per head with no change in triage_batch_cmd
+(8293 of 8300 lines). Tests pass their own set.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-fast-tier created=2026-11-27T15:35:38+00:00 phase=2 -->
+### p2-fast-tier · discovery · The --fr-scope fast tier again selected about the whole suite and was stopped; touched and neighbouring files were run instead (phase 2)
+
+`uv run pytest --fr-scope origin/main -n 2 -q --no-cov` reached about 1% in roughly
+eight minutes on this loaded host and was stopped by its own PIDs. Run instead, all green:
+test_triage_approval, test_merge_train_* (approval, label_board, gate, base_rules,
+commands, forge_seams, red_decision, red_phrase, safety_smoke), test_triage_readiness*,
+test_operator_entries_lineage, test_tripwire_forge_writes, test_tripwire_approval_label_prose,
+test_triage_board_*, test_wave_queue_operator_*, test_triage_batch_board, test_triage_kanban*,
+test_tripwire_triage_board_columns, test_opencode_rendered_readiness, test_triage_batch_drive*,
+test_import_direction and test_tripwire_module_budget (1,391 tests). Advisory; CI is this
+repo's tests evidence. test_merge_train_gate's LabelForge fake gained the comment methods
+(the void now comments), and a real-policy `forge.comments: off` test was added there.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-27T15:35:38+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+the end of an approval is one shared helper (_ended/_end) for both settle functions; the cmd's voided set now comes from settle_approvals' removed set, which dropped a repo_of map and an import
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-27T15:35:38+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+conflict_waits/view_waits is the one R2 test, shared by settle_approvals, the drive's live snapshot, fact_approvals and lanes; nothing duplicated left
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-27T15:35:38+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+ended_by_label is one small helper read by readiness and views; nothing to tidy around it
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-11-27T15:35:38+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+_comments_off moved beside _labels_off and re-exported; the test fakes gained the comment methods on the base _Forge instead of a parallel fake
