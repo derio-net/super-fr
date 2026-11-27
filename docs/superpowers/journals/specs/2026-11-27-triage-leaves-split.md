@@ -45,3 +45,60 @@ Operator chose no rows: the change alters nothing a user sees; the import, purit
 ### wrong-base-shared · discovery · _wrong_base is shared by the export row, the collected close-out step and drive_pass
 
 batch_drive.py:1156, :2044, :2053 call it besides _export_row; it moves to batch_drive_types beside LivePr, not to the export leaf.
+
+<!-- fr:journal kind=finding scope=spec id=s-r1 created=2026-11-27T19:59:06+00:00 state=open review_scope=in -->
+### s-r1 · finding [open] (reviewer: in scope) · R11 names two of the four pages fr docs check will report; fr-triage.md and herdr-control-sessions.md are missing
+
+fr-triage.md covers fr/triage/** and herdr-control-sessions.md covers triage/batch*.py; both go stale with this change.
+
+<!-- fr:journal kind=finding scope=spec id=s-r2 created=2026-11-27T19:59:06+00:00 state=open review_scope=in -->
+### s-r2 · finding [open] (reviewer: in scope) · handback_rules.py also needs Iterable from collections.abc
+
+closeout_handback_decision is annotated with Iterable; handback_rules imports only Callable and Sequence.
+
+<!-- fr:journal kind=finding scope=spec id=s-r3 created=2026-11-27T19:59:06+00:00 state=open review_scope=in -->
+### s-r3 · finding [open] (reviewer: in scope) · R9 contradicts R8 and R10, which change three tests
+
+R9 said no test assertion changes; R8 rewrites the purity tests and R10 the budget constant.
+
+<!-- fr:journal kind=finding scope=spec id=s-r4 created=2026-11-27T19:59:06+00:00 state=open review_scope=in -->
+### s-r4 · finding [open] (reviewer: in scope) · Three line citations in Background are off or mis-ordered
+
+test def at :717 not :719; re-export block 44-55 not 45-56; type names paired with lines in reverse order.
+
+<!-- fr:journal kind=review scope=spec id=spec-review created=2026-11-27T19:59:06+00:00 -->
+### spec-review · review · independent spec review: 4 findings
+
+fr-spec-reviewer checked decisions q1-q5 (all honoured), the no-cycle claim (holds: export bodies use only Action, Admitted, LivePr, CONFLICTING, _wrong_base, EXPORT_PREFIX, Batch, Export, Snapshot as annotation; hand-back bodies only model events and handbacks_since), and every cited file:line. Findings s-r1..s-r4, all in scope.
+
+<!-- fr:journal kind=finding scope=spec id=s-r1-resolved created=2026-11-27T19:59:06+00:00 state=fixed resolves=s-r1 -->
+### s-r1-resolved · finding [fixed] · resolves s-r1: R11 names two of the four pages fr docs check will report; fr-triage.md and herdr-control-sessions.md are missing
+
+R11 and the Design shape now name fr-triage.md and herdr-control-sessions.md with the same stamp; their globs already match the new modules.
+
+<!-- fr:journal kind=finding scope=spec id=s-r2-resolved created=2026-11-27T19:59:06+00:00 state=fixed resolves=s-r2 -->
+### s-r2-resolved · finding [fixed] · resolves s-r2: handback_rules.py also needs Iterable from collections.abc
+
+Design now says handback_rules adds Iterable to its collections.abc import and grows by what the moved bodies use.
+
+<!-- fr:journal kind=finding scope=spec id=s-r3-resolved created=2026-11-27T19:59:06+00:00 state=fixed resolves=s-r3 -->
+### s-r3-resolved · finding [fixed] · resolves s-r3: R9 contradicts R8 and R10, which change three tests
+
+R9 reworded: no test assertion changes other than R8's and R10's.
+
+<!-- fr:journal kind=finding scope=spec id=s-r4-resolved created=2026-11-27T19:59:06+00:00 state=fixed resolves=s-r4 -->
+### s-r4-resolved · finding [fixed] · resolves s-r4: Three line citations in Background are off or mis-ordered
+
+Citations corrected to :717 and :44-55; type names listed in line order.
+
+<!-- fr:journal kind=decision scope=spec id=exit-baseline created=2026-11-27T19:59:08+00:00 -->
+### exit-baseline · decision · exit when spec-review resolved
+
+The exit when spec-review resolved; `fr verification set` and `deliver` compare against it.
+
+```yaml
+row_gates: {}
+row_kinds: {}
+run_gate: developer
+run_kind: none
+```
