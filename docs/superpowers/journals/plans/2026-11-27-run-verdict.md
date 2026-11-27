@@ -143,3 +143,28 @@ a capture task: fixtures and a test, nothing pre-existing to clean
 ### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
 
 a verbatim move that must keep its bytes; the only cleanup (imports left unused in run_cmd, the test fakes' shapes) was done in the green step
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-27T20:11:59+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · test_run_verdict_deliver.py keeps a dead sym/_ALIASES shim that existed to drive run_cmd's pre-move functions; call deliver directly (phase 3)
+
+tests/unit/test_run_verdict_deliver.py:27-41. Fix - drop _ALIASES and sym, look names up on the moved module directly.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-27T20:11:59+00:00 phase=3 state=open review_scope=out -->
+### p3-r2 · finding [open] (reviewer: out of scope) · tests/unit/test_deliver_local_stamp.py:508 docstring still names removed _deliver_exit_guard (cosmetic) (phase 3)
+
+Only the docstring is stale; the body patches deliver.deliver_exit_guard.
+
+<!-- fr:journal kind=review scope=plan id=review-p3-1 created=2026-11-27T20:11:59+00:00 phase=3 -->
+### review-p3-1 · review · phase 3 reviewed by an independent reviewer; 1 in-scope finding fixed, 1 out-of-scope note (phase 3)
+
+Reviewer confirmed byte identity of every moved Say (style="red" refusals, markup lines, warn-routed warnings), _resolve_body's gate order, RECORD_ROWS name and set/reset, the held-stdout flush after a refusal, record/apply.py untouched, layering, no dead names or re-exports, patches at the lookup site, fixtures captured before the move, the stay-in-run_cmd decisions, the needed fr-show-me example edit with both mirror generators in sync, budget +20, docs current. Findings p3-r1 (dead name fallback in the capture test, fixed) and p3-r2 (stale docstring, out of scope).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-27T20:11:59+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: test_run_verdict_deliver.py keeps a dead sym/_ALIASES shim that existed to drive run_cmd's pre-move functions; call deliver directly (phase 3)
+
+Removed _ALIASES and sym in 07ba9b646; the module parameter stays as the one injection point every case uses. 67 tests pass.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-27T20:11:59+00:00 phase=3 state=open resolves=p3-r2 out_of_scope=true -->
+### p3-r2-resolved · finding [out-of-scope] · resolves p3-r2: tests/unit/test_deliver_local_stamp.py:508 docstring still names removed _deliver_exit_guard (cosmetic) (phase 3)
+
+Cosmetic docstring only; the reviewer tagged it out of scope. The docstring was updated in passing in 07ba9b646 to name fr.run.deliver.deliver_exit_guard.
