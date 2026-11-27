@@ -64,9 +64,16 @@ names the missing directory. It does not refresh.
 
 R6. An op that a refresh found changed or added is reopened, until stage 4 completes again.
 Its closure recorded before the refresh no longer closes it: only its live status, or
-evidence recorded after the refresh, does. When the refresh ran at stage 5, 6 or 7, the host
-state forgets stages 4 and later, so the same run goes back to stage 4 and applies the
-reopened ops before anything later runs.
+evidence recorded after the refresh, does. Plan-journal entries the merge brought in from
+the default branch never count as evidence recorded after it. When the refresh ran at stage
+5, 6 or 7 and reopened an op, the host state forgets stages 4 and later. When it ran at stage
+6 or 7 and only the Test Plan changed, it forgets stages 5 and later. Either way the same run
+goes back to the first forgotten stage before anything later runs. After such a restart, a
+`gate:devops-passed` label already on the PR counts only once the devops blockers, read on the
+refreshed workspace, are empty. When they are not, stage 6 fails, naming them, and never
+removes the label itself. A merge that was a no-op (the pinned commit already in the ops
+branch) but leaves the comparison still differing fails the stage, naming the ops: it never
+merges, reopens or restarts again.
 
 R7. A Test Plan step may name the acceptance rows it proves with a pointer
 `(rows: <id>[, <id>…])`. The pointer comes after the optional gate tag and the optional
