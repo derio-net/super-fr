@@ -131,3 +131,68 @@ the tally helpers were cleaned in place (a mutable [secs, mark] list became a (s
 ### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
 
 the change is one exemption tuple in fetch_state and one keyword argument per writer; nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-27T21:18:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · The one-writer rule failed across hosts: a render beside a cloud/other-host driver stored dwell.json and pushed the state ref (phase 2)
+
+The one-writer rule failed across hosts: a render beside a cloud/other-host driver stored dwell.json and pushed the state ref
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-27T21:18:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · Naive datetimes in dwell.json passed load and crashed observe/card_dwell (phase 2)
+
+Naive datetimes in dwell.json passed load and crashed observe/card_dwell
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-27T21:18:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · Time per wave left out Done against R7's per column (phase 2)
+
+Time per wave left out Done against R7's per column
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-27T21:18:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · The wave table overflowed at 390px with a 40-char id and its cells had no padding (phase 2)
+
+The wave table overflowed at 390px with a 40-char id and its cells had no padding
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-27T21:18:35+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · fr-triage.md claimed two processes never race on the ledger (phase 2)
+
+fr-triage.md claimed two processes never race on the ledger
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-27T21:18:35+00:00 phase=2 state=open review_scope=out -->
+### p2-r6 · finding [open] (reviewer: out of scope) · docs/triage/README.md's export sentence was already inaccurate before this change (phase 2)
+
+docs/triage/README.md's export sentence was already inaccurate before this change
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-11-27T21:18:35+00:00 phase=2 -->
+### review-p2 · review · phase 2 review: 5 in-scope findings fixed, 1 out of scope (phase 2)
+
+Independent reviewer checked dwell.py against §D case by case, fetch_state's exemption, the single writer, load/store, durations, wave_time, cutoff, escaping, budget, tests and docs; raised p2-r1..p2-r6; p2-r1..r5 fixed (HEAD 727ab9cd4) with tests (371 targeted pass), p2-r6 out of scope.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-27T21:18:35+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: The one-writer rule failed across hosts: a render beside a cloud/other-host driver stored dwell.json and pushed the state ref (phase 2)
+
+write_board stores only with no live drive.lock and no unexpired lease (an unreadable lease counts as a driver); four tests incl. non-writer leaves the bytes untouched; spec R5/§D amended.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-27T21:18:35+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: Naive datetimes in dwell.json passed load and crashed observe/card_dwell (phase 2)
+
+AwareDatetime on every time field; load gives an empty ledger plus its note; two tests.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-27T21:18:35+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: Time per wave left out Done against R7's per column (phase 2)
+
+Spec R7 and §E amended in this PR: Done is left out because its open interval only grows.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-27T21:18:35+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: The wave table overflowed at 390px with a 40-char id and its cells had no padding (phase 2)
+
+Cell padding, id in its own span with overflow-wrap, table in an overflow-x:auto wrapper; two tests.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-27T21:18:35+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: fr-triage.md claimed two processes never race on the ledger (phase 2)
+
+Reworded to the real rule and its one-lost-observation limit.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-27T21:18:35+00:00 phase=2 state=open resolves=p2-r6 out_of_scope=true -->
+### p2-r6-resolved · finding [out-of-scope] · resolves p2-r6: docs/triage/README.md's export sentence was already inaccurate before this change (phase 2)
+
+Export copying only DURABLE files predates this change; this PR only named dwell.json in the existing sentence.
