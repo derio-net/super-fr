@@ -4265,7 +4265,7 @@ class _Driver:
         self._fetch_failed: dict[str, GitError] = {}
         # (repo, PR, head, default-branch sha) -> the paths its trial merge refused: one trial
         # merge per key per process (R17); never reset, a commit and a sha never change
-        self._probed: dict[tuple[str, int, str, str], list[str]] = {}
+        self._probed: dict[tuple[str, int, str, str, tuple[str, ...], bool], list[str]] = {}
 
     # -------------------------------------------------------------- reaching out
 
@@ -6436,12 +6436,15 @@ class _Driver:
         try:
             checkout = self._fetched_reader(repo)
             main = f"origin/{checkout.default_branch()}"
-            key = (repo, action.pr, action.head, checkout.rev_parse(main))
+            config = facts.config_for(repo)
+            generated, mirrors = tuple(config.generated), bool(config.mirrors)
+            key = (repo, action.pr, action.head, checkout.rev_parse(main), generated, mirrors)
             paths = self._probed.get(key)
             if paths is None:
                 paths = trial_conflicts(
-                    checkout, main, facts.config_for(repo).version, action.head,
+                    checkout, main, config.version, action.head,
                     scratch_root=self.target / "probe", warn=self._probe_cleanup_failed,
+                    generated=generated, mirrors=mirrors,
                 )  # fmt: skip
                 self._probed[key] = paths
         except (GitError, TriageError) as exc:

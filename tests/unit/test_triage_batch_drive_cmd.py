@@ -497,6 +497,12 @@ class _Worktree:
     def abort_merge(self) -> None:
         pass
 
+    def unmerged_stages(self) -> dict[str, dict[int, str]]:
+        return {p: {2: "100644", 3: "100644"} for p in self.checkout.conflicts}
+
+    def read(self, file: str) -> str | None:
+        return None  # no marked-up text: every conflict is real
+
     def commit_all(self, message: str, version_files: list[str]) -> str | None:
         return "sha-updated"
 
