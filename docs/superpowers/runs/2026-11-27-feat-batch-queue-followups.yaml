@@ -3,7 +3,7 @@ run: 2026-11-27-feat-batch-queue-followups
 workflow: fr-goal@1
 branch: feat/batch-queue-followups
 started: '2026-11-27T13:41:19+00:00'
-cursor: implement
+cursor: journal-check
 steps:
   brainstorm:
     state: done
@@ -52,8 +52,8 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: running
-    at: '2026-11-27T15:35:40+00:00'
+    state: done
+    at: '2026-11-27T15:46:20+00:00'
     members:
     - implement-phase
     - review-phase
@@ -104,13 +104,20 @@ steps:
         evidence:
           visual: none
       phase/2/review-phase:
-        state: running
+        state: done
         attempts:
         - dispatched: '2026-11-27T15:35:40+00:00'
           agent: ae933cffba59262c2
           harness: claude-code
           model: claude-opus-5-5
           session: 5d651a76-adb8-4003-93fb-c7fbc93b4d88
+          returned: '2026-11-27T15:46:20+00:00'
+          outcome: done
+        evidence:
+          review: review-p2
+          reviewer: ae933cffba59262c2
+          visual: none
+          findings: p2-r1,p2-r2,p2-r3
   journal-check:
     state: pending
   lens-review:

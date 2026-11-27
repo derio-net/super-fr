@@ -180,3 +180,38 @@ ended_by_label is one small helper read by readiness and views; nothing to tidy 
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 _comments_off moved beside _labels_off and re-exported; the test fakes gained the comment methods on the base _Forge instead of a parallel fake
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-27T15:46:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · needs_you's Waiting skip is redundant with conflict_at, so the R2 board test passes without the change (phase 2)
+
+Raised by the phase 2 reviewer; verified against the code before acting.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-27T15:46:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · lanes.py's Waiting exclusion from the Reviewer lane has no test (phase 2)
+
+Raised by the phase 2 reviewer; verified against the code before acting.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-27T15:46:18+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · Waiting's said-once used a module-global set, the reverse of the plan (phase 2)
+
+Raised by the phase 2 reviewer; verified against the code before acting.
+
+<!-- fr:journal kind=review scope=plan id=review-p2 created=2026-11-27T15:46:18+00:00 phase=2 -->
+### review-p2 · review · phase 2 code review: 3 minor findings, no correctness defect (phase 2)
+
+A dispatched reviewer read spec, plan 02.yaml and the phase 2 diff (approval, operator_entries, readiness, views, lanes, batch_drive readers, triage_batch_cmd). It traced R1's ended event through _live_index/reaches/_pinned_ids and the entry translation, R2's Waiting through every reader (admission, drive, board, lanes, needs_you), and R3's ordering and trusted-marker suppression, and found them correct. Raised p2-r1..p2-r3 (test gaps and a global set): two fixed in 67ba3f6db, p2-r1 refuted.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-27T15:46:18+00:00 phase=2 state=refuted resolves=p2-r1 -->
+### p2-r1-resolved · finding [refuted] · resolves p2-r1: needs_you's Waiting skip is redundant with conflict_at, so the R2 board test passes without the change (phase 2)
+
+Waiting needs a ConflictEvent at the head AND a conflicting read; conflict_at needs only the event, so every Waiting input already has conflict_at set. No reachable snapshot distinguishes them; a test would need an impossible patched snapshot. The skip stays as a statement of R2's intent.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-27T15:46:18+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: lanes.py's Waiting exclusion from the Reviewer lane has no test (phase 2)
+
+test_triage_board_lanes.py::test_deliver_done_labelled_and_waiting_on_a_real_conflict_is_no_reviewer_lane, fails without the exclusion (67ba3f6db).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-27T15:46:18+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: Waiting's said-once used a module-global set, the reverse of the plan (phase 2)
+
+default is a fresh set; the driver holds _waiting_said and passes it; test_a_wait_is_said_each_call_by_default_and_once_per_set_the_driver_keeps (67ba3f6db).
