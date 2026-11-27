@@ -3,7 +3,7 @@ run: 2026-11-27-feat-batch-export-drift
 workflow: fr-goal@1
 branch: feat/batch-export-drift
 started: '2026-11-27T12:56:12+00:00'
-cursor: plan
+cursor: plan-review
 steps:
   brainstorm:
     state: done
@@ -32,8 +32,10 @@ steps:
           reviewer: a6493889b33070701
           findings: s1-r1,s1-r2,s1-r3,s1-r4,s1-r5,s1-r6,s1-r7,s1-r8,s1-r9
   plan:
-    state: running
-    at: '2026-11-27T14:50:13+00:00'
+    state: done
+    at: '2026-11-27T14:51:59+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-11-27-export-drift
     units:
       step/plan:
         attempts:
@@ -41,6 +43,8 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: e93ee8b9-d840-4dd9-b01a-439138b37e11
+          returned: '2026-11-27T14:51:59+00:00'
+          outcome: done
   plan-review:
     state: pending
   implement:
