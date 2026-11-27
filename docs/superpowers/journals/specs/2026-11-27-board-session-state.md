@@ -163,3 +163,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-board-session-state-p2 created=2026-11-27T20:07:50+00:00 -->
 ### phase-split-2026-11-27-board-session-state-p2 · decision · ask: the dwell ledger and its displays (R5-R7) are an ask of their own, built on phase 1's Card.wait
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-27-board-session-state-p2 created=2026-11-27T20:07:54+00:00 -->
+### tier-2026-11-27-board-session-state-p2 · decision · hard: phase 2 changes state_ref.fetch_state's clash rule and adds a single-writer rule, a concurrency path every state-ref caller relies on
