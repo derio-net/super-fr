@@ -1,0 +1,129 @@
+schema_version: 2
+phase:
+  number: 1
+  title: CI hygiene sweep — retire spec-status, pin UV_PYTHON, least-privilege ci.yml,
+    3.14/7-shard leftovers
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - ci-workflows-pin-the-python-floor
+  - ci-workflows-least-privilege-token
+  tier: standard
+  files:
+  - .github/workflows/*
+  - .github/ci-budget.yaml
+  - scripts/floors.py
+  - packages/fr/src/fr/states.py
+  - plugins/super-fr/skills/fr-progress/SKILL.md
+  - .opencode/skills/fr-progress/SKILL.md
+  - .hermes/skills/fr/fr-progress/SKILL.md
+  - docs/explainers/fr-progress.md
+  - docs/docs-currency.md
+  - docs/acceptance/features/2026-11-27-ci-hygiene.yaml
+  - tests/unit/test_ci_shards.py
+  - tests/unit/test_ci_python_floor.py
+  - tests/unit/test_ci_lanes_workflow.py
+  - tests/unit/test_ci_budget.py
+  - .changes/feat-batch-ci-hygiene.yaml
+  - .test_durations
+  estimate_lines: 220
+tasks:
+- number: 1
+  title: Every setup-uv workflow pins UV_PYTHON to the floor (R4)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_ci_python_floor.py add `test_every_uv_workflow_pins_uv_python_to_the_floor`: for every `.github/workflows/*.yml`, if any step of any job has `uses` starting with `astral-sh/setup-uv`, assert the workflow-level `env.UV_PYTHON == _floor()` (message names the file). Run `uv run pytest tests/unit/test_ci_python_floor.py -q --no-cov`: fails naming acceptance-report.yml, ci-budget.yml, pages.yml, pinned-clis.yml.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: add a workflow-level `env:` block with `UV_PYTHON: "3.14"` (after `permissions:`, before `jobs:`; merge into an existing workflow-level `env:` if there is one) to acceptance-report.yml, ci-budget.yml, pages.yml and pinned-clis.yml. Re-run the file: green. Also run `uv run pytest tests/unit/test_workflow_pinned_clis.py tests/unit/test_pages_workflow.py tests/unit/test_ci_budget.py -q --no-cov`: green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: pages.yml is in docs/docs-currency.md's `covers:`; prepend to its `reviewed:` stamp `2026-11-27 ci-hygiene added UV_PYTHON to pages.yml; page still true;` and run `uv run fr docs check`: no finding for docs-currency.md.
+- number: 2
+  title: Workflow-level permissions everywhere, ci.yml read-only (R5)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_ci_lanes_workflow.py add `test_ci_yml_default_token_is_read_only_contents` (ci.yml's top-level `permissions == {"contents": "read"}`) and `test_every_workflow_declares_workflow_level_permissions` (every `.github/workflows/*.yml` parsed with yaml.safe_load has a top-level `permissions` key; message names the file). Run the file: the ci.yml test fails, and the every-workflow test fails on ci.yml and fr-spec-status.yml.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: add a workflow-level `permissions:` block with `contents: read` in .github/workflows/ci.yml (after `env:`, before `jobs:`), with a one-line comment that a job's own block replaces it (classify, scoped-tests, ci-ok). Re-run test_ci_lanes_workflow.py: the ci.yml test passes; the every-workflow test now fails only on fr-spec-status.yml (deleted in task 3).
+- number: 3
+  title: Retire fr-spec-status.yml and _pr_spec_status.yml (R1)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      GREEN: `git rm .github/workflows/fr-spec-status.yml .github/workflows/_pr_spec_status.yml`; remove the `fr-spec-status.yml` line from .github/ci-budget.yaml and `- PR spec status (self)` from ci-budget.yml's `on.workflow_run.workflows`; delete `test_counted_pr_spec_status_counts_every_event` from tests/unit/test_ci_budget.py (pinned-clis keeps the every-event case). Run `uv run pytest tests/unit/test_ci_budget.py tests/unit/test_ci_lanes_workflow.py tests/unit/test_tripwire_actions_pinned.py tests/unit/test_ci_workflow_hygiene.py -q --no-cov`: green.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: drop the sentence naming `.github/workflows/fr-spec-status.yml` from plugins/super-fr/skills/fr-progress/SKILL.md (line ~78) and the matching sentence from docs/explainers/fr-progress.md (line ~78), prepending to the explainer's `reviewed:` `2026-11-27 ci-hygiene retired the spec-status workflow; the sentence naming it is gone;`. In packages/fr/src/fr/states.py:70 reword "in the GHA spec-status comment" to "in `fr spec status` output". Run `uv run --no-project python scripts/sync-opencode.py` and `uv run --no-project python scripts/sync-hermes.py`, then both with `--check`: clean. Grep (excluding docs/superpowers/implemented, docs/triage, tests/fixtures, .test_durations) for `fr-spec-status|_pr_spec_status|PR spec status`: only the data-only uses in test_ci_budget.py:372 and test_tripwire_actions_pinned.py remain. Add `.changes/feat-batch-ci-hygiene.yaml` with `bump: patch` and `summary: Retire the stale fr-spec-status workflow; every CI workflow pins its Python and declares its token permissions`.
+- number: 4
+  title: floors.py and test_ci_shards.py leftovers (R2, R3)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in tests/unit/test_ci_shards.py change the partition test to read the shard list from ci.yml's `test` job matrix (`strategy.matrix.shard`) and split into `len(shards)` groups, asserting `len(groups) == len(shards)`. Run it: expected green at once (it pins the coupling to the matrix rather than catching a bug); say so in the step note.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: update test_ci_shards.py's module docstring (lines 4 and 11) and section comment (line 102) to say 7 shards / the matrix's shard count. In scripts/floors.py replace the 3.11 prose (lines 31-34) with a comment saying the upper bound is a literal version or a derived ceiling (`f">=4.20.0,<{CEILING_VERSION}"`), whose FSTRING_MIDDLE piece ends after the `<`, so group 2 is None; set `_STRING_TOKENS = {tokenize.STRING, tokenize.FSTRING_MIDDLE}`. Regex unchanged. Run `uv run pytest tests/unit/test_ci_shards.py tests/unit/test_version_floors.py -q --no-cov`: green.
+- number: 5
+  title: Rows, quality gate, fast tier (R4, R5)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Move both rows to ci: `uv run fr acceptance set-status --id ci-workflows-pin-the-python-floor --status ci --level unit=super-fr:tests/unit/test_ci_python_floor.py#test_every_uv_workflow_pins_uv_python_to_the_floor --notes "every setup-uv workflow pins UV_PYTHON; unit test runs in CI"` and `uv run fr acceptance set-status --id ci-workflows-least-privilege-token --status ci --level unit=super-fr:tests/unit/test_ci_lanes_workflow.py#test_ci_yml_default_token_is_read_only_contents --level unit=super-fr:tests/unit/test_ci_lanes_workflow.py#test_every_workflow_declares_workflow_level_permissions --notes "workflow-level permissions pinned; unit tests run in CI"`. Then `uv run fr acceptance check`: no failure.
+  - id: P1.T5.S2
+    text: |-
+      REFACTOR + quality gate: `uv run ruff format packages/ tests/ scripts/floors.py`, `uv run ruff check packages/ tests/ scripts/`, `uv run fr docs check`, `uv run --no-project python scripts/check-change-fragment.py origin/main`. Commit, then run the repo's fast tier last (`.fr/ci.yaml` `fast_tier`, base origin/main) into a host-visible log: green.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
