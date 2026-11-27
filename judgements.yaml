@@ -10545,6 +10545,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T12:54:31.828896Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -11579,6 +11586,12 @@ batches:
   ids:
   - super-fr#1667
   wave: 25
+  events:
+  - kind: dispatch
+    at: '2026-11-27T12:54:42.544761Z'
+    runner: herdr
+    handle: w3V:p6
+    branch: feat/batch-export-drift
 - id: arch-shared-helpers
   title: '#1318: shared duplicate-key YAML detector, record placement and hermetic-git fixtures, small
     duplicate readers'
@@ -11646,6 +11659,13 @@ batches:
     at: '2026-11-27T10:08:30.332652Z'
     head: 07f7151351526d64fe5609a06fd17730b7905d24
     paths:
+    - docs/reference/workflow-shapes.md
+    delivered: held
+  - kind: conflict
+    at: '2026-11-27T12:54:38.273647Z'
+    head: 89f3b7ebe4c6c2b0cc9b3dfc54d810bc09053a23
+    paths:
+    - docs/reference/cli.md
     - docs/reference/workflow-shapes.md
     delivered: held
 - id: arch-isolation-split
