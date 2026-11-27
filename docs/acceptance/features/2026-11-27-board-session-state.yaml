@@ -117,3 +117,28 @@ rows:
     status: not-implemented
     notes: ''
     verify: live
+amendments:
+  - row: batch-card-waits-for
+    op: reword
+    base: 0
+    acceptance: Every card on the Batches page outside the Done column names the one
+      party it waits for (you with the lane role, agent, background, ci, queue, dependency),
+      decided by a fixed precedence after the column, which it never changes.
+    why: 'spec-review s1: only a Done card has no wait'
+  - row: batch-lane-owners
+    op: reword
+    base: 0
+    acceptance: A repo's .fr/triage.yaml lane_owners names owners per Needs-you lane;
+      each Needs-you column header shows them or 'owner unassigned', per repo when they
+      differ, and a lane card names them; an unknown lane key is ignored and named in
+      a page note, never refusing the config.
+    why: 'spec-review s9: an unknown lane key is ignored, never refused'
+  - row: batch-dwell-ledger
+    op: reword
+    base: 0
+    acceptance: Every Batches page observation records, in a dwell ledger carried by
+      the state ref and stored only by its one writer, when each batch entered its current
+      column and wait, closing the previous interval; first sightings and truncation
+      are marked, a departed batch is dropped, a fetch adopts the ref's ledger, and
+      an unreadable ledger is an empty one plus a note.
+    why: 'spec-review s5, s7: one writer, defined interval semantics'
