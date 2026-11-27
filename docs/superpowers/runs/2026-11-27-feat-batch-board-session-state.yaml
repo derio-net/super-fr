@@ -3,7 +3,7 @@ run: 2026-11-27-feat-batch-board-session-state
 workflow: fr-goal@1
 branch: feat/batch-board-session-state
 started: '2026-11-27T17:03:24+00:00'
-cursor: plan
+cursor: plan-review
 steps:
   brainstorm:
     state: done
@@ -32,8 +32,10 @@ steps:
           reviewer: a621ec576eea55588
           findings: s1,s2,s3,s4,s5,s6,s7,s8,s9
   plan:
-    state: running
-    at: '2026-11-27T20:05:19+00:00'
+    state: done
+    at: '2026-11-27T20:08:09+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-11-27-board-session-state
     units:
       step/plan:
         attempts:
@@ -41,6 +43,8 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 164db869-0dd1-4fdb-8624-054c412af9ff
+          returned: '2026-11-27T20:08:09+00:00'
+          outcome: done
   plan-review:
     state: pending
   implement:
