@@ -505,7 +505,7 @@ def test_an_unexpected_error_reading_the_holds_is_not_swallowed(
     """p2-r5: the gate catches only the unreadable-input errors; anything else is a
     bug and propagates, never read as "nothing holds it"."""
     import fr.record.pr_body as pr_body
-    from fr.commands.run_cmd import _refuse_unclosed_owed
+    from fr.run.deliver import refuse_unclosed_owed
 
     root = _at_deliver(tmp_path)
 
@@ -514,4 +514,4 @@ def test_an_unexpected_error_reading_the_holds_is_not_swallowed(
 
     monkeypatch.setattr(pr_body, "run_held_issues", bug)
     with pytest.raises(RuntimeError, match="a bug"):
-        _refuse_unclosed_owed(root, load_run_state(root, RUN), "no close", "1", "body.md")
+        refuse_unclosed_owed(root, load_run_state(root, RUN), "no close", "1", "body.md")

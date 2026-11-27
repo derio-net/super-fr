@@ -273,8 +273,10 @@ def test_a_run_with_no_operator_row_renders_none(tmp_path: Path) -> None:
 
 def _gate(root: Path, live: str) -> None:
     from fr.commands import run_cmd
+    from fr.run import deliver
 
-    run_cmd._refuse_premature_closes(root, load_run_state(root, RUN), live)
+    with run_cmd._refusals():
+        deliver.refuse_premature_closes(root, load_run_state(root, RUN), live)
 
 
 def test_the_gate_refuses_a_premature_close_printing_the_line_and_the_fix(

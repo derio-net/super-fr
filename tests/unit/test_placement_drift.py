@@ -164,11 +164,12 @@ def test_fr_push_refuses_a_drifted_branch(
 
 
 def test_deliver_refuses_a_drifted_branch(tmp_path: Path) -> None:
-    from fr.commands.run_cmd import _deliver_placement_gate
+    from fr.run.deliver import deliver_placement_gate
+    from fr.run.verdict import RunRefusal
 
     _, ws = drifted(tmp_path)
-    with pytest.raises(typer.Exit) as e:
-        _deliver_placement_gate(ws)
+    with pytest.raises(RunRefusal) as e:
+        deliver_placement_gate(ws)
     assert e.value.exit_code == 2
 
 

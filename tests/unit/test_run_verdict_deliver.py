@@ -238,7 +238,6 @@ def _pr_gate_cases() -> list[Case]:
         _case(
             "render-refused",
             "deliver_pr_gate",
-            "deliver_acceptance_gate",
             _pr_gate(render=_PrBodyRefused()),
             args,
         ),
@@ -246,7 +245,6 @@ def _pr_gate_cases() -> list[Case]:
         _case(
             "minimal-marker",
             "deliver_pr_gate",
-            "deliver_acceptance_gate",
             _pr_gate(live="body", pr_body="minimal", markers=["<!-- a -->", "<!-- b -->"]),
             args,
         ),
@@ -254,7 +252,6 @@ def _pr_gate_cases() -> list[Case]:
         _case(
             "shared-keyword",
             "deliver_pr_gate",
-            "deliver_acceptance_gate",
             _pr_gate(live=_all_sections() + "Closes #1 and #2\n"),
             args,
         ),

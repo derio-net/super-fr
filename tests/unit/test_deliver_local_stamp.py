@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from fr.run import deliver
 from fr.run.model import load_run_state
 from fr.run.writes import RUN_WRITES, RunWrites
 
@@ -389,14 +390,20 @@ def test_under_quiet_the_fragment_is_written_in_the_artifact_root(
     )
     clear_fold_cache()
 
-    plan = run_cmd._local_stamp_plan(root, "spec", "suite.log@0123456789ab", today="2026-11-14")
+    plan = deliver.local_stamp_plan(
+        root,
+        "spec",
+        "suite.log@0123456789ab",
+        today="2026-11-14",
+        witness=run_cmd._local_stamp_witness,
+    )
 
     assert plan is not None and [p for p, _ in plan.files] == [frag] and plan.rows == ("q-1",)
     assert not (root / KIND_DIRS["acceptance-fragment"]).exists()
     writes = RunWrites(verb="resolve")
     token = RUN_WRITES.set(writes)
     try:
-        run_cmd._deliver_local_stamp_write(root, plan)
+        deliver.deliver_local_stamp_write(root, plan)
         outcome = writes.commit()
     finally:
         RUN_WRITES.reset(token)
@@ -438,7 +445,16 @@ def test_a_fragment_with_no_local_row_never_folds(
         raise AssertionError("the stamp plan folded a fragment with no local row")
 
     monkeypatch.setattr(fold_mod, "effective", boom)
-    assert run_cmd._local_stamp_plan(root, "spec", "suite.log", today="2026-11-14") is None
+    assert (
+        deliver.local_stamp_plan(
+            root,
+            "spec",
+            "suite.log",
+            today="2026-11-14",
+            witness=run_cmd._local_stamp_witness,
+        )
+        is None
+    )
 
 
 # --- tests-lens gaps (l-tests-r1, l-tests-r4) ------------------------------------------

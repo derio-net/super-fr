@@ -14,8 +14,10 @@ import pytest
 import yaml
 from click.exceptions import Exit
 from fr.acceptance.model import Matrix, Row
+from fr.commands import run_cmd
 from fr.journal.model import JournalEntry, append_journal_entry, journal_path, owed_body
 from fr.record.pr_body import premature_closes, unaccounted
+from fr.run import deliver
 from fr.run.model import load_run_state
 from fr.verification.exit import Exit as RunExit
 from fr.verification.exit import run_exit
@@ -247,14 +249,13 @@ def test_with_ci_the_row_fix_is_unchanged(tmp_path: Path) -> None:
 def test_the_deliver_gate_refuses_printing_every_leftover_and_its_fix(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from fr.commands import run_cmd
-
     root = _repo(tmp_path, rows={})
     _journal(root, *_out_of_scope())
     _commit(root)
 
     with pytest.raises(Exit) as exc:
-        run_cmd._deliver_leftovers_gate(root, load_run_state(root, RUN))
+        with run_cmd._refusals():
+            deliver.deliver_leftovers_gate(root, load_run_state(root, RUN))
 
     assert exc.value.exit_code == 2
     err = capsys.readouterr().err.replace("\n", " ")
@@ -350,8 +351,6 @@ def test_p3_r5_a_finished_rows_issue_may_close() -> None:
 def test_p3_r4_an_unparseable_journal_refuses_the_deliver_gates_naming_it(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], gate: str
 ) -> None:
-    from fr.commands import run_cmd
-
     root = _repo(tmp_path, rows={})
     _rows(root, [{"id": "r", "status": "ci", "issues": ["o/proj#1"]}])
     path = journal_path(root, "spec", "s")
@@ -365,9 +364,11 @@ def test_p3_r4_an_unparseable_journal_refuses_the_deliver_gates_naming_it(
 
     with pytest.raises(Exit) as exc:
         if gate == "leftovers":
-            run_cmd._deliver_leftovers_gate(root, state)
+            with run_cmd._refusals():
+                deliver.deliver_leftovers_gate(root, state)
         else:
-            run_cmd._refuse_premature_closes(root, state, "Closes #4\n")
+            with run_cmd._refusals():
+                deliver.refuse_premature_closes(root, state, "Closes #4\n")
 
     assert exc.value.exit_code == 2
     err = capsys.readouterr().err.replace("\n", " ")
@@ -377,43 +378,40 @@ def test_p3_r4_an_unparseable_journal_refuses_the_deliver_gates_naming_it(
 def test_the_gate_refuses_a_gated_row_close_under_a_remap_to_pre_merge(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from fr.commands import run_cmd
-
     root = _repo(tmp_path, rows={"r1": None})
     (root / ".fr/triage.yaml").write_text("exit:\n  gates:\n    candidate: tester\n")
     _rows(root, [{"id": "r1", "status": "ci", "verify": "candidate", "issues": ["o/proj#7"]}])
     _commit(root)
 
     with pytest.raises(Exit):
-        run_cmd._refuse_premature_closes(root, load_run_state(root, RUN), "Closes #7\n")
+        with run_cmd._refusals():
+            deliver.refuse_premature_closes(root, load_run_state(root, RUN), "Closes #7\n")
     assert "Refs o/proj#7" in capsys.readouterr().err.replace("\n", " ")
 
 
 def test_the_gate_still_refuses_an_unwalked_post_merge_row_under_a_remap_to_none(
     tmp_path: Path,
 ) -> None:
-    from fr.commands import run_cmd
-
     root = _repo(tmp_path, rows={"r1": None})
     (root / ".fr/triage.yaml").write_text("exit:\n  gates:\n    live: none\n")
     _rows(root, [{"id": "r1", "status": "walk-owed", "verify": "live", "issues": ["o/proj#7"]}])
     _commit(root)
 
     with pytest.raises(Exit):
-        run_cmd._refuse_premature_closes(root, load_run_state(root, RUN), "Closes #7\n")
+        with run_cmd._refusals():
+            deliver.refuse_premature_closes(root, load_run_state(root, RUN), "Closes #7\n")
 
 
 def test_the_gate_refuses_a_close_over_an_unanswered_narrowing(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from fr.commands import run_cmd
-
     root = _repo(tmp_path, rows={})
     _journal(root, _narrowing())
     _commit(root)
 
     with pytest.raises(Exit):
-        run_cmd._refuse_premature_closes(root, load_run_state(root, RUN), "Closes #4\n")
+        with run_cmd._refusals():
+            deliver.refuse_premature_closes(root, load_run_state(root, RUN), "Closes #4\n")
     err = capsys.readouterr().err.replace("\n", " ")
     assert "d1" in err and "Refs o/proj#4" in err
 
@@ -438,20 +436,19 @@ def test_a_row_the_pending_record_sets_names_the_record(
 ) -> None:
     """gh#1456: the deliver record is applied before this gate reads the fold, so a row
     its `acceptance:` entry sets wins over the fragment; the refusal says so."""
-    from fr.commands import run_cmd
-
     root = _repo(tmp_path, rows={"owed-row": None})
     _rows(root, [{"id": "owed-row", "status": "unwired"}])
     _commit(root)
 
-    token = run_cmd._RECORD_ROWS.set(
+    token = deliver.RECORD_ROWS.set(
         ("docs/superpowers/runs/r.records/deliver.yaml", {"owed-row": "unwired"})
     )
     try:
         with pytest.raises(Exit) as exc:
-            run_cmd._deliver_leftovers_gate(root, load_run_state(root, RUN))
+            with run_cmd._refusals():
+                deliver.deliver_leftovers_gate(root, load_run_state(root, RUN))
     finally:
-        run_cmd._RECORD_ROWS.reset(token)
+        deliver.RECORD_ROWS.reset(token)
 
     assert exc.value.exit_code == 2
     err = " ".join(capsys.readouterr().err.split())
