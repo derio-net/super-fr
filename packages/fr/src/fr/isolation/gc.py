@@ -170,10 +170,10 @@ class GcSweeper:
         live run would refuse is not a preview.
 
         Both the preview probe and the live teardown go through a sibling built
-        from the WORKSPACE's recorded mode (gh#569), not `type(self)`. gc is
-        host-wide and `self` is whatever mode the triggering command ran in: a
-        host-worktree sweep reaping a devcontainer workspace through
-        `type(self)` ran the docker-less `_teardown_container` no-op and leaked
+        from the WORKSPACE's recorded mode (gh#569), not the sweeping target's
+        type. gc is host-wide and the target is whatever mode the triggering
+        command ran in: a host-worktree sweep reaping a devcontainer workspace
+        through the target's type ran the docker-less `_teardown_container` no-op and leaked
         the container — the #354 leak by another route. Function-local import:
         `routing` imports `hostworktree`, which imports this module.
         """
@@ -200,8 +200,8 @@ class GcSweeper:
             # Ask through a sibling rooted at the WORKSPACE's repo, exactly as
             # the live path below does — `_reap_hazard` calls
             # `_resolve_default_branch()`, which reads `self.repo_root`, and gc
-            # is host-wide: `self` here is whichever repo happened to trigger
-            # the sweep, not this workspace's. Asking `self` would resolve
+            # is host-wide: the target is whichever repo happened to trigger
+            # the sweep, not this workspace's. Asking the target would resolve
             # repo A's default branch while comparing repo B's worktree, so a
             # `master` repo swept from a `main` one would preview "would-skip"
             # for a workspace the live run then reaps — the preview/live
@@ -329,8 +329,9 @@ class GcSweeper:
         enumerates `git worktree list`, so a plain `git worktree add` made by
         other automation is never seen and never reaped (#423 non-goal).
 
-        1. docker-label containers (`devcontainer.local_folder`) — devcontainer
-           mode only; docker-less modes override it to an empty list;
+        1. docker-label containers (`devcontainer.local_folder`), asked of the
+           target — devcontainer mode only; a docker-less target answers with
+           an empty list;
         2. directories under the fr worktree cache `~/.cache/fr/worktrees`;
         3. the invoking repo's own fr state records (#423) — the ONLY source
            that finds a workspace created at a custom `--path` (the shape
@@ -401,8 +402,9 @@ class GcSweeper:
 
     # ---------- gc: cache + session-index hygiene (spec 2026-09-04 §5.A/§5.C) ----------
     #
-    # Substrate-neutral (no docker, no git), so every worktree mode inherits
-    # them verbatim; ExternalTarget has its own read-only gc and is untouched.
+    # Substrate-neutral (no docker, no git), so they run the same for every
+    # worktree mode's target; ExternalTarget has its own read-only gc and never
+    # reaches the sweeper.
 
     def _empty_repo_dirs(self) -> list[Path]:
         """Children of `~/.cache/fr/worktrees` with NO subdirectories — the
