@@ -116,6 +116,8 @@ docs/acceptance/features/2026-11-27-ci-hygiene.yaml  ~ both rows: unit levels, s
 
 strategy: none
 gate: developer
+settle.conflicts: report — batch ci-hygiene: the wave driver owns this PR's mergeability
+settle.ci: report — batch ci-hygiene: the wave driver owns this PR's CI
 
 - ci-workflows-pin-the-python-floor: none — the unit test of R4 reads every workflow file in CI
 - ci-workflows-least-privilege-token: none — the unit test of R5 reads every workflow file in CI
