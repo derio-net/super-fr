@@ -10346,6 +10346,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T11:11:09.896006Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T11:11:41.547781Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -11457,6 +11472,8 @@ batches:
     at: '2026-11-27T11:04:08.373346Z'
     keys:
     - super-fr#1517
+  - kind: post_merge
+    at: '2026-11-27T11:11:39.086773Z'
 - id: arch-plan-ops-split
   title: '#1318: split self-review, the spec table and the refactor-gate read out of plan_ops.py'
   ids:
