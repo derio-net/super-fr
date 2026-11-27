@@ -24,21 +24,12 @@ from rich.console import Console
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures/run_verdict/deliver"
 ROOT = Path("/repo")
-# a name the moved module spells without run_cmd's leading underscore
-_ALIASES = {"narrow_answered_by": "_answered_by_or_exit"}
 
 
 def recording_console() -> Console:
     return Console(
         file=StringIO(), width=80, force_terminal=True, color_system="standard", highlight=False
     )
-
-
-def sym(module: ModuleType, name: str) -> str:
-    """The attribute of `module` that holds `name` (run_cmd's is underscored)."""
-    if hasattr(module, name):
-        return name
-    return _ALIASES.get(name, f"_{name}")
 
 
 def _patch(mp: pytest.MonkeyPatch, dotted: str, value: object) -> None:
@@ -212,8 +203,8 @@ def _pr_gate(
         _patch(mp, "fr.hostclient.client_for", lambda _r: _Client(live))
         _patch(mp, "fr.hostclient.FORGE_ERRORS", (OSError,))
         _patch(mp, "fr.hostclient.pr_command", lambda *_a, **_k: "EDIT-PR")
-        mp.setattr(module, sym(module, "refuse_unclosed_owed"), lambda *_a: None)
-        mp.setattr(module, sym(module, "refuse_premature_closes"), lambda *_a: None)
+        mp.setattr(module, "refuse_unclosed_owed", lambda *_a: None)
+        mp.setattr(module, "refuse_premature_closes", lambda *_a: None)
 
     return setup
 
@@ -410,7 +401,7 @@ _CLEANUPS: list[Callable[[], None]] = []
 
 def _held_rows(mp: pytest.MonkeyPatch, module: ModuleType, tmp: Path) -> None:
     _leftovers(mp, module, tmp)
-    holder = getattr(module, sym(module, "RECORD_ROWS"))
+    holder = getattr(module, "RECORD_ROWS")
     token = holder.set(("rec.yaml", {"r-1": "walked"}))
     _CLEANUPS.append(lambda: holder.reset(token))
 
@@ -548,7 +539,7 @@ def run_case(
     mp.setattr(run_cmd, "err_console", console)
     case.setup(mp, module, tmp)
     try:
-        call(getattr(module, sym(module, case.fn)), case.args(tmp))
+        call(getattr(module, case.fn), case.args(tmp))
         code = 0
     except typer.Exit as e:
         code = e.exit_code

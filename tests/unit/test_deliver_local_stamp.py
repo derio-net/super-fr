@@ -505,7 +505,7 @@ def test_the_last_refusal_missing_emits_writes_no_stamp(
 def test_the_exit_guard_refusal_writes_no_stamp(
     tmp_path: Path, live: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """l-tests-r1: a refusal by `_deliver_exit_guard`, after the PR gate passes."""
+    """l-tests-r1: a refusal by `fr.run.deliver.deliver_exit_guard`, after the PR gate passes."""
     import fr.verification.baseline as baseline
 
     root = _at_deliver(tmp_path)
