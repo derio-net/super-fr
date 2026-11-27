@@ -1,0 +1,1 @@
+"[red]plan is ALREADY RUNNING (dispatched 2026-01-01T00:00:00Z).[/red]\n  Waiting on that agent \u2014 do NOT dispatch again.\n  resolve it:      fr run resolve r1 --step plan --state done   (or --state failed)\n  lost agent:      fr run claim r1 --step plan --abandoned\n  re-brief anyway: fr run advance r1 --redispatch"

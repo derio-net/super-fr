@@ -1,0 +1,6 @@
+{
+  "tests": {
+    "fast_tier": "run origin/main -q",
+    "mode": "ci"
+  }
+}
