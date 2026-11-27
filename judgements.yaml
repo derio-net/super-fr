@@ -10427,6 +10427,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T11:35:25.976711Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -11551,6 +11558,16 @@ batches:
     runner: herdr
     handle: w3V:p2
     branch: feat/batch-arch-plan-ops-split
+  - kind: conflict
+    at: '2026-11-27T11:35:30.588976Z'
+    head: e32ccb491013a63dbe5855cfdc8b3ccf294cc151
+    paths:
+    - docs/explainers/fr-dispatch.md
+    - docs/reference/cli.md
+    - docs/reference/dispatch-lifecycle.md
+    - docs/reference/workflow-shapes.md
+    - tests/unit/test_tripwire_module_budget.py
+    delivered: held
 - id: triage-privacy
   title: 'Triage privacy: outsider text never reaches worker sessions or the state ref unfenced'
   ids:
