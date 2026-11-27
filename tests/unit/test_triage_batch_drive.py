@@ -1956,3 +1956,37 @@ def test_drive_pass_queue_landed_batch_closes_out_without_fallback() -> None:
     plain = _snap([b], {"x": "merged"}, merged_at={"x": NOW - timedelta(minutes=1)},
                   post_merge_repos=frozenset({REPO}))  # fmt: skip
     assert ("closeout", "x") not in _kinds(drive_pass(plain).actions)
+
+
+def _two_landed(**kw: Any) -> Snapshot:
+    """R6: a wave of two landed, ungated batches with post_merge recorded, neither landed
+    by the queue: x merged 11 minutes ago, y 2 minutes ago."""
+    x = _merged("x", 1, events=[_POST_MERGE])
+    y = _merged("y", 2, events=[_POST_MERGE])
+    merged_at = {"x": NOW - timedelta(minutes=11), "y": NOW - timedelta(minutes=2)}
+    return _snap([x, y], {"x": "merged", "y": "merged"}, merged_at=merged_at,
+                 post_merge_repos=frozenset({REPO}), **kw)  # fmt: skip
+
+
+def test_wave_closeout_waits_for_every_member_due() -> None:
+    """R6: no collected close-out while a member is not due; one `held` names it."""
+    got = drive_pass(_two_landed())
+    assert not any(a.kind == "closeout" for a in got.actions)
+    (held,) = [a for a in got.actions if a.kind == "held"]
+    assert held.batch == "y" and "y (not due)" in held.detail
+    later = drive_pass(_two_landed(now=NOW + timedelta(minutes=9)))
+    (start,) = [a for a in later.actions if a.kind == "closeout"]
+    assert start.items == ("x", "y")
+    assert not any(a.kind == "held" for a in later.actions)
+
+
+def test_wave_closeout_held_for_unverified_member() -> None:
+    """R6: an unverified member holds its wave's close-out; one not selected does not."""
+    snap = _two_landed(now=NOW + timedelta(minutes=9), unverified=frozenset({"y"}))
+    got = drive_pass(snap)
+    assert not any(a.kind == "closeout" for a in got.actions)
+    (held,) = [a for a in got.actions if a.kind == "held"]
+    assert held.batch == "y" and "y (unverified)" in held.detail
+    unselected = drive_pass(_two_landed(selected=frozenset({"x"})))
+    (start,) = [a for a in unselected.actions if a.kind == "closeout"]
+    assert start.items == ("x",)
