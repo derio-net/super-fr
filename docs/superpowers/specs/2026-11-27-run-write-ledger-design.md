@@ -119,3 +119,9 @@ gate: developer
 - The other `run_cmd.py` clusters (lookup, provenance, briefs, deliver gates, evidence); they
   wait on #1519.
 - Any change to `fr.run.model.save_run_state` (#1500, closed).
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-27-run-write-ledger | `derio-net/super-fr` | `2026-11-27-run-write-ledger` | — |
