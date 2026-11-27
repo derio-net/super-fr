@@ -1,0 +1,61 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Briefs (E) move to fr/run/brief.py
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - run-cmd-clusters-in-fr-run
+  - run-verdict-refusals-preserved
+  tier: standard
+  files:
+  - packages/fr/src/fr/run/brief.py
+  - packages/fr/src/fr/run/evidence/lenses.py
+  - packages/fr/src/fr/run/*.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/commands/*.py
+  - packages/fr/src/fr/record/*.py
+  - tests/unit/*.py
+  - tests/fixtures/run_verdict/**
+  - docs/reference/*.md
+  - docs/explainers/fr-brainstorming-and-plan.md
+  estimate_lines: 2600
+tasks:
+- number: 1
+  title: Capture E's refusals (R9)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: capture from the CURRENT code every refusal path in run_cmd.py's E range (`_template_context` through `_print_member_dispatch`) EXCEPT `_guard_dispatch_binding` and its four helpers, which stay: template rendering, the already-running and nothing-running refusals, manual placement preflight, `_lens_set_or_exit`, claim/close record refusals, and any warning before a refusal. Fixtures under tests/fixtures/run_verdict/brief/ with exit codes; commit. Add tests/unit/test_run_verdict_brief.py driving each through the new modules and `_refusals()`. Also capture, for one flat step and one grouped member, the JSON of the brief dict `_build_brief` / `_build_member_brief` returns, and assert the moved builders return an equal dict. Fails: modules absent.
+- number: 2
+  title: Move E (R6, R11)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      GREEN: move E into packages/fr/src/fr/run/brief.py with `_TEMPLATE_RE`, names public; `_lens_set_or_exit` goes to packages/fr/src/fr/run/evidence/lenses.py as `lens_set_or_refuse` raising RunRefusal. Every moved function that called `resolve_repo_root()` (`build_brief`, the binding-health helper, `record_brief`, `build_member_brief`, `lens_review_brief`) takes `repo_root` as a parameter; each caller passes the root it already resolved (confirm it is the same `resolve_repo_root()` value). `_guard_dispatch_binding`, `_run_journal`, `_restore_bytes`, `_NotAppliedError`, `_substitution_id` and `_print_member_dispatch` stay in run_cmd.py. Refusing calls go through `with _refusals():`. Re-point every test and importer naming a moved name. Run `uv run pytest tests/unit/test_run_*.py tests/unit/test_record_*.py tests/unit/test_pickup*.py tests/unit/test_models*.py -q --no-cov -n 2`: green.
+- number: 3
+  title: Budget, docs, quality gate (R12)
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      REFACTOR + quality gate: lower the run_cmd.py budget (comment names slice 4); `uv run fr docs check` and bump named pages naming slice 4; ruff format, ruff check, mypy. Commit, then run the fast tier the brief names last.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

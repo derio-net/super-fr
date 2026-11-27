@@ -1,0 +1,67 @@
+schema_version: 2
+phase:
+  number: 5
+  title: The remaining evidence verifiers (D) move to fr/run/evidence/
+  tag: agentic
+  depends_on:
+  - 4
+  tracking_issue: null
+  acceptance:
+  - run-cmd-clusters-in-fr-run
+  - run-verdict-refusals-preserved
+  tier: hard
+  files:
+  - packages/fr/src/fr/run/evidence/*.py
+  - packages/fr/src/fr/run/*.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/*.py
+  - packages/fr/src/fr/verification/baseline.py
+  - tests/unit/*.py
+  - tests/fixtures/run_verdict/**
+  - docs/reference/*.md
+  - docs/verification-strategies.md
+  estimate_lines: 5600
+tasks:
+- number: 1
+  title: Capture D's refusals (R9)
+  steps:
+  - id: P5.T1.S1
+    text: |-
+      RED: capture from the CURRENT code every refusal path of every function left in run_cmd.py's D range (`_parse_emitted` through `_debt_phrase`) except `_verified_evidence` itself: emitted parsing, evidence target/parse/hints, journal readers, reviewer and review-entry checks, returned findings, lens reviewers and returns, historical bound, visual, single-phase, walk obligation/verify/provenance, tests-log reading/staleness/phase windows, the CI witness including both exit-75 paths, reuse, local stamps, closed findings, owed units, and each warning or unobserved note emitted before a refusal. Also capture, through `fr run resolve` on a fixture run, one case where two derived witnesses refuse, so the gh#768 summary line is pinned. Fixtures under tests/fixtures/run_verdict/evidence/ with exit codes; commit. Add tests/unit/test_run_verdict_evidence.py driving each through the new package and the adapter. Fails: names absent.
+- number: 2
+  title: Move D by concern (R7, R11)
+  steps:
+  - id: P5.T2.S1
+    text: |-
+      GREEN: move D into fr/run/evidence/, one module per concern, each under 800 lines (for example emitted.py, target.py, journals.py, review.py, lenses.py (joining lens_set_or_refuse), walk.py, tests.py, ci.py, owed.py, with derived.py gaining `single_phase_witness` and `visual_witness`). Each witness verifier whose result `_verified_evidence` stores as a `str` returns `Verdict[str]`; every other refusing function raises RunRefusal and takes `warn` where it warns; `_return_unobserved` notes through fr.run.unobserved and warns through `warn`. Merge rule: a verifier calling a raising function catches RunRefusal into its refusal with the warnings gathered so far; a verifier calling another verifier appends the callee's warnings in order and returns its refusal. Exit 75 stays the exit code for a pending CI gate. Remove run_cmd's local `_derived_refusal` once its last caller has moved.
+  - id: P5.T2.S2
+    text: |-
+      GREEN: rewire `_verified_evidence` (stays in run_cmd.py): each non-derived verifier is settled with `_settle(...)` or called inside `with _refusals():`; `derive` settles each derived verdict inside its `try`, so the gathering and the summary line for more than one refusal are unchanged. Re-point every test naming a moved name, with fakes of the new shape (tests/unit/test_run_evidence_walk.py:70's `_verify_tests_log` lambda returns a `Verdict`). Run `uv run pytest tests/unit/test_run_*.py tests/unit/test_deliver*.py tests/unit/test_record_*.py tests/unit/test_verification*.py -q --no-cov -n 2`: green.
+- number: 3
+  title: Budget, docs, quality gate (R12)
+  steps:
+  - id: P5.T3.S1
+    text: |-
+      REFACTOR + quality gate: confirm `wc -l` of every fr/run/evidence module is under 800; lower the run_cmd.py budget (comment names slice 5); `uv run fr docs check` and bump named pages naming slice 5; ruff format, ruff check, mypy. Commit, then run the fast tier the brief names last.
+state:
+  steps:
+    P5.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P5.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
