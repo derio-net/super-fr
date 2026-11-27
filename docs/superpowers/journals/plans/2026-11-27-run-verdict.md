@@ -58,3 +58,23 @@ Removed Case.old and _old; the docstring names capture commit b39ef3751 (test co
 ### p1-r2-resolved · finding [fixed] · resolves p1-r2: row run-engine-cli-free moved to ci while its acceptance says one allowance and the layering test still permits the temporary adopt.py one (phase 1)
 
 set-status --notes on run-engine-cli-free names the temporary adopt.py allowance that slice 2 removes.
+
+<!-- fr:journal kind=decision scope=plan id=p2-adapters-in-run-cmd created=2026-11-27T18:29:45+00:00 phase=2 -->
+### p2-adapters-in-run-cmd · decision · unit_key and resolve_manifest_for_read are reached through two adapter functions in run_cmd, not wrapped at every call site (phase 2) (phase 2)
+
+`_unit_key` runs `fr.run.steps.unit_key` inside `_refusals()` and `_resolve_manifest_for_read` passes `_say` as the warn; the two names keep their one definition each so the 12 call sites see typer.Exit and the printed warning exactly as before. Other moved names are imported under their old underscore spellings because run_cmd's body uses them; tests, record/apply.py, verification/baseline.py, pickup_cmd.py and adopt.py use fr.run.steps directly.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-lookup-capture created=2026-11-27T18:29:45+00:00 phase=2 -->
+### p2-lookup-capture · discovery · the lookup capture drives one case table through run_cmd's old functions once and now through the moved ones (phase 2) (phase 2)
+
+tests/unit/test_run_verdict_steps.py holds the cases; the fixtures in tests/fixtures/run_verdict/steps/ were taken by a throwaway script (not committed) that called run_cmd's pre-move functions with the same table, in commit 74f3a5ee8 before the move. The test calls only fr.run.steps; no pre-move driver is left behind. 9 cases: 7 unit_key refusals incl. the unparseable-plan AdoptError path, 2 drift warnings (step list, members).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-27T18:29:45+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+a capture task: fixtures and a test, nothing pre-existing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-27T18:29:45+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+a verbatim move that must keep its bytes; the only cleanup (unused imports left in run_cmd) was done in the green step
