@@ -1,0 +1,24 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-export-drift
+step: lens-review
+outcome: done
+journal:
+  - {kind: finding, id: l-security-r1, global: true, review_scope: in, title: "Repo-supplied drift file names (control chars, ESC, newline) reach the terminal and the one-line stop text unsanitised", body: "state_sync.py `drift_text` / `stop_on`: shlex.quote keeps a name shell-safe but leaves ESC and newline bytes in the refusal line and the stored Need reason."}
+  - {kind: finding, id: l-docs-accuracy-r1, global: true, review_scope: in, title: "fr-triage and fr-wave-driver pages describe the refusal and the Need only for changed files; a bad exported-files record also refuses, with a different remedy", body: "docs/explainers/fr-triage.md ~105-112, docs/explainers/fr-wave-driver.md ~221-225 vs state_sync.py read_record / drift_stop_text and triage_batch_cmd.py _export."}
+  - {kind: finding, id: l-errors-r1, global: true, review_scope: in, title: "clear_stop(export-drift) after a successful export is unhandled; an OSError aborts the export with no signal", body: "triage_batch_cmd.py `_export`, the clear_stop call after the drift check."}
+  - {kind: finding, id: l-errors-r2, global: true, review_scope: in, title: "Non-drift export refusals (non-regular stamp/record, unreadable file, foreign stamp) record no stop or Need in the driver", body: "state_sync.py `_refuse_non_regular`, `find_drift`/`_hash`, `_stamp`; triage_batch_cmd.py the generic TriageError branch."}
+  - kind: review
+    id: lens-review-1
+    global: true
+    title: "lens review: docs-accuracy, errors, security — 4 findings, all in scope"
+    body: |
+      One reviewer per lens over the whole diff from 27d7f2485b54 to HEAD, each with only its own lens brief and the shape file (which all three found matches the diff).
+      security: l-security-r1 (fixed). docs-accuracy: l-docs-accuracy-r1 (fixed); it also noted the README's older "this folder" wording, true but not caused by this change and not filed. errors: l-errors-r1, l-errors-r2 (fixed; the foreign-stamp refusal predates this change and keeps its message-only refusal).
+resolves:
+  - {id: l-security-r1, state: fixed, body: "`shown`/`shown_argv` print every argument shell-quoted and printable: a name with a control or non-printable character is ANSI-C quoted (`$'...'`), which bash and zsh read back to the same name. drift_text and drift_stop_text use them. Test: test_a_control_character_in_a_drifted_name_never_reaches_the_text_raw (round trip through bash)."}
+  - {id: l-docs-accuracy-r1, state: fixed, body: "Both explainers now say a damaged record (or, on the driver page, an unreadable file) stops the export the same way, naming the record or file with its remedy (mend or remove it, or --force, which rewrites a damaged record)."}
+  - {id: l-errors-r1, state: fixed, body: "`clear_drift_stop` returns a warning instead of raising; the driver prints it as a warn line and the export goes on. Test: test_a_stop_file_that_cannot_be_written_keeps_the_refusal."}
+  - {id: l-errors-r2, state: fixed, body: "New base `ExportBlocked` (BadRecord and ExportDrift derive from it) for every refusal only the operator can mend in the repo copy; `_refuse_non_regular` and an unreadable file in `find_drift` raise it, and the driver's one `except TriageError` hands it to `stop_on`, which records the export-drift stop and Need. The foreign-stamp refusal is not this change's and stays a message-only refusal. Tests: test_a_non_regular_record_or_unreadable_file_is_an_export_blocked, test_stop_on_records_a_stop_only_for_an_export_blocked."}
+evidence:
+  review: lens-review-1
+  reviewer: "security=a380eb219d42450b1,docs-accuracy=a3cee4047cf79d403,errors=a2339359360280cf0"
