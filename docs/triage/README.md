@@ -23,6 +23,7 @@ regenerated.
 | `drive-pages.json` | the driver | the unfinished waves and whether a snapshot is owed, so a restarted or re-homed driver carries on; no line counts. Travels in the state ref; not exported |
 | `snapshots/` | `fr triage backlog`, and the driver | one per change the board shows when `fr triage backlog` runs by hand; from the driver, one on its first page-writing pass when it has no `drive-pages.json` (and the board differs from the latest) and one each time a wave finishes. The backlog page's "Since last report" and the history page's timeline. Not reproducible |
 | `authored-src/` | by hand | the sources of the built fragments (below) |
+| `exported-files` | `fr triage state export` | what the last export wrote, each file with its sha256; the next export refuses a file changed since. Not state: import never reads it |
 
 Left out on purpose, because fr rebuilds them: `facts.json`, `origins-facts.json` and the
 rendered pages (`backlog.html`, `issues.html`, `batches.html`, `origins.html`,
@@ -45,10 +46,27 @@ carries the same directories.
   diagrams and analysis. `extracted/` holds their sections with styles inlined, made by
   running `extract.js` in a browser on those pages; `build.py` reads these, not `old/`.
 
+## Which way it flows
+
+The state directory is the source; this folder is written only by an export. Do not edit a
+file here and leave it: the next export, by hand or by the driver, compares this folder with
+`exported-files`, and refuses (writing nothing) when a file was changed, deleted or added
+since. Take a direct edit into the state first, then export:
+
+```bash
+uv run fr triage state import --from docs/triage --repo derio-net/super-fr \
+  --only architecture/manifest.yaml --only architecture/decomposition.html
+```
+
+`--only` moves just the named files or directories, even over a newer state copy, and removes
+a named file this folder no longer has. To keep the state's version instead,
+`fr triage state export --to docs/triage --repo derio-net/super-fr --force`. The driver never
+forces: it shows "Triage export drifted from the repo" under Needs you now, with the commands.
+
 ## Regenerating the pages
 
 ```bash
-uv run fr triage state import --from docs/triage --repo derio-net/super-fr
+uv run fr triage state import --from docs/triage --repo derio-net/super-fr   # or --only <path>
 fr triage collect --repo derio-net/super-fr --pr-limit 1000
 fr triage origins collect --repo derio-net/super-fr --since 2026-09-22
 fr triage check --repo derio-net/super-fr          # unranked: judge with the fr-triage skill

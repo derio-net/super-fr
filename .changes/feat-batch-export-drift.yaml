@@ -1,0 +1,2 @@
+bump: minor
+summary: fr triage state export refuses to overwrite a file changed in the repo since the last export (--force overrides; the driver shows a Need), and fr triage state import --only takes in named paths only
