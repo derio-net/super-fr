@@ -1,0 +1,47 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-27-closeout-state
+repo: derio-net/super-fr
+rows:
+  - id: closeout-takeback-both-errors
+    capability: triage wave driver close-out start
+    acceptance: When a close-out session fails to start and taking back its start record
+      fails too, the driver reports both errors in one line, keeps driving, and retries
+      the close-out on a later pass.
+    origin:
+    - spec:2026-11-27-closeout-state#R1
+    - spec:2026-11-27-closeout-state#R2
+    - spec:2026-11-27-closeout-state#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: batch-left-scope-stage
+    capability: triage batch board
+    acceptance: A batch whose repo left the triage scope shows as `left-scope` in Done
+      with a pill and no Jump, in both the board and `batch list`, and the driver neither
+      acts on it nor asks for its repo's checkout.
+    origin:
+    - spec:2026-11-27-closeout-state#R4
+    - spec:2026-11-27-closeout-state#R5
+    - spec:2026-11-27-closeout-state#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: batch-left-scope-cancel
+    capability: triage batch verbs
+    acceptance: '`fr triage batch cancel <id> --orphaned` retires a batch whose repo
+      left the scope without touching the forge, and `batch focus` on it names that
+      command instead of failing on the missing repo.'
+    origin:
+    - spec:2026-11-27-closeout-state#R7
+    - spec:2026-11-27-closeout-state#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
