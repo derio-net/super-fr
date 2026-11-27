@@ -11174,6 +11174,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T16:57:40.542019Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -12209,6 +12216,8 @@ batches:
     pr: 1735
     head: b51633bae9c64afbc107550e32df967ca9c547fe
     patch_id: 326af7b8cf1d7a799d896f1270c1755a3756ad17
+  - kind: post_merge
+    at: '2026-11-27T16:57:35.715597Z'
 - id: closeout-state
   title: Close-outs and batches never stuck as started or Running
   ids:
@@ -13843,6 +13852,11 @@ queues:
     patch_id: 326af7b8cf1d7a799d896f1270c1755a3756ad17
     base: 00101f661f7bd41d2d6789ed2b8376f076f3f96f
     parent: 00101f661f7bd41d2d6789ed2b8376f076f3f96f
+  - kind: queue_land
+    at: '2026-11-27T16:57:15.567789Z'
+    main: 0ba6b3c1ec74c5f2a9f583f87d9feeceee0fb50a
+    entries:
+    - batch: queue-followups
 queue_requests:
 - kind: queue_add
   at: '2026-11-27T15:25:05.595235Z'
