@@ -1,0 +1,26 @@
+schema_version: 12
+run: 2026-11-26-feat-batch-arch-shared-helpers
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S1, P1.T5.S2, P1.T5.S3]
+refactor:
+  P1.T5: "prose, mirrors and stamps only; nothing to test-drive or clean"
+journal:
+  - kind: discovery
+    id: p1-admit-caller
+    title: triage/admit.py also imported claims._created
+    body: "The plan named only claims' own caller, but fr/triage/admit.py imported the private `_created` too (mypy found it). It now calls parse_as_utc(comment.get(\"created_at\")), like claims."
+    phase: 1
+  - kind: discovery
+    id: p1-record-support-name
+    title: tests/unit/record_support.py already defines a different write_record
+    body: "test_record_lens.py imports both, so it imports the new helper as `write_record_text`; the helper keeps the spec's name everywhere else."
+    phase: 1
+  - kind: discovery
+    id: p1-unhashable-key
+    title: PyYAML itself refuses an unhashable key
+    body: "The unhashable-key test asserts PyYAML's own `found unhashable key` error surfaces (the duplicate check skips it, as before), not a successful load."
+    phase: 1
+resolves: []
+evidence: {}
