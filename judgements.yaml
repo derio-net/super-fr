@@ -10902,6 +10902,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T15:02:52.366969Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T15:03:20.409983Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -11937,6 +11952,11 @@ batches:
     runner: herdr
     handle: w3V:p5
     branch: feat/batch-closeout-state
+  - kind: claims_released
+    at: '2026-11-27T15:03:20.409983Z'
+    keys:
+    - super-fr#1601
+    - super-fr#1626
 - id: export-drift
   title: Triage export refuses to overwrite a repo-side edit; targeted import
   ids:
@@ -12142,6 +12162,12 @@ batches:
   wave: 26
   after:
   - arch-run-ledger
+  events:
+  - kind: dispatch
+    at: '2026-11-27T15:02:55.887355Z'
+    runner: herdr
+    handle: w3X:p2
+    branch: feat/batch-arch-run-verdict
 - id: arch-isolation-gc
   title: '#1318: isolation/local.py garbage collection moves to a collaborator'
   ids:
