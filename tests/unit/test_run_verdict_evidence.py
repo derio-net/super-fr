@@ -37,6 +37,9 @@ from fr.run.model import Attempt, StepRecord
 from fr.workflow.model import Step
 from rich.console import Console
 
+# The resolve case builds its repo from the at-deliver template, which reads this checkout.
+pytestmark = pytest.mark.own_artifacts
+
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures/run_verdict/evidence"
 OPENED = "2026-01-01T00:00:00+00:00"
 LATER = "2026-01-02T00:00:00+00:00"
@@ -1886,7 +1889,6 @@ def two_derived_refusals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tup
     return _normalize(out.output, tmp_path), out.exit_code
 
 
-@pytest.mark.own_artifacts
 def test_two_derived_refusals_print_the_summary_line(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
