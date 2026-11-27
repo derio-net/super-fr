@@ -31,10 +31,17 @@ journal:
   - kind: discovery
     id: p2-fast-tier
     phase: 2
-    title: "Fast tier run for phase 2 (see the executor's return for the pass/fail line)"
+    title: "The --fr-scope fast tier again selected about the whole suite and was stopped; touched and neighbouring files were run instead"
     body: |
-      `uv run pytest --fr-scope origin/main -n 2 -q --no-cov` was run in the background with a
-      bounded wait; touched and neighbouring test files were also run directly. Advisory, not
-      tests evidence: this repo declares `tests: ci`.
+      `uv run pytest --fr-scope origin/main -n 2 -q --no-cov` reached about 1% in roughly
+      eight minutes on this loaded host and was stopped by its own PIDs. Run instead, all green:
+      test_triage_approval, test_merge_train_* (approval, label_board, gate, base_rules,
+      commands, forge_seams, red_decision, red_phrase, safety_smoke), test_triage_readiness*,
+      test_operator_entries_lineage, test_tripwire_forge_writes, test_tripwire_approval_label_prose,
+      test_triage_board_*, test_wave_queue_operator_*, test_triage_batch_board, test_triage_kanban*,
+      test_tripwire_triage_board_columns, test_opencode_rendered_readiness, test_triage_batch_drive*,
+      test_import_direction and test_tripwire_module_budget (1,391 tests). Advisory; CI is this
+      repo's tests evidence. test_merge_train_gate's LabelForge fake gained the comment methods
+      (the void now comments), and a real-policy `forge.comments: off` test was added there.
 resolves: []
 evidence: {}
