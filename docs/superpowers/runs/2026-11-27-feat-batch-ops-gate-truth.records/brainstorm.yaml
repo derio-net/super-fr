@@ -1,0 +1,195 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-ops-gate-truth
+step: brainstorm
+outcome: done
+questions:
+  rounds: 1
+journal:
+- kind: discovery
+  input: true
+  id: operator-brief
+  title: 'Operator brief: batch ops-gate-truth (#1617, #1621), verbatim'
+  body: "Batch `ops-gate-truth` of derio-net/super-fr, delivered as one PR on `feat/batch-ops-gate-truth`\
+    \ (Closes #1617, #1621).\n\n## derio-net/super-fr#1617: fr ops gate: stage-4 reruns apply a stale\
+    \ op set — the ops workspace never picks up an op fixed on main after the merge\n\n## Summary\n\n\
+    `fr ops gate` runs a run's post-merge ops from its ops workspace (`chore/ops-<plan>`), and that checkout\
+    \ stays frozen at the commit from stage 3 (\"verify-merge, rebase, ready\"). When an op is fixed on\
+    \ the default branch **after** the merge, every stage-4 re-run keeps reading and applying the **old**\
+    \ op definition. Nothing says the workspace is behind. The earlier trust grant still matches, because\
+    \ it matches the stale content, so the gate silently re-applies an op that is already known to be\
+    \ wrong.\n\n## Observed (derio-net/frank, run `2026-11-16-feat-gpu-speech-service-1006`, fr 8.3.0rc6)\n\
+    \n1. Stage 3 rebased `chore/ops-2026-11-16--infer--speech-service` onto main at `d1988cbc`.\n2. Stage\
+    \ 4: op `postmerge-timeslice-allocatable` applied but its check read OPEN. Root cause was in the op\
+    \ (it synced ArgoCD apps that ignore the ClusterPolicy `/spec`).\n3. The fix merged to main as frank#1015\
+    \ (`74e1ce51`), changing that op's `apply`, `summary`, `side_effects` and `undo` in the plan's `ops.yaml`.\n\
+    4. Re-running `fr ops gate --run … --yes` printed `already trusted (granted <yesterday>); nothing\
+    \ written`. It showed the **old** summary and `side effects: (none declared)` / `undo: none declared`,\
+    \ applied the **old** commands, and failed the same way. The ops workspace HEAD was still `7b4e17ef`\
+    \ (stage 3), without `74e1ce51`.\n5. Workaround: `git merge origin/main` into the ops workspace by\
+    \ hand. It had to be a merge, not a rebase, to keep the gate's uncommitted journal entries (`op-postmerge-*-image`\
+    \ done records). After that, stage 4 sees the fixed op and asks for trust again.\n\n## Why it matters\n\
+    \n- A post-merge op that fails is normally fixed on main, because the feature branch is gone by then.\
+    \ The supported repair path has no way to reach the gate.\n- The failure is silent: same trust grant,\
+    \ same output shape, no warning that the op set on main differs from the one being applied. It reads\
+    \ as \"the fix didn't work\".\n- The gate's own state (journal entries for already-DONE ops) lives\
+    \ uncommitted in that workspace, so the obvious manual repair (a rebase, or re-creating the workspace)\
+    \ can lose it. See also the autostash hazard in fr worktrees shared between sessions.\n\n## Expected\n\
+    \n- Before stage 4 (and on every rerun), the gate compares the plan's `ops.yaml` in the ops workspace\
+    \ with the default branch. When they differ it says so, naming the ops that changed, and offers to\
+    \ bring the workspace up to date (merge, preserving uncommitted gate records), or refuses until it\
+    \ is.\n- A changed op set always re-triggers trust, which it does once the content actually changes,\
+    \ and the preview shows the new commands.\n- Optionally: commit gate journal records as they are written,\
+    \ so the workspace is never carrying unrecorded state that a refresh could clobber.\n\nRelated: #1614\
+    \ (mutating ops that do not act, found on the same run), #1220 (fr ops), #1489 (self-operating DevOps\
+    \ gate).\n\n\n## derio-net/super-fr#1621: Gates: every gate should walk the acceptance rows it verifies\
+    \ (not only tester), and a plan/spec should carry a Definition of Done listing its owed gates\n\n\
+    ## Summary\n\nA devops-gated run can pass every DevOps-gate stage while its acceptance rows stay `not-implemented`.\
+    \ Only the tester gate walks rows. Every other gate records Test Plan step evidence that never reaches\
+    \ the acceptance matrix, and nothing tells the operator.\n\nOperator's direction for the fix:\n1.\
+    \ **Generalize gates.** Every gate should be able to mark the rows it verifies as walked, with evidence,\
+    \ as the tester gate does now. Row walking should not be a tester-only capability.\n2. **Definition\
+    \ of Done.** A plan (or its spec) should carry a Definition of Done that collects every gate the work\
+    \ owes, plus what each gate must produce, so the close-out is a checklist fr can verify rather than\
+    \ a sequence of stages that can each report \"done\".\n\n## Observed (derio-net/frank, run `2026-11-16-feat-gpu-speech-service-1006`,\
+    \ fr 8.3.0rc6)\n\n- The spec's `## Verification` says `strategy: live`, `gate: devops`. All six rows\
+    \ (`infer-speech-*`) are `verify: live`.\n- `fr ops gate` stages 4–8 all completed. The operator walked\
+    \ all 7 Test Plan steps live, each recorded with `fr closeout outcome --ran --evidence …`. The evidence\
+    \ is good: STT auto-detect per language, the TTS listening verdicts, the GPU hand-over drain and restore,\
+    \ a 15-minute batch with alert history, the exposure checks, and a benchmark.\n- Afterwards all six\
+    \ rows on main still read **`not-implemented`**:\n  - `fr closeout outcome` stores a step's evidence\
+    \ but has no link from a Test Plan step to the row(s) it proves.\n  - Stage 7, \"tester hand-off\"\
+    , inspects only rows gated `tester` (`_tester_owns` in `fr/ops/gate.py`). It printed \"no tester step\
+    \ remains\", which is true and irrelevant here.\n  - Stage 6, \"gate pass\", passed with every row\
+    \ unwalked.\n  - Stage 8 reported \"archived\" while it had actually HELD the archive (manual phase\
+    \ 3 unticked) and filed the hold as owed work (frank#1019). The hold was correct; the message was\
+    \ not.\n- To fix the matrix, the operator must run `fr acceptance set-status --walk` per row by hand,\
+    \ copying the evidence the gate had already recorded.\n\n## Proposal\n\n**A. Gates generalized over\
+    \ rows**\n- Any gate (devops, tester, reviewer, security, …) can walk the rows assigned to it, recording\
+    \ `--walk <evidence>` the same way, and its pass refuses while an assigned row is unwalked or failed.\n\
+    - The step-to-row link should be declared: a Test Plan step names the rows it proves (as `(op: <id>)`\
+    \ names an op), for example `(rows: infer-speech-stt-api)`. Recording the step's outcome then walks\
+    \ those rows with that evidence. A row nobody's step covers is reported before the gate can pass.\n\
+    - The stage that currently says \"no tester step remains\" should report the rows the run owes **for\
+    \ its own gate**, not only tester rows.\n\n**B. A Definition of Done per plan/spec**\n- Derived from\
+    \ what the spec already declares (verification strategy and gate, per-row gates and verify strategies,\
+    \ ops, manual phases, follow-ups the spec defers), plus anything the plan adds. One list, for example:\n\
+    \  - gates owed: devops (ops pre/post-merge, Test Plan steps 1–7, rows A–F walked), tester (none);\n\
+    \  - manual phases owed: phase 3;\n  - follow-ups owed: the spec's deferred asks filed as issues.\n\
+    - `fr ops gate`, `fr gate pass` and `fr archive` read it. The close-out is done only when every DoD\
+    \ item is discharged; anything still owed is named. `fr run status` / `fr pickup --run` show the DoD\
+    \ with what is owed, so a run cannot look finished while it is not.\n- This also makes the stage messages\
+    \ honest: \"archived\" only when the plan actually moved, \"gate pass\" only when that gate's DoD\
+    \ items are met.\n\n## Related\n\n- #1310: the tester-gate walker. Generalizing gates would let it\
+    \ share the row-walk machinery.\n- #1189: routing batch PRs to a declared exit. A DoD is the run-level\
+    \ version of that exit.\n- #1614 and #1617 come from the same run: ops that only print, and the stale\
+    \ ops workspace.\n"
+- kind: decision
+  id: q1-stale-ops-refresh
+  title: 'Stale ops workspace: confirm, then merge'
+  body: 'Q: what should `fr ops gate` do when the ops workspace''s op set or Test Plan differs from the
+    default branch at stages 4-7?
+
+    A (operator): name the changed ops; on confirmation commit the uncommitted gate records, merge origin/<default>
+    (never rebase), push leased; trust re-asks on changed content; a conflict aborts and refuses with
+    the manual steps.'
+- kind: decision
+  id: q2-dod-scope
+  title: 'Definition of Done: derived, shown and used'
+  body: 'Q: how much of #1621 part B ships here?
+
+    A (operator): a derived DoD, no authored section: `fr run dod`, included in `fr pickup --run`, read
+    by the ops gate''s messages.'
+- kind: decision
+  id: q3-walk-identity
+  title: Operator-walked steps record harness operator, model human
+  body: 'Q: what harness/model does a walk written by `fr closeout outcome --ran` record?
+
+    A (operator): `harness: operator`, `model: human` by default, overridable with `--harness`/`--model`;
+    strategy = the row''s effective strategy; a row naming specific harnesses stays owed.'
+- kind: decision
+  id: q4-uncovered-rows
+  title: 'Uncovered gated rows: caught at authoring and at the gate'
+  body: 'Q: where is a devops/tester-gated row that no step names caught?
+
+    A (operator): `fr plan self-review` reports it; stage 5 asks the operator to walk each still-uncovered
+    devops row directly (ran/owed).'
+- kind: decision
+  id: q5-tester-pass
+  title: One gate_blockers function for both post-merge gates
+  body: 'Q: should `fr gate pass --gate tester` also refuse on unclosed tester steps/rows when a run resolves?
+
+    A (operator): yes; `gate_blockers(root, run, gate)` serves both; with no run tester behaves as today.'
+- kind: decision
+  id: q6-verification
+  title: 'Verification: strategy none, gate developer, CI-verified rows'
+  body: 'Q: how is this run verified, and does it add rows?
+
+    A (operator): `strategy: none`, `gate: developer`, batch settle report lines; one row per requirement
+    group verified by unit tests in CI; no Test Plan.'
+resolves: []
+acceptance:
+- id: ops-gate-refreshes-a-stale-ops-workspace
+  capability: 'fr ops gate: stale ops workspace'
+  acceptance: Before stages 4-7 act, fr ops gate detects an op set or Test Plan that changed on the default
+    branch, names the changed ops, and on confirmation brings the ops workspace up to date by a merge
+    that keeps its gate records, then re-checks trust
+  origin:
+  - spec:2026-11-27-ops-gate-truth#R1
+  - spec:2026-11-27-ops-gate-truth#R2
+  - spec:2026-11-27-ops-gate-truth#R3
+  - spec:2026-11-27-ops-gate-truth#R4
+  - spec:2026-11-27-ops-gate-truth#R5
+  status: not-implemented
+- id: closeout-outcome-walks-the-rows-a-step-names
+  capability: 'fr closeout outcome: step-to-row walks'
+  acceptance: 'A Test Plan step names the rows it proves with (rows: ...), and recording it ran walks
+    each of those rows with the step''s evidence in the same commit'
+  origin:
+  - spec:2026-11-27-ops-gate-truth#R6
+  - spec:2026-11-27-ops-gate-truth#R7
+  status: not-implemented
+- id: gate-pass-refuses-unwalked-gated-rows
+  capability: 'fr gate pass: rows hold their gate'
+  acceptance: fr gate pass refuses a devops or tester gate while a row that gate owns is not walk-verified,
+    or a step it owns has no ran/n/a outcome
+  origin:
+  - spec:2026-11-27-ops-gate-truth#R8
+  - spec:2026-11-27-ops-gate-truth#R9
+  status: not-implemented
+- id: ops-gate-walks-and-reports-its-own-rows
+  capability: 'fr ops gate: its own rows'
+  acceptance: The DevOps stage asks the operator to walk each devops row no step covers, and its gate-pass
+    and tester hand-off stages report what their own gate still owes
+  origin:
+  - spec:2026-11-27-ops-gate-truth#R10
+  - spec:2026-11-27-ops-gate-truth#R11
+  status: not-implemented
+- id: ops-gate-reports-a-held-archive
+  capability: 'fr ops gate: honest archive stage'
+  acceptance: The DevOps stage reports archived only when the plan moved, and reports the hold and its
+    reasons when fr archive held it
+  origin:
+  - spec:2026-11-27-ops-gate-truth#R12
+  status: not-implemented
+- id: self-review-flags-uncovered-gated-rows
+  capability: 'fr plan self-review: gated-row coverage'
+  acceptance: 'fr plan self-review reports a devops or tester row no step of its gate names, and a (rows:
+    ...) id that names no row of the spec'
+  origin:
+  - spec:2026-11-27-ops-gate-truth#R13
+  status: not-implemented
+- id: run-definition-of-done
+  capability: 'fr run dod: derived Definition of Done'
+  acceptance: fr derives a run's Definition of Done (each post-merge gate's ops, steps and rows, manual
+    phases, owed entries), prints it with fr run dod and in the close-out brief, and the DevOps stage
+    says complete only when its devops items are discharged
+  origin:
+  - spec:2026-11-27-ops-gate-truth#R14
+  - spec:2026-11-27-ops-gate-truth#R15
+  - spec:2026-11-27-ops-gate-truth#R16
+  - spec:2026-11-27-ops-gate-truth#R17
+  status: not-implemented
+emitted:
+  spec: docs/superpowers/specs/2026-11-27-ops-gate-truth-design.md
+evidence: {}
+
