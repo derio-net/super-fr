@@ -11865,6 +11865,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T22:11:08.802232Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -13304,6 +13311,10 @@ batches:
     patch_id: 208d8cd308491e33615c275163d77ee75edc9296
   - kind: post_merge
     at: '2026-11-27T22:06:14.539543Z'
+  - kind: claims_released
+    at: '2026-11-27T22:12:08.996997Z'
+    keys:
+    - super-fr#1516
 - id: arch-run-verdict
   title: '#1318: run_cmd.py refuses through a typed verdict; its clusters move to fr/run'
   ids:
@@ -13423,6 +13434,12 @@ batches:
   - super-fr#1701
   rationale: Leftovers filed by S1 (#1696), all in its configuration code.
   wave: 26
+  events:
+  - kind: dispatch
+    at: '2026-11-27T22:11:17.019516Z'
+    runner: herdr
+    handle: w3X:p7
+    branch: feat/batch-s1-followups
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
