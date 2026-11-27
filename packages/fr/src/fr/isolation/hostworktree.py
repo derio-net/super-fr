@@ -17,7 +17,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, ClassVar
 
-from fr.isolation.local import GcAction, LocalWorktreeDevcontainerTarget
+from fr.isolation.local import LocalWorktreeDevcontainerTarget
+from fr.isolation.reap import GcAction
 from fr.isolation.types import IsolationError, IsolationState, carried_state, save_state
 
 _EXTERNAL = "environment is externally managed — restart/inspect the host, not fr"

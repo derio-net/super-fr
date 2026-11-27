@@ -20,8 +20,9 @@ from fr.artifacts.paths import KIND_DIRS
 from fr.isolation import sessions as _sessions
 from fr.isolation.external import ExternalTarget
 from fr.isolation.hostworktree import HostWorktreeTarget
-from fr.isolation.local import GcAction, LocalWorktreeDevcontainerTarget
+from fr.isolation.local import LocalWorktreeDevcontainerTarget
 from fr.isolation.preserve import NO_PRESERVE, TeardownReport
+from fr.isolation.reap import GcAction
 from fr.isolation.routing import target_for_state
 from fr.isolation.runner import _detached_gc_spawn, subprocess_runner
 from fr.isolation.types import (

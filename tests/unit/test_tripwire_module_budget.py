@@ -24,7 +24,7 @@ BUDGETS: dict[str, int] = {
     # triage_batch_cmd.py +25 more (8225 -> 8250): landing-method (spec 2026-11-26 R2) adds
     # `_landing_hold`, which must call the driver's `merge_ctx`; its pure part is in queue_exec.
     f"{SRC}commands/triage_batch_cmd.py": 8250,
-    f"{SRC}isolation/local.py": 3100,
+    f"{SRC}isolation/local.py": 3000,
     f"{SRC}plan_ops.py": 2600,
     f"{SRC}triage/batch_drive.py": 2275,
 }

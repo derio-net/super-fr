@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 from fr.commands import isolation_cmd
 from fr.isolation.hostworktree import HostWorktreeTarget
-from fr.isolation.local import ReapRefused
+from fr.isolation.reap import ReapRefused
 from fr.isolation.runner import subprocess_runner
 from fr.isolation.types import load_state
 

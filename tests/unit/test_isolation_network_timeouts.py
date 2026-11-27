@@ -246,7 +246,7 @@ def test_reap_hazard_fetch_is_bounded_and_timeout_is_unverifiable(
     assert "could not be checked against origin/main" in hazard.detail
 
 
-ISOLATION_MODULES = ["fr.isolation.local", "fr.isolation.runner"]
+ISOLATION_MODULES = ["fr.isolation.local", "fr.isolation.reap", "fr.isolation.runner"]
 
 
 @pytest.mark.parametrize("module", ISOLATION_MODULES)

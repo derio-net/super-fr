@@ -16,11 +16,10 @@ import pytest
 from fr.isolation.hostworktree import HostWorktreeTarget
 from fr.isolation.local import (
     LocalWorktreeDevcontainerTarget,
-    ReapHazard,
-    ReapRefused,
     branch_changed_paths,
     branch_changes_present,
 )
+from fr.isolation.reap import ReapHazard, ReapRefused
 from fr.isolation.runner import devcontainer_id, subprocess_runner
 from fr.isolation.types import (
     IsolationError,

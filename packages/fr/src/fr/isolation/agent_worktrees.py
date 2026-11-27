@@ -41,7 +41,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO
 
-from .local import GcAction
+from .reap import GcAction
 from .runner import _home
 
 AGENT_MIN_AGE_SECONDS = 24 * 3600
