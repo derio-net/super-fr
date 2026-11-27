@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 __all__ = ["RecordBrief", "in_progress_summary", "record_brief", "render_template"]
 
-_EMITTED_NAMES = ("spec", "plan", "pr")
+_EMITTED_NAMES = ("spec", "plan", "debug", "pr")
 
 
 def render_template(

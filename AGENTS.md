@@ -112,14 +112,15 @@ uv workspace monorepo, version lockstepped across every manifest (see
     `.fr/workflows/<name>.yaml`. Shipped manifests are NOT
     mirrored to OpenCode/Hermes like skills/rules are — `fr run` is a CLI
     surface every harness drives the same way, not a per-harness prompt.
-    Both shipped shapes run `lens-review` between `journal-check` and
+    `fr-goal` and `fr-goal-light` run `lens-review` between `journal-check` and
     `deliver` (spec `2026-11-12-review-lenses` §3.C): `_evidence_target` has a
     third, FEATURE-level target (a flat step emitting `journal:plan`: the plan
     journal, no phase, `feature=True`), which reads `reviewer` as a
     `<lens>=<dispatch-id>` map over `lens_set` recomputed at resolve, gates
     only `l-<lens>-r<k>` findings, and derives `lenses` (per lens, files
     examined and findings raised; `none` for an empty set, which owes no
-    `review`/`reviewer`). Adoption never infers the lens review done.
+    `review`/`reviewer`). Adoption never infers the lens review done. The
+    `fr-debugging` shape has no `lens-review` step.
     `fr/run/liveness.py` (2026-09-20 unit-record-unification §4.G, gh#518) is
     the ONE definition of "idle" — a run that is advanceable with nobody
     working on it: `is_idle` (pure) behind `fr run check --idle` (exit **3**),
@@ -189,7 +190,7 @@ uv workspace monorepo, version lockstepped across every manifest (see
     {list,create,edit,cancel,suggest,dispatch,merge,drive}`
     (`commands/triage_batch_cmd.py`) turn a group of judged issues into one
     fr-goal run with one PR. `judgements.yaml` carries `batches:` with
-     engine-appended `events` (fr reads schemas 1–13 and writes 13, see
+     engine-appended `events` (fr reads schemas 1–14 and writes 14, see
     the waves paragraph below) and `facts.json` schema 8
     (open-PR join with `files`/`head_oid`, `batch_prs`, per-repo `config` from
     the target repo's `.fr/triage.yaml`). The engine is `fr/triage/batch.py`
@@ -222,9 +223,14 @@ uv workspace monorepo, version lockstepped across every manifest (see
     taken member's claim owed (gh#1120); 9 the merge-train events; 10 the collected close-out
     (`closeouts:`, `closeout_handback`, `closeout_hold`, exit-gates R15/R27); 11 added
      `archive_conflict` (merge-truth R12); 12 recovery ownership/session audit metadata;
-     current writers stamp 13 (read 1–13), adding the wave merge queue's `queues:` list,
-     the batch `deferred`/`requeued` events and the `patch_id` of an approval and an update
-     (wave-merge-queue R12, R24).
+     13 the wave merge queue's `queues:` list, the batch `deferred`/`requeued` events and
+     the `patch_id` of an approval and an update (wave-merge-queue R12, R24); current
+     writers stamp 14 (read 1–14), adding the `conflict` event's `onto` and `reissue`
+     and the operator's `queue_requests:` (`queue_add`/`queue_remove`, folded by
+     `fr.triage.queue_requests`; wave-queue-gaps R11, R16). The driver's queue readers
+     read every collected repo a request names, batch or not (`reader_repos`), and a
+     pending operator entry counts as `pending` work (`wave_queue.operator_work`), so the
+     loop never reads `done` over an undrained queue.
     `fr triage batch replace` owns scope then pane locks, checkpoints and cross-store
     repair, never replaying uncertain submission; `drive` runs waves to completion.
     `batch_drive.py` is the pure pass (a `Snapshot` in, ordered `closeout`,
@@ -804,7 +810,7 @@ names (`(#N)` or `Merge pull request #N`, the release bot's own commits skipped)
 must be in it. First parent only: a commit inside a merge-committed branch is no
 landing, and its `(#N)` is usually an issue ref (gh#1333). A rebase merge puts
 the branch's own subjects on that line, so an issue ref there still reads as a
-missed PR: land PRs by merge commit or squash. A failed read, a read at its 1000 cap, a PR the read misses, or a
+missed PR: land PRs by merge commit or squash. A PR the first-parent log names that the forge reports closed unmerged (a push landing GitHub did not mark merged, gh#1705) counts as landed, dated by its commit: `release.py` reads it with `gh pr view` (spec `2026-11-26-landing-method` R7). A failed read, a read at its 1000 cap, a PR the read misses, or a
 failed `fr` decision makes the gate state **unknown**, which cuts an RC, never a
 final and never a refusal over the gate state (nothing when nothing installable changed,
 the same no-op as above; a failing `git diff` there still refuses). So a

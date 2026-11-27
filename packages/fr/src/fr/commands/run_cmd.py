@@ -87,6 +87,7 @@ from fr.run import liveness as _liveness
 from fr.run import units
 from fr.run.adopt import MANUAL_ITEM, AdoptError, Superseded, adopt_run, plan_phase_tags
 from fr.run.cli_step import run_step
+from fr.run.debug_journal import debug_slug, require_debug_slug
 from fr.run.historical import (
     HISTORICAL_HEADING,
     HISTORICAL_REVIEWER,
@@ -1766,7 +1767,7 @@ class _EvidenceTarget:
     drift into several spellings of "reviewed".
     """
 
-    scope: Literal["plan", "spec"]
+    scope: Literal["plan", "spec", "debug"]
     phase: int | None
     feature: bool = False
 
@@ -1774,21 +1775,22 @@ class _EvidenceTarget:
     def subject(self) -> str:
         if self.feature:
             return "the feature"
-        return f"phase {self.phase}" if self.phase is not None else "the spec"
+        fallback = "the fix" if self.scope == "debug" else "the spec"
+        return f"phase {self.phase}" if self.phase is not None else fallback
 
 
 def _evidence_target(step: Step, phase: int | None) -> _EvidenceTarget | None:
     """Which journal `step`'s review evidence names — or `None` when fr can
     locate none. A phase unit reviews its phase; a flat step reviews the spec
-    journal only when the manifest says it writes it (`emits: [journal:spec]`,
-    which is what `spec-review` is), and the whole feature only when it is the
-    lens review: it writes the plan journal AND declares `lenses`. Anything
-    else has nothing to check an id against, and fr says so rather than guess
-    (review p3-r1: any other flat `journal:plan` step keeps that refusal)."""
+    journal only when the manifest says it writes it (`emits: [journal:spec]`),
+    the debug journal likewise (`journal:debug`), and the whole feature only when
+    it is the lens review: it writes the plan journal AND declares `lenses`.
+    Anything else has nothing to check an id against, and fr says so."""
     if phase is not None:
         return _EvidenceTarget("plan", phase)
-    if "journal:spec" in step.emits:
-        return _EvidenceTarget("spec", None)
+    for scope in ("spec", "debug"):
+        if f"journal:{scope}" in step.emits:
+            return _EvidenceTarget(scope, None)
     if "journal:plan" in step.emits and "lenses" in step.evidence:
         return _EvidenceTarget("plan", None, feature=True)
     return None
@@ -1932,6 +1934,8 @@ def _review_journal_entries(
             return slug, []
     if target.scope == "plan":
         return _plan_journal_entries(repo_root, state)
+    if target.scope == "debug":
+        return _journal_entries(repo_root, "debug", require_debug_slug(state), "")
     from fr.requirements import run_spec
 
     spec_rel = run_spec(state)
@@ -1944,7 +1948,7 @@ def _review_journal_entries(
 
 
 def _journal_entries(
-    repo_root: Path, scope: Literal["plan", "spec"], slug: str, phase_flag: str
+    repo_root: Path, scope: Literal["plan", "spec", "debug"], slug: str, phase_flag: str
 ) -> tuple[str, list[JournalEntry]]:
     path = resolve_journal_read_path(repo_root, scope, slug)
     if not path.exists():
@@ -4331,12 +4335,12 @@ def _orchestrator_model_notice(repo_root: Path) -> str | None:
 
 
 def _run_journal(repo_root: Path, state: RunState) -> tuple[JournalScope, str] | None:
-    """`(scope, slug)` of the run journal (spec 2026-10-06-model-binding-churn
-    R11): the plan journal once the run has a plan artifact, else the spec
-    journal — `None` before either exists."""
-    plan_rel = _emitted_plan(state)
-    if plan_rel is not None:
+    """`(scope, slug)` of the run journal (spec 2026-10-06-model-binding-churn R11): plan,
+    else debug, else spec — `None` before any exists."""
+    if (plan_rel := _emitted_plan(state)) is not None:
         return "plan", Path(plan_rel).name
+    if (slug := debug_slug(state)) is not None:
+        return "debug", slug
     from fr.requirements import run_spec
 
     spec_rel = run_spec(state)
@@ -8059,8 +8063,6 @@ def _resolve_body(
     flat_key = _unit_key(repo_root, state, step, None, None)
     # R5: the observed holder, before any evidence is derived.
     agent = agent if agent is not None else _observed_holder(state, flat_key)
-    # A flat `step/<id>` unit names no phase, so `review` evidence cannot be
-    # verified for it and `_verified_evidence` refuses rather than records.
     verified = _verified_evidence(
         repo_root,
         state,
@@ -8075,8 +8077,6 @@ def _resolve_body(
     )
     verified = {**verified, **_take_unobserved()}
     if verified:
-        # Reached by `deliver`'s `tests` evidence (debug journal C5) — the first
-        # obligation a flat unit can carry, since `review` needs a phase.
         state = _with_step(
             state, step_id, units.with_evidence(state.steps[step_id], flat_key, verified)
         )

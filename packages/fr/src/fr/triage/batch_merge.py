@@ -41,11 +41,17 @@ class MergeStopError(TriageError):
 class MergeConflictError(MergeStopError):
     """A real conflict: merge refused to resolve *paths* bringing *batch*'s PR at *head*
     up to date (spec 2026-10-06-verification-strategies §G; R19). Not a moved head, so a
-    driver steps over it; it hands the conflict back to the batch's session."""
+    driver steps over it; it hands the conflict back to the batch's session. *onto* is the
+    commit the queue was building it on, or, handed back, the stack target its brief names
+    from *onto_ref*; *reissue* marks a free re-issue (wave-queue-gaps §A, R1-R3)."""
 
-    def __init__(self, message: str, *, batch: str, head: str, paths: Sequence[str]) -> None:
+    def __init__(
+        self, message: str, *, batch: str, head: str, paths: Sequence[str], onto: str = "",
+        onto_ref: str = "", reissue: bool = False,
+    ) -> None:  # fmt: skip
         super().__init__(message)
-        self.batch, self.head, self.paths = batch, head, tuple(paths)
+        self.batch, self.head, self.paths, self.onto = batch, head, tuple(paths), onto
+        self.onto_ref, self.reissue = onto_ref, reissue
 
 
 class WorktreeSeam(Protocol):
@@ -89,12 +95,20 @@ class MergeContext:
         return f"origin/{self.checkout.default_branch()}"
 
 
-def choose_method(
+SOURCE_EXPLICIT = "--method"
+SOURCE_CONFIGURED = f"merge_method in {TRIAGE_CONFIG_PATH}"
+SOURCE_DEFAULT = "the forge's default"
+SOURCE_ONLY = "the one allowed method"
+
+
+def choose_method_source(
     explicit: str | None, methods: dict[str, Any], *, configured: str | None = None
-) -> str:
-    """The merge method (spec §3.F step 2): *explicit*, else the repo's default,
-    else *configured* (`.fr/triage.yaml`'s `merge_method`, cloud-triage §A: REST
-    names no default), else the one method the repo allows.
+) -> tuple[str, str]:
+    """The merge method and where it came from (spec §3.F step 2, amended by
+    2026-11-26-landing-method R1, gh#1702): *explicit*, else *configured*
+    (`.fr/triage.yaml`'s `merge_method`: the repo's own decision), else the
+    forge's default (the viewer's, only a fallback), else the one method the
+    repo allows.
 
     *methods* is `GhClient.repo_merge_methods`: `{default, allowed}`. An
     explicit or configured method the repo disallows is refused here, before
@@ -108,23 +122,30 @@ def choose_method(
             raise ConfigError(
                 f"--method {explicit}: the repo does not allow it (allowed: {', '.join(allowed)})"
             )
-        return explicit
-    default = methods.get("default")
-    if default in allowed:
-        return str(default)
+        return explicit, SOURCE_EXPLICIT
     if configured is not None:
         if configured not in allowed:
             raise ConfigError(
                 f"merge_method: {configured} in {TRIAGE_CONFIG_PATH}: the repo does not allow it "
                 f"(allowed: {', '.join(allowed)}); change it, or give --method"
             )
-        return configured
+        return configured, SOURCE_CONFIGURED
+    default = methods.get("default")
+    if default in allowed:
+        return str(default), SOURCE_DEFAULT
     if len(allowed) == 1:
-        return allowed[0]
+        return allowed[0], SOURCE_ONLY
     raise ConfigError(
         "the repo names no default merge method you may use; set `merge_method` in "
         f"{TRIAGE_CONFIG_PATH} or give --method ({', '.join(allowed)})"
     )
+
+
+def choose_method(
+    explicit: str | None, methods: dict[str, Any], *, configured: str | None = None
+) -> str:
+    """The merge method alone; see `choose_method_source` for the order."""
+    return choose_method_source(explicit, methods, configured=configured)[0]
 
 
 def pr_checks_verdict(

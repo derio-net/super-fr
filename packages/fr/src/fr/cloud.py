@@ -249,18 +249,41 @@ def _check_merge_method(repo_root: Path | None, methods: dict[str, object] | Non
     a repo allowing several needs `merge_method` in `.fr/triage.yaml`, or every merge is
     refused at the first one. Decided by the merge path's own `choose_method`."""
     from fr.triage.batch_dispatch import TRIAGE_CONFIG_PATH
-    from fr.triage.batch_merge import choose_method
+    from fr.triage.batch_merge import choose_method_source
     from fr.triage.errors import TriageError
+    from fr.triage.queue_exec import landing_refusal
 
     fix = f"set `merge_method: <merge|squash|rebase>` in {TRIAGE_CONFIG_PATH} and merge it"
     if repo_root is None or methods is None:
         return Check("merge_method", True, "merge methods unknown", fix, MERGE_METHOD_ITEM)
     configured = _configured_merge_method(repo_root)
     try:
-        method = choose_method(None, {"allowed": methods.get("allowed")}, configured=configured)
+        allowed = {"allowed": methods.get("allowed")}
+        method, source = choose_method_source(None, allowed, configured=configured)
     except TriageError as exc:
         return Check("merge_method", False, str(exc), fix, MERGE_METHOD_ITEM)
+    queue = _configured_queue(repo_root)  # R5, gh#1705: the push landing needs merge commits
+    if queue is not None:
+        land = str(queue.get("land") or "push")
+        names = [str(m) for m in methods.get("allowed") or []]  # type: ignore[attr-defined]
+        why = landing_refusal(land, method, source=source, allowed=names)
+        if why is not None:
+            return Check("merge_method", False, why, fix, MERGE_METHOD_ITEM)
     return Check("merge_method", True, f"merges with {method}", fix, MERGE_METHOD_ITEM)
+
+
+def _configured_queue(repo_root: Path) -> dict[str, object] | None:
+    """The `queue:` block of the repo's `.fr/triage.yaml`, None when it has none."""
+    import yaml
+
+    from fr.triage.batch_dispatch import TRIAGE_CONFIG_PATH
+
+    try:
+        data = yaml.safe_load((repo_root / TRIAGE_CONFIG_PATH).read_text(encoding="utf-8"))
+    except OSError, yaml.YAMLError:
+        return None
+    block = data.get("queue") if isinstance(data, dict) else None
+    return block if isinstance(block, dict) else None
 
 
 def _configured_merge_method(repo_root: Path) -> str | None:

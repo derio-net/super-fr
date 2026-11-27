@@ -18,7 +18,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Annotated, Any, Final, Literal
+from typing import Annotated, Any, Final, Literal, NamedTuple
 
 import yaml
 from pydantic import (
@@ -94,12 +94,18 @@ from fr.triage.stage import Stage, derive_stage
 # files the repo's `mirrors:` write in whole: `to_json` dumps it, `[]` included, which a
 # closed-world schema-17 reader rejects; a file below 18 reads it as `[]`, so no conflicted
 # path is taken as generated until the next collect.
-# 19 adds (2026-11-19-event-driven-a-la-carte R20) `state_repo_declared`, the state repo a
-# one-repo scope's settings name: `to_json` dumps it, which a closed-world schema-18 reader
-# rejects; a file below 19 reads it as empty, so no mismatch is reported until collect.
-FACTS_SCHEMA: Final[int] = 19
+# 19 adds (2026-11-24-batch-merge-readiness §A, R1) `PullRequest.cursor_read`, whether the run
+# cursor at an open batch PR's head was read (`read`, `unread`, `no-clone`): `to_json` dumps
+# it, `null` included, which a closed-world schema-18 reader rejects; a file below 19 reads it
+# as None (never asked), so no batch PR reads as delivered until the next collect.
+# `PullRequest.cursor_detail` (the cause of an `unread` read) rides in the same unreleased 19.
+# 20 adds (2026-11-19-event-driven-a-la-carte R20) `state_repo_declared`, the state repo a
+# one-repo scope's settings name: `to_json` dumps it, which a closed-world schema-19 reader
+# rejects; a file below 20 reads it as empty, so no mismatch is reported until collect.
+FACTS_SCHEMA: Final[int] = 20
 FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
-# The version this fr WRITES: every engine write stamps 13 (the wave merge queue's
+# The version this fr WRITES: every engine write stamps 14 (the `conflict` event's `onto`
+# and `reissue`, 2026-11-24-wave-queue-gaps R16; 13 was the wave merge queue's
 # `queues:` list and its events, a batch's `deferred` and `requeued` events and an
 # approval's `patch_id`, 2026-11-19-wave-merge-queue R24; 12 was recovery ownership/session
 # metadata; 11 added the `archive_conflict` event,
@@ -113,8 +119,8 @@ FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
 # 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
 # `after`; 2 was 2026-09-25-triage-batches §3.A); the loader reads every version in
 # JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[13] = 13
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
+JUDGEMENTS_SCHEMA: Literal[14] = 14
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14)
 
 ScopeKind = Literal["repo", "org", "group"]
 SCOPE_NAME_LIMIT = 80
@@ -310,10 +316,27 @@ class CursorPosition(_Strict):
     unit: str | None = None
 
 
-CursorReader = Callable[["PullRequest"], CursorPosition | None]
-"""The run cursor's position at an open batch PR's head (exit-gates R18): built by the
-command layer over a `gitseam.Checkout` (`fr.triage.cursor.read_cursor`), so `collect`
-itself starts no process."""
+CursorRead = Literal["read", "unread", "no-clone"]
+"""Whether the run cursor at a PR's head was read (2026-11-24-batch-merge-readiness R1):
+`read` (a position, or none naming the branch), `unread` (the head or a cursor could not be
+read) or `no-clone` (the driver has no clone of the repo)."""
+
+
+class CursorAnswer(NamedTuple):
+    """One read of the run cursor at a PR's head (batch-merge-readiness R1): the folded
+    *position*, the *read* status and, for an `unread` read, its cause (*detail*: which read
+    failed and why), so a failure never reaches the page or the driver without its reason."""
+
+    position: CursorPosition | None
+    read: CursorRead
+    detail: str = ""
+
+
+CursorReader = Callable[["PullRequest"], CursorAnswer]
+"""The run cursor's folded position at an open batch PR's head (exit-gates R18), its read
+status and cause (batch-merge-readiness R1): built by the command layer over a
+`gitseam.Checkout` (`fr.triage.cursor.read_cursor`), so `collect` itself starts no
+process."""
 
 
 class PullRequest(_Strict):
@@ -348,6 +371,12 @@ class PullRequest(_Strict):
     # The run cursor's position at this PR's head (exit-gates R18, facts schema 12): an
     # open batch PR only; None when never read or no cursor names the PR's branch.
     cursor: CursorPosition | None = None
+    # Whether that cursor was read (batch-merge-readiness R1, facts schema 19); None when
+    # never asked. The head it was read at is `head_oid`.
+    cursor_read: CursorRead | None = None
+    # Why an `unread` read failed (the read that failed and its error), None otherwise: it
+    # rides in schema 19 with `cursor_read`, so the page and the driver name the cause.
+    cursor_detail: str | None = None
     anchor: AnchorKind = "unanchored"
     anchor_path: str | None = None
     anchor_body: str = ""
@@ -897,6 +926,10 @@ class ConflictEvent(_Strict):
     paths: list[str] = Field(min_length=1)  # the paths merge refused to resolve
     delivered: ConflictDelivery
     handle: str | None = None
+    # schema 14 (2026-11-24-wave-queue-gaps R2, R3): the commit the brief named, and a brief
+    # re-issued at the same head because that commit stopped leading to `main` (no budget)
+    onto: str | None = None
+    reissue: bool = False
 
 
 class ClaimsReleasedEvent(_Strict):
@@ -1124,7 +1157,7 @@ class RequeuedEvent(_Strict):
     wave: int | None = None
 
 
-QueueEntryKind = Literal["closeout", "export", "archive", "housekeeping"]
+QueueEntryKind = Literal["closeout", "export", "archive", "housekeeping", "operator"]
 
 
 class QueueEntryRef(_Strict):
@@ -1310,6 +1343,35 @@ QueueEvent = Annotated[
     | QueueApprovalEvent,
     Field(discriminator="kind"),
 ]
+
+
+class QueueAddEvent(_Strict):
+    """`fr triage queue add --pr <pr>` by forge login *by*: *repo*'s PR *pr* joins *scope*'s
+    queue as an operator entry, or, for a batch PR of the scope, is only *preapproved*
+    (spec 2026-11-24-wave-queue-gaps R11, R13, R16). Needs judgements schema 14."""
+
+    kind: Literal["queue_add"]
+    at: AwareDatetime
+    repo: str = Field(min_length=1)
+    scope: str = Field(min_length=1)
+    pr: int = Field(ge=1)
+    by: str = Field(min_length=1)
+    preapproved: bool = False
+
+
+class QueueRemoveEvent(_Strict):
+    """`fr triage queue remove --pr <pr>` by forge login *by*: the add of *pr* ends (spec
+    2026-11-24-wave-queue-gaps R11, R16). Needs judgements schema 14."""
+
+    kind: Literal["queue_remove"]
+    at: AwareDatetime
+    repo: str = Field(min_length=1)
+    scope: str = Field(min_length=1)
+    pr: int = Field(ge=1)
+    by: str = Field(min_length=1)
+
+
+QueueRequest = Annotated[QueueAddEvent | QueueRemoveEvent, Field(discriminator="kind")]
 
 
 def _time_ordered(events: list[Any], what: str) -> list[Any]:
@@ -1509,7 +1571,7 @@ class Export(_Strict):
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
@@ -1519,6 +1581,7 @@ class Judgements(_Strict):
     exports: list[Export] = []  # the driver's per-wave state exports; schema 4
     closeouts: list[CollectedCloseout] = []  # collected close-out start markers; schema 10
     queues: list[QueueRecord] = []  # the wave merge queues (wave-merge-queue R24); schema 13
+    queue_requests: list[QueueRequest] = []  # operator entries (wave-queue-gaps R11); 14
 
     @field_validator("issues", mode="before")
     @classmethod
@@ -1613,6 +1676,11 @@ class Judgements(_Strict):
             raise ValueError(
                 f"`exports:` needs schema 4, but this file is stamped schema {self.schema_}"
             )
+        if self.queue_requests and self.schema_ < 14:
+            raise ValueError(
+                f"`queue_requests:` needs schema 14, but this file is stamped schema {self.schema_}"
+            )
+        _time_ordered(list(self.queue_requests), "queue_requests")
         if self.queues and self.schema_ < 13:
             raise ValueError(
                 f"`queues:` needs schema 13, but this file is stamped schema {self.schema_}"
@@ -1629,6 +1697,12 @@ class Judgements(_Strict):
             for e in b.events
         ):
             raise ValueError("an update's `patch_id` needs schema 13")
+        if self.schema_ < 14 and any(
+            isinstance(e, ConflictEvent) and (e.onto is not None or e.reissue)
+            for b in self.batches
+            for e in b.events
+        ):
+            raise ValueError("a conflict's `onto` and `reissue` need schema 14")
         carried: set[str] = {e.kind for b in self.batches for e in b.events}
         carried |= {e.kind for q in self.queues for e in q.events}
         if self.schema_ < 12 and any(

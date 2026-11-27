@@ -1,2 +1,0 @@
-bump: minor
-summary: fr-show-me draws a change as text views; every spec carries a `## Design shape`, and every fr-goal PR shows a required `## Shape of the change` that the spec and lens reviewers check against the code.

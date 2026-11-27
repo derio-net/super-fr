@@ -157,10 +157,15 @@ def test_absent_rsync_fails(home: Path, repo: Path) -> None:
     assert [c.name for c in _check(repo, rsync=False) if not c.ok] == ["rsync"]
 
 
-def _methods(repo: Path, allowed: list[str], configured: str | None) -> list[cloud.Check]:
-    if configured:
+def _methods(
+    repo: Path, allowed: list[str], configured: str | None, queue: str | None = None
+) -> list[cloud.Check]:
+    lines = [f"merge_method: {configured}"] if configured else []
+    if queue is not None:
+        lines.append(f"queue:\n{queue}")
+    if lines:
         (repo / ".fr").mkdir(exist_ok=True)
-        (repo / ".fr" / "triage.yaml").write_text(f"merge_method: {configured}\n")
+        (repo / ".fr" / "triage.yaml").write_text("\n".join(lines) + "\n")
     return cloud.check(
         repo_root=repo,
         latest_release=lambda: None,
@@ -194,6 +199,28 @@ def test_a_configured_merge_method_the_repo_disallows_fails(home: Path, repo: Pa
     _healthy(home, repo)
     failed = [c for c in _methods(repo, ["merge"], "squash") if not c.ok]
     assert [c.name for c in failed] == ["merge_method"]
+
+
+@pytest.mark.parametrize("queue", ["  ci: push\n  land: push", "  ci: push"])
+def test_a_squash_method_under_a_push_queue_fails_with_the_landing_refusal(
+    home: Path, repo: Path, queue: str
+) -> None:
+    """R5, gh#1705: `land` defaults to push, and GitHub closes a squash-pushed PR unmerged."""
+    _healthy(home, repo)
+    failed = [c for c in _methods(repo, ["merge", "squash"], "squash", queue) if not c.ok]
+    assert [c.name for c in failed] == ["merge_method"]
+    assert "unmerged" in failed[0].detail and "queue.land: merge" in failed[0].detail
+
+
+@pytest.mark.parametrize(
+    ("configured", "queue"),
+    [("merge", "  ci: push"), ("squash", "  ci: push\n  land: merge"), ("squash", None)],
+)
+def test_merge_commits_or_a_merge_landing_or_no_queue_block_pass(
+    home: Path, repo: Path, configured: str, queue: str | None
+) -> None:
+    _healthy(home, repo)
+    assert all(c.ok for c in _methods(repo, ["merge", "squash"], configured, queue))
 
 
 def test_unknown_merge_methods_are_not_a_failure(home: Path, repo: Path) -> None:

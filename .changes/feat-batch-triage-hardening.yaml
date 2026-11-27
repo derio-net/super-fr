@@ -1,2 +1,0 @@
-bump: minor
-summary: "triage: ready-fr admits an issue only with a trusted fr triage admit marker matching its content (re-admit label-only issues with fr triage admit), ineligible issues' titles are withheld, never-dispatched batches whose members all closed are obsolete (check lists them with the cancel command, batch cancel accepts them, the Batches page groups them), judged PRs past the PR list limit are settled, the privacy guard reads snapshot keys, owed trackers leave dedupe"

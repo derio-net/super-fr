@@ -124,3 +124,15 @@ def test_p6_r6_a_member_no_action_runs_post_merge_for_holds_the_whole_wave() -> 
     done = _wave({"a": (1, "merged"), "b": (1, "merged")}, post_merge_repos=repos,
                  a_events=[POST_MERGE], b_events=[POST_MERGE])  # fmt: skip
     assert _closeouts(done) == [("a", "b")]
+
+
+def test_under_quiet_placement_an_operator_entry_stays_and_housekeeping_goes() -> None:
+    """wave-queue-gaps l-tests-r6: the placement filter keeps `fr triage queue add`'s entries
+    (they are no fr artifact) and drops every fr-owned non-batch entry."""
+    snap = _snap([_batch("a", 1)], {"a": "pr-open"}, placements={REPO: "quiet"},
+                 wave_queues={REPO: _config()})  # fmt: skip
+    admitted = [Admitted("operator", REPO, _live(301, "h301", head_ref="fix/typo"), at=NOW),
+                Admitted("housekeeping", REPO, _live(302, "h302", head_ref="chore/ops-x"),
+                         at=NOW)]  # fmt: skip
+    qs = queue_snapshot(snap, REPO, admitted=admitted)
+    assert [o.key for o in qs.others] == ["operator#301"]

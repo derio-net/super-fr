@@ -506,8 +506,8 @@ class FakeGhClient:
         return f"Closes {repo}#{number}"
 
     def repo_merge_methods(self, repo: str) -> dict[str, Any]:
-        """A repo allowing every method, squash by default."""
-        return {"default": "squash", "allowed": ["merge", "rebase", "squash"]}
+        """A repo allowing every method, merge by default (a push landing needs merge commits)."""
+        return {"default": "merge", "allowed": ["merge", "rebase", "squash"]}
 
     def repo_visibility(self, repo: str) -> str:
         self.calls.append(("repo_visibility", {"repo": repo}))

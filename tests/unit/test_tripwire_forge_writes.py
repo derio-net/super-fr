@@ -79,6 +79,8 @@ GATED: dict[str, str] = {
         "file_failures: the target's RepoPolicy.block(issues), allows(labels) first",
     "fr/src/fr/triage/driver_failures.py::file_failures.comment":
         "file_failures: the target's RepoPolicy.block(issues), allows(comments) first",
+    "fr/src/fr/triage/operator_entries.py::_preapprove":
+        "_labels_off and _comments_off: client_policy(labels, comments) first (dry run: none)",
     "fr/src/fr/triage/approval.py::settle_approvals":
         "_labels_off: client_policy(labels) (a dry run writes nothing)",
     "fr/src/fr/triage/approval.py::settle_entry_approval":

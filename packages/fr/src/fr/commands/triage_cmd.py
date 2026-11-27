@@ -77,6 +77,7 @@ from fr.triage.model import (
     state_dir,
 )
 from fr.triage.pacing import Pacer
+from fr.triage.plan_overlap import checked_report, fix_text, report_json, source_for_clones
 from fr.triage.probe import PassPlan, Prober, judgements_digest
 from fr.triage.quota import is_rate_limited
 from fr.triage.render import (
@@ -879,8 +880,10 @@ def check_command(
         err_console.print(f"[yellow]warning:[/yellow] {escape(str(exc))}", soft_wrap=True)
         recorded = None
     result = classify(facts, judgements, me=me, now=datetime.now(UTC), recorded_state_repo=recorded)
+    overlap = checked_report(judgements, facts, source_for_clones(Path.cwd(), None))
     if as_json:
-        print(json.dumps(result.to_json(), indent=2, ensure_ascii=False))
+        document = {**result.to_json(), "plan_overlap": report_json(overlap)}
+        print(json.dumps(document, indent=2, ensure_ascii=False))
         return
     console.print(f"[bold]skipped repos[/bold] ({len(result.skipped)}) — not collected")
     for repo, why in result.skipped:
@@ -1048,6 +1051,20 @@ def check_command(
         console.print(f"  {escape(d.key)} → {escape(d.original)} ({d.state})", soft_wrap=True)
         console.print(f"    {escape(d.command or d.reason)}", soft_wrap=True)
     print_claim_sets(result.claims)
+    console.print(
+        f"[bold]plan overlap[/bold] ({len(overlap.overlaps)}) — unmerged batches whose plans "
+        "name the same files"
+    )
+    for o in overlap.overlaps:
+        waves = f"waves {o.wave_a if o.wave_a is not None else '-'}/"
+        waves += str(o.wave_b if o.wave_b is not None else "-")
+        console.print(
+            f"  {escape(o.a)}  {escape(o.b)}  {waves}  {escape(', '.join(o.paths))}",
+            soft_wrap=True,
+        )
+        console.print(f"    {escape(fix_text(o.a, o.b))}", soft_wrap=True)
+    for batch_id, why in overlap.unread:
+        console.print(f"  not compared  {escape(batch_id)}  {escape(why)}", soft_wrap=True)
 
 
 @triage_app.command("clean-labels")
@@ -1347,4 +1364,5 @@ import fr.commands.triage_drive_cmd  # noqa: E402, F401
 import fr.commands.triage_history_cmd  # noqa: E402, F401
 import fr.commands.triage_kanban_cmd  # noqa: E402, F401
 import fr.commands.triage_origins_cmd  # noqa: E402, F401
+import fr.commands.triage_queue_cmd  # noqa: E402, F401
 import fr.commands.triage_state_cmd  # noqa: E402, F401

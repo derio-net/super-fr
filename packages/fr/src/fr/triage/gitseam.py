@@ -27,7 +27,7 @@ import signal
 import stat
 import subprocess
 import tempfile
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal
@@ -878,6 +878,28 @@ class Checkout:
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         return git_ok(["merge-base", "--is-ancestor", ancestor, descendant], self.path)
 
+    def leads(self, onto: str, target: str) -> bool:
+        """Whether *onto* is an ancestor of (or is) *target* (spec 2026-11-24-wave-queue-gaps
+        R2). Unlike `is_ancestor`, a missing object raises `GitError` (R5), never False."""
+        return not git(["rev-list", "-n", "1", onto, f"^{target}"], self.path).strip()
+
+    def carried(self, head: str, target: str, built: Iterable[str]) -> tuple[str, ...]:
+        """The shas of *built* that *head* reaches and *target* does not (R4), newest first,
+        less any that was rebuilt fresh into *target*'s history (a commit there with its
+        tree and parents, R13 of 2026-11-19-wave-merge-queue). A missing object raises."""
+        wanted = set(built)
+        out: list[str] = []
+        for sha in git(["rev-list", head, f"^{target}"], self.path).split():
+            if sha not in wanted:
+                continue
+            line = git(["log", "-1", "--format=%T %P", sha], self.path).strip()
+            parents = line.split()[1:]
+            since = [target, f"^{parents[0]}"] if parents else [target]
+            twins = git(["log", "--format=%H %T %P", *since], self.path).splitlines()
+            if not any(t.split(" ", 1)[1] == line for t in twins if t.split()[0] != sha):
+                out.append(sha)
+        return tuple(out)
+
     def changed_paths(self, ref: str, head: str) -> frozenset[str]:
         """The paths *head* changed since it forked from *ref* (`ref...head`)."""
         out = git(["diff", "--name-only", "--no-renames", "-z", f"{ref}...{head}"], self.path)
@@ -1024,15 +1046,23 @@ class Checkout:
     def reach_commit(self, sha: str, branch: str) -> bool:
         """Whether this clone has commit *sha*, fetching origin's *branch* once when it
         does not (a PR head the clone never saw). A failed fetch is no commit."""
+        return not self.reach_failure(sha, branch)
+
+    def reach_failure(self, sha: str, branch: str) -> str:
+        """Why `reach_commit` would be False ("" when the clone has *sha*): no head, the
+        fetch of *branch* failing (its error), origin having no such branch, or the fetched
+        branch not holding *sha* (batch-merge-readiness R1: a cause is never dropped)."""
         if not sha:
-            return False
+            return "the PR has no head sha"
         if has_commit(self.path, sha):
-            return True
+            return ""
         try:
-            fetch_ref(self.path, "origin", f"refs/heads/{branch}")
-        except GitError:
-            return False
-        return has_commit(self.path, sha)
+            fetched = fetch_ref(self.path, "origin", f"refs/heads/{branch}")
+        except GitError as exc:
+            return f"fetch of {branch} failed: {exc}"
+        if fetched is None:
+            return f"origin has no branch {branch}"
+        return "" if has_commit(self.path, sha) else f"{sha[:12]} is not on origin's {branch}"
 
     def list_dir(self, ref: str, directory: str) -> list[str]:
         """The names of the entries directly under *directory* at *ref*; empty when it

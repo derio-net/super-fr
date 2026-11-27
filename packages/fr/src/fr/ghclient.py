@@ -521,6 +521,12 @@ class GhClient(Protocol):
         inconclusive and refuses, naming the flag."""
         ...
 
+    def repo_default_branch(self, repo: str) -> str:
+        """*repo*'s default branch as the forge reports it (`fr triage queue add`'s base
+        check, spec 2026-11-24-wave-queue-gaps R11). Raises the backend's error when it
+        cannot be read, so a refusal never rests on an unread answer."""
+        ...
+
     def repo_visibility(self, repo: str) -> str:
         """*repo*'s visibility as the forge reports it, lowercased: `public`, `private`
         or `internal` (spec 2026-10-07-cloud-triage §B, §C). Raises the backend's error
@@ -685,6 +691,9 @@ class UnsupportedBatchOps:
 
     def repo_visibility(self, repo: str) -> str:
         raise self._unsupported("repo_visibility")
+
+    def repo_default_branch(self, repo: str) -> str:
+        raise self._unsupported("repo_default_branch")
 
     def pages_visibility(self, repo: str) -> str:
         return "unknown"  # a backend with no route for it (Gitea): fail closed

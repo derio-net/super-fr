@@ -27,6 +27,7 @@ from fr.triage.merge_stops import MergeStop
 from fr.triage.model import Facts, Judgements
 
 from tests.unit.triage_board_fixtures import (
+    DELIVERED,
     REPO,
     batch,
     busy,
@@ -240,10 +241,12 @@ def test_the_driver_would_dispatch_a_proposed_batch() -> None:
 def test_the_driver_would_merge_a_green_open_pr() -> None:
     f, jd = _world(
         [batch("a", [1], events=[dispatch("a")])],
-        [issue(1, prs=[pr(11, "feat/batch-a", labels=["approved-fr"])])],
+        [issue(1, prs=[pr(11, "feat/batch-a", labels=["approved-fr"], **DELIVERED)])],
         config={REPO: {"queue": {"ci": "push"}}},
     )
-    assert _hint("a", f, jd) == "in merge queue"  # R25: the offline queue holds it
+    card = build_board(f, jd, {}).card("a")  # R25: the offline queue holds it
+    assert card.readiness is not None and card.readiness.verdict == "Approved, merges next"
+    assert card.hint == ""
 
 
 def test_a_failing_pr_reads_ci_failing() -> None:
@@ -371,11 +374,12 @@ def test_a_merge_the_driver_stopped_on_needs_you_not_merge_ready() -> None:
 def test_a_merge_stop_at_a_head_since_moved_no_longer_counts() -> None:
     f, jd = _world(
         [batch("a", [1], events=[dispatch("a")])],
-        [issue(1, prs=[pr(11, "feat/batch-a", labels=["approved-fr"])])],
+        [issue(1, prs=[pr(11, "feat/batch-a", labels=["approved-fr"], **DELIVERED)])],
         config={REPO: {"queue": {"ci": "push"}}},
     )
     card = build_board(f, jd, {}, stops=_stopped("sha-older")).card("a")
-    assert (card.hint, card.needs_you) == ("in merge queue", False)
+    assert card.readiness is not None and card.readiness.verdict == "Approved, merges next"
+    assert (card.hint, card.needs_you) == ("", False)
 
 
 def test_a_merge_stop_on_a_pr_no_longer_open_no_longer_counts() -> None:
@@ -896,3 +900,18 @@ def test_a_ci_none_repos_archive_pr_with_no_checks_reads_ready_to_merge() -> Non
     assert build_board(f, jd, {}).card("m").hint == "archive PR #30: checks pending"
     card = build_board(f, jd, {}, ci_none=(REPO,)).card("m")
     assert card.hint == "archive PR #30: ready to merge"
+
+
+# ------------------------------------------------------ plan overlap (spec 2026-11-25 R7)
+
+
+def test_overlap_sentences_land_on_the_named_cards_only() -> None:
+    f, jd = _world([batch("a", [1]), batch("b", [2])], [issue(1), issue(2)])
+    board = build_board(f, jd, {}, overlaps={"a": ("Plans overlap with b on x.py: fix.",)})
+    assert board.card("a").overlaps == ("Plans overlap with b on x.py: fix.",)
+    assert board.card("b").overlaps == ()
+
+
+def test_a_board_built_without_overlaps_has_none_on_any_card() -> None:
+    f, jd = _world([batch("a", [1])], [issue(1)])
+    assert build_board(f, jd, {}).card("a").overlaps == ()

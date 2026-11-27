@@ -1017,6 +1017,13 @@ class RealGhRestClient:
         conditional read sharing `fr.gh`'s module-level ETag map (quota-pacing R12)."""
         return _gh.repo_visibility(self._gh, self._host, repo)
 
+    def repo_default_branch(self, repo: str) -> str:
+        """`default_branch` of `GET repos/{repo}`; raises when the answer holds none."""
+        name = self._api(f"repos/{repo}").get("default_branch")
+        if not isinstance(name, str) or not name:
+            raise GhError(f"GET repos/{repo}: no default_branch in the answer")
+        return name
+
     def pages_visibility(self, repo: str) -> str:
         """`public` of `GET repos/{repo}/pages`; `unknown` on a 404 (no site) or any failure."""
         from fr.acceptance.pages import UNKNOWN, from_github

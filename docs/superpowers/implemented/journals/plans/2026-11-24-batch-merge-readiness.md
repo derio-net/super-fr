@@ -1,0 +1,463 @@
+<!-- fr:journal-schema=4 -->
+# Journal: 2026-11-24-batch-merge-readiness
+
+<!-- fr:journal kind=decision scope=plan id=p1-readiness-module-imports created=2026-11-25T00:48:18+00:00 phase=1 -->
+### p1-readiness-module-imports · decision · readiness imports wave_queue; wave_queue imports readiness lazily (phase 1)
+
+`fr.triage.readiness` needs `QueueSnapshot`, `base_refusal`, `is_deferred` and the new
+`queue_held_reason` from `wave_queue`, and `wave_queue._ready` / `plan_queue` call
+`batch_readiness`. So readiness imports wave_queue at module level and wave_queue
+imports readiness inside the two functions (and under TYPE_CHECKING for
+`QueuePlan.readiness`), the same lazy pattern batch_drive and wave_queue already use.
+
+<!-- fr:journal kind=decision scope=plan id=p1-livepr-url created=2026-11-25T00:48:18+00:00 phase=1 -->
+### p1-livepr-url · decision · LivePr gains url so R6's links need no host guess (phase 1)
+
+R6 links the PR and its checks tab; `LivePr` carried no URL. Both Snapshot builders
+now fill `LivePr.url` from the batch PR's facts; `fact_cursors` (in readiness.py)
+fills `Snapshot.cursors` the same way for both builders.
+
+<!-- fr:journal kind=decision scope=plan id=p1-queue-held-verdict created=2026-11-25T00:48:18+00:00 phase=1 -->
+### p1-queue-held-verdict · decision · Queue held means another scope holds the hold, or this scope's open queue is halted (phase 1)
+
+R5's first verdict reads `wave_queue.queue_held_reason`: the R31 hold of another scope
+(`held_by_other`, now shared with `_held`) or the `live_halt` of this scope's open
+queue. It never changes `admits`, which stays the queue's own entry rule.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-test-worlds-default-delivered created=2026-11-25T00:48:18+00:00 phase=1 -->
+### p1-test-worlds-default-delivered · discovery · Every queue and drive test world now defaults to a delivered run (phase 1)
+
+83 existing tests assumed approved + green merges. Their snapshot helpers (planner,
+operator view, batch_drive, draft_red), the board fixtures (`DELIVERED` in
+triage_board_fixtures) and the drive command's World/DriveCheckout (a delivered PR
+head serves one `deliver: done` cursor; `world.pr(..., delivered=False)` opts out)
+now default to delivered, so each still tests what it did; new tests cover the hold.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-batch-drive-at-budget created=2026-11-25T00:48:18+00:00 phase=1 -->
+### p1-batch-drive-at-budget · discovery · batch_drive.py sits exactly at its 2275-line budget (phase 1)
+
+`_member_reports` now reads `batch_readiness`, and `Snapshot.cursors` / `LivePr.url`
+were added; comments were trimmed to stay at 2275. Phase 2's board work in batch_drive
+has no headroom: put it in readiness.py or kanban.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-cursor-unread-not-cached created=2026-11-25T00:48:18+00:00 phase=1 -->
+### p1-cursor-unread-not-cached · discovery · The driver no longer caches an unread cursor head (phase 1)
+
+`_Driver.cursor_at` used to cache `None` for a head the clone could not reach, so a
+head fetched later in the same process was never read again. It now caches only a
+`read` answer (a commit never changes); an `unread` one is asked again next pass.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-facts-fixtures-regenerated created=2026-11-25T00:48:18+00:00 phase=1 -->
+### p1-facts-fixtures-regenerated · discovery · Facts schema 17 regenerates six committed scenario fixtures (phase 1)
+
+`tests/scenarios/fixtures/*-facts.json` carry the facts stamp; their generators
+(`make_*_facts.py`) were re-run, so only the `schema` line moved.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t1 created=2026-11-25T00:48:18+00:00 phase=1 -->
+### no-refactor-p1-t1 · discovery · no-refactor-because P1.T1 (phase 1)
+
+a smoke task: one docstring module, one test and a fragment, nothing to clean
+
+<!-- fr:journal kind=review scope=plan id=p1-review created=2026-11-25T02:01:21+00:00 phase=1 -->
+### p1-review · review · Phase 1 code review: merge gate sound (no undelivered batch is readied, admitted or merged); 7 in-scope findings (phase 1)
+
+Reviewer checked R2 (no bypass of batch_readiness: _ready, _entries re-filter, _queue_entry pr_ready, queue_exec pr_merge, foreground batch merge), R1 (fold_positions fails closed, distinct reasons, live pr_view head vs facts head_oid), R5 order and admits = old _ready + delivered, R3 voiding sha from ApprovalEvent.voided_at, R12 wording, FACTS_READS 3-17 with cursor_read None reading unread, and readiness.py purity. All held. Findings p1-r1..p1-r7 below.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-25T02:01:21+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · `fr triage batch merge <id>` refuses an approved-but-undelivered batch as "not approved", because approved-not-delivered now lands in Pass.awaiting (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-25T02:01:21+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · _member_reports no longer reports a gated approved PR as held/awaiting while CI is pending or the queue is held (reads r.kind, not the gate) (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-25T02:01:21+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · in_queue_order leaves an admitted batch absent from the plan's order (e.g. ejected) reading "Approved, merges next" (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-11-25T02:01:21+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · _voided_sha reads a stale voided_at for a Held verdict, so a re-labelled PR still says "Approval voided ... re-label" (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5 created=2026-11-25T02:01:21+00:00 phase=1 state=open review_scope=in -->
+### p1-r5 · finding [open] (reviewer: in scope) · no driver-level test that facts head_oid != live pr_view head holds the PR (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6 created=2026-11-25T02:01:21+00:00 phase=1 state=open review_scope=in -->
+### p1-r6 · finding [open] (reviewer: in scope) · no test that an old-facts PR (deliver-done cursor, cursor_read None) reads not delivered (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7 created=2026-11-25T02:01:21+00:00 phase=1 state=open review_scope=in -->
+### p1-r7 · finding [open] (reviewer: in scope) · the approve-pr Need still asks to label a green PR approved-fr while its run has not delivered (contradicts R4, invites an approval R3 voids) (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-25T02:01:21+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: `fr triage batch merge <id>` refuses an approved-but-undelivered batch as "not approved", because approved-not-delivered now lands in Pass.awaiting (phase 1)
+
+276f12b64: readiness.merge_refusal decides 'not approved' from the verdict; an approved hold names its readiness reason. Test test_triage_batch_merge.py::test_a_named_approved_batch_whose_run_has_not_delivered_is_held_for_that_reason.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-25T02:01:21+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: _member_reports no longer reports a gated approved PR as held/awaiting while CI is pending or the queue is held (reads r.kind, not the gate) (phase 1)
+
+d8d17cd75: _member_reports holds an approved PR when not delivered or readiness.gated(...), whatever CI/queue state. Test test_triage_readiness_queue.py::test_the_driver_holds_a_gated_approved_pr_for_devops_whatever_its_ci.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-25T02:01:21+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: in_queue_order leaves an admitted batch absent from the plan's order (e.g. ejected) reading "Approved, merges next" (phase 1)
+
+d8d17cd75: new not-queued verdict (eject reason at live head, else 'not in the queue this pass'). Tests test_triage_readiness.py::test_an_admitted_batch_outside_the_plans_order_is_not_merges_next and ::test_an_ejected_batch_outside_the_order_reads_its_eject_reason.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-11-25T02:01:21+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: _voided_sha reads a stale voided_at for a Held verdict, so a re-labelled PR still says "Approval voided ... re-label" (phase 1)
+
+d8d17cd75: _voided_sha returns None for Held. Test test_triage_readiness.py::test_a_held_approval_never_reads_an_older_void.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved created=2026-11-25T02:01:21+00:00 phase=1 state=fixed resolves=p1-r5 -->
+### p1-r5-resolved · finding [fixed] · resolves p1-r5: no driver-level test that facts head_oid != live pr_view head holds the PR (phase 1)
+
+2241610b9: test_triage_batch_drive_cmd.py::test_a_pr_whose_head_moved_since_the_cursor_was_read_is_held_with_both_heads (no queue-open, no pr_ready, no merge, both heads named).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved created=2026-11-25T02:01:21+00:00 phase=1 state=fixed resolves=p1-r6 -->
+### p1-r6-resolved · finding [fixed] · resolves p1-r6: no test that an old-facts PR (deliver-done cursor, cursor_read None) reads not delivered (phase 1)
+
+2241610b9: test_triage_cursor_read.py::test_a_cursor_with_no_read_status_is_never_delivered and ::test_a_schema_16_facts_files_delivered_cursor_is_not_admitted.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7-resolved created=2026-11-25T02:01:21+00:00 phase=1 state=fixed resolves=p1-r7 -->
+### p1-r7-resolved · finding [fixed] · resolves p1-r7: the approve-pr Need still asks to label a green PR approved-fr while its run has not delivered (contradicts R4, invites an approval R3 voids) (phase 1)
+
+c2549b27a: needs_you reads readiness.snapshot_readiness over the board's snapshot; no label Need while undelivered, R12 Need for a PR with no cursor. Test test_merge_train_label_board.py::test_a_green_pr_whose_run_has_not_delivered_is_never_asked_for_the_label.
+
+<!-- fr:journal kind=decision scope=plan id=p2-others-refused-via-actions created=2026-11-25T03:08:29+00:00 phase=2 -->
+### p2-others-refused-via-actions · decision · Refused close-out, archive and export candidates are read off the pass's own actions (phase 2) (phase 2)
+
+drive_pass could not grow (batch_drive.py is at its budget), so readiness.refused_others reads the trust rules' refusals from the pass's actions: a candidate is told apart by which PR set (collected_prs, archives, export_prs) holds its number, never by the action text, and the action's detail is the reason. QueueSnapshot.refused (key -> reason) and refused_entries carry them; they are never entries, and wave_queue._base_needs skips them so a refused PR raises no queue Need.
+
+<!-- fr:journal kind=decision scope=plan id=p2-queue-reports-moved created=2026-11-25T03:08:29+00:00 phase=2 -->
+### p2-queue-reports-moved · decision · queue_reports and QUEUE_REPORT_KEY moved out of batch_drive to fr.triage.queue_reports (phase 2) (phase 2)
+
+To add the refused hook inside batch_drive.py's 2275-line budget, an equal amount of code left it: the queue's report actions. views.py and the planner test import from the new module.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-board-facts-lack-others created=2026-11-25T03:08:29+00:00 phase=2 -->
+### p2-board-facts-lack-others · discovery · The board's facts name no default branch, PR base, collected close-out PR or export PR (phase 2) (phase 2)
+
+drive_snapshot cannot admit or refuse an archive PR on the board (no default branch, no base), and collected close-out and export PRs are not in the facts. So the card's archive PR gets a verdict kanban._archive_view builds from what the facts do say (checks, a conflict, else 'its base branch is not in the collected facts: the driver reads it live'), through the same other_readiness. Close-out and export entries show whenever the plan holds them (Card.others by batch, Board.others for no batch), and render tests cover them.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-opening-wave-order created=2026-11-25T03:08:29+00:00 phase=2 -->
+### p2-opening-wave-order · discovery · A ready entry of a wave whose queue is only opening read 'not in the queue this pass' (phase 2) (phase 2)
+
+plan_queue opens a wave's queue with no entries and builds on the next pass, so in_queue_order placed nothing. wave_queue._readiness now orders the opening wave's ready entries first, so the card reads 'Approved, merges next'.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-hints-kept created=2026-11-25T03:08:29+00:00 phase=2 -->
+### p2-hints-kept · discovery · The merge-ready, in-queue and awaiting-approval hints were removed; the conflict, unconfigured, draft and CI-pending hints stay (phase 2) (phase 2)
+
+R5 gives an approved conflicting PR no verdict (the queue ejects it), and a repo with no queue block has no queue verdict, so CONFLICT_HINT and HINT_QUEUE_UNCONFIGURED say what the verdict does not. A card whose PR was ready, queued or awaiting now carries no hint; every open batch PR gets a verdict, from snapshot_readiness when its repo has no queue plan. The tests that read the old hints read the verdict instead.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-25T03:08:29+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+other_readiness is new code beside batch_readiness and _other_ready now delegates to it; the only move (the queue report actions out of batch_drive) was done in the same commit to hold the module budget
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-25T03:08:29+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+the board change is additive (Card.readiness and Card.others); the hint cleanup is P2.T3.S3
+
+<!-- fr:journal kind=review scope=plan id=p2-review created=2026-11-25T04:44:56+00:00 phase=2 -->
+### p2-review · review · Phase 2 code review: one verdict function for board and queue holds (R4); 6 in-scope findings (phase 2)
+
+Reviewer confirmed R4 (board and queue read plan.queues[*].readiness from batch_readiness/other_readiness; equality test over six cases; _other_ready admission unchanged from main), R6 facts and the collection-time line, R7 verdict-first cards, the wave_queue._readiness "merges next" change is label-only, the queue_reports move, and HTML escaping. Findings p2-r1..p2-r6 below. A low-confidence note (archive refusals under a non-repo placement) was not filed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-25T04:44:56+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · R6 pane focus command (non-https Next-action link) is dropped by _link/_safe_url, so session-owned cards never show it (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-25T04:44:56+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · Refused export PRs carry Action.batch=repo, so _others_of files them under a repo-name key and they render nowhere (R8 gap) (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-25T04:44:56+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · A repo with no queue block leads its card "Approved, merges next"; the unconfigured queue is not a queue-held verdict (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-25T04:44:56+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · refused_others keys pool/taken by bare PR number across repos, so same-numbered PRs in two repos collide (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-25T04:44:56+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · Stale docstring in triage_batch_cmd.py names batch_drive._queue_reports after the move (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-25T04:44:56+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · Test gaps: no end-to-end test for refused close-out/export, focus-command render, unconfigured verdict; the others' admits test is tautological (phase 2)
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-25T04:44:56+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: R6 pane focus command (non-https Next-action link) is dropped by _link/_safe_url, so session-owned cards never show it (phase 2)
+
+64dcdf56c: ReadinessFacts gained `command`; `link` is URL-only; the card renders a Command row as escaped code. Test test_triage_kanban_render_readiness.py::test_a_session_owned_verdicts_focus_command_shows_on_the_page_escaped.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-25T04:44:56+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: Refused export PRs carry Action.batch=repo, so _others_of files them under a repo-name key and they render nowhere (R8 gap) (phase 2)
+
+9da5c3309: refused_others files a refused entry under a batch only when Action.batch is a real batch id, else under "" (Board.others). Test test_triage_readiness_others.py::test_a_refused_export_pr_reaches_the_boards_others_with_its_reason (fails on the old code).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-25T04:44:56+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: A repo with no queue block leads its card "Approved, merges next"; the unconfigured queue is not a queue-held verdict (phase 2)
+
+9a701a15b, 76c139c0a: queue_snapshot defaults a repo with no queue block to QueueConfig(ci=None) and queue_held_reason names it, so the card reads 'Not ready: queue held: queue not configured …'. admits keeps the entry's own admission (as for a halt-held queue): the held queue is what merges nothing, and the driver's ready set and the unconfigured hint read admits. Test test_triage_board_readiness.py::test_a_repo_with_no_queue_block_still_leads_its_card_with_a_verdict.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-25T04:44:56+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: refused_others keys pool/taken by bare PR number across repos, so same-numbered PRs in two repos collide (phase 2)
+
+9da5c3309: pool/taken/out keyed by (repo, number). Test test_triage_readiness_others.py::test_same_numbered_prs_in_two_repos_do_not_share_a_refusal (fails on the old code).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-25T04:44:56+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: Stale docstring in triage_batch_cmd.py names batch_drive._queue_reports after the move (phase 2)
+
+3b4b923cd: the docstring names fr.triage.queue_reports.queue_reports.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-25T04:44:56+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: Test gaps: no end-to-end test for refused close-out/export, focus-command render, unconfigured verdict; the others' admits test is tautological (phase 2)
+
+9da5c3309: test_admits_follows_the_queues_conditions_written_out uses an independent oracle; test_a_refused_closeout_pr_reaches_its_batchs_card_with_its_reason and the export test go through drive_pass and kanban._others_of; focus-command and unconfigured tests above.
+
+<!-- fr:journal kind=decision scope=plan id=p3-running-in-preserve created=2026-11-25T05:38:20+00:00 phase=3 -->
+### p3-running-in-preserve · decision · The running predicate lives in preserve.py; local.py gets a 3-line guard (phase 3) (phase 3)
+
+`BranchRun.running_step`/`.running` and `preserve.running_hold(runs)` read steps and units in state `running` (an unreadable file counts); `_reap_or_classify` calls it after the external check, so dry run and live, merged and merged-by-content, are all guarded. gc reports action `skipped`, detail `kept: run <id> step <step> is running`. `_reap_hazard`, `_down_worktree_tail` and `down` are unchanged (a test pins it).
+
+<!-- fr:journal kind=review scope=plan id=p3-review created=2026-11-25T05:44:53+00:00 phase=3 -->
+### p3-review · review · Phase 3 code review: R9 gc guard covers dry run and live, merged and merged-by-content; down untouched; 1 low test gap (phase 3)
+
+Reviewer traced every reap path (_reap_or_classify is the only caller for both merged verdicts; the guard sits before both the dry-run and live branches and after the external return), unreadable cursors (branch_runs marks YAML errors, non-mapping steps; never raises; no cursor still reaps), units in state running, the report vocabulary (action skipped, distinct unreadable detail), and that _reap_hazard/_down_worktree_tail/down are unchanged with down pinned by a test. One finding, p3-r1.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-25T05:44:53+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · gc-level tests leave gaps: unreadable cursor dry-run only with a loose assertion; no gc test for a running unit, non-mapping steps, or a merged workspace with no cursor (phase 3)
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-25T05:44:53+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: gc-level tests leave gaps: unreadable cursor dry-run only with a loose assertion; no gc test for a running unit, non-mapping steps, or a merged workspace with no cursor (phase 3)
+
+c17291c30: test_gc_keeps_merged_workspace_with_an_unreadable_cursor is parametrized over dry run/live and broken-YAML/steps-not-a-mapping, pushes the cursor so only the R9 guard keeps it, and asserts the 'is unreadable' detail; new test_gc_keeps_merged_workspace_with_a_running_unit (dry run and live) and test_gc_still_reaps_merged_workspace_with_no_cursor. test_isolation.py + test_isolation_preserve.py: 321 passed.
+
+<!-- fr:journal kind=decision scope=plan id=p4-debug-journal-module created=2026-11-25T07:03:08+00:00 phase=4 -->
+### p4-debug-journal-module · decision · The debug journal's slug lives in fr.run.debug_journal (phase 4) (phase 4)
+
+run_cmd.py sits exactly at its 9100-line budget, so `debug_slug` and `require_debug_slug`
+(the emitted `debug` path's stem) are a sibling module that apply.py, run_cmd's review-entry
+lookup and tests share. `debug` joins REPO_TRACKED_ARTIFACTS, so `--emitted debug=` is
+path-normalised and must exist; pr_body._journals reads `debug` the same way. No artifact
+shape changed (the `emitted` map and `journal:<scope>` vocabulary already admitted it), so no
+stamp bump or migration.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-skill-line-cap created=2026-11-25T07:03:08+00:00 phase=4 -->
+### p4-skill-line-cap · discovery · The fr-debugging skill sat at the 120-line cap (phase 4) (phase 4)
+
+The run steps were folded into long lines in sections 0, 3 and 4; the skill is now 110 lines.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-11-25T07:03:08+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+a new manifest and one vocabulary token; nothing existing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-11-25T07:03:08+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+the readers gained one branch each, the slug logic sits in the new fr.run.debug_journal; run_cmd.py stayed at its 9100 budget by trimming two comments
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t3 created=2026-11-25T07:03:08+00:00 phase=4 -->
+### no-refactor-p4-t3 · discovery · no-refactor-because P4.T3 (phase 4)
+
+prose rewritten to fit the 120-line skill cap; mirrors regenerated
+
+<!-- fr:journal kind=review scope=plan id=p4-review created=2026-11-25T08:20:48+00:00 phase=4 -->
+### p4-review · review · Phase 4 code review: fr-debugging shape matches §E and every R11 reader names the debug journal; 7 in-scope gaps, 1 out (phase 4)
+
+Reviewer verified the manifest against §E, `debug` in REPO_TRACKED_ARTIFACTS, the debug-journal readers (record/apply slug, _evidence_target, _review_journal_entries, pr_body._journals and so unaccounted/deliver's leftovers gate), that run_exit/docs/deliver witnesses tolerate a run with no spec or plan, that fr-goal and fr-goal-light are unchanged, and that every command the skill names exists. Findings p4-r1..p4-r8.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-11-25T08:20:48+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · record template's _EMITTED_NAMES omits debug, so the debug step's brief never asks for emitted: {debug: ...} (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2 created=2026-11-25T08:20:48+00:00 phase=4 state=open review_scope=in -->
+### p4-r2 · finding [open] (reviewer: in scope) · _EvidenceTarget.subject says 'the spec' for the debug target; refusals and suggested commands name a spec that does not exist (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3 created=2026-11-25T08:20:48+00:00 phase=4 state=open review_scope=in -->
+### p4-r3 · finding [open] (reviewer: in scope) · PR body's Review lenses section says 'This run predates review lenses.' for every debug run (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4 created=2026-11-25T08:20:48+00:00 phase=4 state=open review_scope=in -->
+### p4-r4 · finding [open] (reviewer: in scope) · _run_journal ignores the debug journal, so a dead binding in a debug run refuses autonomous substitution (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5 created=2026-11-25T08:20:48+00:00 phase=4 state=open review_scope=in -->
+### p4-r5 · finding [open] (reviewer: in scope) · skill §0 starts no run in any reused workspace; R10 limits that to a workspace that already has a run (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6 created=2026-11-25T08:20:48+00:00 phase=4 state=open review_scope=in -->
+### p4-r6 · finding [open] (reviewer: in scope) · skill/explainer: no host-side note for fr run; offers fr journal add --kind review, which the review gate refuses before the step opens (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7 created=2026-11-25T08:20:48+00:00 phase=4 state=open review_scope=in -->
+### p4-r7 · finding [open] (reviewer: in scope) · vacuous test assertions ('debug'/'review' in output); no end-to-end deliver refusal on an open out-of-scope debug finding (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8 created=2026-11-25T08:20:48+00:00 phase=4 state=open review_scope=out -->
+### p4-r8 · finding [open] (reviewer: out of scope) · a reviewer's fenced review-findings block is validated only for phase targets, so the skill's d-r<k> block is unchecked (phase 4)
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-11-25T08:20:48+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: record template's _EMITTED_NAMES omits debug, so the debug step's brief never asks for emitted: {debug: ...} (phase 4)
+
+e80ac2bbc: _EMITTED_NAMES gains debug; test parses the brief JSON, asserts step == debug and the template's debug: line.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r2-resolved created=2026-11-25T08:20:48+00:00 phase=4 state=fixed resolves=p4-r2 -->
+### p4-r2-resolved · finding [fixed] · resolves p4-r2: _EvidenceTarget.subject says 'the spec' for the debug target; refusals and suggested commands name a spec that does not exist (phase 4)
+
+e80ac2bbc: subject returns 'the fix' for scope debug; test asserts 'filed against the fix are still open: d-r1' and the --scope debug resolve command. Spec/plan wording unchanged.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r3-resolved created=2026-11-25T08:20:48+00:00 phase=4 state=fixed resolves=p4-r3 -->
+### p4-r3-resolved · finding [fixed] · resolves p4-r3: PR body's Review lenses section says 'This run predates review lenses.' for every debug run (phase 4)
+
+e80ac2bbc: pr_body._shape_has_lens_review reads the run's manifest; a shape with no lens-review step renders 'This workflow has no lens review.' (test_pr_body_lenses.py).
+
+<!-- fr:journal kind=finding scope=plan id=p4-r4-resolved created=2026-11-25T08:20:48+00:00 phase=4 state=fixed resolves=p4-r4 -->
+### p4-r4-resolved · finding [fixed] · resolves p4-r4: _run_journal ignores the debug journal, so a dead binding in a debug run refuses autonomous substitution (phase 4)
+
+e80ac2bbc: _run_journal falls back to the run's debug journal after plan, before spec; test added. run_cmd.py held at its 9100 budget.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r5-resolved created=2026-11-25T08:20:48+00:00 phase=4 state=fixed resolves=p4-r5 -->
+### p4-r5-resolved · finding [fixed] · resolves p4-r5: skill §0 starts no run in any reused workspace; R10 limits that to a workspace that already has a run (phase 4)
+
+7198f79de, cc9a45747: §0 checks the branch for an existing cursor; with one it starts none, without one it runs fr run start fr-debugging --branch <that branch>. Explainer matches.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r6-resolved created=2026-11-25T08:20:48+00:00 phase=4 state=fixed resolves=p4-r6 -->
+### p4-r6-resolved · finding [fixed] · resolves p4-r6: skill/explainer: no host-side note for fr run; offers fr journal add --kind review, which the review gate refuses before the step opens (phase 4)
+
+7198f79de, cc9a45747: skill and explainer say fr run / fr usage run on the harness host in devcontainer mode; the review step record is the only route for the review entry (fr journal add --kind review named once as the refused route). Mirrors and README synced.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r7-resolved created=2026-11-25T08:20:48+00:00 phase=4 state=fixed resolves=p4-r7 -->
+### p4-r7-resolved · finding [fixed] · resolves p4-r7: vacuous test assertions ('debug'/'review' in output); no end-to-end deliver refusal on an open out-of-scope debug finding (phase 4)
+
+e80ac2bbc: assertions parse the brief JSON and match the exact refusal texts ('names no entry in the debug journal', 'still open: d-r1'); new end-to-end test refuses deliver through resolve while out-of-scope d-r2 is open and unaccounted.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved created=2026-11-25T08:20:48+00:00 phase=4 state=open resolves=p4-r8 out_of_scope=true -->
+### p4-r8-resolved · finding [out-of-scope] · resolves p4-r8: a reviewer's fenced review-findings block is validated only for phase targets, so the skill's d-r<k> block is unchecked (phase 4)
+
+Not caused by this change: returned review-findings blocks are checked only for phase units (run_cmd returned_phase = target.phase), already true of spec-review before this branch. R11 does not require it; the gate still refuses any open d-r finding in the journal.
+
+<!-- fr:journal kind=review scope=plan id=lens-review created=2026-11-25T11:45:33+00:00 -->
+### lens-review · review · Lens review (security, errors, tests, docs-accuracy) of the whole feature: 16 in-scope findings, all fixed
+
+Four reviewers, one per lens, over git diff 24130aa17..HEAD. Security found no path to ready, admit or merge an undelivered PR; it and errors both found that a corrupt cursor was skipped (fail open), and security found gc's guard blind to quiet/stealth placement and to an unlistable runs dir. Errors found read failures losing their cause and missing Needs. Tests mutation-checked the suite: the R5 order, the unread-retry, the queue-open verdict, whose-move for CI red and the skill's R10 text were unpinned. Docs-accuracy found three false claims (skill, explainer, AGENTS.md). Fixes: 72fcd25c7, 077f478d4, f0f78c421, 5c63c10e1; spec R10 wording in the follow-up commit.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · gc's R9 guard reads cursors only from the product worktree; under quiet/stealth a running deliver is reaped
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-security-r2 · finding [open] (reviewer: in scope) · branch_runs returns [] on OSError, so an unlistable runs dir reads as nothing running and gc reaps
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-security-r3 · finding [open] (reviewer: in scope) · read_cursor skips a corrupt or malformed branch cursor, so a not-delivered run beside a deliver-done one reads delivered
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · an unparseable or malformed run file is dropped from the every-cursor fold (admits, or wrong R12 merge-by-hand advice)
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · cursor read failures drop their cause, log nothing and read as the driver's move forever
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · needs_you raises a Need only for no-cursor; no-clone and persistent unread never reach Needs-you
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · _shape_has_lens_review's bare except turns any failure into a false 'predates review lenses'
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · R5 order not pinned: single-condition fixtures and a vacuous R5_ORDER test
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · no test that _Driver.cursor_at re-reads after an unread result
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · the queue-opening verdict (merges next) is untested
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · whose move for ci-red/conflicting is unpinned
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · no tripwire pins the fr-debugging skill's R10 run-start instructions
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-tests-r6 · finding [open] (reviewer: in scope) · two admission tests restate the code under test and cannot fail
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · skill says fr run start refuses a second run on a branch; it refuses only the same workflow
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · fr-debugging explainer's pick-a-profile command lacks --profile and forces --base HEAD
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3 created=2026-11-25T11:45:33+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r3 · finding [open] (reviewer: in scope) · AGENTS.md says both shipped shapes run lens-review; fr-debugging has none
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: gc's R9 guard reads cursors only from the product worktree; under quiet/stealth a running deliver is reaped
+
+077f478d4: preserve.gc_run_hold reads the placement's feature root (space_for, create=False) as well as the worktree; an unresolvable placement or absent non-repo root keeps the workspace ('kept: run cursor location unknown'). Unit and gc dry-run/live tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-security-r2 -->
+### l-security-r2-resolved · finding [fixed] · resolves l-security-r2: branch_runs returns [] on OSError, so an unlistable runs dir reads as nothing running and gc reaps
+
+077f478d4: a runs dir that exists but cannot be listed keeps the workspace (in the gc hold, so down's branch_runs callers are unchanged per R9); absent dir is still no cursor. chmod 000 test.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-security-r3 -->
+### l-security-r3-resolved · finding [fixed] · resolves l-security-r3: read_cursor skips a corrupt or malformed branch cursor, so a not-delivered run beside a deliver-done one reads delivered
+
+72fcd25c7: a non-YAML, non-run-shaped or branch-naming-but-unusable file makes the whole read unread, naming the file; tests for corrupt-beside-delivered and lone-corrupt.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: an unparseable or malformed run file is dropped from the every-cursor fold (admits, or wrong R12 merge-by-hand advice)
+
+72fcd25c7: same change as l-security-r3.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: cursor read failures drop their cause, log nothing and read as the driver's move forever
+
+72fcd25c7: read_cursor returns CursorAnswer(position, read, detail); gitseam Checkout.reach_failure carries the fetch error; PullRequest.cursor_detail (optional, inside unreleased facts 17) and cursor_details carry it into the verdict; _Driver.cursor_at reports it once per head via _report_once.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [fixed] · resolves l-errors-r3: needs_you raises a Need only for no-cursor; no-clone and persistent unread never reach Needs-you
+
+72fcd25c7: no-clone and a caused unread are the operator's move; readiness.cursor_remedy names the remedy on the card and in a new cursor-unread Needs-you row, approved or not.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: _shape_has_lens_review's bare except turns any failure into a false 'predates review lenses'
+
+f0f78c421: catches only WorkflowError/OSError and renders 'fr could not read the workflow shape: <error>'; others propagate. Tests for unknown shape, broken YAML and a RuntimeError.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: R5 order not pinned: single-condition fixtures and a vacuous R5_ORDER test
+
+72fcd25c7: 10 two-condition tests over R5's adjacent pairs; the unused R5_ORDER constant and its vacuous test removed.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: no test that _Driver.cursor_at re-reads after an unread result
+
+72fcd25c7: cursor_at re-reads after unread (three calls, three reads), reports once, and carries a clone-open error.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: the queue-opening verdict (merges next) is untested
+
+72fcd25c7: the queue-opening pass pinned to 'Approved, merges next'; verified it fails with the branch disabled.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: whose move for ci-red/conflicting is unpinned
+
+72fcd25c7: whose move pinned to the session for CI red and an unapproved conflict.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: no tripwire pins the fr-debugging skill's R10 run-start instructions
+
+5c63c10e1: tripwire in test_fr_debugging_journal.py over the skill and both mirrors (run start, start-none rule, refusal wording, review via step record).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-tests-r6 -->
+### l-tests-r6-resolved · finding [fixed] · resolves l-tests-r6: two admission tests restate the code under test and cannot fail
+
+72fcd25c7: _ready and _other_ready checked against hand-written admits per case.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: skill says fr run start refuses a second run on a branch; it refuses only the same workflow
+
+5c63c10e1: skill says the check is the agent's own; spec R10 reworded to match in the follow-up commit.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: fr-debugging explainer's pick-a-profile command lacks --profile and forces --base HEAD
+
+5c63c10e1: explainer shows fr isolation up --branch fix/<slug> [--profile <name>] [--base HEAD].
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3-resolved created=2026-11-25T11:45:33+00:00 state=fixed resolves=l-docs-accuracy-r3 -->
+### l-docs-accuracy-r3-resolved · finding [fixed] · resolves l-docs-accuracy-r3: AGENTS.md says both shipped shapes run lens-review; fr-debugging has none
+
+5c63c10e1: AGENTS.md says fr-goal and fr-goal-light run lens-review and fr-debugging has none.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r8-resolved-2 created=2026-11-25T15:24:42+00:00 phase=4 state=open resolves=p4-r8 tracked_by=https://github.com/derio-net/super-fr/issues/1692 -->
+### p4-r8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1692] · resolves p4-r8: a reviewer's fenced review-findings block is validated only for phase targets, so the skill's d-r<k> block is unchecked (phase 4)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1692.

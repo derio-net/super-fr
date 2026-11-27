@@ -114,7 +114,7 @@ def _queue_view(labels: tuple[str, ...]) -> tuple[list[str], list[str]]:
     from fr.triage.approval import Approved
     from fr.triage.batch import QueueEntry
     from fr.triage.batch_drive import LivePr, Snapshot, drive_pass
-    from fr.triage.model import Batch, PullRequest
+    from fr.triage.model import Batch, CursorPosition, PullRequest
     from fr.triage.wave_queue import QueueConfig
 
     batch = Batch.model_validate({
@@ -130,6 +130,8 @@ def _queue_view(labels: tuple[str, ...]) -> tuple[list[str], list[str]]:
         batches=(batch,), stages={"b1": "pr-open"}, queue=(QueueEntry(batch, pr),),
         live={"b1": live}, repos={"b1": "o/r"}, now=datetime(2026, 11, 20, 12, tzinfo=UTC),
         approvals={"b1": Approved("h1")}, wave_queues={"o/r": QueueConfig()},
+        cursors={"b1": ("h1", CursorPosition(run="r", step="deliver", kind="deliver-done"),
+                        "read")},
     )  # fmt: skip
     plan = drive_pass(snap)
     opened = [a.kind for q in plan.queues for a in q.actions if a.kind == "queue-open"]

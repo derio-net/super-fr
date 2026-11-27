@@ -137,7 +137,6 @@ from fr.triage.approval import (
     PatchIdOf,
     ensure_approval_label,
     facts_without_label,
-    is_approved,
     judge_approval,
     read_release_marker,
     settle_approvals,
@@ -202,7 +201,6 @@ from fr.triage.batch_drive import (
     DEFAULT_MAX_INFLIGHT,
     DEFAULT_WORKSPACE_PREFIX,
     EXPORT_KINDS,
-    HOUSEKEEPING_PREFIX,
     STALE_CLOSEOUT,
     Action,
     Admitted,
@@ -229,7 +227,6 @@ from fr.triage.batch_drive import (
     collected_item_id,
     collected_name,
     collected_used,
-    conflict_decision,
     conflict_item_id,
     default_selection,
     drive_pass,
@@ -246,7 +243,6 @@ from fr.triage.batch_drive import (
     is_archived,
     is_finished,
     marker_of,
-    red_decision,
     settle,
     summary_line,
     unfinished_waves,
@@ -256,7 +252,7 @@ from fr.triage.batch_merge import (
     MergeConflictError,
     MergeContext,
     MergeStopError,
-    choose_method,
+    choose_method_source,
     pr_checks_verdict,
     trial_conflicts,
 )
@@ -273,7 +269,7 @@ from fr.triage.claim_sync import (
 from fr.triage.claims import Claim, expired, held_line, held_map, held_members, taken_keys
 from fr.triage.claims import stale as claim_stale
 from fr.triage.components import page
-from fr.triage.cursor import read_cursor
+from fr.triage.cursor import answer_at
 from fr.triage.dedupe import candidates
 from fr.triage.drive_errors import DriverRefusal, TransientPassFailure, classify
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
@@ -281,6 +277,7 @@ from fr.triage.drive_lock import lock_text as _lock_text
 from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout, GitError
+from fr.triage.handback_rules import ConflictDecision, conflict_decision, red_decision
 from fr.triage.intake import (
     NOT_COLLECTED,
     rejected_by_batch,
@@ -310,7 +307,7 @@ from fr.triage.model import (
     CollectedCloseout,
     ConflictDelivery,
     ConflictEvent,
-    CursorPosition,
+    CursorAnswer,
     CursorReader,
     DeferredEvent,
     DispatchEvent,
@@ -337,12 +334,19 @@ from fr.triage.model import (
     normalize_key,
 )
 from fr.triage.operation_lock import replacement_scope_lock
+from fr.triage.operator_entries import (
+    carry_hand_back,
+    housekeeping_reads,
+    lineage_reads,
+    operator_reads,
+)
 from fr.triage.pacing import Pacer
 from fr.triage.privacy import VisibilityUnreadable, guard_write
 from fr.triage.probe import PassPlan
 from fr.triage.queue_comment import CommentBook
 from fr.triage.queue_comment import sync as queue_comments_sync
 from fr.triage.queue_exec import (
+    REBASE_WARNING,
     EntryInput,
     Landing,
     QueueExecutor,
@@ -350,17 +354,23 @@ from fr.triage.queue_exec import (
     QueueWriter,
     forge_refusal,
     held_plan,
+    landing_refusal,
+    merge_read_hold,
     queue_config,
     queue_refusal,
     read_hold,
     read_slots,
     required_names,
 )
+from fr.triage.queue_handback import handback_onto
+from fr.triage.queue_requests import reader_repos
 from fr.triage.quota import Pace
+from fr.triage.readiness import fact_cursor_details, fact_cursors, merge_refusal
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
 from fr.triage.state_sync import check_scope_name, export_state
 from fr.triage.timestamps import parse_aware
+from fr.triage.wave_overlap import overlap_lines
 from fr.triage.wave_queue import REPORT_KINDS as QUEUE_REPORT_KINDS
 from fr.triage.wave_queue import (
     Hold,
@@ -677,7 +687,7 @@ def event_writer(target: Path, facts: Facts, *, read_errors: bool = False) -> Ev
 
 
 _REPORTED_AS = {"queue-held": "held", "queue-need": "blocked", "queue-warn": "warn"}
-"""The pass action each queue report becomes (`batch_drive._queue_reports`)."""
+"""The pass action each queue report becomes (`fr.triage.queue_reports.queue_reports`)."""
 
 
 def queue_writer(target: Path, repo: str, scope: str) -> QueueWriter:
@@ -915,6 +925,11 @@ def batch_list_command(
         )
 
 
+def _print_overlaps(lines: Sequence[str]) -> None:
+    for line in lines:
+        console.print(line, markup=False, soft_wrap=True)
+
+
 @batch_app.command("create")
 def batch_create_command(
     batch_id: Annotated[str, typer.Argument(help="Batch id, a slug: \\[a-z]\\[a-z0-9-]{0,39}.")],
@@ -960,6 +975,7 @@ def batch_create_command(
     console.print(f"created batch {new.id} ({plural(len(new.ids), 'issue')})", markup=False)
     _say_takes(new.id, admitted)
     _warn_mixed_themes(new, judgements)
+    _print_overlaps(overlap_lines([*judgements.batches, new], judgements, facts, only=new.id))
     if new.wave is not None:  # a wave makes claims owed from now (R3)
         free = [k for k in new.ids if k not in dict(admitted)]
         _settle_claims(env, _claim_ops(new, free, facts, env.me), yes=yes)
@@ -1050,6 +1066,9 @@ def batch_edit_command(
     console.print(f"edited batch {new.id}", markup=False)
     _say_takes(new.id, [(k, h) for k, h in admitted.items() if k in added])
     _warn_mixed_themes(new, judgements)
+    _print_overlaps(
+        overlap_lines(_replace(judgements.batches, new), judgements, facts, only=new.id)
+    )
     owed_before = batch.wave is not None or stage != "proposed"
     owed_after = new.wave is not None or stage != "proposed"
     dropped = [k for k in batch.ids if k not in new.ids]
@@ -1347,14 +1366,16 @@ def batch_suggest_command(
     dir_override: DirOpt = None,
     workspace: WorkspaceOpt = None,
 ) -> None:
-    """Print candidate groupings (shared file, theme, pattern). Writes nothing."""
+    """Print candidate groupings and the overlaps within one wave. Writes nothing."""
     _, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     found = suggest(judgements, facts)
-    if not found:
+    overlaps = overlap_lines(judgements.batches, judgements, facts)
+    if not found and not overlaps:
         console.print("no suggestions")
         return
     for s in found:
         console.print(f"{s.signal} {s.label}: {', '.join(s.keys)}", markup=False, soft_wrap=True)
+    _print_overlaps(overlaps)
 
 
 # ---------------------------------------------------------------- dispatch
@@ -3304,13 +3325,8 @@ def batch_merge_command(
             except (DriverRefusal, TransientPassFailure) as exc:  # the pass's own boundary
                 _fail(exc.message, code=exc.code)
             plan = driver.last_pass
-            if batch_ids and plan is not None:
-                unapproved = [n for n in names if n in plan.awaiting]
-                if unapproved:
-                    _fail(
-                        f"not approved: {', '.join(unapproved)}: fr merges a batch PR only "
-                        f"with the operator's `{APPROVED_FR.name}` label on it"
-                    )
+            if batch_ids and plan is not None and (refused := merge_refusal(names, plan)):
+                _fail(refused)
             if not yes:
                 return
             done, said = _merge_progress(driver, names, plan)
@@ -4207,6 +4223,7 @@ class _Driver:
         self._comment_books: dict[str, CommentBook] = {}  # repo -> its marker comments (R28)
         self._queue_needs: dict[str, list[str]] = {}
         self._allowed: dict[str, dict[str, Any]] = {}  # repo -> its merge methods, read at build
+        self._method_source: dict[str, str] = {}  # repo -> where its chosen method came from
         # per pass (triage-intake R9): repos whose origin this pass checked, and those held
         self._ctx_checked: set[str] = set()
         self._ctx_held: dict[str, DefaultBranchUnknown] = {}
@@ -4242,7 +4259,7 @@ class _Driver:
         self.pace: Pace | None = None
         # (repo, head sha) -> the run cursor's position there: a commit never changes, so
         # each open batch PR head is read once per process (exit-gates R18)
-        self._cursors: dict[tuple[str, str], CursorPosition | None] = {}
+        self._cursors: dict[tuple[str, str], CursorAnswer] = {}
         # (repo, default-branch tip, batch branch) -> its gated rows there (R13, R14): they
         # move only when the default branch does
         self._ledger_rows: dict[tuple[str, str, str], LedgerRead] = {}
@@ -4256,18 +4273,20 @@ class _Driver:
 
     # -------------------------------------------------------------- reaching out
 
-    def cursor_at(self, pr: PullRequest) -> CursorPosition | None:
-        """The run cursor's position at open batch PR *pr*'s head, read through the repo's
-        clone (`gitseam`); None with no clone, or one that cannot reach the head."""
+    def cursor_at(self, pr: PullRequest) -> CursorAnswer:
+        """*pr*'s head cursor and read status (`cursor.answer_at`, R1): a read head is cached,
+        an `unread` one is read again next call, its cause said once per head (l-errors-r2)."""
         key = (pr.repo, pr.head_oid)
-        if key not in self._cursors:
-            if self.path_of(pr.repo) is None or not pr.head_oid:
-                return None
-            try:
-                self._cursors[key] = read_cursor(self._reader(pr.repo), pr)
-            except TriageError:
-                return None  # unknown this pass; read again next pass
-        return self._cursors[key]
+        if key in self._cursors:
+            return self._cursors[key]
+        has_clone = self.path_of(pr.repo) is not None
+        got = answer_at(pr, (lambda: self._reader(pr.repo)) if has_clone else None)
+        if got.read == "unread":
+            said = f"{pr.repo}#{pr.number}: run cursor not read: {got.detail}"
+            self._report_once(f"cursor\0{pr.repo}\0{pr.head_oid}", said)
+        if got.read == "read":
+            self._cursors[key] = got
+        return got
 
     def client(self, facts: Facts, repo: str) -> GhClient:
         if repo not in self._clients:
@@ -4447,7 +4466,7 @@ class _Driver:
         if repo not in self._merge:
             try:
                 self._allowed[repo] = client.repo_merge_methods(repo)
-                method = choose_method(
+                method, self._method_source[repo] = choose_method_source(
                     self.method_override,
                     self._allowed[repo],
                     configured=facts.config_for(repo).merge_method,
@@ -4469,7 +4488,7 @@ class _Driver:
         config = facts.config_for(repo)
         ctx.version = config.version
         try:  # the allowed methods were read at the build: no forge read here
-            ctx.method = choose_method(
+            ctx.method, self._method_source[repo] = choose_method_source(
                 self.method_override, self._allowed[repo], configured=config.merge_method
             )
         except TriageError as exc:
@@ -4577,6 +4596,7 @@ class _Driver:
                     base=str(view.get("base_ref") or ""),
                     mergeable=str(view.get("mergeable") or ""),  # R17: the conflict probe
                     merge_state=str(view.get("merge_state") or ""),
+                    url=e.pr.url,
                 )
             # Every landed batch, selected or not: adopting a finished close-out is
             # bookkeeping (gh#990). Only the selection is read further.
@@ -4635,14 +4655,22 @@ class _Driver:
                 if now - event.at >= STALE_CLOSEOUT:  # is its tab still live? (gh#1025)
                     stale.append(b)
             self._queue_needs, self._queue_live = {}, live
-            queue_reads = self._wave_queue_reads(facts, judgements, repos, {*unread, *carried})
+            # p2-r3: a repo only a queue request names is read too (`queue add` takes any)
+            qrepos = reader_repos(repos, judgements.queue_requests, scope_id(self.scope),
+                                  facts.repos)  # fmt: skip
+            queue_reads = self._wave_queue_reads(facts, judgements, qrepos, {*unread, *carried})
             queue_reads["queue_housekeeping"] = self._housekeeping_reads(
-                facts, judgements, repos, {*unread, *carried}
+                facts, judgements, qrepos, {*unread, *carried}
             )
+            queue_reads.update(operator_reads(self, facts, judgements, qrepos, {*unread, *carried}))
             gated_in, gated_runs = self._barrier_reads(
-                facts, judgements, repos, queue, live, {*unread, *carried}
+                facts, judgements, qrepos, queue, live, {*unread, *carried}
             )
             queue_reads["queue_released"], queue_reads["queue_runs"] = gated_in, gated_runs
+            queue_reads.update(lineage_reads(
+                self, facts, judgements, qrepos, live, queue_reads["bases"], {*unread, *carried},
+                reads=queue_reads,
+            ))  # fmt: skip
         except FORGE_ERRORS as exc:
             raise ForgeReadError(f"a forge read failed: {exc}", code=1) from exc
         done_waves = finished_waves(judgements.batches, stages)
@@ -4684,6 +4712,8 @@ class _Driver:
             closeout_waits=self._closeout_waits(due, repos),
             **reads,
             approvals=approvals,
+            cursors=fact_cursors(queue),
+            cursor_details=fact_cursor_details(queue),
             batches=tuple(judgements.batches),
             stages=stages,
             queue=queue,
@@ -4724,11 +4754,11 @@ class _Driver:
             awaiting_unlabelled=awaiting_unlabelled(facts),
             ledger_unknown=fact_ledger_unknown(judgements.batches, facts, stages),
             post_merge_repos=frozenset(
-                r for r in set(repos.values()) if facts.config_for(r).post_merge
+                r for r in set(qrepos.values()) if facts.config_for(r).post_merge
             )
             if self.adapter.kind == "host"
             else frozenset(),
-            placements=self._placements(repos, {*unread, *carried}),
+            placements=self._placements(qrepos, {*unread, *carried}),
             **queue_reads,
             **claim_plan,
         )
@@ -5859,6 +5889,7 @@ class _Driver:
                 loader=self.runner if self.adapter.kind == "cloud" else None,
                 # the repos this pass judged `ci none`, as the walk did (p1-r2)
                 ci_none=frozenset(r for r, none in self._ci.items() if none),
+                checkouts=self.checkout_paths,
             )
         except Exception as exc:  # noqa: BLE001 - the board is a view; it never fails a pass
             cause = triage_kanban_cmd.one_line(exc)
@@ -6367,7 +6398,11 @@ class _Driver:
         reports itself."""
         stopped = self._stopped_line(batch, action, exc, failed=False)
         earlier = self._conflicts.setdefault(repo, [])
-        decision = conflict_decision(batch.events, exc.head, exc.paths, tuple(earlier))
+        decision = (
+            ConflictDecision("handback")
+            if exc.reissue  # R3: free, never skipped
+            else conflict_decision(batch.events, exc.head, exc.paths, tuple(earlier))
+        )
         earlier.append((batch.id, exc.paths))
         if decision.kind == "skip":
             return stopped, False
@@ -6594,7 +6629,8 @@ class _Driver:
     ) -> ConflictEvent:
         return ConflictEvent(
             kind="conflict", at=_now_after(batch), head=exc.head, paths=list(exc.paths),
-            delivered=delivered, handle=handle,  # type: ignore[arg-type]
+            delivered=delivered, handle=handle, onto=exc.onto or None,  # type: ignore[arg-type]
+            reissue=exc.reissue,
         )  # fmt: skip
 
     def _hand_back_target(self, facts: Facts, batch: Batch, repo: str) -> tuple[str, Any, Launch]:
@@ -6646,18 +6682,21 @@ class _Driver:
         judgements: Judgements,
         batch: Batch,
         repo: str,
+        brief: str = "",
     ) -> tuple[str, bool]:
-        """Deliver the brief: to the target's idle session, else nothing while it is
-        working or blocked, else to a fresh conflict session (R20, R23)."""
+        """Deliver the brief (*brief*, else the conflict brief): to the target's idle session,
+        else nothing while it is working or blocked, else to a fresh conflict session (R20,
+        R23)."""
         last = last_dispatch(batch)
         name, target, launch = self._hand_back_target(facts, batch, repo)
         branch = last.branch if last else batch_branch(batch)
         ctx = self._ctx_or_hold(facts, repo)
         if ctx is None:  # R13
             return f"{stopped}; held: default branch unknown", False
-        brief = conflict_brief(
+        brief = brief or conflict_brief(
             batch, pr=action.pr, head=exc.head, paths=exc.paths, branch=branch,
-            base=ctx.main, mirrors=facts.config_for(repo).mirrors,
+            base=ctx.main, mirrors=facts.config_for(repo).mirrors, onto=exc.onto,
+            onto_ref=exc.onto_ref,
         )  # fmt: skip
         if not self.adapter.carries(name):  # p4-o2: another driver's session
             return (
@@ -6909,7 +6948,7 @@ class _Driver:
         batch = self._queue_batch(key)
         if batch is None:
             kind, _, _ = key.partition("#")
-            if kind not in ("closeout", "archive", "export", "housekeeping"):
+            if kind not in ("closeout", "archive", "export", "housekeeping", "operator"):
                 return None
             try:
                 client = self.client(facts, repo)
@@ -7017,10 +7056,23 @@ class _Driver:
             return self._queue_hand_back_other(action, facts, judgements, repo, live)
         if batch is None or live is None:
             return "no batch session to hand it back to"
+        if action.kind == "queue-carry":  # wave-queue-gaps R4
+            return carry_hand_back(self, action, facts, judgements, batch, live, repo)
         if action.reason == "conflict":
             why = action.detail.removeprefix(f"eject {batch.id}: ")
             said = why if why.startswith("PR #") else f"PR #{live.number} (batch {batch.id}): {why}"
-            exc = MergeConflictError(said, batch=batch.id, head=action.head, paths=action.paths)
+            onto, ref = handback_onto(
+                action, scope_id(self.scope), self.checkout(repo).default_branch()
+            )
+            exc = MergeConflictError(
+                said,
+                batch=batch.id,
+                head=action.head,
+                paths=action.paths,
+                onto=onto,
+                onto_ref=ref,
+                reissue=action.decision == "reissue",
+            )
             merge = Action("warn", batch.id, action.detail, pr=live.number, head=action.head)
             line, _ = self._conflict(exc, merge, facts, judgements, batch, repo)
             return line
@@ -7114,6 +7166,26 @@ class _Driver:
             self._queue_block(facts, repo), ci_none=self._ci_none(repo),
             versioned=facts.config_for(repo).version is not None,
         )  # fmt: skip
+
+    def _landing_hold(self, facts: Facts, repo: str) -> str | None:
+        """Why *repo*'s queue may not plan builds and landings (spec 2026-11-26-landing-method
+        R2, R4): its chosen method cannot land by push, or no method can be chosen or read.
+        Only `_queue_gate` asks: `_queue_refusal`, which the resume pass calls, builds no
+        merge context. Says the rebase warning, once, when the landing is allowed."""
+        try:
+            ctx = self._ctx_or_hold(facts, repo)  # says a held default branch once (R13)
+            if ctx is None:
+                return f"cannot tell {repo}'s default branch ({self._ctx_held[repo]}): held"
+        except DriverRefusal as exc:
+            return exc.message
+        except (ForgeReadError, TransientPassFailure) as exc:
+            return merge_read_hold(exc, transient=getattr(exc, "code", 1) == 1)
+        land = self._queue_block(facts, repo).land
+        why = landing_refusal(land, ctx.method, source=self._method_source[repo],
+                              allowed=self._allowed[repo]["allowed"])  # fmt: skip
+        if why is None and land == "merge" and ctx.method == "rebase":
+            self._report_once(f"rebase-first-parent\0{repo}", f"{repo}: {REBASE_WARNING}")
+        return why
 
     def _queue_resume(self, facts: Facts, judgements: Judgements, skip: Iterable[str]) -> bool:
         """R24: before the pass reads anything, finish what a killed driver left in each
@@ -7303,65 +7375,13 @@ class _Driver:
     def _housekeeping_reads(
         self, facts: Facts, judgements: Judgements, repos: Mapping[str, str], skip: Iterable[str]
     ) -> dict[str, tuple[tuple[LivePr, datetime | None], ...]]:
-        """R32: each repo's open housekeeping PRs (a DevOps stage's `chore/ops-<slug>` branch,
-        from the repo itself by an allowed author) whose `approved-fr` is valid, settled on
-        the queue's own events: recorded as an `approval` at its head and patch-id, voided
-        (label off) when a push changes its diff (R12). Only such a PR is admitted, with the
-        time its approval was recorded, which orders it. Nothing is written without --yes."""
-        out: dict[str, tuple[tuple[LivePr, datetime | None], ...]] = {}
-        scope = scope_id(self.scope)
-        for repo in sorted(set(repos.values()) - set(skip)):
-            allowed = allowed_authors(repo, facts)
-            mine = [
-                p for p in facts.prs
-                if p.repo == repo and p.state == "OPEN"
-                and p.head_ref.startswith(HOUSEKEEPING_PREFIX)
-                and distrust(p.author, p.cross_repo, allowed) is None
-            ]  # fmt: skip
-            if not mine:
-                continue
-            client = self.client(facts, repo)
-            events = [e for q in judgements.queues if q.repo == repo and q.scope == scope
-                      for e in q.events if isinstance(e, QueueApprovalEvent)]  # fmt: skip
-            found: list[tuple[LivePr, datetime | None]] = []
-            for pr in mine:
-                view = client.pr_view(repo, pr.number)
-                head = str(view.get("head_oid") or "")
-                if view.get("state") != "OPEN" or not head:
-                    continue
-
-                def record(event: QueueApprovalEvent, repo: str = repo) -> None:
-                    checkout = self._fetched_reader(repo)
-                    base = checkout.rev_parse(f"origin/{checkout.default_branch()}")
-                    queue_writer(self.target, repo, scope)(event, base=base)
-                    events.append(event)
-
-                verdict, at = settle_entry_approval(
-                    client, record, repo, QueueEntryRef(pr=pr.number, kind="housekeeping"),
-                    events, view, _say, now=_now(), dry_run=not self.yes,
-                    patch_id_of=self._patch_id_of(facts, repo),
-                )  # fmt: skip
-                if not is_approved(verdict):
-                    continue
-                checks, failing = checks_verdict(
-                    client.pr_required_checks(repo, pr.number), pr.checks or {},
-                    ci_none=self._ci_none(repo),
-                )  # fmt: skip
-                found.append((LivePr(
-                    number=pr.number, state="OPEN", draft=bool(view.get("draft")), head=head,
-                    checks=checks, failing=failing, head_ref=pr.head_ref, trusted=True,
-                    base=str(view.get("base_ref") or ""),
-                    labels=tuple(str(n) for n in view.get("labels") or ()),
-                ), at))  # fmt: skip
-            if found:
-                out[repo] = tuple(found)
-        return out
+        return housekeeping_reads(self, facts, judgements, repos, skip)
 
     def _queue_gate(self, qplan: QueuePlan, facts: Facts) -> QueuePlan:
         """The pass's own word on a queue plan: a repo that cannot run the queue is held
         (R7, R20, R35); a check that never reported is a Need (R7); with --yes, the last
         landing's `post_merge` and read-back gate the next one (R33, R35)."""
-        refusal = self._queue_refusal(facts, qplan.repo)
+        refusal = self._queue_refusal(facts, qplan.repo) or self._landing_hold(facts, qplan.repo)
         if refusal is not None:
             return held_plan(qplan, refusal)
         needs = tuple(QueueAction("queue-need", qplan.repo, n, wave=qplan.wave)

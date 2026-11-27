@@ -1,2 +1,0 @@
-bump: minor
-summary: "Delivered draft PRs settle: fr waits for mergeability and CI and fixes them, per the new git.settle setting (a repo that writes git.settle makes an older fr refuse its settings)"

@@ -38,7 +38,7 @@ from fr.triage.batch_drive import (
     unfinished_waves,
     wave_group,
 )
-from fr.triage.model import Batch, Export, PullRequest
+from fr.triage.model import Batch, CursorPosition, Export, PullRequest
 from fr.triage.wave_queue import QueueConfig
 
 pytestmark = pytest.mark.own_artifacts
@@ -79,6 +79,9 @@ def _pr(bid: str, n: int, head: str = "", **kw: Any) -> PullRequest:
     )
 
 
+DELIVERED = CursorPosition(run="r", step="deliver", kind="deliver-done")
+
+
 def _live(n: int, head: str, **kw: Any) -> LivePr:
     return LivePr(number=n, state=kw.pop("state", "OPEN"), draft=kw.pop("draft", False),
                   head=head, checks=kw.pop("checks", "green"), **kw)  # fmt: skip
@@ -105,6 +108,7 @@ def _snap(
     # Every queued PR carries the operator's label unless a test says otherwise
     # (merge-train-safety §A): the walk's approval gate has its own tests.
     kw.setdefault("approvals", {e.batch.id: First(e.pr.head_oid) for e in queue})
+    kw.setdefault("cursors", {bid: (p.head, DELIVERED, "read") for bid, p in live.items()})
     return Snapshot(
         batches=tuple(batches),
         stages=stages,  # type: ignore[arg-type]
