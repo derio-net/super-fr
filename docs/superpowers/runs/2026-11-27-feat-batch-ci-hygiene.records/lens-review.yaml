@@ -1,0 +1,16 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-ci-hygiene
+step: lens-review
+outcome: done
+journal:
+  - kind: review
+    id: lens-review-1
+    global: true
+    title: "lens review: docs-accuracy and security, no findings"
+    body: |
+      docs-accuracy: both touched pages (fr-progress explainer, docs-currency stamp) true of the code; shape file matches the diff.
+      security: no ci.yml job without its own block uses a token beyond contents: read (no gh, GH_TOKEN, secrets or REST; artifacts/cache use the runtime token); the retirement removes a pull-requests: write job and a runtime pip install from a tag; UV_PYTHON pins widen nothing.
+resolves: []
+evidence:
+  review: lens-review-1
+  reviewer: "docs-accuracy=ac6a8dc4cc5027877,security=a69c9817eea74b194"
