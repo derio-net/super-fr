@@ -29,13 +29,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from versions import Version  # noqa: E402
 
 # The upper bound is either a literal version, or NOT one: a derived ceiling,
-# `f">=4.20.0,<{CEILING_VERSION}"`. Python 3.11 hands the tokenizer that whole
-# f-string as one STRING (`<` then `{`); 3.12+ splits it, and the FSTRING_MIDDLE
-# piece simply ends after the `<`. Either way group 2 is None.
+# `f">=4.20.0,<{CEILING_VERSION}"`, whose FSTRING_MIDDLE piece ends after the
+# `<`, so group 2 is None.
 FLOOR_RE = re.compile(
     r"(?<![\w.])>=\s*(\d+\.\d+\.\d+)\s*,\s*<\s*(?:(\d+\.\d+\.\d+)(?![\w.])|(?=\{|$))",
 )
-_STRING_TOKENS = {tokenize.STRING, getattr(tokenize, "FSTRING_MIDDLE", tokenize.STRING)}
+_STRING_TOKENS = {tokenize.STRING, tokenize.FSTRING_MIDDLE}
 
 
 @dataclass(frozen=True)
@@ -72,7 +71,7 @@ def floors_in_source(source: str) -> list[Floor]:
         for tok in tokenize.generate_tokens(io.StringIO(source).readline):
             if tok.type in _STRING_TOKENS:
                 found.extend(_floors_in(tok.string, tok.start[0]))
-    except (tokenize.TokenError, SyntaxError, IndentationError):
+    except tokenize.TokenError, SyntaxError, IndentationError:
         # Not valid Python: fall back to quoted literals found by text alone.
         found = [
             f
