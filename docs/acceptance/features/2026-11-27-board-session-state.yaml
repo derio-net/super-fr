@@ -77,9 +77,14 @@ rows:
       ledger is an empty one plus a note.
     origin:
     - spec:2026-11-27-board-session-state#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_dwell.py#test_a_column_change_closes_an_interval_and_restarts_only_the_column
+      - super-fr:tests/unit/test_triage_state_ref.py#test_a_moved_ref_overwrites_a_locally_changed_dwell_ledger_without_a_conflict
+      - super-fr:tests/unit/test_triage_kanban_cmd.py#test_write_board_beside_a_live_driver_observes_in_memory_and_stores_nothing
+    status: ci
+    notes: observe, the cap, first-seen, load notes, the one-writer rule and the fetch
+      exemption are unit-tested in CI
     verify: none
   - id: batch-card-dwell-line
     capability: Triage Batches page
