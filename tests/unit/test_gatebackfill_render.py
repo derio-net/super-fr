@@ -140,3 +140,10 @@ def test_tracked_rows_print_the_link_only_form(tmp_path: Path) -> None:
         "fr acceptance set-status --id widget-live --issue 'example-org/widgets#7' "
         "--feature <spec-slug>"
     ]
+
+
+def test_the_module_runs_under_hermetic_git() -> None:
+    import os
+
+    assert os.environ["GIT_CONFIG_GLOBAL"] == os.devnull
+    assert os.environ["GIT_CONFIG_NOSYSTEM"] == "1"

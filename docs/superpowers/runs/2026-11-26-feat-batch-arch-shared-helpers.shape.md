@@ -21,10 +21,13 @@ tests/unit/
                                                          (test_record_lens imports it as write_record_text)
   hermetic_git.py           + apply_hermetic_git, hermetic_git fixture
                                                        ← 6 modules: usefixtures, no setenv copies;
-                                                         test_merge_evidence.stub_fetch calls apply_hermetic_git
+                                                         test_merge_evidence.stub_fetch and
+                                                         test_gatebackfill_closes call apply_hermetic_git
   test_yamlio_strict.py     + single construct_mapping owner, yamlio import purity, default error
-  test_record_helpers.py    + no placement copies, helper bytes/path
-  test_hermetic_git.py      + activation, no setenv copies, restoration
+  test_record_helpers.py    + no placement copies (11 modules), helper bytes/path
+  test_hermetic_git.py      + activation, fixture runs, glob: no null-device setenv copy, restoration
+  test_timestamp_callers.py + _created_since / _pr_time keep their rules for awkward stamps
+  test_usage_backfill.py    ~ _worth_reading reads captured_at naive as UTC
   test_journal_gate_help.py + --gate help string from Gate
   test_utc_time.py          + parse_as_utc contract
   test_triage_timestamps.py ~ body scan also guards parse_as_utc
