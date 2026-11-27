@@ -53,7 +53,7 @@ steps:
       self-review passed
   implement:
     state: running
-    at: '2026-11-27T12:21:22+00:00'
+    at: '2026-11-27T12:25:54+00:00'
     members:
     - implement-phase
     - review-phase
@@ -87,6 +87,15 @@ steps:
           reviewer: a830a865ae2a88c0b
           visual: none
           findings: p1-r1,p1-r2
+      phase/2/implement-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-11-27T12:25:54+00:00'
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          tier: standard
+          bound: claude-sonnet-5
+          session: cb639c3e-79db-4eda-8c7a-b9aa00904308
   journal-check:
     state: pending
   lens-review:
