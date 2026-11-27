@@ -50,8 +50,9 @@ rows:
       and its gate-pass and tester hand-off stages report what their own gate still
       owes
     origin:
-    - spec:2026-11-27-ops-gate-truth#R10
-    - spec:2026-11-27-ops-gate-truth#R11
+    - spec:2026-11-27-ops-gate-truth#R12
+    - spec:2026-11-27-ops-gate-truth#R13
+    - spec:2026-11-27-ops-gate-truth#R14
     levels: {}
     status: not-implemented
     notes: ''
