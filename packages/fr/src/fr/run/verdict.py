@@ -36,7 +36,7 @@ class Verdict[T]:
     warnings: tuple[Say, ...] = ()
 
 
-class RunRefusal(Exception):
+class RunRefusal(Exception):  # noqa: N818 — the spec's name (R1): a refusal, not an error
     """A refusal raised by run-engine code; the calling command prints `lines` and exits."""
 
     def __init__(self, lines: tuple[Say, ...], exit_code: int = 2) -> None:
