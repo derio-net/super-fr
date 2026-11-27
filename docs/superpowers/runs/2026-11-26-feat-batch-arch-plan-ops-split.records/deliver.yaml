@@ -1,0 +1,10 @@
+schema_version: 12
+run: 2026-11-26-feat-batch-arch-plan-ops-split
+step: deliver
+outcome: done
+acceptance: []
+emitted:
+  pr: https://github.com/derio-net/super-fr/pull/1723
+evidence:
+  tests: ci
+  walk: none
