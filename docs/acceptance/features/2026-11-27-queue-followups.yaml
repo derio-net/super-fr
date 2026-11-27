@@ -55,9 +55,20 @@ rows:
     - spec:2026-11-27-queue-followups#R5
     - spec:2026-11-27-queue-followups#R6
     - spec:2026-11-27-queue-followups#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_closeout_due_queued_is_due_at_once
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_drive_pass_queue_landed_batch_closes_out_without_fallback
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_queue_landed_batch_is_closed_out_without_the_release_or_the_fallback
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_wave_closeout_waits_for_every_member_due
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_wave_closeout_held_for_unverified_member
+      - super-fr:tests/unit/test_triage_probe.py#test_deadline_repos_reads_a_repo_whose_closeout_fallback_passed
+      - super-fr:tests/unit/test_triage_probe.py#test_deadline_repos_fails_open_on_no_merged_at_and_skips_queue_landed
+      - super-fr:tests/unit/test_triage_probe.py#test_a_quiet_pass_with_a_deadline_repo_reads_only_it
+      - super-fr:tests/unit/test_triage_pacing_state.py#test_planned_at_round_trips_and_a_bad_value_is_none
+    status: ci
+    notes: closeout_due(queued), wave hold and deadline-woken paced pass; unit tests
+      in CI (R5-R7)
     verify: none
   - id: wave-overlap-repo-case
     capability: wave plan overlap
