@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/ops/**
   - packages/fr/src/fr/commands/ops_cmd.py
-reviewed: 2026-11-27 stages 4 to 7 compare the ops workspace with the default branch first and merge it after a confirmation, never a rebase; changed ops are trusted again and reopened, and a refresh after stage 4 goes back to stage 4 (ops-gate-truth R1-R6, gh#1617); 2026-11-25 under quiet and stealth `.fr/ops.yaml` is read from the protected configuration branch's fetched tip or refused, and the ops gate's first stage also stops on `.fr/profiles.yaml` (S1 R7, R9); 2026-11-24 still true after ci-economy phase 1 (a cancelled check now reads as pending, never failing, in every check reader; 2026-11-24 still true; the trust tree also leaves out a run shape file as fr bookkeeping, which this page does not list (show-me-visuals R12); no claim here names how a cancelled check is read); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-21 gh#1614 a print-only apply is refused and never counted applied; a done entry says if the apply ran; 2026-11-19 a failed forge read of the default branch is an exit-2 refusal that names the error (batch consumer-followups, gh#1554); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth); 2026-11-21 stage 4 posts a marker comment beside the postmerge-done label, and the queue needs both; 2026-11-20 stage 2 adds `fr-queue:release` and merges nothing, stage 4 adds `fr-queue:postmerge-done`, `--method` removed (wave merge queue R26)
+reviewed: 2026-11-28 a Test Plan change at stage 6 or 7 goes back to stage 5, merged-in entries never close a reopened op, an existing pass is re-checked after a restart, a no-op merge that still differs stops (phase 1 review); 2026-11-27 stages 4 to 7 compare the ops workspace with the default branch first and merge it after a confirmation, never a rebase; changed ops are trusted again and reopened, and a refresh after stage 4 goes back to stage 4 (ops-gate-truth R1-R6, gh#1617); 2026-11-25 under quiet and stealth `.fr/ops.yaml` is read from the protected configuration branch's fetched tip or refused, and the ops gate's first stage also stops on `.fr/profiles.yaml` (S1 R7, R9); 2026-11-24 still true after ci-economy phase 1 (a cancelled check now reads as pending, never failing, in every check reader; 2026-11-24 still true; the trust tree also leaves out a run shape file as fr bookkeeping, which this page does not list (show-me-visuals R12); no claim here names how a cancelled check is read); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-21 gh#1614 a print-only apply is refused and never counted applied; a done entry says if the apply ran; 2026-11-19 a failed forge read of the default branch is an exit-2 refusal that names the error (batch consumer-followups, gh#1554); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth); 2026-11-21 stage 4 posts a marker comment beside the postmerge-done label, and the queue needs both; 2026-11-20 stage 2 adds `fr-queue:release` and merges nothing, stage 4 adds `fr-queue:postmerge-done`, `--method` removed (wave merge queue R26)
 ---
 
 # fr ops — manual operations you can check and run
@@ -327,9 +327,22 @@ stops. It names the conflicted paths and the commands to merge by hand.
 
 A reopened op is open until stage 4 completes again. A closure recorded before the update
 does not close it. Only its live status, or evidence recorded after the update, closes it.
+A journal entry that the merge brings in from the default branch is not evidence recorded
+after the update.
+
 If the update occurs at stage 5, 6 or 7 and reopens an op, the host state forgets stage 4 and
 the stages after it. The same run then goes back to stage 4, which applies the reopened ops
-again. A change to the Test Plan only reopens nothing.
+again. If only the Test Plan changed, the update reopens no op. At stage 6 or 7 it then
+forgets stage 5 and the stages after it. The run goes back to stage 5, which records the
+Test Plan steps again.
+
+After such a restart, a `gate:devops-passed` label that is already on the PR counts only when
+the devops blockers on the updated workspace are empty. Stage 6 reads them itself. If one
+remains, stage 6 stops and names it. fr never removes the label.
+
+If the ops branch already holds the pinned commit and the comparison still differs, a merge
+changes nothing. The stage stops, names the ops that differ, and tells you to resolve it by
+hand. It does not merge, reopen or restart again.
 
 If the run's plan directory is not on `origin/<default>`, the stage stops and names the
 directory. It does not update the workspace.
