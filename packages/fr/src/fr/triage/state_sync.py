@@ -55,10 +55,12 @@ import shutil
 import stat
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
 from fr.triage.errors import TriageError
+from fr.triage.merge_stops import MergeStop, export_drift_stop_key, record_stop
 
 # The export set: a subset of `fr.triage.state_ref.REF_FILES` (the state ref carries more:
 # merge stops, the lease, durable settings, the cloud mailbox), pinned by test_triage_state_ref.
@@ -85,6 +87,10 @@ _RECORD_SCHEMA = 1
 
 class BadRecord(TriageError):  # noqa: N818 - a refusal, beside TriageError
     """The repo-side record is a symlink, not a regular file, or does not parse (R3)."""
+
+    def __init__(self, path: Path, why: str) -> None:
+        self.why, self.root = why, path.parent
+        super().__init__(f"{path} {why}; `fr triage state export --force` rewrites it")
 
 
 class Drift(NamedTuple):
@@ -119,7 +125,7 @@ class ExportDrift(TriageError):  # noqa: N818 - a refusal, beside TriageError
     """An export that would overwrite a repo-side edit, refused before any write (R3)."""
 
     def __init__(self, drift: tuple[Drift, ...], *, base: Path, root: Path) -> None:
-        self.drift = drift
+        self.drift, self.root = drift, root
         super().__init__(
             f"{root} was "
             + drift_text(
@@ -327,19 +333,18 @@ def read_record(root: Path) -> dict[str, str] | None:
     `BadRecord`, naming the file, when it is a symlink, not a regular file, or does not
     hold `{"schema": 1, "files": {<durable path>: <sha256>}}`."""
     path = root / RECORD_FILE
-    fix = "`fr triage state export --force` rewrites it"
     try:
         data = _read(root, RECORD_FILE)
     except _SymlinkError:
-        raise BadRecord(f"{path} is a symlink, not read; {fix}") from None
+        raise BadRecord(path, "is a symlink, not read") from None
     except OSError as exc:
-        raise BadRecord(f"{path} cannot be read ({exc.strerror or exc}); {fix}") from exc
+        raise BadRecord(path, f"cannot be read ({exc.strerror or exc})") from exc
     if data is None:
         return None
     try:
         body = json.loads(data.decode("utf-8"))
     except UnicodeDecodeError, ValueError:
-        raise BadRecord(f"{path} is not JSON; {fix}") from None
+        raise BadRecord(path, "is not JSON") from None
     files = body.get("files") if isinstance(body, dict) else None
     if (
         not isinstance(body, dict)
@@ -347,8 +352,43 @@ def read_record(root: Path) -> dict[str, str] | None:
         or not isinstance(files, dict)
         or not all(_record_path(k) and isinstance(v, str) for k, v in files.items())
     ):
-        raise BadRecord(f"{path} is not a schema {_RECORD_SCHEMA} export record; {fix}")
+        raise BadRecord(path, f"is not a schema {_RECORD_SCHEMA} export record")
     return dict(files)
+
+
+def stop_on(
+    exc: ExportDrift | BadRecord,
+    target: Path,
+    repo: str,
+    *,
+    scope_args: Sequence[str],
+    path: str,
+    at: str,
+) -> str:
+    """Record the driver's `export-drift:<repo>` stop in the state directory *target* and
+    return its reason (R4): the whole operator text, for *repo*'s export into *path*
+    refused at default-branch sha *at*. The commands carry the driver's own scope options
+    (*scope_args*), each argument quoted. The driver never forces."""
+    text = drift_stop_text(exc, scope_args=scope_args or ["--repo", repo], path=path, at=at)
+    stamp = datetime.now(UTC).isoformat(timespec="seconds")
+    record_stop(target, export_drift_stop_key(repo), MergeStop(at, text, stamp))
+    return text
+
+
+def drift_stop_text(
+    exc: ExportDrift | BadRecord, *, scope_args: Sequence[str], path: str, at: str
+) -> str:
+    """`stop_on`'s reason: for drift, `drift_text` with the driver's commands; for a bad
+    record, the record named with its fault and the forced export that rewrites it."""
+    rel = f"{path}/{exc.root.name}"
+    force = ["fr", "triage", "state", "export", *scope_args, "--to", path, "--force"]
+    if isinstance(exc, ExportDrift):
+        imp = ["fr", "triage", "state", "import", *scope_args, "--from", path]
+        return f"{rel} was " + drift_text(exc.drift, import_argv=imp, force_argv=force, at=at)
+    return (
+        f"{rel}/{RECORD_FILE} {exc.why}: mend or remove it in a checkout of the default "
+        f"branch at or after {at}, or run `{shlex.join(force)}` there, which rewrites it"
+    )
 
 
 def find_drift(state_dir: Path, root: Path, record: Mapping[str, str]) -> tuple[Drift, ...]:
