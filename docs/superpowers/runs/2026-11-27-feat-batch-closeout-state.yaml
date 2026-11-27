@@ -3,7 +3,7 @@ run: 2026-11-27-feat-batch-closeout-state
 workflow: fr-goal@1
 branch: feat/batch-closeout-state
 started: '2026-11-27T11:04:53+00:00'
-cursor: spec-review
+cursor: plan
 steps:
   brainstorm:
     state: done
@@ -12,17 +12,25 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-27-closeout-state-design.md
   spec-review:
-    state: running
-    at: '2026-11-27T11:21:57+00:00'
+    state: done
+    at: '2026-11-27T11:28:51+00:00'
     units:
       step/spec-review:
         attempts:
         - dispatched: '2026-11-27T11:21:57+00:00'
+          agent: a90444264dcb0e3da
           agent_type: super-fr:fr-spec-reviewer
           harness: claude-code
+          model: claude-opus-5-5
           tier: hard
           bound: claude-opus-5-5
           session: cb639c3e-79db-4eda-8c7a-b9aa00904308
+          returned: '2026-11-27T11:28:50+00:00'
+          outcome: done
+        evidence:
+          review: spec-review-1
+          reviewer: a90444264dcb0e3da
+          findings: s-r1,s-r2,s-r3,s-r4,s-r5,s-r6,s-r7,s-r8,s-r9
   plan:
     state: pending
   plan-review:
