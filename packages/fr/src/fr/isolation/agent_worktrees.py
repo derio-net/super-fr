@@ -41,7 +41,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO
 
-from .local import GcAction, _home
+from .local import GcAction
+from .runner import _home
 
 AGENT_MIN_AGE_SECONDS = 24 * 3600
 AGENT_MAX_LOCK_AGE_SECONDS = 72 * 3600
