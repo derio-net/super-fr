@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-26-feat-batch-arch-isolation-split
+captures:
+- host: h-691c281a
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-27T08:59:51+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: e7b88638-d75e-401b-b20b-fe99a8901c21
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 54
+        cache_write: 268676
+        cache_read: 3401572
+        output: 15797
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 7
+      other:
+        usd: null
+        turns: 8
+      paperwork:
+        usd: null
+        turns: 10
+    steps:
+      (outside run):
+        usd: null
+        turns: 4
+        input: 10
+        cache_write: 103865
+        cache_read: 394623
+        output: 847
+      brainstorm:
+        usd: null
+        turns: 21
+        input: 44
+        cache_write: 164811
+        cache_read: 3006949
+        output: 14950
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 4
+          input: 10
+          cache_write: 103865
+          cache_read: 394623
+          output: 847
+        brainstorm:
+          usd: null
+          turns: 21
+          input: 44
+          cache_write: 164811
+          cache_read: 3006949
+          output: 14950

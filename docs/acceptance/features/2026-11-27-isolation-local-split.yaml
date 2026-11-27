@@ -1,0 +1,24 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-27-isolation-local-split
+repo: derio-net/super-fr
+rows:
+  - id: isolation-local-split-guards
+    capability: isolation module structure guards
+    acceptance: The workspace driver's runner, reap, branch-ref and landing helpers
+      live in their own isolation modules that never import the driver module; the forge-argv
+      and remedy tripwires cover each of them, and the driver module's line budget sits
+      within the tripwire's headroom of its new size.
+    origin:
+    - spec:2026-11-27-isolation-local-split#R1
+    - spec:2026-11-27-isolation-local-split#R2
+    - spec:2026-11-27-isolation-local-split#R5
+    - spec:2026-11-27-isolation-local-split#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none

@@ -3,11 +3,14 @@ run: 2026-11-26-feat-batch-arch-isolation-split
 workflow: fr-goal@1
 branch: feat/batch-arch-isolation-split
 started: '2026-11-26T18:27:45+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-26T18:27:55+00:00'
+    state: done
+    at: '2026-11-27T08:59:50+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-27-isolation-local-split-design.md
   spec-review:
     state: pending
   plan:
