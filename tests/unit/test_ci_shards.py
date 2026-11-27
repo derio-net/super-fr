@@ -9,7 +9,8 @@ shards and gates at 75.
 
 (b) Partition: pytest-split's `least_duration` grouping must place every
 test in exactly one of the matrix's groups (its shard count). This calls
-pytest-split's own algorithm in process over the real node ids in `.test_durations`, plus ids absent from
+pytest-split's own algorithm in process over the real node ids in
+`.test_durations`, plus ids absent from
 it (a new test gets the average duration), so the check exercises the real
 algorithm and costs milliseconds. Earlier versions of this test ran five
 full-suite `--collect-only` subprocesses, which took 30-90s inside a change
