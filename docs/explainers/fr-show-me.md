@@ -12,7 +12,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-show-me/SKILL.md
   - packages/fr/src/fr/shape.py
-reviewed: 2026-11-24 new page for fr-show-me, the spec's design shape and the PR's shape of the change (#1641)
+reviewed: 2026-11-27 still true; run-verdict slice 3 renames one function in the skill's call-tree example (deliver_pr_gate, now in fr/run/deliver.py), no behaviour change (#1519); 2026-11-24 new page for fr-show-me, the spec's design shape and the PR's shape of the change (#1641)
 ---
 
 ## Why a picture?
