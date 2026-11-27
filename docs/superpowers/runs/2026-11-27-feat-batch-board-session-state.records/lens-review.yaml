@@ -1,0 +1,90 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-board-session-state
+step: lens-review
+outcome: done
+journal:
+- kind: finding
+  id: l-errors-r1
+  global: true
+  review_scope: in
+  title: One failed pane read lost every background mark
+  body: One failed pane read lost every background mark
+- kind: finding
+  id: l-errors-r2
+  global: true
+  review_scope: in
+  title: An unguarded dwell.store failure failed the whole Batches render
+  body: An unguarded dwell.store failure failed the whole Batches render
+- kind: finding
+  id: l-errors-r3
+  global: true
+  review_scope: in
+  title: A non-mapping lane_owners value refused the repo's whole triage config
+  body: A non-mapping lane_owners value refused the repo's whole triage config
+- kind: finding
+  id: l-errors-r4
+  global: true
+  review_scope: in
+  title: lane_owner_notes worded three different causes as 'not a lane'
+  body: lane_owner_notes worded three different causes as 'not a lane'
+- kind: finding
+  id: l-errors-r5
+  global: true
+  review_scope: in
+  title: An unusable dwell.json was overwritten without a copy, the note lacked path and loc
+  body: An unusable dwell.json was overwritten without a copy, the note lacked path and loc
+- kind: finding
+  id: l-errors-r6
+  global: true
+  review_scope: out
+  title: Supervisor.on_refusal swallows render failures with a bare pass
+  body: Supervisor.on_refusal swallows render failures with a bare pass
+- kind: finding
+  id: l-docs-accuracy-r1
+  global: true
+  review_scope: in
+  title: herdr-control-sessions.md overstated the pane reads
+  body: herdr-control-sessions.md overstated the pane reads
+- kind: finding
+  id: l-docs-accuracy-r2
+  global: true
+  review_scope: in
+  title: fr-triage.md states the writer rule but did not cover its files
+  body: fr-triage.md states the writer rule but did not cover its files
+- kind: review
+  id: lens-review
+  global: true
+  title: 'lens review: docs-accuracy 2 findings, errors 6 (5 in, 1 out)'
+  body: One reviewer per lens over the whole diff from 0ba6b3c1; both checked the shape file against the
+    diff (no contradiction). In-scope findings fixed in 39bea405d with tests (438 targeted pass).
+resolves:
+- id: l-errors-r1
+  state: fixed
+  body: Each pane read is guarded, pane-less agents skipped; test_one_unreadable_pane_never_loses_another_items_background_mark.
+- id: l-errors-r2
+  state: fixed
+  body: OSError becomes the note 'dwell times are not stored'; the page still renders; test added.
+- id: l-errors-r3
+  state: fixed
+  body: Mapped to empty lanes with cause not-a-mapping; parse_triage_config test, post_merge survives.
+- id: l-errors-r4
+  state: fixed
+  body: Per-cause IgnoredLane records and wording; two tests incl. the facts JSON round trip.
+- id: l-errors-r5
+  state: fixed
+  body: The writer sets it aside as dwell.json.bad (not on the ref); notes name the path and the first
+    error's loc and msg; three tests.
+- id: l-errors-r6
+  state: out-of-scope
+  body: The bare pass predates this change (supervise.py); this change only passes writer=True into the
+    same render call.
+- id: l-docs-accuracy-r1
+  state: fixed
+  body: The section now says reads stop at the first pane with background work and an unreadable pane
+    is skipped.
+- id: l-docs-accuracy-r2
+  state: fixed
+  body: covers now lists triage_kanban_cmd.py and triage_drive_loop.py; the paragraph names dwell.json.bad.
+evidence:
+  review: lens-review
+  reviewer: docs-accuracy=a83ae227dfe29124d,errors=ab4cca248db046c3c
