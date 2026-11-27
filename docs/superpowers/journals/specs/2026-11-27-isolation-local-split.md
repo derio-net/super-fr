@@ -124,3 +124,6 @@ row_kinds:
 run_gate: developer
 run_kind: none
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-isolation-local-split-p2 created=2026-11-27T09:08:58+00:00 -->
+### phase-split-2026-11-27-isolation-local-split-p2 · decision · ask: slice 2 of #1517 is its own module move, one phase each (operator decision q-scope)
