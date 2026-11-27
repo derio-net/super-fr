@@ -1,0 +1,65 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-27-queue-followups
+repo: derio-net/super-fr
+rows:
+  - id: queue-approval-label-lifecycle
+    capability: wave merge queue approvals
+    acceptance: A recorded approval whose approved-fr label is gone is ended, so re-adding
+      the label approves the live head; every label removal fr makes posts its reason
+      on the PR once.
+    origin:
+    - spec:2026-11-27-queue-followups#R1
+    - spec:2026-11-27-queue-followups#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: queue-approval-waits-conflict-free
+    capability: wave merge queue approvals
+    acceptance: An approved-fr label on a conflicting head is held unrecorded and is
+      recorded at the first conflict-free head, so a conflict repair needs no second
+      approval.
+    origin:
+    - spec:2026-11-27-queue-followups#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: conflict-probe-matches-queue-resolution
+    capability: wave driver conflict probe
+    acceptance: The early conflict probe reports only the conflicts the queue's own
+      build would refuse, so a stamp or generated-file conflict costs no hand-back.
+    origin:
+    - spec:2026-11-27-queue-followups#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: queue-closeout-due-at-landing
+    capability: wave driver close-out
+    acceptance: A queue-landed wave gets exactly one collected close-out as soon as
+      its landings' post_merge succeeded, and a close-out deadline wakes a quiet paced
+      pass.
+    origin:
+    - spec:2026-11-27-queue-followups#R5
+    - spec:2026-11-27-queue-followups#R6
+    - spec:2026-11-27-queue-followups#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: wave-overlap-repo-case
+    capability: wave plan overlap
+    acceptance: Two batches whose repo names differ only in case are compared as one
+      repo for plan-file overlap.
+    origin:
+    - spec:2026-11-27-queue-followups#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
