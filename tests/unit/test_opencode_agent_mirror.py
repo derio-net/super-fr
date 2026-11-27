@@ -204,7 +204,7 @@ def test_do_not_hand_edit_banner_names_the_sync_script(tmp_path: Path) -> None:
 #       the mirror was quietly LESS capable than the canonical agent. A
 #       closed vocabulary that drops what it does not recognise is not
 #       closed; this repo's own `fr.harness.model` and `fr.capabilities`
-#       raise instead, and `_StrictLoader` exists for exactly this class of
+#       raise instead, and `fr.yamlio.StrictLoader` exists for exactly this class of
 #       silent loss.
 #   f2  `update()` let a constant deny overwrite a mapped grant, so a
 #       canonical `tools:` line GRANTING WebFetch produced a mirror DENYING
