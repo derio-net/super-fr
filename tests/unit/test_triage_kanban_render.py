@@ -858,10 +858,41 @@ def test_time_per_wave_has_a_block_per_wave_after_the_queue_and_marks_the_cutoff
     assert [b[0].strip() for b in blocks] == ['data-wave="1" data-cutoff-hidden', 'data-wave="2"']
     w2 = blocks[1][1]
     assert "<summary>wave 2" in w2
-    assert '<tr><td>Running</td><td class="time">≥3h 12m</td><td>live ≥3h 12m</td></tr>' in w2
-    assert re.search(r'<tr><td>waits for \w+</td><td class="time">≥3h 12m</td><td></td></tr>', w2)
+    assert (
+        '<tr><td>Running</td><td class="time">≥3h 12m</td>'
+        '<td class="longest"><span class="mono">live</span> · ≥3h 12m</td></tr>'
+    ) in w2
+    assert re.search(
+        r'<tr><td>waits for \w+</td><td class="time">≥3h 12m</td><td class="longest"></td></tr>',
+        w2,
+    )
     assert "No time measured outside Done." in blocks[0][1]
     assert page.index('<section class="wave-time">') < page.index('class="board"')
+
+
+def test_a_long_batch_id_wraps_in_its_own_element_and_the_table_scrolls() -> None:
+    """p2-r4: a 40-character batch id must not push the page wider than a 390px phone: the
+    id sits in its own element, its cell wraps anywhere, and the table scrolls inside its
+    block rather than widening the page."""
+    long_id = "batch-" + "x" * 34
+    assert len(long_id) == 40
+    base = _cards()
+    a = replace(_named(_as(base[0], 3, "dispatched"), long_id), column="running")
+    ledger = observe(Ledger(), _board_of([a]), AT - timedelta(minutes=75))
+    page = _dwell_page([a], ledger)
+    block = page[page.index('<details class="wave-time-block"') :]
+    block = block[: block.index("</details>")]
+    assert f'<td class="longest"><span class="mono">{long_id}</span> · ≥1h 15m</td>' in block
+    assert '<div class="wave-scroll"><table class="grid narrow">' in block
+    assert re.search(r"section\.wave-time td\.longest \{[^}]*overflow-wrap: anywhere", CSS)
+    assert re.search(r"\.wave-scroll \{[^}]*overflow-x: auto", CSS)
+
+
+def test_the_wave_table_cells_have_horizontal_padding() -> None:
+    """p2-r4: the Batches page carries no `GRID_CSS`, so the wave table pads its own cells."""
+    m = re.search(r"section\.wave-time th, section\.wave-time td \{([^}]*)\}", CSS)
+    assert m and re.search(r"padding: \d+px \d+px", m.group(1))
+    assert "padding: 0" not in m.group(1)
 
 
 def test_the_batches_with_no_wave_come_last() -> None:

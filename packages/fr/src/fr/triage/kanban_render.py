@@ -113,6 +113,10 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
 section.wave-time details { margin: 4px 0; }
 section.wave-time summary { cursor: pointer; }
 section.wave-time td.time { white-space: nowrap; }
+section.wave-time th, section.wave-time td { padding: 4px 8px; text-align: left;
+  vertical-align: top; }
+section.wave-time td.longest { overflow-wrap: anywhere; }
+.wave-scroll { overflow-x: auto; max-width: 100%; }
 .wait-owners { display: block; font-size: .72rem; color: var(--muted); overflow-wrap: anywhere; }
 .owners { margin: 2px 0 6px; font-size: .78rem; color: var(--muted); }
 .owners span { display: block; overflow-wrap: anywhere; }
@@ -642,14 +646,17 @@ def _time(seconds: float, at_least: bool) -> str:
 
 
 def _time_row(label: str, row: TimeRow) -> str:
+    """One table row; the longest batch's id and its time are separate elements, and the
+    cell wraps anywhere, so a long id never widens the page (p2-r4)."""
     longest = (
         ""
         if row.longest is None
-        else f"{esc(row.longest)} {_time(row.longest_seconds, row.longest_at_least)}"
+        else f'<span class="mono">{esc(row.longest)}</span> · '
+        f"{_time(row.longest_seconds, row.longest_at_least)}"
     )
     return (
         f'<tr><td>{esc(label)}</td><td class="time">{_time(row.seconds, row.at_least)}</td>'
-        f"<td>{longest}</td></tr>"
+        f'<td class="longest">{longest}</td></tr>'
     )
 
 
@@ -658,8 +665,8 @@ def _wave_block(w: WaveTime, hidden: bool) -> str:
     rows = "".join(_time_row(COLUMN_TITLES[r.key], r) for r in w.columns)  # type: ignore[index]
     rows += "".join(_time_row(f"waits for {r.key}", r) for r in w.parties)
     table = (
-        '<table class="grid narrow"><thead><tr><th></th><th>total</th><th>longest (batch)</th>'
-        f"</tr></thead><tbody>{rows}</tbody></table>"
+        '<div class="wave-scroll"><table class="grid narrow"><thead><tr><th></th><th>total</th>'
+        f"<th>longest (batch)</th></tr></thead><tbody>{rows}</tbody></table></div>"
         if rows
         else '<p class="meta">No time measured outside Done.</p>'
     )
