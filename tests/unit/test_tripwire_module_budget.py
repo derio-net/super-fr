@@ -26,8 +26,9 @@ BUDGETS: dict[str, int] = {
     # +25 to 8250) merged with S1's (event-driven-a-la-carte) guarded-key and state-home
     # reads; the merged module is 8292 lines.
     f"{SRC}commands/triage_batch_cmd.py": 8300,
-    # isolation/local.py: 3200 -> 2125 after runner, reap, branchrefs and landing left it (#1517).
-    f"{SRC}isolation/local.py": 2125,
+    # isolation/local.py: 3200 -> 2125 after runner, reap, branchrefs and landing left it (#1517);
+    # 2125 -> 1735 after gc moved to GcSweeper in isolation/gc.py (#1521).
+    f"{SRC}isolation/local.py": 1735,
     # #1518 split self-review, the spec table, rework and the refactor-gate read out.
     f"{SRC}plan_ops.py": 700,
     f"{SRC}triage/batch_drive.py": 2275,
