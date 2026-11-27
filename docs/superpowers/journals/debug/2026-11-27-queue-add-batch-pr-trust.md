@@ -15,3 +15,8 @@ collect files a PR whose Closes lines name an issue under that issue's prs; fact
 ### 73a9581e21ca · root-cause · queue add reads PR author and origin from facts.prs only, so a linked batch PR has no identity
 
 packages/fr/src/fr/commands/triage_queue_cmd.py queue_add_command looked up the PR in facts.prs (unlinked open PRs). A batch PR closes its members, so collect files it under those issues' prs; the lookup returned None and distrust() answered 'never read'. batch_pr (via _branch_prs) already pools member-linked PRs, facts.prs and facts.batch_prs and applies distrust itself.
+
+<!-- fr:journal kind=finding scope=debug id=d-fix-1 created=2026-11-27T20:06:14+00:00 state=fixed -->
+### d-fix-1 · finding [fixed] · trust a batch PR by batch_pr's verdict; read any other PR from the same pool
+
+queue_add_command resolves the batch first: a batch PR (found by _batch_of, i.e. batch_pr, which trusts only same-repo PRs by allowed authors) skips the second distrust. Any other PR is read by the new _known_pr from issue prs + facts.prs + facts.batch_prs, preferring a record whose author and origin were read. Tests: test_a_batch_pr_known_only_through_its_member_issue_is_preapproved, test_a_linked_pr_that_is_no_batch_s_is_added, test_a_linked_fork_or_foreign_pr_is_still_refused.
