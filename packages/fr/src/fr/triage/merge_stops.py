@@ -46,8 +46,15 @@ def export_stop_key(repo: str) -> str:
     return f"export:{repo}"
 
 
+def export_drift_stop_key(repo: str) -> str:
+    """A repo's refused state export: the repo changed a file since the last export
+    (spec 2026-11-27-export-drift R4). No PR exists, so it is held by no head."""
+    return f"export-drift:{repo}"
+
+
 def load_stops(target: Path) -> dict[str, MergeStop]:
-    """The recorded stops by key (a batch id, `archive:<batch>`, `export:<repo>`); empty
+    """The recorded stops by key (a batch id, `archive:<batch>`, `export:<repo>`,
+    `export-drift:<repo>`); empty
     when there is no readable record."""
     try:
         data = json.loads((target / MERGE_STOPS_FILE).read_text(encoding="utf-8"))

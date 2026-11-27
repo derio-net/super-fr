@@ -1,0 +1,82 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-27-export-drift
+repo: derio-net/super-fr
+rows:
+  - id: export-drift-refused
+    capability: triage state export
+    acceptance: An export over a repo-side root whose durable files changed, were deleted
+      or were added since the last export (per its committed exported-files record)
+      writes nothing and names every drifted path and the targeted-import remedy; `fr
+      triage state export --force` overwrites them; every export writes the record.
+    origin:
+    - spec:2026-11-27-export-drift#R1
+    - spec:2026-11-27-export-drift#R2
+    - spec:2026-11-27-export-drift#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_state_sync.py#test_an_export_over_a_repo_side_edit_is_refused_and_writes_nothing
+      - super-fr:tests/unit/test_triage_state_sync.py#test_force_overwrites_the_drifted_files_and_rewrites_the_record
+      - super-fr:tests/unit/test_triage_state_sync.py#test_a_bad_record_is_refused_and_force_rewrites_it
+      - super-fr:tests/unit/test_triage_state_sync.py#test_the_export_verb_refuses_drift_with_exit_2_until_force
+    status: ci
+    notes: unit tests pin the record, the refusal over changed, deleted and added files
+      with nothing written, the no-record bootstrap, symlinks skipped, a bad record
+      and --force
+    verify: none
+  - id: export-drift-driver-need
+    capability: triage wave driver export
+    acceptance: The driver's per-wave export over drift pushes nothing and opens no
+      PR, and Needs you now shows an export-drift row naming the paths and the exact
+      import command until an export finds no drift.
+    origin:
+    - spec:2026-11-27-export-drift#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_an_export_over_a_repo_side_edit_stops_with_a_need_and_pushes_nothing
+    status: ci
+    notes: 'a driver unit test exports over drift and a bad record: no push or PR, the
+      stop''s text, the Need row and its label on the rendered page, and the stop cleared
+      by a clean export'
+    verify: none
+  - id: targeted-import-only
+    capability: triage state import
+    acceptance: '`fr triage state import --only <path>` copies only the named files
+      or directories, even over a newer state copy, leaves every other state file alone,
+      and refuses a path naming no durable file before copying anything.'
+    origin:
+    - spec:2026-11-27-export-drift#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_state_sync.py#test_only_copies_a_named_file_over_a_newer_state_copy_and_nothing_else
+      - super-fr:tests/unit/test_triage_state_sync.py#test_only_removes_a_named_path_the_repo_lacks
+      - super-fr:tests/unit/test_triage_state_sync.py#test_only_skips_a_named_symlink_on_either_side
+      - super-fr:tests/unit/test_triage_state_sync.py#test_only_refuses_a_bad_or_unmatched_path_before_any_write
+    status: ci
+    notes: 'unit tests import with --only: named paths alone move (over a newer state
+      copy), a path the repo lacks is removed, symlinks skipped, a bad or unmatched
+      path refused before any write'
+    verify: none
+amendments:
+  - row: targeted-import-only
+    op: reword
+    base: 0
+    acceptance: '`fr triage state import --only <path>` changes only the named files
+      or directories: copied from the repo even over a newer state copy, or removed
+      from the state when the repo lacks them; every other state file is left alone,
+      and a path naming no durable file on either side is refused before anything changes.'
+    why: spec review s1-r1 — a named path the repo lacks is now removed from the state
+  - row: export-drift-refused
+    op: reword
+    base: 0
+    acceptance: An export over a repo-side root whose durable files changed, were deleted
+      or were added since the last export (per its committed exported-files record),
+      or whose record is unreadable, writes nothing and names every drifted path and
+      the remedy; `fr triage state export --force` overwrites them and rewrites the
+      record; every export writes the record.
+    why: spec review s1-r2, s1-r6 — repo-only files are drift too, and a bad record
+      is refused

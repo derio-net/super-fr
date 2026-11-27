@@ -381,7 +381,7 @@ from fr.triage.quota import Pace
 from fr.triage.readiness import fact_cursor_details, fact_cursors, merge_refusal
 from fr.triage.render import plural
 from fr.triage.scope_config import load_durable, load_scope_config, scope_id
-from fr.triage.state_sync import check_scope_name, export_state
+from fr.triage.state_sync import check_scope_name, clear_drift_stop, export_state, stop_on
 from fr.triage.timestamps import parse_aware
 from fr.triage.wave_overlap import overlap_lines
 from fr.triage.wave_queue import REPORT_KINDS as QUEUE_REPORT_KINDS
@@ -7902,6 +7902,7 @@ class _Driver:
             if where.exists():  # fr's own scratch, not a worktree: replaced (p4-r10)
                 shutil.rmtree(where)
             worktree = checkout.add_worktree(where, f"origin/{default}")
+            at = checkout.rev_parse(f"origin/{default}")  # read before, never in a handler
         except (TriageError, OSError) as exc:
             return self._export_failed(wave, f"export wave {wave}: {exc}")
         try:
@@ -7909,10 +7910,13 @@ class _Driver:
             try:
                 report = export_state(
                     self.target, worktree.path, rel, owner=scope_id(self.scope)
-                )  # never takes over another scope's export (gh#1101)
-            except TriageError as exc:
+                )  # never takes over another scope's export (gh#1101), never forced (R4)
+            except TriageError as exc:  # an ExportBlocked records its stop and Need (R4)
                 self._export_refusals += 1
-                return f"refused, nothing committed or pushed: {exc}"
+                text = stop_on(exc, self.target, repo, self.scope_args, path=config.path, at=at)
+                return f"refused, nothing committed or pushed: {text}"
+            if (why := clear_drift_stop(self.target, repo)) is not None:  # R4, l-errors-r1
+                _say(action_line(Action("warn", repo, why, wave=wave)))
             try:
                 # Never forced past the repo's .gitignore (p4-r9): named, not staged.
                 left = worktree.ignored([f"{rel}/{p}" for p in report.copied])

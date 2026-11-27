@@ -262,6 +262,8 @@ class Need:
     # | queue-unconfigured (a repo with open batch PRs and no `queue.ci`: nothing merges)
     # | queue-need (the wave merge queue's own: a halt, a hold, a stall, a barrier, R28)
     # | cursor-unread (a batch PR's run cursor: no clone, or a read failed with a cause)
+    # | export-drift (the driver's state export refused a file changed in the repo, R4 of
+    #   spec 2026-11-27-export-drift)
     kind: str
     ref: str  # the batch id, `<owner/repo>#<n>` (a gated PR), or issue key the row names
     text: str
@@ -282,6 +284,7 @@ NEED_LABELS = {
     "unplaced": "Unplaced issue",
     "merge-conflict": "Merge conflict",
     "archive-conflict": "Archive PR conflict",
+    "export-drift": "Triage export drifted from the repo",
     "driver-stopped": "Driver stopped",
     "session-blocked": "Session blocked",
     "ledger-unread": "Gate labels unread",
@@ -488,6 +491,7 @@ def needs_you(
         )  # fmt: skip
 
     out.extend(archive_conflict_needs(facts, judgements, snap.repos, stops or {}))
+    out.extend(export_drift_needs(stops or {}))
 
     # The four Needs-you lanes (exit-gates R17): one Need per card the board puts in one,
     # from the same `lane_of`, so "Needs you now" and the columns agree.
@@ -541,6 +545,18 @@ def needs_you(
                          f"#batch-{b.id}")
                 )  # fmt: skip
     return out
+
+
+def export_drift_needs(stops: Mapping[str, MergeStop]) -> list[Need]:
+    """One `export-drift` Need per repo whose state export the driver refused because the
+    repo changed a file since the last export (spec 2026-11-27-export-drift R4); the stop's
+    reason is the whole operator text. It holds until a clean export clears it."""
+    prefix = "export-drift:"
+    return [
+        Need("export-drift", key.removeprefix(prefix), stop.reason, None)
+        for key, stop in sorted(stops.items())
+        if key.startswith(prefix)
+    ]
 
 
 def archive_conflict_needs(
