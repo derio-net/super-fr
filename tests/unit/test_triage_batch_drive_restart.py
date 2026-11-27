@@ -223,7 +223,8 @@ def test_the_restart_happens_before_the_exec_restart(
 
 def _driver(tmp_path: Path, **kw: Any) -> Any:
     return triage_batch_cmd._Driver(
-        triage_batch_cmd._scope(REPO, None), tmp_path, named=kw.get("named"), checkouts={},
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=kw.get("named"),
+        checkouts={REPO.lower(): None},
         max_inflight=4, yes=True,
     )  # fmt: skip
 

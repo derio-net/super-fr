@@ -91,10 +91,11 @@ REPORT_KINDS: frozenset[str] = frozenset({"queue-held", "queue-need", "queue-war
 (phase 2 of the plan wires the planner in report-only mode)."""
 
 TERMINAL_STAGES: frozenset[str] = frozenset(
-    {"merged", "partial", "cancelled", "abandoned", "obsolete"}
+    {"merged", "partial", "cancelled", "abandoned", "obsolete", "left-scope"}
 )
 """A batch at one of these, or deferred out of its wave, never holds its wave open (R2;
-`obsolete`, a never-dispatched batch whose members all closed: 2026-11-22-triage-hardening R8)."""
+`obsolete`, a never-dispatched batch whose members all closed: 2026-11-22-triage-hardening R8;
+`left-scope`, whose repo left the scope: 2026-11-27-closeout-state R5)."""
 
 
 @dataclass(frozen=True)
@@ -348,7 +349,8 @@ def is_deferred(batch: Batch) -> bool:
 
 
 def is_terminal(batch: Batch, stage: str | None) -> bool:
-    """Landed, cancelled, abandoned, obsolete or deferred: it holds no wave open (R2, R30)."""
+    """Landed, cancelled, abandoned, obsolete, left-scope or deferred: it holds no wave open
+    (R2, R30)."""
     return stage in TERMINAL_STAGES or is_deferred(batch)
 
 

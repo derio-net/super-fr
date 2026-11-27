@@ -309,8 +309,8 @@ def owed_claims(
     out: list[tuple[str, str]] = []
     for b in batches:
         stage = stages[b.id]
-        if releasing(b, stage, b.id in archived):
-            continue
+        if stage == "left-scope" or releasing(b, stage, b.id in archived):
+            continue  # left-scope: no forge write reaches its repo (2026-11-27 R5)
         keys = b.ids if _owes(b, stage) else taken_keys(b)
         out.extend((k, b.id) for k in keys)
     return out
