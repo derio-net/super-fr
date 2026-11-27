@@ -1,7 +1,8 @@
 // Shared marker-resolution logic: given a file path, walk up to the nearest
 // existing ancestor directory, resolve the git toplevel, decide whether the
 // repo is "fr-enabled", and check for a valid .fr-isolation marker or
-// .fr-isolation-allow escape. Extracted so both the deny path and any future
+// .fr/isolation-allow escape (`.fr-isolation-allow` is its fallback, S1 R8, R13).
+// Extracted so both the deny path and any future
 // caller (e.g. a status/debug tool) share one source of truth — mirrors
 // fr-isolation-required.sh's own separation between marker lookup and the
 // PreToolUse deny decision.
@@ -169,6 +170,15 @@ function isDir(path: string): boolean {
   }
 }
 
+/** A regular file (through a symlink, as the shell's `[ -f ]`). */
+function isFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
 /** The repository's common git dir, read from the filesystem (no subprocess): `.git` as
  * a dir, or a `gitdir:` file (a linked worktree), then its `commondir`. */
 function commonDirOf(toplevel: string): string | null {
@@ -193,7 +203,48 @@ function commonDirOf(toplevel: string): string | null {
 }
 
 /**
- * Whether `refs/remotes/origin/fr` MAY exist, read from the filesystem with no
+ * The quiet switch's locations, newest first (spec 2026-11-19-event-driven-a-la-carte S1
+ * R5, R13): `.fr/settings.yaml` on `fr-config`, then the old root `settings.yaml` on `fr`.
+ * The shell library's `FR_SWITCH_NEW` / `FR_SWITCH_OLD` are the same two, and
+ * tests/unit/test_isolation_decision_core.py keeps them from drifting.
+ */
+export const SWITCH_LOCATIONS = [
+  "refs/remotes/origin/fr-config:.fr/settings.yaml", // fr-switch-location
+  "refs/remotes/origin/fr:settings.yaml", // fr-switch-location
+] as const;
+
+/** What a switch reads as when the two files differ: fr-enabled, never canonical quiet. */
+const DIFFERING_SWITCHES = "placement: two switches that differ";
+
+/**
+ * The switch's text: the file at `SWITCH_LOCATIONS[0]`, else the one at `[1]` (R13);
+ * `undefined` when neither can be read. Two files that are both there and differ (by
+ * blob, so byte for byte, as fr compares them, R6) read as a text `switchEnabled` calls
+ * fr-enabled and `switchIsQuiet` never calls quiet (fail closed). Bash: `_fr_read_switch`.
+ */
+/** The sentence a deny appends when the two quiet switches differ (R6). Bash:
+ * `FR_SWITCH_DIFFER_NOTE`, the same text. */
+export const SWITCH_DIFFER_NOTE =
+  "The two quiet switches (origin/fr-config:.fr/settings.yaml and origin/fr:settings.yaml) differ, " +
+  "so this repo is gated: preview the move with `fr settings sync` (first), then bring the old copy " +
+  "in step with `fr settings sync --yes --expect <tip>`, or, if neither matches, make the two " +
+  "identical by hand.";
+
+/** `SWITCH_DIFFER_NOTE` (with a leading space) when *toplevel*'s two switches differ, else "". */
+export function switchDifferNote(toplevel: string): string {
+  if (!switchRefMaybe(toplevel)) return "";
+  return readSwitch(toplevel) === DIFFERING_SWITCHES ? ` ${SWITCH_DIFFER_NOTE}` : "";
+}
+
+export function readSwitch(toplevel: string): string | undefined {
+  const [fresh, old] = SWITCH_LOCATIONS.map((at) => git(toplevel, "rev-parse", "--verify", "--quiet", at));
+  if (fresh !== undefined && old !== undefined && fresh !== old) return DIFFERING_SWITCHES;
+  const blob = fresh ?? old;
+  return blob === undefined ? undefined : git(toplevel, "cat-file", "-p", blob);
+}
+
+/**
+ * Whether `refs/remotes/origin/fr-config` or `refs/remotes/origin/fr` MAY exist, read from the filesystem with no
  * subprocess (review p6-r8): a loose ref, a `packed-refs` line, a reftable store (not
  * readable without git, so "maybe"), or a git dir that cannot be read. False only when
  * the filesystem says positively that it does not. The precondition that keeps a plain
@@ -204,11 +255,13 @@ export function switchRefMaybe(toplevel: string): boolean {
   const common = commonDirOf(toplevel);
   if (common === null || !isDir(common)) return true;
   if (existsSync(join(common, "refs", "remotes", "origin", "fr"))) return true;
+  if (existsSync(join(common, "refs", "remotes", "origin", "fr-config"))) return true;
   if (isDir(join(common, "reftable"))) return true;
   try {
     return readFileSync(join(common, "packed-refs"), "utf-8")
       .split("\n")
-      .some((line) => line.replace(/\r$/, "").endsWith(" refs/remotes/origin/fr"));
+      .map((line) => line.replace(/\r$/, ""))
+      .some((line) => line.endsWith(" refs/remotes/origin/fr") || line.endsWith(" refs/remotes/origin/fr-config"));
   } catch {
     return false;
   }
@@ -239,7 +292,8 @@ export function switchEnabled(text: string): boolean {
 /**
  * Whether the repo is on the quiet or stealth placement, found WITHOUT `fr`: the
  * marker records `placement` quiet or stealth, or the last fetched
- * `refs/remotes/origin/fr:settings.yaml`, with an origin remote (R23), cannot be read
+ * switch (`readSwitch`: `fr-config`'s `.fr/settings.yaml`, else `fr`'s `settings.yaml`),
+ * with an origin remote (R23), cannot be read
  * positively as `repo` (`switchEnabled`), read only when `switchRefMaybe` says the ref
  * may exist, so a plain repo spawns no git for it. The shell library's
  * `_fr_placement_enabled`, line for line.
@@ -250,7 +304,7 @@ export function placementEnabled(toplevel: string): boolean {
   // The filesystem answers first (review pr1431-n6): no `refs/remotes/origin/fr`, no git.
   if (!switchRefMaybe(toplevel)) return false;
   if (git(toplevel, "config", "--get", "remote.origin.url") === undefined) return false;
-  const text = git(toplevel, "cat-file", "-p", "refs/remotes/origin/fr:settings.yaml");
+  const text = readSwitch(toplevel);
   return text !== undefined && switchEnabled(text);
 }
 
@@ -368,9 +422,48 @@ function globMatch(pattern: string, value: string): boolean {
   return new RegExp(`^${escaped}$`).test(value);
 }
 
+const PROTECTED_FILES = [".fr/isolation-allow", ".fr-isolation-allow", ".fr-isolation"] as const;
+
+/** Whether *a* and *b* both exist and are one file (dev+inode, through symlinks). */
+function sameFile(a: string, b: string): boolean {
+  try {
+    const sa = statSync(a);
+    const sb = statSync(b);
+    return sa.dev === sb.dev && sa.ino === sb.ino;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether no allowlist may exempt the edit of *file* (*rel* below *toplevel*; review
+ * p2-r5): the isolation marker `.fr-isolation` and either allowlist file are never
+ * exempted, since a `*` or `.fr/**` line would otherwise let an edit tool rewrite the
+ * gate's own inputs. Fail closed on every way a filesystem can name the same file:
+ * an empty, `.` or `..` segment; the ASCII case-folded name; file identity (dev+inode)
+ * with a protected file that exists at the toplevel; and a non-ASCII name whose parent
+ * is the toplevel or its `.fr`, by name or identity. Bash: `_fr_allowlist_protected`;
+ * tests/fixtures/isolation-decision-cases.json drives both.
+ */
+export function allowlistProtected(toplevel: string, file: string, rel: string): boolean {
+  const lc = rel.replace(/[A-Z]/g, (c) => c.toLowerCase());
+  if (/\/\/|\/\.\.?\//.test(`/${lc}/`)) return true;
+  if ((PROTECTED_FILES as readonly string[]).includes(lc)) return true;
+  if (existsSync(file) && PROTECTED_FILES.some((p) => sameFile(file, join(toplevel, p)))) return true;
+  const name = lc.slice(lc.lastIndexOf("/") + 1);
+  if (!/[^\x20-\x7e]/.test(name)) return false;
+  const segments = lc.split("/");
+  if (segments.length === 1 || (segments.length === 2 && segments[0] === ".fr")) return true;
+  const parent = dirname(file);
+  return sameFile(parent, toplevel) || sameFile(parent, join(toplevel, ".fr"));
+}
+
 function matchesAllowlist(toplevel: string, file: string): boolean {
-  const allowPath = `${toplevel}/.fr-isolation-allow`;
-  if (!existsSync(allowPath)) return false;
+  // `.fr/isolation-allow` in the working tree (S1 R8), never read from a ref; the old
+  // `.fr-isolation-allow` only while it is absent (R13). Bash: the same two-path lookup.
+  const fresh = `${toplevel}/.fr/isolation-allow`;
+  const allowPath = isFile(fresh) ? fresh : `${toplevel}/.fr-isolation-allow`;
+  if (!isFile(allowPath)) return false;
   // Symlink-robust: resolve the file's existing-ancestor dir the same way
   // `toplevel` was resolved, so a macOS /tmp -> /private/tmp mismatch doesn't
   // make `relative()` walk outside toplevel and silently drop the escape
@@ -381,6 +474,7 @@ function matchesAllowlist(toplevel: string, file: string): boolean {
   const rfile = `${rdir}${tail}`;
   const rel = relative(toplevel, rfile);
   if (rel.startsWith("..")) return false;
+  if (allowlistProtected(toplevel, rfile, rel)) return false;
   const lines = readFileSync(allowPath, "utf-8").split("\n");
   for (const raw of lines) {
     const pattern = raw.trim();
@@ -410,8 +504,31 @@ function quietWorktreePath(common: string): string | null {
   return join(home, ".cache", "fr", "worktrees", basename(dirname(common)), "fr");
 }
 
-/** The repo's own quiet `fr` worktree: a LINKED worktree at exactly that path, HEAD on
- * `refs/heads/fr`, the switch reading canonically `placement: quiet`. */
+/** The repo's own quiet `fr` worktree, or its `fr-config` worktree beside it (S1 R5): a
+ * LINKED worktree at exactly that path, HEAD on that path's branch (`refs/heads/fr`,
+ * `refs/heads/fr-config`), the switch (`readSwitch`) reading canonically `placement: quiet`. */
+/**
+ * Whether every path of a configuration checkout's tree lies below `.fr/` (depth 0:
+ * quiet's `fr-config`) or below `<one segment>/.fr/` (depth 1: a stealth
+ * `<branch>-config`). Spec §B: an orphan branch whose tree is `.fr/`; a checkout holding
+ * anything else is no write target (review p2-r2). Bash: `_fr_config_tree_ok`.
+ */
+export function configTreeOk(depth: 0 | 1, names: readonly string[]): boolean {
+  return names
+    .filter((n) => n !== "")
+    .every((n) => {
+      if (depth === 0) return n.startsWith(".fr/") && n.length > 4;
+      const at = n.indexOf("/.fr/");
+      return at > 0 && !n.slice(0, at).includes("/") && n.length > at + 5;
+    });
+}
+
+/** The checkout's HEAD tree passes `configTreeOk`; an unreadable or empty tree does not. */
+function configCheckoutOk(toplevel: string, depth: 0 | 1): boolean {
+  const tree = git(toplevel, "ls-tree", "-r", "--name-only", "HEAD");
+  return tree !== undefined && configTreeOk(depth, tree.split("\n"));
+}
+
 function isQuietFrWorktree(toplevel: string): boolean {
   try {
     if (!statSync(join(toplevel, ".git")).isFile()) return false; // never a primary checkout
@@ -422,17 +539,19 @@ function isQuietFrWorktree(toplevel: string): boolean {
   const common = rawCommon === null ? null : resolvedDir(rawCommon);
   if (common === null) return false;
   const rawWant = quietWorktreePath(common);
-  const want = rawWant === null ? null : resolvedDir(rawWant);
-  if (want === null || want !== toplevel) return false;
-  if (git(toplevel, "symbolic-ref", "--quiet", "HEAD") !== "refs/heads/fr") return false;
+  if (rawWant === null) return false;
+  const branch = ["fr", "fr-config"].find((name) => resolvedDir(join(dirname(rawWant), name)) === toplevel);
+  if (branch === undefined) return false;
+  if (git(toplevel, "symbolic-ref", "--quiet", "HEAD") !== `refs/heads/${branch}`) return false;
+  if (branch === "fr-config" && !configCheckoutOk(toplevel, 0)) return false;
   if (git(toplevel, "config", "--get", "remote.origin.url") === undefined) return false;
-  const text = git(toplevel, "cat-file", "-p", "refs/remotes/origin/fr:settings.yaml");
+  const text = readSwitch(toplevel);
   return text !== undefined && switchIsQuiet(text);
 }
 
 /** The switch says canonically `placement: quiet` and nothing else (`switchEnabled`'s
  * scan, strict: a spelling it fails closed on is not quiet here). */
-function switchIsQuiet(text: string): boolean {
+export function switchIsQuiet(text: string): boolean {
   const live = text
     .split("\n")
     .map((raw) => raw.replace(/\r$/, ""))
@@ -463,7 +582,17 @@ function sameRepo(a: string, b: string): boolean {
 
 /** A stealth tracking clone: a CLONE named `stealth--*` beside a workspace whose marker is
  * valid, records `placement: stealth`, and names this clone's origin and HEAD branch as
- * its `tracking.ref` (`fr.placement.stealth.ensure_worktree`'s own check). */
+ * its `tracking.ref` (`fr.placement.stealth.ensure_worktree`'s own check); or the
+ * configuration clone, named `stealth--*-config`, on that branch plus `-config`. */
+/** The tracking clone (`stealth--*` on the marker's *branch*) or the configuration clone
+ * (`stealth--*-config` on `<branch>-config`, S1 R5, `fr.placement.stealth.config_ref`).
+ * Bash: `_fr_stealth_head_ok`; tests/fixtures/isolation-decision-cases.json. */
+export function stealthHeadMatches(name: string, branch: string, head: string): boolean {
+  if (!/^stealth--./.test(name)) return false;
+  if (branch === head) return true;
+  return head === `${branch}-config` && /^stealth--.+-config$/.test(name);
+}
+
 function isStealthClone(toplevel: string): boolean {
   if (!isDir(join(toplevel, ".git"))) return false; // a clone, never a worktree
   if (!/^stealth--./.test(basename(toplevel))) return false;
@@ -487,7 +616,9 @@ function isStealthClone(toplevel: string): boolean {
     const at = ref.lastIndexOf("@");
     if (at <= 0 || at === ref.length - 1) continue;
     const branch = ref.slice(at + 1);
-    if (branch.includes(":") || branch.startsWith("-") || branch !== head) continue;
+    if (branch.includes(":") || branch.startsWith("-")) continue;
+    if (!stealthHeadMatches(basename(toplevel), branch, head)) continue;
+    if (branch !== head && !configCheckoutOk(toplevel, 1)) continue;
     if (!sameRepo(ref.slice(0, at), url)) continue;
     const wsTop = resolvedDir(ws);
     if (wsTop !== null && hasValidIsolationMarker(wsTop)) return true;

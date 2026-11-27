@@ -34,6 +34,15 @@ tier resolution, and triage batch dispatch's orchestrator fallback (spec
 path."""
 
 
+def repo_models_path(repo_root: Path) -> Path:
+    """The repo's bindings file for the product checkout *repo_root*: `.fr/models.yaml`
+    in its configuration space, or the old `docs/superpowers/models.yaml` while only that
+    one exists (spec 2026-11-19-event-driven-a-la-carte R9, R13)."""
+    from fr.config.space import located
+
+    return located(Path(repo_root), "models")
+
+
 class ModelsError(Exception):
     """Raised when a models config file is structurally invalid."""
 

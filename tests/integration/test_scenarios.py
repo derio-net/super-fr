@@ -287,8 +287,15 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "archive-refusal-writes-nothing",
         "archive-dry-run",
         "wave-queue-release-hold",
+        "config-homes",
     }
     assert on_disk == here
+
+
+def test_config_homes(installed: Path, tmp_path: Path) -> None:
+    """S1 configuration homes under repo, quiet and stealth, shipped defaults and the
+    triage cache home (spec 2026-11-19-event-driven-a-la-carte, every row's candidate walk)."""
+    _scenario("config-homes", installed, tmp_path)
 
 
 def test_verification_strategy_resolution(installed: Path, tmp_path: Path) -> None:

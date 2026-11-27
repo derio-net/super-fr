@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# A fake `gh` for tests/scenarios/config-homes.sh. It answers the one route the protection
+# read asks (spec 2026-11-19-event-driven-a-la-carte R7, FR_FORGE_API=rest):
+# `GET repos/example-org/demo/rules/branches/fr-config`, replaying a CAPTURED reply from
+# tests/fixtures/github_rest/rules/ (captured 2026-11-25, that directory's README) chosen by
+# $FAKE_RULES: `approved` (pull-request-approved-dismiss-stale.json, the captured approved reply
+# with one parameter flipped, read as enforced) or `free-plan` (free-plan.error.json, the
+# private free-plan 403). Any other route or value fails loudly,
+# naming itself, which a reader must treat as an unreadable answer.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+caps="$here/../../../../fixtures/github_rest/rules"
+[ -n "${FAKE_GH_LOG:-}" ] && printf '%s\n' "$*" >> "$FAKE_GH_LOG"
+[ "${1:-}" = api ] && [ "${2:-}" = -i ] && set -- api "${@:3}"
+if [ "${1:-}" = api ] && [ "${2:-}" = repos/example-org/demo/rules/branches/fr-config ]; then
+  case "${FAKE_RULES:-}" in
+    approved) cat "$caps/pull-request-approved-dismiss-stale.json"; exit 0 ;;
+    free-plan)
+      # an .error.json capture is {exit, stdout, stderr} exactly as gh gave them
+      python3 -I -c 'import json,sys
+d = json.load(open(sys.argv[1]))
+sys.stdout.write(d["stdout"]); sys.stderr.write(d["stderr"]); sys.exit(d["exit"])' \
+        "$caps/free-plan.error.json"
+      exit $? ;;
+  esac
+fi
+echo "fake gh: no capture for: gh $*" >&2
+exit 1

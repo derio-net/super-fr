@@ -28,7 +28,8 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from fr.verification.effective import install_problem
+from fr.config.space import rel
+from fr.verification.effective import install_path, install_problem
 from fr.verification.model import StrategyManifest
 
 if TYPE_CHECKING:
@@ -54,7 +55,7 @@ __all__ = [
 ]
 
 WALK_SCHEMA = 1
-CANDIDATE_INSTALL = ".fr/candidate-install"
+CANDIDATE_INSTALL = rel("candidate-install")
 STEP_TIMEOUT_SECONDS = 1800
 SMOKE_VERSION = "smoke:version"
 SMOKE_STATUS = "smoke:status"
@@ -364,6 +365,41 @@ def _contract(repo_root: Path, manifest: StrategyManifest) -> None:
         raise WalkError(problem)
 
 
+def _protected(repo_root: Path, manifest: StrategyManifest, forge: object | None) -> None:
+    """Spec 2026-11-19-event-driven-a-la-carte R7: under quiet and stealth a program the
+    install or scenario template reads from the configuration branch
+    (`.fr/candidate-install`) runs only when the forge enforces a pull-request rule on that
+    branch, and only as its freshly fetched tip has it (review p3-r2,
+    `protection.export_checked`); *forge* is the client to ask (None: the repo's own). Asked
+    before anything runs, so a refusal leaves nothing half done."""
+    from fr.config.space import in_space
+
+    programs = [t[0] for t in (manifest.install, manifest.scenario) if t]
+    if any(in_space(p) for p in programs):
+        first = next(p for p in programs if in_space(p))
+        _program(first, repo_root, forge, "run the candidate install")
+
+
+def _program(argv0: str, repo_root: Path, forge: object | None, what: str = "") -> str:
+    """The repo-relative program *argv0*'s path. One in the configuration space under quiet
+    or stealth passes the protection guard and runs from the exported fetched tip, never the
+    configuration checkout (R7, review p3-r2), so no template reaches it unguarded."""
+    from fr.config.space import config_space, in_space
+    from fr.config.tip import export_checked
+    from fr.settings import SettingsError
+
+    if not in_space(argv0):
+        return str(install_path(argv0, repo_root))
+    try:
+        space = config_space(repo_root)
+        if space.ref is None:
+            return str(install_path(argv0, repo_root))
+        out = export_checked(space, forge, what or f"run {argv0}")
+        return str(out / space.tree_path(argv0))
+    except SettingsError as exc:
+        raise WalkError(str(exc)) from exc
+
+
 def run_walk(
     *,
     repo_root: Path,
@@ -376,6 +412,7 @@ def run_walk(
     client: Path | None = None,
     env: Mapping[str, str] | None = None,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
+    forge: object | None = None,
 ) -> tuple[Path, WalkLog]:
     """Install, smoke, scenarios; write the log; return `(path, log)`.
 
@@ -390,6 +427,7 @@ def run_walk(
     from fr.verification.resolve import strategy_identity
 
     base = dict(os.environ if env is None else env)
+    _protected(repo_root, manifest, forge)
     _contract(repo_root, manifest)
     manifest_source, manifest_sha256 = strategy_identity(manifest.verification, repo_root)
     if manifest.source == "prerelease":
@@ -443,7 +481,7 @@ def run_walk(
             argv = render_argv(template, {**values, **extra})
             # A repo-relative program (`.fr/candidate-install`) runs from the repo.
             if "/" in argv[0] and not os.path.isabs(argv[0]):
-                argv[0] = str(repo_root / argv[0])
+                argv[0] = _program(argv[0], repo_root, forge)
             return argv
 
         def operator_fr_moved() -> str | None:

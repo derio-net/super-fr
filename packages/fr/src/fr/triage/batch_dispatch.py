@@ -15,6 +15,7 @@ from collections.abc import Iterable, Sequence
 import yaml
 from pydantic import ValidationError
 
+from fr.config.space import rel
 from fr.settle.managed import MANAGED_SENTENCE
 from fr.triage.batch import (
     batch_branch,
@@ -51,7 +52,7 @@ def obsolete_refusal(batch_id: str, verb: str) -> str:
     )
 
 
-TRIAGE_CONFIG_PATH = ".fr/triage.yaml"
+TRIAGE_CONFIG_PATH = rel("triage")
 
 CLOUD_PREFLIGHT_RUNNERS = frozenset({"claude-cloud"})
 """Runners whose sessions do not load the plugin's agents before their first turn (a
@@ -371,7 +372,9 @@ def dispatched_already(comments: Iterable[dict[str, object]], item_id: str) -> b
     return latest_marker(comments, item_id) == "dispatch"
 
 
-def check_config_fresh(collected: TriageConfig | None, on_origin: str | None) -> tuple[str, ...]:
+def check_config_fresh(
+    collected: TriageConfig | None, on_origin: str | None, strip_guarded: bool = False
+) -> tuple[str, ...]:
     """Refuse a collected `.fr/triage.yaml` that is not the one on
     `origin/<default>` now (§3.I).
 
@@ -384,12 +387,13 @@ def check_config_fresh(collected: TriageConfig | None, on_origin: str | None) ->
     comparison, as collect dropped it (R4); the keys it dropped on the origin side are
     returned so the caller can say so.
     """
+    from fr.config.protection import without_guarded
+
     try:
-        current, ignored = (
-            parse_triage_config(yaml.safe_load(on_origin) or {})
-            if on_origin is not None
-            else (None, ())
-        )
+        data = (yaml.safe_load(on_origin) or {}) if on_origin is not None else None
+        if data is not None and strip_guarded:  # *strip_guarded*: as collect dropped them (R7)
+            data = without_guarded(data)
+        current, ignored = parse_triage_config(data) if data is not None else (None, ())
     except (yaml.YAMLError, ValidationError) as exc:
         raise TriageError(
             f"{TRIAGE_CONFIG_PATH} on the default branch is not valid triage config: {exc}"

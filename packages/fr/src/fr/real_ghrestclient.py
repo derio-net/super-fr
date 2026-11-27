@@ -832,7 +832,7 @@ class RealGhRestClient:
         required = set(required_cfg.get("contexts") or [])
         required |= {c.get("context") for c in required_cfg.get("checks") or []}
         try:
-            rules = self._api(f"repos/{repo}/rules/branches/{b}") or []
+            rules = self.branch_rules(repo, base) or []
         except GhError as exc:
             if not _plan_lacks_rulesets(exc):
                 raise
@@ -842,6 +842,13 @@ class RealGhRestClient:
                 params = rule.get("parameters") or {}
                 required |= {c.get("context") for c in params.get("required_status_checks") or []}
         return sorted(str(n) for n in required if n)
+
+    def branch_rules(self, repo: str, branch: str) -> Any:
+        """`GET rules/branches/{branch}`: the effective rules, as GitHub answers them (spec
+        2026-11-19-event-driven-a-la-carte R7). The forge's error propagates, the free-plan
+        403 included; `required_check_names`, `base_rules` and `fr.config.protection` each
+        decide what it means. `RealGhClient.branch_rules` is this method."""
+        return self._api(f"repos/{repo}/rules/branches/{_q(branch)}")
 
     def base_rules(self, repo: str, branch: str) -> BaseRules:
         """`GET rules/branches/{branch}` for a `merge_queue` rule and a strict
@@ -856,7 +863,7 @@ class RealGhRestClient:
         b = _q(branch)
         queue = strict = False
         try:
-            rules = self._api(f"repos/{repo}/rules/branches/{b}") or []
+            rules = self.branch_rules(repo, branch) or []
         except GhError as exc:
             if not _plan_lacks_rulesets(exc):
                 raise

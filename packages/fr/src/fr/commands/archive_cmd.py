@@ -382,12 +382,12 @@ def _refuse_cannot_tell(repo_root: Path, placement: str) -> None:
 
 def _unpushed(fr_root: Path, path: Path) -> bool:
     """The local `fr` holds a commit of *path* that `origin/fr` does not (review p5-r7)."""
-    from fr.artifacts.paths import SWITCH_REF
+    from fr.artifacts.paths import MEMORY_REF
     from fr.git import GitUnavailableError, git_answer
 
     rel = path.resolve().relative_to(fr_root.resolve()).as_posix()
     try:
-        done = git_answer(fr_root, "log", "--format=%H", f"{SWITCH_REF}..HEAD", "--", rel)
+        done = git_answer(fr_root, "log", "--format=%H", f"{MEMORY_REF}..HEAD", "--", rel)
     except GitUnavailableError:
         return True
     return done.returncode != 0 or bool(done.stdout.strip())

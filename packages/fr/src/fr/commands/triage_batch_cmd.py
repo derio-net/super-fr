@@ -104,6 +104,8 @@ from fr.commands.triage_drive_loop import drive_log_attached as drive_log_attach
 from fr.commands.triage_drive_loop import wait_out as wait_out
 from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
 from fr.commands.triage_kanban_cmd import probe_item, try_load
+from fr.config.space import LEGACY_PROFILES, PROFILES
+from fr.config.space import rel as space_rel
 from fr.ghclient import MERGE_METHODS, BaseRules, GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS, client_for_url
 from fr.isolation.adopt import (
@@ -124,7 +126,7 @@ from fr.labels import (
     held_gates,
     passed_gates,
 )
-from fr.models import REPO_MODELS_REL, default_models_path, load_models, resolved_config
+from fr.models import default_models_path, load_models, repo_models_path, resolved_config
 from fr.services import ServicesError
 from fr.services.resolve import resolve_services
 from fr.triage import batch_closeout as collected
@@ -326,6 +328,7 @@ from fr.triage.model import (
     ReplacementEvent,
     RequeuedEvent,
     Scope,
+    TriageConfig,
     load_judgements,
     load_scope_facts,
     normalize_key,
@@ -1447,7 +1450,7 @@ def _orchestrator(repo_root: Path | None) -> Callable[[str], str | None]:
     §A): the ORCHESTRATOR tier binding for a harness, repo-over-user, read from
     *repo_root*'s own `docs/superpowers/models.yaml` (the checkout the run will
     work in, not the dispatcher's cwd) when one is known."""
-    repo_cfg = load_models(repo_root / REPO_MODELS_REL) if repo_root else {}
+    repo_cfg = load_models(repo_models_path(repo_root)) if repo_root else {}
     user_cfg = load_models(default_models_path())
     config = resolved_config(repo_cfg=repo_cfg, user_cfg=user_cfg)
 
@@ -1519,10 +1522,8 @@ def _config_fresh(
         if not hold_unknown:
             raise
         raise DefaultBranchUnknown(owner_repo, exc) from exc
-    ignored = check_config_fresh(
-        facts.config.get(owner_repo),
-        checkout.show(default, TRIAGE_CONFIG_PATH),
-    )
+    collected = facts.config.get(owner_repo)
+    ignored = check_config_fresh(collected, *_triage_on_origin(checkout, default, collected))
     if ignored:
         err_console.print(
             f"[yellow]warning:[/yellow] {escape(owner_repo)}: ignoring {TRIAGE_CONFIG_PATH} "
@@ -1530,6 +1531,30 @@ def _config_fresh(
             soft_wrap=True,
         )
     return default
+
+
+def _triage_on_origin(
+    checkout: Checkout, default: str, collected: TriageConfig | None
+) -> tuple[str | None, bool]:
+    """The `.fr/triage.yaml` the collected config is compared with, and whether its guarded
+    keys are left out of the comparison. Under repo: *default*'s. Under quiet and stealth: the
+    configuration branch's (spec 2026-11-19-event-driven-a-la-carte R1); when the collected
+    config carries no guarded key (`fr.config.protection.GUARDED_TRIAGE_KEYS`, which collect
+    drops from an unprotected branch, R7), the branch's are left out too, so a dropped key is
+    no change. Their executors ask the protection again before running."""
+    from fr.config.protection import GUARDED_TRIAGE_KEYS
+    from fr.config.space import config_space
+    from fr.settings import SettingsError
+
+    try:
+        space = config_space(checkout.path)
+        if space.ref is None:
+            return checkout.show(default, TRIAGE_CONFIG_PATH), False
+        text = space.at_default("triage")
+    except SettingsError as exc:
+        raise TriageError(f"{TRIAGE_CONFIG_PATH} cannot be read: {exc}") from exc
+    carried = collected is not None and bool(collected.model_fields_set & set(GUARDED_TRIAGE_KEYS))
+    return text, not carried
 
 
 def _work_item(
@@ -3656,7 +3681,8 @@ def batch_closeout_command(
 
 DEFAULT_INTERVAL = 120
 SERVICE_PATHS: tuple[str, ...] = (
-    ".devcontainer/fr-profiles.yaml",
+    LEGACY_PROFILES,
+    space_rel(PROFILES),
     *sorted({p for paths in CI_CONFIG_PATHS.values() for p in paths}),
 )
 """What `ci none` is resolved from: the services declaration and the CI configs."""
@@ -6809,6 +6835,11 @@ class _Driver:
         command = facts.config_for(repo).post_merge
         if not command:
             return "no post_merge configured", False
+        from fr.config.protection import refusal_at
+
+        why = refusal_at(checkout.path, self.client(facts, repo), "run post_merge")  # R7
+        if why is not None:
+            return f"post_merge held: {why}", False
         try:
             ran = self.adapter.post_merge(checkout, command)  # the host's (R20)
         except TriageError as exc:
@@ -7108,6 +7139,18 @@ class _Driver:
         why = forge_refusal(self.client(facts, repo))
         if why is not None:
             return why
+        from fr.config.protection import refusal_at
+
+        # R7: the queue gates, versions and runs post_merge on configuration. A repo whose
+        # collected config has no `queue:` (none declared, or collect dropped it from an
+        # unprotected configuration branch) is refused below for the missing `ci`.
+        if facts.config_for(repo).queue is not None:
+            why = refusal_at(
+                self.checkout(repo).path, self.client(facts, repo),
+                "run the merge queue (gate_checks, version commands, post_merge)",
+            )  # fmt: skip
+            if why is not None:
+                return why
         try:
             rules = self._base_rules(facts, repo)
         except DefaultBranchUnknown as exc:
@@ -7213,8 +7256,14 @@ class _Driver:
             if record is None or queue_config(block).ci == "none":
                 continue
             client = self.client(facts, repo)
+            try:  # review p1-r3: an unreadable configuration space is said, not a crash
+                required = required_names(client, checkout, repo, default)
+            except TriageError as exc:
+                self._report_once(f"checks-unread\0{repo}\0{exc}",
+                                  f"{repo}: required checks unread: {exc}")  # fmt: skip
+                continue
             read, needs = read_slots(
-                client, repo, record, required_names(client, checkout, repo, default),
+                client, repo, record, required,
                 now=_now(), wait_minutes=block.check_wait_minutes,
             )  # fmt: skip
             slots.update(read)

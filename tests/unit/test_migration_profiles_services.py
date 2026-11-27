@@ -15,11 +15,30 @@ from pathlib import Path
 
 import pytest
 import yaml
-from fr.artifacts import MIGRATIONS, artifact_kind, run_migrations
+from fr.artifacts import MIGRATIONS, artifact_kind
+from fr.artifacts.profiles_services import PROFILES_SERVICES_MIGRATION
 from fr.artifacts.registry import PRE_FRAMEWORK_VERSION
+from fr.artifacts.runner import MigrationRegistry
+from fr.artifacts.runner import run_migrations as _run_migrations
 from fr.services.resolve import resolve_services
 
 PROFILES_REL = ".devcontainer/fr-profiles.yaml"
+
+
+def _one_to_two() -> MigrationRegistry:
+    """The 1 -> 2 hop alone: this file's subject. The 2 -> 3 relocation (spec
+    2026-11-19-event-driven-a-la-carte S1 R9) is `test_migration_config_kinds.py`'s."""
+    from dataclasses import replace
+
+    kind = replace(artifact_kind("profiles"), current_version=2)
+    reg = MigrationRegistry(kinds={"profiles": kind})
+    reg.register(PROFILES_SERVICES_MIGRATION)
+    return reg
+
+
+def run_migrations(repo: Path, **kwargs: object):  # type: ignore[no-untyped-def]
+    return _run_migrations(repo, registry=_one_to_two(), **kwargs)  # type: ignore[arg-type]
+
 
 BODY = """\
 # fr-profiles — header comment, must survive
@@ -73,15 +92,17 @@ acceptance-report:
 """
 
 
-def test_the_profiles_kind_is_at_version_two() -> None:
+def test_the_profiles_kind_is_at_version_three() -> None:
+    """3 since S1 moved it to `.fr/profiles.yaml` (spec 2026-11-19-event-driven-a-la-carte
+    R9); the old path is its first locator."""
     kind = artifact_kind("profiles")
-    assert kind.current_version == 2
-    assert kind.locator == PROFILES_REL
+    assert kind.current_version == 3
+    assert kind.locators == (PROFILES_REL, ".fr/profiles.yaml")
 
 
-def test_the_chain_from_one_is_one_hop_to_two() -> None:
+def test_the_chain_from_one_is_the_services_hop_then_the_move() -> None:
     chain = MIGRATIONS.chain("profiles", PRE_FRAMEWORK_VERSION)
-    assert [s.to_version for s in chain] == [2]
+    assert [s.to_version for s in chain] == [2, 3]
 
 
 def test_github_with_real_ci(tmp_path: Path) -> None:
@@ -295,7 +316,8 @@ def test_the_exempt_commands_run_over_an_unmigrated_v1_file(
         import json
 
         assert code == 0, out
-        data = json.loads(out)
+        # the old path is read with R13's notice (spec 2026-11-19-event-driven-a-la-carte)
+        data = json.loads("\n".join(ln for ln in out.splitlines() if not ln.startswith("fr: ")))
         assert data["forge"] == {"type": "gitlab", "host": "gitlab.example.com", "source": "legacy"}
         assert data["ci"]["type"] == "gitlab-ci" and data["ci"]["source"] == "legacy"
 

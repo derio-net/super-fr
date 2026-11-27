@@ -262,7 +262,7 @@ def test_cli_all_fails_when_nothing_is_discoverable(tmp_path: Path, monkeypatch)
     assert "no workflow shapes found" in result.output
     # The refusal names every place it looked, so the operator can fix one.
     assert str(empty_shipped) in result.output
-    assert "FR_SHIPPED_WORKFLOWS_DIR" in result.output
+    assert "FR_SHIPPED_DEFAULTS_DIR" in result.output
 
 
 def test_cli_all_finds_the_wheel_internal_shapes_with_no_plugin_installed(

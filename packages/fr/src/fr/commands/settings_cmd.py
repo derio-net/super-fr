@@ -108,80 +108,134 @@ def init_cmd(
     if path.exists() and not force:
         typer.echo(f"{SETTINGS_PATH} already exists; pass --force to overwrite it", err=True)
         raise typer.Exit(2)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_init())
+    from fr.config.space import repo_config_space, write_settings
+
+    write_settings(repo_config_space(resolve_repo_root()), render_init(), message="")
     typer.echo(f"wrote {path}")
 
 
 def init_quiet(root: Path) -> str:
-    """Create the orphan `fr` branch (one commit, root `settings.yaml` from
-    `render_init("quiet")`) with git plumbing, so the checkout is never touched, and push
-    it with a plain push. Refuses with no origin, or when origin already has `fr`."""
+    """Create the quiet switch (`render_init("quiet")`): the orphan `fr-config` branch
+    holding `.fr/settings.yaml`, then the orphan `fr` branch holding the same bytes as its
+    root `settings.yaml` (spec 2026-11-19-event-driven-a-la-carte R5, R6), each made with
+    plumbing, so the checkout is never touched, and pushed with a plain push. Refuses with
+    no origin, or when origin or this clone already has either branch."""
+    from fr.config.space import quiet_config_space, write_settings
     from fr.git import GitUnavailableError, git_answer
-    from fr.placement.quiet import FETCH_REFSPEC, QUIET_REF, unreachable
+    from fr.git_policy.templates import fr_message
+    from fr.placement.quiet import (
+        CONFIG_BRANCH,
+        CONFIG_REF,
+        QUIET_BRANCH,
+        QUIET_REF,
+        unreachable,
+    )
     from fr.settings.render import QUIET_LIMITATION, render_init
 
-    def git(*args: str, stdin: str | None = None) -> str:
-        try:
-            if stdin is None:
-                done = git_answer(root, *args)
-            else:
-                import subprocess
-
-                from fr.git import git_argv
-
-                done = subprocess.run(
-                    git_argv(root, *args), input=stdin, capture_output=True, text=True
-                )
-        except GitUnavailableError as e:
-            raise SettingsError(f"fr settings init --quiet: {e}") from e
-        if done.returncode != 0:
+    try:
+        if git_answer(root, "config", "--get", "remote.origin.url").returncode != 0:
             raise SettingsError(
-                f"fr settings init --quiet: `git {' '.join(args)}` failed: {done.stderr.strip()}"
+                "fr settings init --quiet: this repository has no `origin`; quiet keeps the "
+                "`fr` and `fr-config` branches on origin, so add one first"
             )
-        return done.stdout
+        probe = git_answer(root, "ls-remote", "--exit-code", "origin", QUIET_REF, CONFIG_REF)
+        if probe.returncode == 0 and _origin_has_only_old_switch(root, probe.stdout):
+            return _create_from_old_switch(root)
+        if probe.returncode == 0 and _origin_has_only_new_switch(probe.stdout):
+            from fr.placement.quiet import finish_refusal, half_written
 
-    if git_answer(root, "config", "--get", "remote.origin.url").returncode != 0:
-        raise SettingsError(
-            "fr settings init --quiet: this repository has no `origin`; quiet keeps the `fr` "
-            "branch on origin, so add one first"
-        )
-    if git_answer(root, "rev-parse", "--verify", "--quiet", QUIET_REF).returncode == 0:
-        # p3-r9: the root commit made here is unrelated to any existing local `fr`, which
-        # the fr worktree would otherwise adopt and push as a second root.
-        raise SettingsError(
-            "fr settings init --quiet: this clone already has a local `fr` branch, which "
-            "would not be an ancestor or a descendant of the switch fr is about to create. "
-            "Rename or delete it (`git branch -m fr fr-old`) and retry"
-        )
-    probe = git_answer(root, "ls-remote", "--exit-code", "origin", QUIET_REF)
+            plan = half_written(root)
+            if plan is not None:
+                raise finish_refusal("fr settings init --quiet", plan)
+        for ref, name in ((QUIET_REF, QUIET_BRANCH), (CONFIG_REF, CONFIG_BRANCH)):
+            if git_answer(root, "rev-parse", "--verify", "--quiet", ref).returncode == 0:
+                # p3-r9: the root commit made here is unrelated to any existing local
+                # branch, which a worktree would otherwise adopt and push as a second root.
+                raise SettingsError(
+                    f"fr settings init --quiet: this clone already has a local `{name}` "
+                    "branch, which would not be an ancestor or a descendant of the one fr "
+                    f"is about to create. Rename or delete it (`git branch -m {name} "
+                    f"{name}-old`) and retry"
+                )
+    except GitUnavailableError as e:
+        raise SettingsError(f"fr settings init --quiet: {e}") from e
     if probe.returncode == 0:
+        found = " and ".join(
+            f"`{line.split(chr(9), 1)[1].removeprefix('refs/heads/')}`"
+            for line in probe.stdout.splitlines()
+            if chr(9) in line
+        )
         raise SettingsError(
-            "fr settings init --quiet: origin already has an `fr` branch; fr never overwrites "
-            "it (edit its settings.yaml there instead)"
+            f"fr settings init --quiet: origin already has {found}; fr never overwrites "
+            f"the switch (edit `.fr/settings.yaml` on `{CONFIG_BRANCH}` instead)"
         )
     if probe.returncode != 2:
         raise unreachable(probe.stderr.strip() or "git ls-remote failed", None)
-    blob = git("hash-object", "-w", "--stdin", stdin=render_init("quiet")).strip()
-    tree = git("mktree", stdin=f"100644 blob {blob}\tsettings.yaml\n").strip()
-    from fr.git_policy.templates import fr_message
-
     # fr's own subject goes through the commit templates (R14), like every fr commit.
     message = fr_message(root, "chore(fr): switch this repo to the quiet placement")
-    commit = git("commit-tree", tree, "-F", "-", stdin=message).strip()
-    git("push", "origin", f"{commit}:{QUIET_REF}")
-    git("fetch", "--no-tags", "origin", FETCH_REFSPEC)
+    write_settings(quiet_config_space(root), render_init("quiet"), message=message)
+    commit = git_answer(root, "rev-parse", "--short=12", CONFIG_REF).stdout.strip()
     return (
-        f"pushed the `fr` branch ({commit[:12]}) to origin: this repo is now quiet.\n"
+        f"pushed the `{CONFIG_BRANCH}` branch ({commit}) and the `{QUIET_BRANCH}` branch to "
+        "origin: this repo is now quiet.\n"
         f"{QUIET_LIMITATION}\n"
-        "The policy keys are read from `fr`: protect it as you protect the default branch."
+        f"The policy keys are read from `{CONFIG_BRANCH}`: protect it as you protect the "
+        "default branch."
+    )
+
+
+def _origin_has_only_old_switch(root: Path, listing: str) -> bool:
+    """*listing* (`ls-remote origin fr fr-config`) names `fr` alone, and that branch, once
+    fetched, is a quiet switch: an existing quiet repo whose configuration space is not
+    created yet (plan decision p2-create-at-init-and-migration)."""
+    from fr.placement.quiet import FETCH_REFSPEC, QUIET_REF, _read_legacy
+
+    heads = {line.split("\t", 1)[1].strip() for line in listing.splitlines() if "\t" in line}
+    if heads != {QUIET_REF}:
+        return False
+    from fr.git import git_answer
+
+    fetched = git_answer(root, "fetch", "--quiet", "--no-tags", "origin", FETCH_REFSPEC)
+    if fetched.returncode != 0:
+        raise SettingsError(
+            f"fr settings init --quiet: cannot fetch origin/fr: {fetched.stderr.strip()}"
+        )
+    return _read_legacy(root) is not None
+
+
+def _origin_has_only_new_switch(listing: str) -> bool:
+    """*listing* (`ls-remote origin fr fr-config`) names `fr-config` alone: maybe a switch
+    whose old copy was never pushed (lens review l-errors-r1; `quiet.half_written` reads
+    it)."""
+    from fr.placement.quiet import CONFIG_REF
+
+    heads = {line.split("\t", 1)[1].strip() for line in listing.splitlines() if "\t" in line}
+    return heads == {CONFIG_REF}
+
+
+def _create_from_old_switch(root: Path) -> str:
+    """Create `fr-config` holding the old switch's bytes (`quiet.ensure_config_branch`)."""
+    from fr.placement.quiet import CONFIG_BRANCH, QUIET_BRANCH, ensure_config_branch
+
+    if not ensure_config_branch(root):
+        raise SettingsError(
+            f"fr settings init --quiet: origin already has `{CONFIG_BRANCH}`; fr never "
+            f"overwrites the switch (edit `.fr/settings.yaml` on `{CONFIG_BRANCH}` instead)"
+        )
+    return (
+        f"created the `{CONFIG_BRANCH}` branch on origin holding the quiet switch from "
+        f"origin/{QUIET_BRANCH}:settings.yaml (byte for byte): this repo's configuration "
+        f"space now exists. The old file stays, in step, for older fr (R6)."
     )
 
 
 def init_stealth(root: Path, text: str) -> str:
-    """Write `<target-dir>/settings.yaml` (from `render_init("stealth")`) on the tracking
-    branch and push it compare-and-swap (R3, R24). Refuses an unreachable tracking repo
-    or a missing branch before writing, and a file that is already there."""
+    """Write the target's settings (from `render_init("stealth")`): `<target-dir>/.fr/
+    settings.yaml` on the tracking repo's `<branch>-config`, then the same bytes as
+    `<target-dir>/settings.yaml` on `<branch>` (R5, R6, R24), each pushed
+    compare-and-swap. Refuses an unreachable tracking repo or a missing branch before
+    writing, and a file that is already at either path."""
+    from fr.config.space import stealth_config_space, write_settings
     from fr.git_policy.templates import fr_message
     from fr.placement import stealth
     from fr.settings.render import render_init
@@ -193,28 +247,47 @@ def init_stealth(root: Path, text: str) -> str:
     target_remote = stealth.origin_url(root)
     stealth.check_privacy(ref, target_remote, target_root=root)
     target = stealth.target_dir(root)
-    wt = stealth.ensure_worktree(root, ref)
-    path = wt / target / stealth.TARGET_SETTINGS
-    if path.exists():
+    stealth.ensure_worktree(root, ref)
+    cref = stealth.config_ref(ref)
+    if stealth._remote_has(cref, root):
+        stealth.ensure_worktree(root, cref)
+    new, old = stealth.target_settings_texts(root, ref, target)
+    if new is not None and old is None:
+        # lens review l-errors-r1: an earlier init pushed the configuration branch and
+        # stopped before the old file; `fr settings sync` (in a stealth workspace) lands it
+        from fr.placement.quiet import SYNC_COMMAND
+
         raise SettingsError(
-            f"fr settings init --stealth: {ref.text} already holds {target}/"
+            f"fr settings init --stealth: {cref.text} holds {target}/{stealth.TARGET_SETTINGS} "
+            f"but {ref.text} has no {target}/{stealth.LEGACY_TARGET_SETTINGS}: an earlier "
+            "write stopped before the old file, which an older fr reads. Finish it from a "
+            f"stealth workspace: `fr isolation up --stealth {ref.text} --branch <branch>`, "
+            f"then `{SYNC_COMMAND}` to preview it and `{SYNC_COMMAND} --yes --expect <tip>`"
+        )
+    if new is not None:
+        raise SettingsError(
+            f"fr settings init --stealth: {cref.text} already holds {target}/"
             f"{stealth.TARGET_SETTINGS}; fr never overwrites it (edit it there instead)"
         )
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_init("stealth"))
     message = fr_message(root, f"chore(fr): stealth settings for {target}")
-    try:
-        outcome = stealth.commit_and_push(
-            ref, wt, [path], message, stealth.plain_commit, target_remote=target_remote
+    space = stealth_config_space(root, ref.text, target)
+    if old is not None:
+        # An existing target (plan decision p2-create-at-init-and-migration): its space
+        # is created here, holding the old file's bytes; the old file stays in step (R6).
+        url = write_settings(space, old, message=message)
+        if url is not None:
+            return f"opened {url}: it adds {target}/{stealth.TARGET_SETTINGS} to {cref.text}"
+        return (
+            f"moved {target}/{stealth.LEGACY_TARGET_SETTINGS} on {ref.text} to {target}/"
+            f"{stealth.TARGET_SETTINGS} on {cref.text} (byte for byte); the old file stays, "
+            "in step, for older fr (R6)"
         )
-    except SettingsError:
-        path.unlink(missing_ok=True)
-        raise
-    if not outcome.committed:
-        path.unlink(missing_ok=True)
-        raise SettingsError(f"fr settings init --stealth: {outcome.reason}")
+    url = write_settings(space, render_init("stealth"), message=message)
+    if url is not None:
+        return f"opened {url}: it adds {target}/{stealth.TARGET_SETTINGS} to {cref.text}"
     return (
-        f"pushed {target}/{stealth.TARGET_SETTINGS} to {ref.text}: start a run with "
+        f"pushed {target}/{stealth.TARGET_SETTINGS} to {cref.text} and "
+        f"{target}/{stealth.LEGACY_TARGET_SETTINGS} to {ref.text}: start a run with "
         f"`fr isolation up --stealth {ref.text}` (stealth is chosen per run)"
     )
 
@@ -264,7 +337,14 @@ def paths_answers(toplevel: Path | None, *, create: bool = True) -> dict[str, st
     """The resolver's answers as `FR_*` variables: the placement, its root, the feature,
     then one per `fr.artifacts.paths.KIND_DIRS` entry. `FR_PLACEMENT=none` alone
     outside a git repo. Raises `SettingsError` for a placement this fr cannot serve."""
-    from fr.artifacts.paths import KIND_DIRS, kind_dir, shell_name, space_for
+    from fr.artifacts.paths import (
+        CONFIG_KINDS,
+        KIND_DIRS,
+        config_kind_path,
+        kind_dir,
+        shell_name,
+        space_for,
+    )
 
     if toplevel is None:
         return {"FR_PLACEMENT": "none"}
@@ -274,7 +354,15 @@ def paths_answers(toplevel: Path | None, *, create: bool = True) -> dict[str, st
         "FR_ARTIFACT_ROOT": str(space.root),
         "FR_FEATURE": space.feature or "",
     }
-    out.update({shell_name(kind): str(kind_dir(kind, space)) for kind in KIND_DIRS})
+    # The configuration kinds name the configuration space under every placement (S1 R9).
+    out.update(
+        {
+            shell_name(kind): str(
+                config_kind_path(toplevel, kind) if kind in CONFIG_KINDS else kind_dir(kind, space)
+            )
+            for kind in KIND_DIRS
+        }
+    )
     return out
 
 
@@ -309,6 +397,149 @@ def paths_cmd(
         return
     for key, value in answers.items():
         typer.echo(f"{key}={shlex.quote(value)}")
+
+
+def _sync_placement(root: Path) -> str | None:
+    """The placement `sync` works under. The usual reader refuses while the two copies
+    differ, which is exactly the state `sync` exists for: a stealth marker answers first,
+    then quiet whenever origin has both switches (whatever they say)."""
+    from fr.artifacts.paths import outside_repo
+    from fr.placement import quiet, stealth
+
+    if stealth.marker_tracking(root) is not None:
+        return "stealth"
+    new, old = quiet.switch_texts(root)
+    if new is not None and old is not None:
+        return "quiet"
+    if new is not None and quiet.parse_switch_text(new[1]) is not None:
+        return "quiet"  # the old copy is absent: `sync` offers to land it (l-errors-r1)
+    return outside_repo(root)
+
+
+def _protected_tip(root: Path, placement: str) -> str:
+    """`--yes` without `--expect` (plan discovery p2-phase3-sync-needs-protection): the
+    configuration branch's tip, when the forge's rules for it require a pull request with an
+    approving review a later push cannot keep and block force-pushes and deletion (what fr
+    checked; it cannot see
+    bypass actors, `protection.BYPASS_LIMIT`); otherwise the refusal naming the preview (spec
+    R6, R7)."""
+    from fr.config.protection import BYPASS_LIMIT, ProtectionReadError, require_protected
+    from fr.config.space import quiet_config_space, stealth_config_space
+    from fr.placement import quiet, stealth
+
+    if placement == "quiet":
+        space = quiet_config_space(root)
+    else:
+        found = stealth.marker_tracking(root)
+        assert found is not None
+        ref, target = found
+        space = stealth_config_space(root, ref.text, target)
+    try:
+        require_protected(space, None, "bring the old settings copy in step without `--expect`")
+    except ProtectionReadError as e:  # lens review l-errors-r9: the remedy needs no rules read
+        raise ProtectionReadError(
+            f"{e}. Run `{quiet.SYNC_COMMAND}` to preview the change, then "
+            f"`{quiet.SYNC_COMMAND} --yes --expect <tip>`"
+        ) from e
+    except SettingsError as e:
+        raise SettingsError(
+            f"{e}. Run `{quiet.SYNC_COMMAND}` to preview the change, then "
+            f"`{quiet.SYNC_COMMAND} --yes --expect <tip>`"
+        ) from e
+    if placement == "quiet":
+        tip = quiet.sync_plan(root).tip
+    else:
+        tip = stealth.sync_plan_target(root, ref, target).tip
+    typer.echo(
+        "the forge's rules for the configuration branch require an approved pull request and "
+        f"block force-pushes and deletion ({BYPASS_LIMIT}): writing from its tip {tip}"
+    )
+    return str(tip)
+
+
+@settings_app.command("sync")
+def sync_cmd(
+    yes: bool = typer.Option(
+        False, "--yes", help="Write the old settings copy (otherwise only preview)."
+    ),
+    expect: str | None = typer.Option(
+        None, "--expect", help="With --yes: the configuration branch tip the preview showed."
+    ),
+) -> None:
+    """Bring the old settings copy in step after a reviewed change (spec R6)."""
+    root = resolve_repo_root()
+    try:
+        placement = _sync_placement(root)
+        if yes and expect is None and placement in ("quiet", "stealth"):
+            expect = _protected_tip(root, placement)
+        if placement == "quiet":
+            from fr.placement import quiet
+
+            plan = quiet.sync_legacy(root, expect=expect) if yes else quiet.sync_plan(root)
+        elif placement == "stealth":
+            from fr.placement import stealth
+
+            found = stealth.marker_tracking(root)
+            assert found is not None
+            ref, target = found
+            plan = (
+                stealth.sync_legacy_target(root, ref, target, expect=expect)
+                if yes
+                else stealth.sync_plan_target(root, ref, target)
+            )
+        else:
+            typer.echo("placement repo: there is no old settings copy to keep in step")
+            return
+    except SettingsError as e:
+        raise _refuse(e) from e
+    typer.echo(f"configuration branch: {plan.new_at}")
+    typer.echo(f"old copy:             {plan.old_at}")
+    if plan.tip:
+        typer.echo(f"tip:                  {plan.tip} (settings blob {plan.blob or 'none'})")
+    if plan.state == "in-step":
+        typer.echo("in step: nothing to do")
+        return
+    if plan.state == "none":
+        typer.echo("one of the two is absent: nothing to sync (fr reads the one there, R13)")
+        return
+    if plan.state == "mismatch":  # only the preview gets here; --yes refuses above
+        typer.echo(
+            "neither matches the other at any earlier version: edit them by hand to the same "
+            "bytes (the configuration branch through a pull request)",
+            err=True,
+        )
+        raise typer.Exit(2)
+    if plan.state == "absent":
+        typer.echo(
+            "the old copy is absent (a write stopped before it); fr can write it from the "
+            "configuration branch's tip. Its commits (first parent, newest first; the label "
+            "is information, not a review: check the shas):"
+        )
+    else:
+        typer.echo(
+            "the configuration branch moved since the old copy's version (first parent, "
+            "newest first; the label is information, not a review: check the shas):"
+        )
+    if plan.unlabelled:
+        typer.echo(f"warning: {plan.unlabelled}", err=True)
+    for sha, second, subject, merged in plan.commits:
+        how = (
+            "label unknown"
+            if plan.unlabelled
+            else "merge of fr-config-change/ (its tip is the second parent)"
+            if merged
+            else "NOT a merge of a fr-config-change/* branch"
+            if second
+            else "NOT a merge (a direct commit or a fast-forward)"
+        )
+        typer.echo(f"  {sha}  second parent {second or 'none'}  {how}  {subject}")
+    if yes:
+        typer.echo("wrote the old copy: the two are in step")
+    else:
+        typer.echo(
+            "review the commits above, then run "
+            f"`fr settings sync --yes --expect {plan.tip}` to write the old copy"
+        )
 
 
 @settings_app.command("check")

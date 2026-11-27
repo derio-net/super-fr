@@ -44,6 +44,7 @@ from fr.models import (
     ModelsConfig,
     default_models_path,
     load_models,
+    repo_models_path,
     resolved_config,
 )
 from fr.opencode_agents import MaterializeResult, default_config_home, materialize_agents
@@ -70,7 +71,7 @@ def _repo_cfg() -> ModelsConfig:
         root = resolve_repo_root()
     except Exception:
         return {}
-    return load_models(root / REPO_MODELS_REL)
+    return load_models(repo_models_path(root))
 
 
 def _resolved_config() -> ModelsConfig:

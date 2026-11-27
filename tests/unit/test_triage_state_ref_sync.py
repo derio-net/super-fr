@@ -1,6 +1,8 @@
 """One state across workspaces: every triage command syncs with the state ref through
 ONE wrapper in the triage CLI (spec 2026-10-07-cloud-triage R5, §B "One state across
-workspaces", review p3-r1).
+workspaces", review p3-r1). Each "workspace" here stands for one host's state directory,
+named with `--dir` inside its own clone: on one host every workspace now shares the cache
+(spec 2026-11-19 R17), so two hosts need two directories.
 
 Once a scope has a `state_repo`, a command that reads state fetches the ref first
 (adopting it when the local copy is not ahead) and a command that changes state pushes
@@ -80,7 +82,7 @@ def test_a_command_that_changes_state_pushes_it_after(tmp_path: Path, origin: Pa
     ws, state = _workspace(tmp_path, "a", {"scope-durable.yaml": DURABLE})
     src = _export_dir(tmp_path, b"schema: 6\nissues: {}\n")
 
-    result = _invoke("state", "import", "--from", str(src), "--repo", REPO, "--workspace", str(ws))
+    result = _invoke("state", "import", "--from", str(src), "--repo", REPO, "--dir", str(state))
 
     assert result.exit_code == 0, result.output
     sha = _ref(origin)
@@ -99,7 +101,7 @@ def test_a_command_that_reads_state_fetches_the_ref_first(tmp_path: Path, origin
     )  # fmt: skip
     ws_b, state_b = _workspace(tmp_path, "b", {"scope-durable.yaml": DURABLE})
 
-    result = _invoke("batch", "list", "--repo", REPO, "--workspace", str(ws_b))
+    result = _invoke("batch", "list", "--repo", REPO, "--dir", str(state_b))
 
     assert result.exit_code == 0, result.output
     assert (state_b / "judgements.yaml").read_bytes() == b"schema: 6\n"
@@ -115,7 +117,7 @@ def test_a_command_that_only_reads_pushes_nothing(tmp_path: Path, origin: Path) 
     )  # fmt: skip
     (state / "judgements.yaml").write_bytes(b"schema: 6\nissues: {}\n")  # local, unpushed
 
-    result = _invoke("batch", "list", "--repo", REPO, "--workspace", str(ws))
+    result = _invoke("batch", "list", "--repo", REPO, "--dir", str(state))
 
     assert result.exit_code == 0, result.output
     assert _ref(origin) == before
@@ -140,7 +142,7 @@ def test_a_push_conflict_refuses_with_the_fetch_and_retry_line(
     monkeypatch.setattr(triage_state_cmd, "import_state", racing)
     src = _export_dir(tmp_path, b"schema: 6\n")
 
-    result = _invoke("state", "import", "--from", str(src), "--repo", REPO, "--workspace", str(ws))
+    result = _invoke("state", "import", "--from", str(src), "--repo", REPO, "--dir", str(state))
 
     assert result.exit_code == 2, result.output
     flat = " ".join(result.output.split())
@@ -197,7 +199,7 @@ def test_collect_whose_push_is_refused_warns_and_exits_zero(
     ws, state = _workspace(tmp_path, "a", {})
     _refuse_pushes(origin)
 
-    result = _invoke("collect", "--repo", REPO, "--workspace", str(ws))
+    result = _invoke("collect", "--repo", REPO, "--dir", str(state))
 
     assert result.exit_code == 0, result.output
     assert (state / "facts.json").is_file()
@@ -215,7 +217,7 @@ def test_a_wrapped_command_whose_push_is_refused_warns_and_exits_zero(
     src = _export_dir(tmp_path, b"schema: 6\nissues: {}\n")
     _refuse_pushes(origin)
 
-    result = _invoke("state", "import", "--from", str(src), "--repo", REPO, "--workspace", str(ws))
+    result = _invoke("state", "import", "--from", str(src), "--repo", REPO, "--dir", str(state))
 
     assert result.exit_code == 0, result.output
     assert "stays local until a push succeeds" in " ".join(result.output.split())
@@ -225,12 +227,12 @@ def test_a_wrapped_command_whose_push_is_refused_warns_and_exits_zero(
 
 def test_state_push_whose_push_is_refused_still_fails(tmp_path: Path, origin: Path) -> None:
     """Pushing is `state push`'s whole job: a refusal is its failure, exit 2."""
-    ws, _state = _workspace(
+    ws, state = _workspace(
         tmp_path, "a", {"scope-durable.yaml": DURABLE, "judgements.yaml": b"schema: 6\n"}
     )
     _refuse_pushes(origin)
 
-    result = _invoke("state", "push", "--repo", REPO, "--workspace", str(ws))
+    result = _invoke("state", "push", "--repo", REPO, "--dir", str(state))
 
     assert result.exit_code == 2, result.output
     assert "refused by policy" in result.output

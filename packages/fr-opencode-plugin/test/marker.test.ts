@@ -2,7 +2,7 @@
 // isolated from the tool.execute.before wiring in index.test.ts.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -635,5 +635,255 @@ describe("the quiet fr worktree and the stealth tracking clone (pr1431-r6)", () 
     sh("git", ["checkout", "--quiet", "main"], clone);
     sh("git", ["remote", "set-url", "origin", "https://example.com/org/other.git"], clone);
     withoutFr(() => expect(allowed(spec(join(clone, "target")))).toBe(false));
+  });
+});
+
+// S1 (spec 2026-11-19-event-driven-a-la-carte R5, R6, R8, R13): the switch moved to
+// `refs/remotes/origin/fr-config:.fr/settings.yaml`, the old one is the fallback, two that
+// differ fail closed; the fr-config worktree and the stealth configuration clone are write
+// targets; the allowlist is `.fr/isolation-allow` with `.fr-isolation-allow` as fallback.
+import { matchesAllowlist, SWITCH_LOCATIONS } from "../src/marker";
+
+function configSwitch(dir: string, settings = "placement: quiet\n", addOrigin = true): void {
+  if (addOrigin) sh("git", ["remote", "add", "origin", "https://example.com/org/repo.git"], dir);
+  const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], { cwd: dir, input: settings }).toString().trim();
+  const inner = execFileSync("git", ["mktree"], { cwd: dir, input: `100644 blob ${blob}\tsettings.yaml\n` })
+    .toString()
+    .trim();
+  const tree = execFileSync("git", ["mktree"], { cwd: dir, input: `040000 tree ${inner}\t.fr\n` }).toString().trim();
+  const commit = execFileSync("git", ["commit-tree", tree, "-m", "config"], { cwd: dir }).toString().trim();
+  sh("git", ["update-ref", "refs/remotes/origin/fr-config", commit], dir);
+}
+
+describe("S1: the switch on fr-config (R5, R6, R13)", () => {
+  test("the switch locations are fr-config's .fr/settings.yaml, then fr's settings.yaml", () => {
+    expect(SWITCH_LOCATIONS).toEqual([
+      "refs/remotes/origin/fr-config:.fr/settings.yaml",
+      "refs/remotes/origin/fr:settings.yaml",
+    ]);
+  });
+
+  test("a switch only on fr-config is fr-enabled; the ref is found on the filesystem", () => {
+    configSwitch(repo);
+    expect(switchRefMaybe(repo)).toBe(true);
+    withoutFr(() => expect(placementEnabled(repo)).toBe(true));
+  });
+
+  test("an fr-config saying repo is not fr-enabled", () => {
+    configSwitch(repo, "placement: repo\n");
+    withoutFr(() => expect(placementEnabled(repo)).toBe(false));
+  });
+
+  test("two switches that differ fail closed, whichever says repo", () => {
+    quietSwitch(repo, "placement: quiet\n");
+    configSwitch(repo, "placement: repo\n", false);
+    withoutFr(() => expect(placementEnabled(repo)).toBe(true));
+  });
+});
+
+describe("S1: the fr-config worktree and the configuration clone (R5)", () => {
+  let root: string;
+  let savedHome: string | undefined;
+  beforeEach(() => {
+    root = realpathSync(mkdtempSync(join(tmpdir(), "fr-opencode-s1-")));
+    savedHome = process.env.HOME;
+    process.env.HOME = join(root, "home");
+  });
+  afterEach(() => {
+    if (savedHome === undefined) delete process.env.HOME;
+    else process.env.HOME = savedHome;
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  function plain(name: string): string {
+    const dir = join(root, name);
+    mkdirSync(dir, { recursive: true });
+    sh("git", ["init", "--quiet", "-b", "main"], dir);
+    sh("git", ["config", "user.email", "test@example.com"], dir);
+    sh("git", ["config", "user.name", "Test"], dir);
+    writeFileSync(join(dir, "README.md"), "x\n");
+    sh("git", ["add", "."], dir);
+    sh("git", ["commit", "--quiet", "-m", "init"], dir);
+    return dir;
+  }
+  const base = (name: string) => join(root, "home", ".cache", "fr", "worktrees", name);
+  function worktree(repoDir: string, at: string, branch: string, from: string): string {
+    mkdirSync(dirname(at), { recursive: true });
+    sh("git", ["worktree", "add", "--quiet", "-b", branch, at, from], repoDir);
+    return realpathSync(at);
+  }
+  const allowed = (file: string) => {
+    const r = resolveMarker(file);
+    return !r.toplevel || !r.frEnabled || r.hasValidMarker || r.placementTarget === true;
+  };
+
+  test("the repo's own fr-config worktree is editable; off its branch or elsewhere it is not", () => {
+    const prod = plain("prod");
+    configSwitch(prod);
+    const wt = worktree(prod, join(base("prod"), "fr-config"), "fr-config", "refs/remotes/origin/fr-config");
+    withoutFr(() => {
+      expect(placementWriteTarget(wt)).toBe(true);
+      expect(allowed(join(wt, ".fr", "ci.yaml"))).toBe(true);
+      expect(allowed(join(prod, "src.ts"))).toBe(false);
+    });
+    sh("git", ["checkout", "--quiet", "-b", "not-fr-config"], wt);
+    withoutFr(() => expect(allowed(join(wt, ".fr", "ci.yaml"))).toBe(false));
+    const elsewhere = worktree(prod, join(root, "elsewhere", "fr-config"), "x-config", "refs/remotes/origin/fr-config");
+    withoutFr(() => expect(allowed(join(elsewhere, ".fr", "ci.yaml"))).toBe(false));
+  });
+
+  test("the fr branch checked out at fr-config's path is refused", () => {
+    const prod = plain("prod");
+    quietSwitch(prod);
+    const wt = worktree(prod, join(base("prod"), "fr-config"), "fr", "refs/remotes/origin/fr");
+    withoutFr(() => expect(allowed(join(wt, "x.md"))).toBe(false));
+  });
+
+  test("the fr worktree reads the new switch, and is refused when the two differ", () => {
+    const prod = plain("prod");
+    quietSwitch(prod);
+    const wt = worktree(prod, join(base("prod"), "fr"), "fr", "refs/remotes/origin/fr");
+    configSwitch(prod, "placement: quiet\n", false);
+    withoutFr(() => expect(allowed(join(wt, "x.md"))).toBe(true));
+    configSwitch(prod, "placement: quiet\n# edited\n", false);
+    withoutFr(() => expect(allowed(join(wt, "x.md"))).toBe(false));
+  });
+
+  function stealthConfig(foreign = false): { ws: string; config: string } {
+    const tracking = plain("tracking");
+    const bare = join(root, "tracking.git");
+    sh("git", ["clone", "--quiet", "--bare", tracking, bare], root);
+    // the configuration branch's tree is `target/.fr/` (spec §B); `foreign` adds a file
+    // outside it (review p2-r2)
+    sh("git", ["checkout", "--quiet", "--orphan", "main-config"], tracking);
+    sh("git", ["rm", "-rqf", "."], tracking);
+    mkdirSync(join(tracking, "target", ".fr"), { recursive: true });
+    writeFileSync(join(tracking, "target", ".fr", "ci.yaml"), "tests: local\n");
+    if (foreign) writeFileSync(join(tracking, "src.ts"), "x\n");
+    sh("git", ["add", "."], tracking);
+    sh("git", ["commit", "--quiet", "-m", "config"], tracking);
+    sh("git", ["push", "--quiet", bare, "main-config"], tracking);
+    const target = plain("target");
+    const parent = base("target");
+    mkdirSync(parent, { recursive: true });
+    const ws = join(parent, "feat__x");
+    sh("git", ["worktree", "add", "--quiet", ws, "-b", "feat/x"], target);
+    writeFileSync(
+      join(ws, ".fr-isolation"),
+      JSON.stringify({
+        toplevel: realpathSync(ws),
+        branch: "feat/x",
+        mode: "worktree",
+        placement: "stealth",
+        tracking: { ref: `${bare}@main`, target: "target" },
+      })
+    );
+    const config = join(parent, "stealth--local--tracking--main-config");
+    sh("git", ["clone", "--quiet", "--branch", "main-config", bare, config], root);
+    // an untracked, invalid marker naming stealth makes the clone fr-enabled, so the
+    // write-target rule is what decides (else every edit there is allowed)
+    writeFileSync(join(config, ".fr-isolation"), JSON.stringify({ placement: "stealth" }));
+    return { ws, config: realpathSync(config) };
+  }
+
+  test("the stealth configuration clone is editable; on another branch or with no workspace it is not", () => {
+    const { ws, config } = stealthConfig();
+    const file = join(config, "target", ".fr", "ci.yaml");
+    withoutFr(() => expect(allowed(file)).toBe(true));
+    sh("git", ["checkout", "--quiet", "-b", "other-config"], config);
+    withoutFr(() => expect(allowed(file)).toBe(false));
+    sh("git", ["checkout", "--quiet", "main-config"], config);
+    const marker = readFileSync(join(ws, ".fr-isolation"), "utf-8");
+    writeFileSync(join(ws, ".fr-isolation"), marker.replace(realpathSync(ws), "/elsewhere.invalid"));
+    withoutFr(() => expect(allowed(file)).toBe(false));
+  });
+
+  test("review p2-r2: a foreign configuration clone or fr-config worktree is no write target", () => {
+    const { config } = stealthConfig(true);
+    withoutFr(() => expect(allowed(join(config, "target", ".fr", "ci.yaml"))).toBe(false));
+    const prod = plain("prod");
+    configSwitch(prod);
+    const wt = worktree(prod, join(base("prod"), "fr-config"), "fr-config", "refs/remotes/origin/fr-config");
+    withoutFr(() => expect(allowed(join(wt, ".fr", "ci.yaml"))).toBe(true));
+    writeFileSync(join(wt, "src.ts"), "x\n");
+    sh("git", ["add", "src.ts"], wt);
+    sh("git", ["commit", "--quiet", "-m", "product file"], wt);
+    withoutFr(() => expect(allowed(join(wt, ".fr", "ci.yaml"))).toBe(false));
+  });
+});
+
+describe("S1: the allowlist is .fr/isolation-allow (R8, R13)", () => {
+  test("the new file is read; the old one only while the new one is absent", () => {
+    const top = realpathSync(repo);
+    writeFileSync(join(top, ".fr-isolation-allow"), "projects/**\n");
+    expect(matchesAllowlist(top, join(top, "projects", "x.md"))).toBe(true);
+    mkdirSync(join(top, ".fr"));
+    writeFileSync(join(top, ".fr", "isolation-allow"), "# data\ndata/**\n");
+    expect(matchesAllowlist(top, join(top, "data", "x.md"))).toBe(true);
+    expect(matchesAllowlist(top, join(top, "projects", "x.md"))).toBe(false);
+  });
+
+  test("it is never read from a ref", () => {
+    const top = realpathSync(repo);
+    mkdirSync(join(top, ".fr"));
+    writeFileSync(join(top, ".fr", "isolation-allow"), "projects/**\n");
+    sh("git", ["add", ".fr/isolation-allow"], top);
+    sh("git", ["commit", "--quiet", "-m", "allow"], top);
+    rmSync(join(top, ".fr", "isolation-allow"));
+    expect(matchesAllowlist(top, join(top, "projects", "x.md"))).toBe(false);
+  });
+});
+
+describe("review p2-r5: the allowlist never unlocks itself", () => {
+  for (const allowAt of [".fr/isolation-allow", ".fr-isolation-allow"]) {
+    for (const edited of [".fr/isolation-allow", ".fr-isolation-allow", ".FR/Isolation-Allow"]) {
+      test(`${allowAt} with '*' does not allow an edit to ${edited}`, () => {
+        const top = realpathSync(repo);
+        mkdirSync(join(top, ".fr"), { recursive: true });
+        writeFileSync(join(top, allowAt), "*\n.fr/**\n.fr-isolation-allow\n");
+        expect(matchesAllowlist(top, join(top, "anything.ts"))).toBe(true);
+        expect(matchesAllowlist(top, join(top, edited))).toBe(false);
+      });
+    }
+  }
+});
+
+describe("review p2-r5: the marker, file identity and non-ASCII names", () => {
+  function starAllow(): string {
+    const top = realpathSync(repo);
+    mkdirSync(join(top, ".fr"), { recursive: true });
+    writeFileSync(join(top, ".fr", "isolation-allow"), "*\n");
+    return top;
+  }
+  test("the isolation marker is never exempted", () => {
+    const top = starAllow();
+    expect(matchesAllowlist(top, join(top, ".fr-isolation"))).toBe(false);
+    expect(matchesAllowlist(top, join(top, ".FR-Isolation"))).toBe(false);
+  });
+  test("a symlink or hard link to a protected file is refused by identity", () => {
+    const top = starAllow();
+    mkdirSync(join(top, "notes"));
+    symlinkSync(join(top, ".fr", "isolation-allow"), join(top, "notes", "link"));
+    linkSync(join(top, ".fr", "isolation-allow"), join(top, "notes", "hard"));
+    expect(matchesAllowlist(top, join(top, "notes", "link"))).toBe(false);
+    expect(matchesAllowlist(top, join(top, "notes", "hard"))).toBe(false);
+    expect(matchesAllowlist(top, join(top, "notes", "plain.md"))).toBe(true);
+  });
+  test("a non-ASCII name beside the protected files is refused; deeper it is not", () => {
+    const top = starAllow();
+    for (const name of [".fr-isolatİon", ".fr/isolatıon-allow", "ﬁle"]) {
+      expect(matchesAllowlist(top, join(top, name))).toBe(false);
+    }
+    expect(matchesAllowlist(top, join(top, "docs", "café.md"))).toBe(true);
+  });
+});
+
+describe("R6: a deny over differing switches names the sync", () => {
+  test("switchDifferNote is empty for one switch and names fr settings sync for two that differ", () => {
+    const { switchDifferNote } = require("../src/marker");
+    quietSwitch(repo, "placement: quiet\n");
+    withoutFr(() => expect(switchDifferNote(repo)).toBe(""));
+    configSwitch(repo, "placement: quiet\n# reviewed\n", false);
+    withoutFr(() => expect(switchDifferNote(repo)).toContain("fr settings sync"));
   });
 });

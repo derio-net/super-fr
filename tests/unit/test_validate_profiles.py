@@ -12,7 +12,12 @@ HEAD = "schema_version: 2\nprofiles:\n  dev:\n    purpose: x\ndefault: dev\n"
 
 
 def _problems(tmp_path: Path, text: str) -> list[str]:
+    # A version-2 file is checked where it lives at version 3 since S1 (R9): at
+    # `.fr/profiles.yaml`; a version-1 file is stale wherever it is.
     path = tmp_path / ".devcontainer" / "fr-profiles.yaml"
+    if "schema_version: 2" in text:
+        text = text.replace("schema_version: 2", "schema_version: 3")
+        path = tmp_path / ".fr" / "profiles.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     report = validate_repo(tmp_path, kind_name="profiles")

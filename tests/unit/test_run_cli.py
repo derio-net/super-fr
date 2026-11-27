@@ -826,8 +826,10 @@ steps:
 
 def _brief_of(output: str) -> dict:
     """The JSON brief `advance` prints, wherever in the output it sits (a
-    gated agent step prints the gate line first)."""
-    return json.loads(output[output.index("{") :])
+    gated agent step prints the gate line first, and a notice may follow it, such
+    as the old-location notice for a repo workflow directory, S1 R13)."""
+    brief, _ = json.JSONDecoder().raw_decode(output, output.index("{"))
+    return brief
 
 
 # --- r2-f1: a `gate: operator` step must be clearable, not a dead end -------
@@ -5388,7 +5390,12 @@ def test_check_reports_an_orchestrator_open_dispatch_without_counting_it_unclaim
 
 
 _SHIPPED_FR_GOAL = (
-    Path(__file__).resolve().parents[2] / "plugins" / "super-fr" / "workflows" / "fr-goal.yaml"
+    Path(__file__).resolve().parents[2]
+    / "plugins"
+    / "super-fr"
+    / "defaults"
+    / "workflows"
+    / "fr-goal.yaml"
 )
 
 

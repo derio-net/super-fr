@@ -13,8 +13,10 @@ from pathlib import Path
 import pytest
 from fr.artifacts import paths
 from fr.artifacts.paths import (
+    CONFIG_KINDS,
     KIND_DIRS,
     ArtifactSpace,
+    config_kind_path,
     feature_id,
     feature_roots,
     kind_dir,
@@ -48,11 +50,12 @@ EXPECTED_DIRS = {
     "usage": "docs/superpowers/usage",
     "usage-archived": "docs/superpowers/implemented/usage",
     "audit-archived": "docs/superpowers/implemented/audits",
-    "workflow": "docs/superpowers/workflows",
-    "verification": "docs/superpowers/verifications",
-    "plan-config": "docs/superpowers/plan-config.yaml",
-    "models": "docs/superpowers/models.yaml",
-    "trackers": "docs/superpowers/trackers.yaml",
+    # repo configuration, `.fr/` in the configuration space since S1 R9
+    "workflow": ".fr/workflows",
+    "verification": ".fr/verifications",
+    "plan-config": ".fr/plan-config.yaml",
+    "models": ".fr/models.yaml",
+    "trackers": ".fr/trackers.yaml",
     "acceptance": "docs/acceptance",
     "acceptance-fragment": "docs/acceptance/features",
 }
@@ -82,6 +85,11 @@ def test_the_repo_space_is_the_toplevel_with_no_feature(tmp_path: Path) -> None:
     space = space_for(root)
     assert space == ArtifactSpace("repo", root, None)
     for kind, rel in KIND_DIRS.items():
+        if kind in CONFIG_KINDS:
+            assert config_kind_path(root, kind) == root / rel
+            with pytest.raises(KeyError, match="repo configuration"):
+                kind_dir(kind, space)
+            continue
         assert kind_dir(kind, space) == root / rel
 
 
@@ -105,6 +113,8 @@ def test_quiet_and_stealth_keep_the_layout_below_a_feature_root(
     space = ArtifactSpace(placement, x, "feat__a")
     assert list(feature_roots(space)) == [x / "features/feat__a", x / "features/feat__b"]
     for kind, rel in KIND_DIRS.items():
+        if kind in CONFIG_KINDS:  # configuration has no place below a feature root (S1 R9)
+            continue
         assert kind_dir(kind, space) == x / "features" / "feat__a" / rel
 
 

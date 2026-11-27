@@ -25,6 +25,7 @@ from pydantic import ValidationError
 from fr import real_ghclient
 from fr.artifacts.paths import KIND_DIRS
 from fr.checkstate import verdict_of
+from fr.config.space import forge_ref, rel
 from fr.ghclient import GhClient, UnsupportedForgeOperation
 from fr.hostclient import FORGE_ERRORS
 from fr.labels import FR_CLAIMED, FR_IN_PROGRESS, held_gates
@@ -69,7 +70,7 @@ ORIGINS_ISSUE_LIST_FIELDS = (
     real_ghclient.ORIGINS_ISSUE_LIST_FIELDS
 )  # origins' own, wider issue fields
 BODY_LIMIT = 2000
-CONFIG_PATH = ".fr/triage.yaml"
+CONFIG_PATH = rel("triage")
 # GitHub's contents API resolves HEAD to the default branch (verified live
 # 2026-09-25), so the config read needs no default-branch lookup first.
 DEFAULT_BRANCH_REF = "HEAD"
@@ -241,6 +242,11 @@ class ClientForge:
     def repo_visibility(self, *, repo: str) -> str | None:
         with _forge_errors():
             return self._client.repo_visibility(repo)
+
+    def branch_rules(self, *, repo: str, branch: str) -> Any:
+        """The adapter's effective rules of *branch* (`fr.config.protection` judges them)."""
+        with _forge_errors():
+            return self._client.branch_rules(repo, branch)
 
 
 def scope_repos(
@@ -1134,17 +1140,109 @@ def read_config_lenient(forge: Forge, repo: str) -> tuple[TriageConfig | None, t
     and named, never refused (R4); a known key with a bad value, or a file that is not
     valid config, is refused naming the repo and file, which fails a repo-scope collect
     and skips just that repo in org scope (review r2p-f4). Any other forge failure
-    propagates like the list calls' do."""
+    propagates like the list calls' do, the quiet switch probe's included; a malformed
+    switch on `fr-config` is refused like a bad config (review p1-r2)."""
+    from fr.settings import SettingsError
+
     try:
-        body = forge.read_file_at_ref(repo=repo, path=CONFIG_PATH, ref=DEFAULT_BRANCH_REF)
+        ref = forge_ref(forge, repo) or DEFAULT_BRANCH_REF
+        body = forge.read_file_at_ref(repo=repo, path=CONFIG_PATH, ref=ref)
+    except SettingsError as exc:
+        raise TriageError(f"{repo}: its configuration switch cannot be read: {exc}") from exc
     except ForgeError as exc:
         if _NOT_FOUND in str(exc):
             return None, ()
         raise
     try:
-        return parse_triage_config(yaml.safe_load(body) or {})
-    except (yaml.YAMLError, ValidationError) as exc:
+        data = yaml.safe_load(body) or {}
+    except yaml.YAMLError as exc:
         raise TriageError(f"{repo}: {CONFIG_PATH} is not valid triage config: {exc}") from exc
+    if ref != DEFAULT_BRANCH_REF:
+        data = _guarded(forge, repo, ref, data)
+    try:
+        return parse_triage_config(data)
+    except ValidationError as exc:
+        raise TriageError(f"{repo}: {CONFIG_PATH} is not valid triage config: {exc}") from exc
+
+
+_IGNORED_SAID: set[tuple[str, str]] = set()
+"""(repo, line) pairs this process has said, so a driver's passes say each once."""
+
+SETTINGS_PATH = rel("settings")
+
+
+class StateRepoUnread(Exception):  # noqa: N818 — a state, not a failure of the collect
+    """The declared `triage.state_repo` could not be read (a forge error other than a 404,
+    or a failed protection read; lens review l-errors-r5): neither "declared" nor "absent",
+    so the state repo, decided once, is not decided this collect."""
+
+
+def read_declared_state_repo(forge: Forge, repo: str) -> str | None:
+    """The state repo *repo*'s `.fr/settings.yaml` names as `triage.state_repo` (spec
+    2026-11-19 R20), read through the forge from the repo's configuration space: its default
+    branch under `repo`, `fr-config` under quiet (`forge_ref`). The key decides where private
+    issue data is pushed, so it is trust configuration: from `fr-config` it counts only while
+    the forge enforces a pull-request rule there (R7, sec-1), and is otherwise ignored, said
+    once. None when the file or the key is absent, when the file cannot be used (not valid
+    settings, said once) and when the forge cannot read files at a ref: the state repo is
+    then decided by the other rules. A read that fails (`StateRepoUnread`, lens review
+    l-errors-r5) is neither: the caller leaves the state repo undecided this collect."""
+    from fr.config import protection
+    from fr.settings import SettingsError
+    from fr.settings.load import parse_settings_text
+
+    where = f"{repo}:{SETTINGS_PATH}"
+    try:
+        ref = forge_ref(forge, repo) or DEFAULT_BRANCH_REF
+        body = forge.read_file_at_ref(repo=repo, path=SETTINGS_PATH, ref=ref)
+        state_repo = parse_settings_text(body, source=where, servable=False).triage.state_repo
+    except ForgeError as exc:
+        if _NOT_FOUND in str(exc):
+            return None
+        raise StateRepoUnread(f"triage.state_repo of {where} not read: {exc}") from exc
+    except (SettingsError, UnsupportedForgeOperation) as exc:
+        _say_once(repo, f"triage.state_repo of {where} not used: {exc}")
+        return None
+    if state_repo is None or ref == DEFAULT_BRANCH_REF:
+        return state_repo
+    at = f"{repo}:{ref}:{SETTINGS_PATH}"
+    try:
+        answer = protection.branch_protection(forge, repo, ref)
+    except protection.ProtectionReadError as exc:
+        raise StateRepoUnread(f"triage.state_repo of {at} not read: {exc}") from exc
+    if isinstance(answer, protection.Enforced):
+        return state_repo
+    _say_once(repo, protection.ignored_line(["triage.state_repo"], answer, at))
+    return None
+
+
+def _say_once(repo: str, line: str) -> None:
+    if (repo, line) not in _IGNORED_SAID:
+        _IGNORED_SAID.add((repo, line))
+        print(f"fr triage: {line}", file=sys.stderr)
+
+
+def _guarded(forge: Forge, repo: str, ref: str, data: object) -> object:
+    """*data* read from the configuration branch *ref* (spec 2026-11-19 R7, findings sec-1 and
+    p1-r1): its commands and trust keys (`fr.config.protection.GUARDED_TRIAGE_KEYS`) count only
+    when the forge enforces a pull-request rule on *ref*; otherwise they are dropped, said once.
+    A failed protection read refuses this repo's config, naming the error."""
+    from fr.config import protection
+
+    keys = protection.guarded_present(data)
+    if not keys:
+        return data
+    try:
+        answer = protection.branch_protection(forge, repo, ref)
+    except protection.ProtectionReadError as exc:
+        raise TriageError(f"{repo}: {CONFIG_PATH} on {ref} is not used: {exc}") from exc
+    if isinstance(answer, protection.Enforced):
+        return data
+    line = protection.ignored_line(keys, answer, f"{repo}:{ref}:{CONFIG_PATH}")
+    if (repo, line) not in _IGNORED_SAID:
+        _IGNORED_SAID.add((repo, line))
+        print(f"fr triage: {line}", file=sys.stderr)
+    return protection.without_guarded(data)
 
 
 @dataclass(frozen=True)

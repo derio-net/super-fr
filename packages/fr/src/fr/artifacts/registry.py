@@ -49,17 +49,26 @@ from fr.artifacts.paths import RECORDS_SUFFIX, repo_glob, search_roots
 from fr.artifacts.structure import (
     validate_agents,
     validate_fragment,
+    validate_isolation_allow,
     validate_journal,
     validate_matrix,
+    validate_models_config,
     validate_ops,
     validate_plan,
+    validate_plan_config,
     validate_profiles,
+    validate_quiet_config,
     validate_record,
     validate_run,
+    validate_settings_location,
     validate_spec,
+    validate_trackers_config,
     validate_usage,
+    validate_verification_config,
+    validate_workflow_config,
 )
 from fr.artifacts.text import read_utf8
+from fr.config import migrate as _moves
 
 PRE_FRAMEWORK_VERSION = 1
 """What an artifact with no stamp reads as (spec §3.A)."""
@@ -115,11 +124,54 @@ class ArtifactKind:
     """No `fr` reads this kind any more: its last migration deleted it (spec
     `2026-11-04-repo-feature-settings-design` R19, the matrix). Any file still
     under the locator is stale, and `fr validate artifacts` says so."""
+    locators: tuple[str, ...] = ()
+    """A kind that MOVED (spec 2026-11-19-event-driven-a-la-carte S1 §D): every locator
+    it has had, oldest first, the last one equal to `locator`. Empty for a kind that
+    never moved, whose `locator` is its one place. A location-stamped kind
+    (`location_stamp`) reads its version from which of them a file matched."""
+    roots: Callable[[Path, int], list[Path]] | None = None
+    """Where `locators[i]` (or `locator`, as index 0, for a kind with no `locators`) is
+    globbed for the checkout at the given repo root; None reads `search_roots`. A moved
+    kind's newest locator is rooted at the configuration space (`fr.config.space`)."""
 
     def read_version(self, path: Path) -> int:
         """The version `path` is on — `PRE_FRAMEWORK_VERSION` when unstamped."""
         declared = self.read_stamp(path)
         return PRE_FRAMEWORK_VERSION if declared is None else declared
+
+    @property
+    def all_locators(self) -> tuple[str, ...]:
+        """Every locator this kind is globbed at, oldest first."""
+        return self.locators or (self.locator,)
+
+
+# --- location stamps (moved kinds, S1 §D) ----------------------------------
+#
+# A kind that moved and has no stamp of its own carries its version in WHERE it is: the
+# file at its first locator is version 1, at its second version 2. Writing the stamp is
+# the move itself, so the writer is a no-op (the runner never stamps a relocating hop).
+
+
+def location_stamp(*locators: str) -> Callable[[Path], int | None]:
+    """The stamp reader of a kind moved through *locators* (oldest first): the 1-based
+    index of the NEWEST locator the path matches, so a more specific new locator
+    (`.fr/settings.yaml`) wins over an old one it also matches (`settings.yaml`)."""
+    patterns = tuple(f"**/{loc}" for loc in locators)
+
+    def read(path: Path) -> int | None:
+        for i in range(len(patterns) - 1, -1, -1):
+            if Path(path).full_match(patterns[i]):
+                return i + 1
+        raise ArtifactStampError(
+            f"{path}: at none of this kind's locations ({', '.join(locators)})"
+        )
+
+    return read
+
+
+def no_stamp_write(path: Path, version: int) -> None:
+    """A location-stamped kind's stamp writer: the move is the stamp (S1 §D.2)."""
+    del path, version
 
 
 # --- YAML-carried stamps (plan / run / matrix) ---------------------------
@@ -605,12 +657,71 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
             # §3.D), migration `fr.artifacts.profiles_services`. Fields MOVE, so
             # version 1 is read only through the frozen
             # `fr.services.legacy.ProfilesV1`. An unstamped file is version 1.
-            current_version=2,
-            locator=".devcontainer/fr-profiles.yaml",
-            stamp="`schema_version` in `fr-profiles.yaml`",
+            # 2 -> 3 RELOCATES it to `.fr/profiles.yaml` in the configuration space
+            # (spec 2026-11-19-event-driven-a-la-carte S1 R9, §D), writing
+            # `schema_version: 3`, migration `fr.artifacts.config_migration`.
+            current_version=3,
+            locator=_moves.moved("profiles").new_locator,
+            locators=(_moves.LEGACY_PROFILES, _moves.moved("profiles").new_locator),
+            roots=_moves.moved_roots("profiles"),
+            owns=_moves.moved_owns("profiles"),
+            stamp="`schema_version` in the profiles yaml",
             read_stamp=_read_yaml_stamp,
             write_version=_write_yaml_stamp,
             validate=validate_profiles,
+        ),
+        *(
+            # The files S1 moves into `.fr/` (R8, R9), stamped by their location: version
+            # 1 at the old path, 2 at the new one. Born at 2; the 1 -> 2 hop relocates
+            # (`fr.artifacts.config_migration`).
+            ArtifactKind(
+                name=kind,
+                current_version=2,
+                locator=_moves.moved(kind).new_locator,
+                locators=(_moves.moved(kind).old, _moves.moved(kind).new_locator),
+                roots=_moves.moved_roots(kind),
+                owns=_moves.moved_owns(kind),
+                stamp="its location (old path: 1, `.fr/`: 2)",
+                read_stamp=location_stamp(_moves.moved(kind).old, _moves.moved(kind).new_locator),
+                write_version=no_stamp_write,
+                validate=validate,
+            )
+            for kind, validate in (
+                ("workflow-config", validate_workflow_config),
+                ("verification-config", validate_verification_config),
+                ("models-config", validate_models_config),
+                ("trackers-config", validate_trackers_config),
+                ("plan-config", validate_plan_config),
+                ("isolation-allow", validate_isolation_allow),
+            )
+        ),
+        ArtifactKind(
+            # Under quiet, the product checkout's own `.fr/` files (R11) move to
+            # `fr-config`: version 1 in the product, 2 in the `fr-config` checkout.
+            name="quiet-config",
+            current_version=2,
+            locator=_moves.rel("*"),
+            locators=(_moves.rel("*"), _moves.rel("*")),
+            roots=_moves.quiet_roots,
+            owns=_moves.quiet_owns,
+            stamp="its checkout (product: 1, `fr-config`: 2)",
+            read_stamp=_moves.quiet_stamp,
+            write_version=no_stamp_write,
+            validate=validate_quiet_config,
+        ),
+        ArtifactKind(
+            # The switch's settings file (R5, R6): the root `settings.yaml` on `fr`
+            # (stealth: `<target-dir>/settings.yaml`) is 1 until the configuration branch
+            # holds the same bytes at `.fr/settings.yaml`, then it is R6's legacy copy.
+            name="settings-location",
+            current_version=2,
+            locator=_moves.rel(_moves.SETTINGS),
+            locators=(_moves.SETTINGS, _moves.rel(_moves.SETTINGS)),
+            roots=_moves.settings_roots,
+            stamp="the configuration branch holding it (old switch only: 1)",
+            read_stamp=_moves.settings_stamp,
+            write_version=no_stamp_write,
+            validate=validate_settings_location,
         ),
         ArtifactKind(
             name="ops",
@@ -677,14 +788,22 @@ def iter_paths_of(repo_root: Path, kind: ArtifactKind) -> Iterator[Path]:
     """
     # Under quiet a placement-bound kind lives below every feature root of the fr
     # worktree, the same relative layout (review p3-r4); repo output is unchanged.
-    for root in search_roots(repo_root, kind.locator):
-        for path in sorted(root.glob(kind.locator)):
-            if ARCHIVE_SEGMENT in path.relative_to(root).parts:
-                continue
-            if kind.owns is not None and not kind.owns(path):
-                continue
-            if path.is_file():
-                yield path
+    seen: set[Path] = set()
+    for index, locator in enumerate(kind.all_locators):
+        roots = (
+            kind.roots(repo_root, index)
+            if kind.roots is not None
+            else search_roots(repo_root, locator)
+        )
+        for root in roots:
+            for path in sorted(root.glob(locator)):
+                if path in seen or ARCHIVE_SEGMENT in path.relative_to(root).parts:
+                    continue
+                if kind.owns is not None and not kind.owns(path):
+                    continue
+                if path.is_file():
+                    seen.add(path)
+                    yield path
 
 
 def own_feature(repo_root: Path) -> Callable[[Path], bool]:

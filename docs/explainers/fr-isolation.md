@@ -14,7 +14,8 @@ covers:
   - plugins/super-fr/hooks/fr-isolation-required.sh
   - plugins/super-fr/hooks/fr-isolation-guard.sh
   - packages/fr/src/fr/isolation/**
-reviewed: 2026-11-25 gc keeps a workspace whose run has a running or unreadable step, and says why (batch-merge-readiness R9); 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-19 the edit gate reads its payload with a resolved, isolated parser and refuses without one (batch hook-hardening). 2026-11-17 still true; scaffold asks git check-ignore through fr.git.is_ignored (batch-acceptance-edits). 2026-11-16 up refuses a branch whose slug another workspace holds; a resume keeps the recorded mode; scaffold names secrets after the repo
+  - packages/fr/src/fr/config/**
+reviewed: 2026-11-25 gc keeps a workspace whose run has a running or unreadable step, and says why (batch-merge-readiness R9); 2026-11-25 adds where repo configuration lives under each placement (`.fr/`, `fr-config`, `<branch>-config`), `.fr/isolation-allow`, `fr settings sync`, the protection rule for executable configuration and the two new write targets (S1 R1-R13); 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-19 the edit gate reads its payload with a resolved, isolated parser and refuses without one (batch hook-hardening). 2026-11-17 still true; scaffold asks git check-ignore through fr.git.is_ignored (batch-acceptance-edits). 2026-11-16 up refuses a branch whose slug another workspace holds; a resume keeps the recorded mode; scaffold names secrets after the repo
 ---
 
 ## What are the two boundaries and the bridge?
@@ -159,15 +160,19 @@ refuses the edit. It does not let the edit through.
 
 Only a marker that clears every step allows the edit, with one structural exception. Under
 quiet and stealth, fr keeps a feature's spec, plan and journals outside the workspace: in the
-repo's own `fr` worktree, or in the clone of the tracking repo. Neither carries a marker, so
-the gate recognises them by their shape instead.
+repo's own `fr` worktree, or in the clone of the tracking repo. The repo's configuration is
+outside it too: in the `fr-config` worktree, or in a second clone of the tracking repo. None
+of these carries a marker, so the gate recognises them by their shape instead.
 
 The `fr` worktree must be a linked worktree of the same repository, at exactly the path fr
 gives it (`~/.cache/fr/worktrees/<repo>/fr`), on branch `fr`, while the switch says
 `placement: quiet`. A worktree of another repo parked at that path, or a branch named `fr`
 anywhere else, does not qualify. The tracking clone must have a `stealth--…` name, sit
 beside a workspace whose marker is valid and says `placement: stealth`, and have the origin
-and branch that marker names. The skills ask `fr settings paths --shell` for the directories
+and branch that marker names. The `fr-config` worktree sits beside the `fr` worktree, on
+branch `fr-config`, and its files must all be below `.fr/`. The stealth configuration clone
+has a `stealth--…-config` name, is on the tracking branch plus `-config`, and holds only
+`<target-dir>/.fr/`. The skills ask `fr settings paths --shell` for the directories
 (`FR_SPECS_DIR`, `FR_PLANS_DIR` and the rest) rather than writing to `docs/superpowers/` in
 the workspace.
 
@@ -175,8 +180,11 @@ There are three ways around the gate, all deliberate:
 
 - **`FR_BASE_OK=1`**: a one-shot environment override for a deliberate, knowing edit to the
   base clone.
-- **`.fr-isolation-allow`**: a root glob-list for operator-managed paths (data, caches,
-  memory) that legitimately live outside isolation.
+- **`.fr/isolation-allow`**: a glob-list for operator-managed paths (data, caches,
+  memory) that legitimately live outside isolation. It sits in the working tree of the
+  checkout it governs, under every placement, tracked or not. An older repo has it at the
+  root as `.fr-isolation-allow`. fr reads that file while the new one is absent, and the
+  migration renames it.
 - **Self-heal**: the Bash guard's sentinel records every workspace your session bound. It
   stays armed while any survives, and retires once they are all gone, so it never
   deadlocks you.
@@ -184,6 +192,72 @@ There are three ways around the gate, all deliberate:
 The gate answers one question only: is this fr work happening in an fr-enabled repo's base
 clone instead of its workspace? It is not a filesystem sandbox or a credential boundary,
 and it says nothing about paths outside an fr-enabled repo.
+
+## Where does the repo's configuration live?
+
+A repo tells fr how to work through a few files: workflow shapes, verification strategies,
+model bindings, trackers, the plan format, the devcontainer profile declarations, the CI and
+docs settings, and the settings file with the placement switch. All of them live in one
+`.fr/` directory. That directory sits in the repo's **configuration space**, which follows
+the placement:
+
+| Placement | Where `.fr/` is |
+|---|---|
+| `repo` | the product checkout itself |
+| `quiet` | the orphan branch `fr-config`, checked out at `~/.cache/fr/worktrees/<repo>/fr-config` |
+| `stealth` | `<target-dir>/.fr/` on the tracking repo's branch `<branch>-config` |
+
+The `.devcontainer/<profile>/` directories stay in the product, and so does
+`.fr/isolation-allow`. Under quiet and stealth, fr ignores the product checkout's own `.fr/`
+and says so once per command. A feature branch therefore cannot change how fr treats it. A
+change to the configuration is a pull request to the configuration branch. The fr commands open that pull
+request when they change the settings or move a file there. `fr init scaffold` opens none.
+Under quiet it refuses once the branch holds the profile declarations, and under stealth it
+refuses before it writes anything.
+
+**Moving an older repo.** `fr migrate artifacts --yes`, or the migration that runs before an
+fr command in a workspace, moves each old file. Under `repo` it is a rename in one
+`chore(fr): migrate` commit. Under quiet and stealth the result depends on the
+configuration branch. If the branch does not exist yet, fr creates it with every moved file
+and pushes it. If the branch exists without a file, fr proposes that file in a pull request.
+The product file then stays until the pull request merges and you run the migration again.
+If the branch holds the file with other bytes, fr refuses that file and keeps both.
+
+The migration moves only the bytes that the default branch has committed. It does not move
+a file that git does not track. It removes a file from the product only when the fetched branch holds the same bytes. If the push is refused, nothing leaves
+the product. Under stealth the product file stays, and fr prints the `git rm` you can run.
+
+**Older fr.** An fr from before this change reads the switch only from the old file, the
+root `settings.yaml` on `fr`. So fr keeps that old copy identical to the new
+`.fr/settings.yaml`. After a reviewed change merges, the old copy is one step behind, and
+fr refuses to act until you bring it in step. `fr settings sync` shows both copies and the
+commits between them. `fr settings sync --yes --expect <tip>` then writes the old copy from
+the tip you checked. fr writes it without `--expect` only when the forge protects the
+configuration branch. A write can also stop half way: fr pushed the new copy, and then
+the remote refused the old one. The same sync finishes it. Its preview says the old copy
+is absent, and `fr settings init` names that sync when you run it again.
+
+**Configuration that runs commands.** Some files run commands or decide what merges: the
+candidate install, the command keys of `.fr/triage.yaml`, `.fr/ops.yaml`, and three keys of
+`.fr/ci.yaml`. Under quiet and stealth anyone who can push to the configuration branch
+could change them. So fr uses them only when the forge enforces a rule on that branch. The
+rule is a ruleset that requires a pull request with at least one approving review and
+blocks force-pushes and deletion. A push after the approval must not keep it. So set the
+rule to dismiss stale approvals on push, or to require approval of the most recent push.
+fr reads the rules of the branch, but it cannot see who may bypass them. Keep the bypass
+list of that ruleset empty. fr also trusts what the branch held before you added the rule,
+so check that content once when you add it.
+
+When the forge does not enforce such a rule, fr does not trust these files. It refuses to
+run the candidate install or the `.fr/ops.yaml` runbook, and it says how to fix that. It
+ignores the guarded keys of `.fr/ci.yaml` and `.fr/triage.yaml` as though they were absent,
+and it says so once. Then `deliver` asks for a local full-suite log, and the triage driver
+runs no command from `.fr/triage.yaml`. GitHub does not enforce rulesets on a private repo
+on the free plan, so there fr always acts like this. A rules read that fails refuses. Workflow shapes, verification
+strategies and profile declarations do not lock you out. fr uses the shipped shape or
+strategy instead, and reads the profiles without their secrets and service blocks. When fr
+does run a guarded program, it runs it from the fetched tip of the configuration branch,
+never from your local checkout.
 
 ## Which three shipped bugs shaped the design?
 
