@@ -260,3 +260,8 @@ both pr_view clients return labels None for a missing key (fr.ghclient.pr_label_
 ### l-errors-r3-resolved · finding [out-of-scope] · resolves l-errors-r3: trial_conflicts classified before abort_merge, so a GitError there skipped the abort
 
 Reviewer's tag kept (out). The abort ordering was hardened anyway in a8569adbc (classification in try/finally so abort_merge always runs; test_a_failing_conflict_read_still_aborts_the_merge_and_propagates); the scratch worktree was already removed in every case.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6-resolved-2 created=2026-11-27T16:18:58+00:00 phase=1 state=open resolves=p1-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1739 -->
+### p1-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1739] · resolves p1-r6: wave_overlap.py:75 compares repo_name exactly, the same case bug as #1695 in a sibling module (phase 1)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1739.
