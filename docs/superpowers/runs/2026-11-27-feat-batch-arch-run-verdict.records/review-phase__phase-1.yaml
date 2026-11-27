@@ -1,0 +1,38 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-arch-run-verdict
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+- kind: finding
+  id: p1-r1
+  phase: 1
+  review_scope: in
+  title: test_run_verdict_derived.py keeps a never-called Case.old/_old capture driver naming run_cmd._witness_base (gone) and the now-Verdict-returning aliases
+  body: tests/unit/test_run_verdict_derived.py:128-169 and every _old(...) in _cases(); dead and misleading. Fix - drop the field and helper, name the capture commit in the docstring.
+- kind: finding
+  id: p1-r2
+  phase: 1
+  review_scope: in
+  title: row run-engine-cli-free moved to ci while its acceptance says one allowance and the layering test still permits the temporary adopt.py one
+  body: docs/acceptance/features/2026-11-27-run-verdict.yaml; tests/unit/test_run_writes_layering.py:96-99 allows adopt.py until phase 2. Fix - name the temporary allowance in the row's notes.
+- kind: review
+  id: review-p1-1
+  phase: 1
+  title: phase 1 reviewed by an independent reviewer; 2 findings, both in scope, both fixed
+  body: |
+    Reviewer checked byte identity of every moved Say against the pre-move prints, derive's gh#768 accumulation, _refusals' cause, unobserved.py, the layering test (per-file package, rich.markup both spellings, both old test names kept), the re-pointed patches, fixtures captured before the move (b39ef3751 before f53d3542f), budget, fragment and stamps. Findings p1-r1 (dead pre-move driver in the capture test) and p1-r2 (row note did not name the temporary adopt.py allowance), both fixed.
+- kind: lens
+  lens: tests
+  title: each later slice's fixtures must be captured before its move, with no capture driver left behind as dead code
+resolves:
+- id: p1-r1
+  state: fixed
+  body: Removed Case.old and _old; the docstring names capture commit b39ef3751 (test commit after the review). 13 tests pass.
+- id: p1-r2
+  state: fixed
+  body: set-status --notes on run-engine-cli-free names the temporary adopt.py allowance that slice 2 removes.
+evidence:
+  review: review-p1-1
+  reviewer: a37914f68200f7dc1
+  model: claude-opus-5-5
