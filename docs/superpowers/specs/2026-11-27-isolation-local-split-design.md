@@ -120,3 +120,9 @@ imports (arrow = "imports from"):
 strategy: none
 - isolation-local-split-guards: none — the forge-argv, remedy and budget tripwires run in this PR's CI, with the whole unit suite unchanged in behaviour
 gate: developer
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-27-isolation-local-split | `derio-net/super-fr` | `2026-11-27-isolation-local-split` | — |

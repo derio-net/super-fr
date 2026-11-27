@@ -1,0 +1,50 @@
+schema_version: 2
+phase:
+  number: 2
+  title: reap.py — the reap and gc value types leave local.py (R1-R6)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - isolation-local-split-guards
+  tier: standard
+  files:
+  - packages/fr/src/fr/isolation/local.py
+  - packages/fr/src/fr/isolation/reap.py
+  - packages/fr/src/fr/isolation/*.py
+  - packages/fr/src/fr/commands/*.py
+  - tests/unit/*.py
+  - tests/integration/*.py
+  estimate_lines: 340
+tasks:
+- number: 1
+  title: Guard first, then the move
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: add `"fr.isolation.reap"` to `ISOLATION_MODULES` in `tests/unit/test_isolation_network_timeouts.py`; the new case fails (no module).
+  - id: P2.T1.S2
+    text: |-
+      GREEN: create `packages/fr/src/fr/isolation/reap.py` (docstring, #1517) holding the reap group byte-identical (`local.py` lines 172-297 at the branch base): `MergeVerification`, `GcWorkspace`, `_forge_refused`, `GcAction`, `ReapHazard`, `ReapRefused`, `_merged_before`, `_hazard_detail`. Its imports: `IsolationError`, `IsolationState` from `fr.isolation.types`, `KIND_DIRS` from `fr.artifacts.paths`, stdlib. `_UP_REMEDY` and `_FR_OWNED_EXCLUDES` STAY in `local.py` (spec R5). `local.py` imports from `reap` what its code uses. Guard passes.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: migrate every caller of the moved names (src incl. `hostworktree.py`, `external.py`, `isolation_cmd.py`, `archive_cmd.py`; tests incl. lazy imports) to `fr.isolation.reap`. Lower the budget as in P1.T2.S3. ruff check, ruff format, mypy clean; fast tier green.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

@@ -1,0 +1,75 @@
+schema_version: 2
+phase:
+  number: 4
+  title: landing.py — landing analysis leaves local.py; budget and docs stamps settle
+    (R1-R8)
+  tag: agentic
+  depends_on:
+  - 3
+  tracking_issue: null
+  acceptance:
+  - isolation-local-split-guards
+  tier: standard
+  files:
+  - packages/fr/src/fr/isolation/local.py
+  - packages/fr/src/fr/isolation/landing.py
+  - packages/fr/src/fr/isolation/*.py
+  - packages/fr/src/fr/commands/*.py
+  - tests/unit/*.py
+  - tests/integration/*.py
+  - docs/explainers/fr-isolation.md
+  - docs/explainers/fr-dispatch.md
+  - docs/explainers/fr-progress.md
+  - docs/explainers/fr-triage.md
+  - docs/reference/dispatch-lifecycle.md
+  - docs/reference/cli.md
+  - docs/herdr-control-sessions.md
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: Guard first, then the move
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: add `"fr.isolation.landing"` to `ISOLATION_MODULES`; the new case fails.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: create `packages/fr/src/fr/isolation/landing.py` (docstring, #1517) holding `local.py`'s `_ARCHIVED_KINDS`/`_SUPERPOWERS` block (with its comment) and the landing group from `_archived_path` through `recorded_start`, byte-identical. It imports from `runner`, `reap` (`MergeVerification`), `branchrefs` (`_main_worktree_root`), `types` (`load_state` and what else it names), never `local`. `local.py` keeps calling `branch_changes_present`/`recorded_start` through its own imported globals, so `"fr.isolation.local.branch_changes_present"` (tests/unit/test_isolation.py:1473) still patches what the class calls. Guard passes.
+  - id: P4.T1.S3
+    text: |-
+      REFACTOR: migrate every caller of the moved names to `fr.isolation.landing`. Add a test in `tests/unit/test_isolation_network_timeouts.py` beside the guard that AST-checks none of `runner`, `reap`, `branchrefs`, `landing` imports `fr.isolation.local` (R2). ruff, format, mypy clean.
+- number: 2
+  title: Settle the budget and the docs stamps
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      Lower `local.py`'s budget to the final count rounded up to the next 25, plus 25, with a comment naming #1517. Confirm `grep -rn "fr.isolation.local import" packages tests` names only what `local.py` still defines or imports for its own use (R3 forbids a deliberate re-export list).
+  - id: P4.T2.S2
+    text: |-
+      Run `uv run fr docs check --base origin/main`; for each covered page it reports (spec Background lists seven), move the front-matter `reviewed:` to today with the note `still true: isolation/local.py split into modules (#1517), no reader-visible change`. Re-run until it exits 0. Then the fast tier last.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
