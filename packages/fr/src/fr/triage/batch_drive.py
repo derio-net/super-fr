@@ -741,13 +741,32 @@ def _stale_closeout(batch: Batch, event: CloseoutEvent, snap: Snapshot) -> Actio
     )  # fmt: skip
 
 
-def closeout_due(*, released: bool, merged_at: datetime | None, now: datetime) -> bool:
+def closeout_due(
+    *, released: bool, merged_at: datetime | None, now: datetime, queued: bool = False
+) -> bool:
     """§B step 2: the release commit that follows the merge is on the base branch,
     or ten minutes passed since the merge with none. An unknown merge time is not
-    yet due (review rg-9): the caller supplies when it first saw the merge."""
-    if released:
+    yet due (review rg-9): the caller supplies when it first saw the merge.
+
+    *queued* (a `queue_land` of its repo names the batch) is due at once: the queue's hold
+    blocks any release until the drain, which waits for this close-out, so waiting for
+    one only costs the fallback (R5 of spec 2026-11-27-queue-followups). The same value
+    gates the repo's `post_merge`, which the queue's landing normally ran already."""
+    if released or queued:
         return True
     return merged_at is not None and now - merged_at >= CLOSEOUT_FALLBACK
+
+
+def queue_landed_by_repo(records: Sequence[QueueRecord]) -> dict[str, frozenset[str]]:
+    """Per repo, the batches a `queue_land` record of that repo names
+    (`wave_queue.queue_landed`): due for close-out at once (R5, R7 of spec
+    2026-11-27-queue-followups)."""
+    from fr.triage.wave_queue import queue_landed
+
+    return {
+        repo: queue_landed([r for r in records if r.repo == repo])
+        for repo in {r.repo for r in records}
+    }
 
 
 # ---------------------------------------------------------- close-out (§C)
@@ -1674,6 +1693,21 @@ def wave_landings_done(snap: Snapshot, repo: str, wave: int | None) -> bool:
     )
 
 
+def _can_hold_wave(batch: Batch, snap: Snapshot) -> bool:
+    """R6 of spec 2026-11-27-queue-followups: whether *batch* may hold its wave's collected
+    close-out. A batch with no wave stands alone (`wave_landings_done`); one held by the
+    verb (`closeout_hold`), gated, or with a close-out of its own (a hand-opened PR, a live
+    per-batch tab) never holds the rest (review p1-r2, p1-r5)."""
+    item = closeout_item_id(snap.repos.get(batch.id, ""), batch.id)
+    return (
+        _wave_of(batch) is not None
+        and closeout_hold(batch) is None
+        and not is_gated(batch, snap)
+        and batch.id not in snap.adopted
+        and item not in snap.existing
+    )
+
+
 def queue_snapshot(
     snap: Snapshot,
     repo: str,
@@ -1827,15 +1861,22 @@ def drive_pass(snap: Snapshot) -> Pass:
     post_planned: set[str] = set()
     # (repo, wave) -> the batches its collected close-out takes (R15: one per wave)
     collecting: dict[tuple[str, int | None], list[str]] = {}
+    # (repo, wave) -> the members that hold its close-out back, and why (R6 of spec
+    # 2026-11-27-queue-followups): not due, unverified or ledger-unread
+    blocking: dict[tuple[str, int | None], list[tuple[str, str]]] = {}
     labelled: set[str] = set()  # issues an awaiting-live action already names this pass
+    queued = queue_landed_by_repo(snap.queue_records)
     for batch in snap.batches:
         if stages.get(batch.id) not in LANDED or batch.id in held_ids:
             continue
         if closeout_of(batch, snap.closeouts) is not None:
             continue
         driven_now = snap.selected is None or batch.id in snap.selected
+        wave_key = (snap.repos.get(batch.id, ""), _wave_of(batch))
         if batch.id in snap.unverified:
             closing += driven_now
+            if driven_now and _can_hold_wave(batch, snap):
+                blocking.setdefault(wave_key, []).append((batch.id, "unverified"))
             continue
         # A close-out the driver did not start is recorded once, as an event: every
         # later pass, the board and `batch list` read it (gh#899, gh#900, gh#912).
@@ -1854,6 +1895,7 @@ def drive_pass(snap: Snapshot) -> Pass:
             released=batch.id in snap.released,
             merged_at=snap.merged_at.get(batch.id),
             now=snap.now,
+            queued=batch.id in queued.get(snap.repos.get(batch.id, ""), frozenset()),
         )
         owed = not any(e.kind == "post_merge" for e in batch.events)
         item = closeout_item_id(snap.repos.get(batch.id, ""), batch.id)
@@ -1870,6 +1912,8 @@ def drive_pass(snap: Snapshot) -> Pass:
             post_planned.add(batch.id)
         if batch.id in snap.ledger_unknown:  # p4-r1: unknown is not ungated
             closing += 1
+            if _can_hold_wave(batch, snap):
+                blocking.setdefault(wave_key, []).append((batch.id, "ledger unread"))
             actions.append(Action("ledger-unread", batch.id, "its merged PR's labels were not "
                                   "read, so whether a gate holds it is unknown; no close-out "
                                   "until they are"))  # fmt: skip
@@ -1898,6 +1942,8 @@ def drive_pass(snap: Snapshot) -> Pass:
                                   pr=hand.number))  # fmt: skip
             continue
         if not due:
+            if _can_hold_wave(batch, snap):
+                blocking.setdefault(wave_key, []).append((batch.id, "not due"))
             continue
         if item in snap.existing:  # a per-batch close-out started before R15: recorded
             actions.append(Action("closeout", batch.id, f"record the live {item}", recorded=True))
@@ -1916,6 +1962,10 @@ def drive_pass(snap: Snapshot) -> Pass:
     # R15: one collected close-out per wave, at most one per repo, none while one is under way.
     started: set[str] = set()
     for repo, group in sorted(collecting, key=lambda k: (k[0], k[1] is None, k[1] or 0)):
+        if blockers := blocking.get((repo, group)):
+            said = ", ".join(f"{bid} ({why})" for bid, why in blockers)
+            actions.append(Action("held", blockers[0][0], f"the wave's close-out waits for {said}"))
+            continue
         if waiting := post_owed.get((repo, group)):
             # R15: held until every landed member's post_merge succeeded, never started
             # with the rest; the post-merge action retries it every pass

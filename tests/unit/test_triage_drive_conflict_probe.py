@@ -248,3 +248,88 @@ def test_a_lockfile_conflict_is_resolved_only_when_the_repo_relocks(
     root = tmp_path / "probe"
     assert trial_conflicts(Checkout(repo), "main", block, head, scratch_root=root) == expected
     assert _scratch_gone(repo, root)
+
+
+def _page(date: str, note: str) -> str:
+    return f"---\ntitle: P\nreviewed: {date} {note}\ncovers: [x]\n---\n\nBody.\n"
+
+
+def _regen_conflicts(tmp_path: Path) -> tuple[Path, str]:
+    """main and a PR both edit a page's `reviewed:` stamp, a whole generated file and a
+    plain source line."""
+    repo = _repo(tmp_path)
+    (repo / "docs").mkdir()
+    (repo / "gen").mkdir()
+    (repo / "docs" / "page.md").write_text(_page("2026-11-01", "base"))
+    (repo / "gen" / "out.txt").write_text("generated base\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "pages")
+    _git(repo, "switch", "-qc", "pr")
+    (repo / "a.txt").write_text("one\nPR\nthree\n")
+    (repo / "docs" / "page.md").write_text(_page("2026-11-20", "pr"))
+    (repo / "gen" / "out.txt").write_text("generated pr\n")
+    _git(repo, "commit", "-qam", "pr")
+    head = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "switch", "-q", "main")
+    (repo / "a.txt").write_text("one\nMAIN\nthree\n")
+    (repo / "docs" / "page.md").write_text(_page("2026-11-10", "main"))
+    (repo / "gen" / "out.txt").write_text("generated main\n")
+    _git(repo, "commit", "-qam", "main")
+    return repo, head
+
+
+def test_the_probe_skips_the_conflicts_the_queue_resolves_with_mirrors(tmp_path: Path) -> None:
+    """R4 of spec 2026-11-27-queue-followups: a stamp hunk and a whole generated path are
+    the queue's to resolve when the repo declares mirrors; only the real path is left."""
+    repo, head = _regen_conflicts(tmp_path)
+    root = tmp_path / "probe"
+    got = trial_conflicts(
+        Checkout(repo), "main", None, head, scratch_root=root, generated=("gen/*",), mirrors=True
+    )
+    assert got == ["a.txt"]
+    assert _scratch_gone(repo, root)
+    assert _git(repo, "status", "--porcelain") == ""
+
+
+def test_the_probe_keeps_owed_generated_paths_without_mirrors(tmp_path: Path) -> None:
+    """R4: with no mirrors the queue refuses a generated path, never a stamp hunk."""
+    repo, head = _regen_conflicts(tmp_path)
+    root = tmp_path / "probe"
+    got = trial_conflicts(
+        Checkout(repo), "main", None, head, scratch_root=root, generated=("gen/*",), mirrors=False
+    )
+    assert got == ["a.txt", "gen/out.txt"]
+
+
+def test_a_failing_conflict_read_still_aborts_the_merge_and_propagates(tmp_path: Path) -> None:
+    """l-errors-r3: the classification reads the conflicted merge; a GitError there never
+    skips `abort_merge`, and the error propagates as a merge error does."""
+    repo = _repo(tmp_path)
+    head = _pr_head(repo)
+    (repo / "a.txt").write_text("one\nMAIN\nthree\n")
+    _git(repo, "commit", "-qam", "main")
+    aborted: list[bool] = []
+
+    class _Wt:
+        def __init__(self, inner: object) -> None:
+            self._inner = inner
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._inner, name)
+
+        def unmerged_stages(self) -> object:
+            raise GitError("ls-files: index unreadable")
+
+        def abort_merge(self) -> None:
+            aborted.append(True)
+            self._inner.abort_merge()  # type: ignore[attr-defined]
+
+    class _Checkout(Checkout):
+        def add_worktree(self, where: Path, ref: str) -> _Wt:  # type: ignore[override]
+            return _Wt(super().add_worktree(where, ref))
+
+    root = tmp_path / "probe"
+    with pytest.raises(GitError, match="index unreadable"):
+        trial_conflicts(_Checkout(repo), "main", None, head, scratch_root=root)
+    assert aborted == [True]
+    assert _scratch_gone(repo, root)

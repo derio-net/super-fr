@@ -1,0 +1,102 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-27-queue-followups
+repo: derio-net/super-fr
+rows:
+  - id: queue-approval-label-lifecycle
+    capability: wave merge queue approvals
+    acceptance: A recorded approval whose approved-fr label is gone is ended, so re-adding
+      the label approves the live head; a label on a head with a real conflict is held
+      unrecorded until a conflict-free head; every label removal fr makes posts its
+      reason on the PR once.
+    origin:
+    - spec:2026-11-27-queue-followups#R1
+    - spec:2026-11-27-queue-followups#R2
+    - spec:2026-11-27-queue-followups#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_approval.py#test_a_removed_label_ends_a_live_approval_with_no_forge_write
+      - super-fr:tests/unit/test_triage_approval.py#test_an_entry_approval_whose_label_is_gone_is_ended
+      - super-fr:tests/unit/test_triage_approval.py#test_a_label_on_a_head_with_a_real_conflict_waits
+      - super-fr:tests/unit/test_triage_approval.py#test_a_waiting_pr_is_recorded_once_its_head_is_conflict_free
+      - super-fr:tests/unit/test_triage_approval.py#test_a_void_removes_the_label_records_it_and_says_why_on_the_pr
+      - super-fr:tests/unit/test_triage_approval.py#test_a_trusted_marker_for_the_head_suppresses_the_comment
+      - super-fr:tests/unit/test_triage_readiness.py#test_a_waiting_approval_reads_as_waiting_for_a_conflict_free_head
+      - super-fr:tests/unit/test_triage_readiness.py#test_an_ended_approval_is_not_a_push_void
+      - super-fr:tests/unit/test_merge_train_label_board.py#test_an_ended_approval_asks_for_the_label_without_naming_a_push
+      - super-fr:tests/unit/test_triage_approval.py#test_no_comment_when_comments_are_off_or_the_policy_is_unreadable_and_it_says_why
+    status: ci
+    notes: R1-R3 proven by approval, board, lane and client unit tests in CI; the comments-off
+      test was renamed when it learned to say why (l-errors-r1)
+    verify: none
+  - id: queue-approval-waits-conflict-free
+    capability: wave merge queue approvals
+    acceptance: An approved-fr label on a conflicting head is held unrecorded and is
+      recorded at the first conflict-free head, so a conflict repair needs no second
+      approval.
+    origin:
+    - spec:2026-11-27-queue-followups#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: conflict-probe-matches-queue-resolution
+    capability: wave driver conflict probe
+    acceptance: The early conflict probe reports only the conflicts the queue's own
+      build would refuse, so a stamp or generated-file conflict costs no hand-back.
+    origin:
+    - spec:2026-11-27-queue-followups#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_drive_conflict_probe.py#test_the_probe_skips_the_conflicts_the_queue_resolves_with_mirrors
+      - super-fr:tests/unit/test_triage_drive_conflict_probe.py#test_the_probe_keeps_owed_generated_paths_without_mirrors
+    status: ci
+    notes: trial_conflicts classifies with regen.classify_conflicts; scratch-repo unit
+      tests in CI (R4)
+    verify: none
+  - id: queue-closeout-due-at-landing
+    capability: wave driver close-out
+    acceptance: A queue-landed wave gets exactly one collected close-out as soon as
+      its landings' post_merge succeeded, and a close-out deadline wakes a quiet paced
+      pass.
+    origin:
+    - spec:2026-11-27-queue-followups#R5
+    - spec:2026-11-27-queue-followups#R6
+    - spec:2026-11-27-queue-followups#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_closeout_due_queued_is_due_at_once
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_drive_pass_queue_landed_batch_closes_out_without_fallback
+      - super-fr:tests/unit/test_triage_batch_drive_cmd.py#test_a_queue_landed_batch_is_closed_out_without_the_release_or_the_fallback
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_wave_closeout_waits_for_every_member_due
+      - super-fr:tests/unit/test_triage_batch_drive.py#test_wave_closeout_held_for_unverified_member
+      - super-fr:tests/unit/test_triage_probe.py#test_deadline_repos_reads_a_repo_whose_closeout_fallback_passed
+      - super-fr:tests/unit/test_triage_probe.py#test_deadline_repos_fails_open_on_no_merged_at_and_skips_queue_landed
+      - super-fr:tests/unit/test_triage_probe.py#test_a_quiet_pass_with_a_deadline_repo_reads_only_it
+      - super-fr:tests/unit/test_triage_pacing_state.py#test_planned_at_round_trips_and_a_bad_value_is_none
+    status: ci
+    notes: closeout_due(queued), wave hold and deadline-woken paced pass; unit tests
+      in CI (R5-R7)
+    verify: none
+  - id: wave-overlap-repo-case
+    capability: wave plan overlap
+    acceptance: Two batches whose repo names differ only in case are compared as one
+      repo for plan-file overlap.
+    origin:
+    - spec:2026-11-27-queue-followups#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_plan_overlap.py#test_overlaps_compares_repo_names_case_insensitively
+    status: ci
+    notes: overlaps compares repo names lower-cased; unit test in CI (R8)
+    verify: none
+amendments:
+  - row: queue-approval-waits-conflict-free
+    op: retire
+    base: 0
+    notes: merged into queue-approval-label-lifecycle
+    why: 'q4: one row per issue (sr-12)'

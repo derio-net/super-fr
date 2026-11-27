@@ -16,6 +16,7 @@ from fr.triage.approval import (
     approval_verdict,
     settle_approvals,
 )
+from fr.triage.approval import _comments_off as _real_comments_off
 from fr.triage.model import ApprovalEvent, Batch, BatchEvent, UpdateEvent
 
 REPO = "derio-net/super-fr"
@@ -49,6 +50,14 @@ class _Forge:
     def __init__(self, view: dict[str, Any]) -> None:
         self.view = view
         self.label_edits: list[tuple[int, frozenset[str], frozenset[str]]] = []
+        self.comments: list[dict[str, Any]] = []
+        self.posted: list[tuple[int, str]] = []
+
+    def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
+        return list(self.comments)
+
+    def comment_pr(self, repo: str, pr: int, body: str) -> None:
+        self.posted.append((pr, body))
 
     def read_file(self, repo: str, path: str) -> str:
         from fr.gh import GhError
@@ -473,3 +482,302 @@ def test_a_clean_since_that_says_no_voids_a_matching_patch_id() -> None:
     assert judge_approval(events, 7, "h2", [LABEL], reader)[0] == Approved("h1")
     reader.clean_since = lambda pr, approved, head: None  # type: ignore[attr-defined]
     assert judge_approval(events, 7, "h2", [LABEL], reader)[0].__class__.__name__ == "Held"
+
+
+# ------------------------------- the approval lifecycle (2026-11-27-queue-followups R1-R3)
+
+
+class _Lifecycle(_Forge):
+    """A `_Forge` holding *comments* already on the PR, whose post can fail."""
+
+    def __init__(self, view: dict[str, Any], comments: list[dict[str, Any]] | None = None,
+                 *, fail_comment: bool = False) -> None:  # fmt: skip
+        super().__init__(view)
+        self.comments = comments or []
+        self.fail_comment = fail_comment
+
+    def comment_pr(self, repo: str, pr: int, body: str) -> None:
+        if self.fail_comment:
+            raise RuntimeError("HTTP 502")
+        super().comment_pr(repo, pr, body)
+
+
+@pytest.fixture(autouse=True)
+def _policy_open(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("fr.triage.approval._labels_off", lambda *a: None)
+    monkeypatch.setattr("fr.triage.approval._comments_off", lambda *a: None)
+
+
+def test_a_removed_label_ends_a_live_approval_with_no_forge_write() -> None:
+    forge = _Lifecycle({"state": "OPEN", "head_oid": "hB", "labels": []})
+    said: list[str] = []
+    removed: set[int] = set()
+    written: list[BatchEvent] = []
+
+    got = settle_approvals(
+        forge, lambda bid, ev: written.append(ev), REPO, [(_batch(_approval("hA", "pA")), 7)],
+        said.append, now=NOW, removed=removed,
+    )  # fmt: skip
+
+    assert got == {"a": Unlabelled()}
+    (event,) = written
+    assert isinstance(event, ApprovalEvent)
+    assert (event.head, event.voided_at, event.patch_id) == ("hA", "hB", "pA")
+    assert forge.label_edits == [] and forge.posted == [] and removed == set()
+    assert said == ["approval of PR #7 at hA ended: label removed"]
+    # a later label is a first approval at the live head
+    forge.view = {"state": "OPEN", "head_oid": "hC", "labels": [LABEL]}
+    got, again, _ = _settle(forge, _batch(_approval("hA", "pA"), event), {"hC": "pC"})
+    assert got == {"a": Approved("hC")}
+    ((_, first),) = again
+    assert (first.head, first.patch_id, first.voided_at) == ("hC", "pC", None)
+
+
+def test_unread_labels_end_nothing_and_a_dry_run_only_says_it_would() -> None:
+    forge = _Lifecycle({"state": "OPEN", "head_oid": "hB", "labels": None})
+    got, written, _ = _settle(forge, _batch(_approval("hA", "pA")), {})
+    assert written == [] and got == {"a": Unlabelled()}
+    forge.view = {"state": "OPEN", "head_oid": "hB", "labels": []}
+    said: list[str] = []
+    _, written, _ = _settle(forge, _batch(_approval("hA", "pA")), {}, said=said, dry_run=True)
+    assert written == [] and said == ["would end approval of PR #7 at hA: label removed"]
+
+
+def test_an_entry_approval_whose_label_is_gone_is_ended() -> None:
+    from fr.triage.approval import settle_entry_approval
+    from fr.triage.model import QueueApprovalEvent, QueueEntryRef
+
+    ref = QueueEntryRef(pr=41, kind="housekeeping")
+    first = QueueApprovalEvent(kind="approval", at=NOW, entry=ref, head="h1", patch_id="p1")
+    recorded: list[QueueApprovalEvent] = []
+    said: list[str] = []
+    client = _Lifecycle({})
+    verdict, at = settle_entry_approval(
+        client, recorded.append, REPO, ref, [first], _entry_view("h2", ()), said.append,
+        now=NOW)  # fmt: skip
+    assert isinstance(verdict, Unlabelled) and at is None
+    (ended,) = recorded
+    assert (ended.head, ended.voided_at, ended.patch_id) == ("h1", "h2", "p1")
+    assert client.label_edits == [] and client.posted == []
+    assert said == ["approval of PR #41 at h1 ended: label removed"]
+    # unread labels end nothing
+    view = {"state": "OPEN", "head_oid": "h2", "labels": None}
+    settle_entry_approval(client, recorded.append, REPO, ref, [first], view, said.append, now=NOW)
+    assert len(recorded) == 1
+    # a dry run says it would, and writes nothing
+    settle_entry_approval(
+        client, lambda e: pytest.fail("wrote"), REPO, ref, [first], _entry_view("h2", ()),
+        said.append, now=NOW, dry_run=True)  # fmt: skip
+    assert said[-1] == "would end approval of PR #41 at h1: label removed"
+
+
+def _conflict(head: str) -> BatchEvent:
+    from fr.triage.model import ConflictEvent
+
+    return ConflictEvent(kind="conflict", at=NOW, head=head, paths=["a.py"], delivered="session")
+
+
+def test_a_label_on_a_head_with_a_real_conflict_waits() -> None:
+    from fr.triage.approval import Waiting, is_approved
+
+    verdict = approval_verdict([], 7, "H", [LABEL], waits=True)
+    assert verdict == Waiting("H", "waits for a conflict-free head") and not is_approved(verdict)
+    conflicting = {"state": "OPEN", "head_oid": "H", "labels": [LABEL], "mergeable": "CONFLICTING"}
+    forge = _Lifecycle(conflicting)
+    said: list[str] = []
+    seen: set[tuple[str, int, str]] = set()
+    batch = _batch(_conflict("H"))
+    for _ in range(2):
+        written: list[BatchEvent] = []
+        got = settle_approvals(forge, lambda b, e: written.append(e), REPO, [(batch, 7)],
+                               said.append, now=NOW, said=seen)  # fmt: skip
+        assert written == [] and isinstance(got["a"], Waiting)
+    assert said == ["approval of PR #7 at H not recorded: waits for a conflict-free head"]
+
+
+def test_a_wait_is_said_each_call_by_default_and_once_per_set_the_driver_keeps(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r3: the default is a fresh set per call (nothing process-global), and the driver
+    passes one set of its own to every pass, so a head's wait is said once per driver."""
+    from fr.commands import triage_batch_cmd
+
+    from tests.unit.triage_board_fixtures import DELIVERED, dispatch, facts, issue, j, judgements
+    from tests.unit.triage_board_fixtures import REPO as BOARD_REPO
+    from tests.unit.triage_board_fixtures import batch as mk_batch
+    from tests.unit.triage_board_fixtures import pr as mk_pr
+
+    conflicting = {"state": "OPEN", "head_oid": "H", "labels": [LABEL], "mergeable": "CONFLICTING"}
+    batch = _batch(_conflict("H"))
+    line = "approval of PR #7 at H not recorded: waits for a conflict-free head"
+    said: list[str] = []
+    for _ in range(2):
+        settle_approvals(_Lifecycle(conflicting), lambda b, e: None, REPO, [(batch, 7)],
+                         said.append, now=NOW)  # fmt: skip
+    assert said == [line, line]
+
+    driver = triage_batch_cmd._Driver(
+        triage_batch_cmd._scope(BOARD_REPO, None), tmp_path, named=None, checkouts={},
+        max_inflight=4, yes=True,
+    )  # fmt: skip
+    sets: list[object] = []
+
+    def fake_settle(*args: Any, said: Any = None, **kw: Any) -> dict[str, Any]:
+        sets.append(said)
+        return {}
+
+    monkeypatch.setattr(triage_batch_cmd, "settle_approvals", fake_settle)
+    monkeypatch.setattr(triage_batch_cmd, "ensure_approval_label", lambda *a, **k: None)
+    monkeypatch.setattr(driver, "client", lambda facts, repo: object())
+    monkeypatch.setattr(driver, "_patch_id_of", lambda facts, repo: None)
+    f = facts([issue(1, prs=[mk_pr(11, "feat/batch-a", **DELIVERED)])], schema=12)
+    jd = judgements({"widgets#1": j(1)}, [mk_batch("a", [1], events=[dispatch("a")])])
+    driver._label_seen = set()
+    for _ in range(2):
+        driver._settle_approvals(f, jd)
+    assert len(sets) == 2 and sets[0] is sets[1] is driver._waiting_said
+
+
+@pytest.mark.parametrize(
+    ("view", "events"),
+    [
+        ({"mergeable": "CONFLICTING"}, ()),  # a conflict the queue resolves
+        ({"mergeable": "UNKNOWN"}, ("H",)),  # mergeability not computed yet
+        ({"mergeable": "MERGEABLE"}, ("H0",)),  # a conflict at another head
+    ],
+)
+def test_a_label_without_both_conflict_conditions_is_recorded(
+    view: dict[str, str], events: tuple[str, ...]
+) -> None:
+    forge = _Lifecycle({"state": "OPEN", "head_oid": "H", "labels": [LABEL], **view})
+    batch = _batch(*[_conflict(h) for h in events])
+    got, written, _ = _settle(forge, batch, {"H": "pH"})
+    assert got == {"a": Approved("H")} and len(written) == 1
+
+
+def test_a_waiting_pr_is_recorded_once_its_head_is_conflict_free() -> None:
+    forge = _Lifecycle({"state": "OPEN", "head_oid": "H2", "labels": [LABEL],
+                        "mergeable": "MERGEABLE"})  # fmt: skip
+    got, written, _ = _settle(forge, _batch(_conflict("H")), {"H2": "p2"})
+    assert got == {"a": Approved("H2")}
+    ((_, event),) = written
+    assert event.head == "H2"
+
+
+def test_an_entry_approval_never_waits() -> None:
+    from fr.triage.approval import settle_entry_approval
+    from fr.triage.model import QueueEntryRef
+
+    view = {**_entry_view("H"), "mergeable": "CONFLICTING", "merge_state": "DIRTY"}
+    verdict, _ = settle_entry_approval(
+        _Lifecycle({}), lambda e: None, REPO, QueueEntryRef(pr=41, kind="housekeeping"), [],
+        view, lambda s: None, now=NOW)  # fmt: skip
+    assert isinstance(verdict, Approved)
+
+
+def test_ended_by_label_tells_an_ended_approval_from_a_push_void() -> None:
+    from fr.triage.approval import ended_by_label
+
+    ended = ApprovalEvent(kind="approval", at=NOW, pr=7, head="hA", voided_at="hA")
+    pushed = ApprovalEvent(kind="approval", at=NOW, pr=7, head="hA", voided_at="hB")
+    assert ended_by_label([_approval("hA"), ended], 7)
+    assert not ended_by_label([_approval("hA"), pushed], 7)
+    assert not ended_by_label([_approval("hA")], 7) and not ended_by_label([], 7)
+
+
+def _voided_view() -> dict[str, Any]:
+    return {"state": "OPEN", "head_oid": "h2", "labels": [LABEL]}
+
+
+def _marker(head: str, association: str = "MEMBER") -> dict[str, Any]:
+    return {"body": f"<!-- fr-queue:approval-voided head={head} -->\nsaid", "author": "bot",
+            "association": association}  # fmt: skip
+
+
+def test_a_void_removes_the_label_records_it_and_says_why_on_the_pr() -> None:
+    forge = _Lifecycle(_voided_view())
+    removed: set[int] = set()
+    written: list[BatchEvent] = []
+    settle_approvals(
+        forge, lambda b, e: written.append(e), REPO, [(_batch(_approval("h1", "p1")), 7)],
+        lambda s: None, now=NOW, removed=removed,
+        patch_id_of=lambda pr, head, fresh=False: "p2",
+    )  # fmt: skip
+    assert forge.label_edits and len(written) == 1 and removed == {7}
+    ((pr, body),) = forge.posted
+    assert pr == 7 and body.startswith("<!-- fr-queue:approval-voided head=h2 -->")
+    assert "its diff changed at h2" in body and "label it approved-fr again" in body
+
+
+def test_a_trusted_marker_for_the_head_suppresses_the_comment() -> None:
+    forge = _Lifecycle(_voided_view(), [_marker("h2")])
+    _settle(forge, _batch(_approval("h1", "p1")), {"h2": "p2"})
+    assert forge.label_edits and forge.posted == []
+    # an untrusted marker, or one for another head, does not
+    for comments in ([_marker("h2", "NONE")], [_marker("h0")]):
+        forge = _Lifecycle(_voided_view(), comments)
+        _settle(forge, _batch(_approval("h1", "p1")), {"h2": "p2"})
+        assert len(forge.posted) == 1
+
+
+@pytest.mark.parametrize("unreadable", [False, True], ids=["comments-off", "policy-unreadable"])
+def test_no_comment_when_comments_are_off_or_the_policy_is_unreadable_and_it_says_why(
+    monkeypatch: pytest.MonkeyPatch, unreadable: bool
+) -> None:
+    from fr.settings import SettingsError
+    from fr.triage import approval
+
+    if unreadable:
+        monkeypatch.setattr(approval, "_comments_off", _real_comments_off)
+
+        def policy(client: Any, repo: str) -> Any:
+            raise SettingsError("settings unreadable")
+
+        monkeypatch.setattr("fr.settings.remote.client_policy", policy)
+        why = "settings unreadable"
+    else:
+        monkeypatch.setattr(approval, "_comments_off", lambda *a: "forge.comments is off")
+        why = "forge.comments is off"
+    forge = _Lifecycle(_voided_view())
+    said: list[str] = []
+    _, written, _ = _settle(forge, _batch(_approval("h1", "p1")), {"h2": "p2"}, said=said)
+    assert forge.label_edits and written and forge.posted == []
+    assert f"approval of PR #7 voided without a comment: {why}" in said
+
+
+def test_comments_off_reads_the_policy_and_an_unreadable_one_blocks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fr.settings import SettingsError
+    from fr.triage import approval, operator_entries
+
+    monkeypatch.undo()
+    assert operator_entries._comments_off is approval._comments_off
+
+    def unreadable(client: Any, repo: str) -> Any:
+        raise SettingsError("settings unreadable")
+
+    monkeypatch.setattr("fr.settings.remote.client_policy", unreadable)
+    assert approval._comments_off(object(), REPO) == "settings unreadable"
+
+
+def test_a_comment_that_fails_to_post_is_a_warning_and_the_void_stands() -> None:
+    forge = _Lifecycle(_voided_view(), fail_comment=True)
+    said: list[str] = []
+    got, written, _ = _settle(forge, _batch(_approval("h1", "p1")), {"h2": "p2"}, said=said)
+    assert got == {"a": Unlabelled()} and len(written) == 1 and forge.label_edits
+    assert any(s.startswith("warning:") and "HTTP 502" in s for s in said)
+
+
+def test_an_entry_void_says_why_on_the_pr_once() -> None:
+    from fr.triage.approval import settle_entry_approval
+    from fr.triage.model import QueueApprovalEvent, QueueEntryRef
+
+    ref = QueueEntryRef(pr=41, kind="housekeeping")
+    first = QueueApprovalEvent(kind="approval", at=NOW, entry=ref, head="h1", patch_id="p1")
+    for comments, posts in (([], 1), ([_marker("h2")], 0)):
+        client = _Lifecycle({}, comments)
+        settle_entry_approval(
+            client, lambda e: None, REPO, ref, [first], _entry_view("h2"), lambda s: None,
+            now=NOW, patch_id_of=lambda pr, head, fresh=False: "p2")  # fmt: skip
+        assert client.label_edits and len(client.posted) == posts

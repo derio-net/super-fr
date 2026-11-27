@@ -1,0 +1,2 @@
+bump: patch
+summary: The wave merge queue ends an approval whose label was removed, holds an approval on a really conflicting head until it is fixed, says why it removed a label, starts a queued wave's one close-out at once, and the conflict probe skips conflicts the queue resolves.

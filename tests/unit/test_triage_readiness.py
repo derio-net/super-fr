@@ -369,3 +369,23 @@ def test_a_held_approval_never_reads_an_older_void() -> None:
     got = _facts(_qs(_batch(VOIDED), approved=Held("a" * 40, "git failed")))
     assert got.kind == "ready-for-approval"
     assert got.facts.approval == "held unreadable: git failed"
+
+
+# ------------------------------------- the approval lifecycle (queue-followups R1, R2)
+
+
+def test_a_waiting_approval_reads_as_waiting_for_a_conflict_free_head() -> None:
+    from fr.triage.approval import WAITS_WHY, Waiting
+
+    got = _facts(_qs(_batch(CONFLICT), pr=_live(mergeable="CONFLICTING"),
+                     approved=Waiting(HEAD, WAITS_WHY)))  # fmt: skip
+    assert got.facts.approval == "approved, waits for a conflict-free head"
+    assert not got.approved and got.kind != "approval-voided"
+
+
+def test_an_ended_approval_is_not_a_push_void() -> None:
+    approved = {"kind": "approval", "at": "2026-11-24T10:00:00Z", "pr": 101, "head": HEAD}
+    ended = {**approved, "at": "2026-11-24T11:00:00Z", "voided_at": HEAD}
+    got = _facts(_qs(_batch(approved, ended), approved=Unlabelled()))
+    assert got.facts.approval == "ended: label removed"
+    assert got.kind != "approval-voided" and "voided by a push" not in got.verdict

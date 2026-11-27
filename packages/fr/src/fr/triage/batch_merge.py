@@ -32,6 +32,7 @@ from fr.triage.batch_version import (
 from fr.triage.errors import ConfigError, TriageError
 from fr.triage.gitseam import GitError
 from fr.triage.model import VersionBlock
+from fr.triage.regen import classify_conflicts
 
 
 class MergeStopError(TriageError):
@@ -63,6 +64,8 @@ class WorktreeSeam(Protocol):
     def merge_base(self, ref: str) -> str: ...
     def show(self, ref: str, file: str) -> str | None: ...
     def abort_merge(self) -> None: ...
+    def unmerged_stages(self) -> dict[str, dict[int, str]]: ...
+    def read(self, file: str) -> str | None: ...
 
 
 class CheckoutSeam(Protocol):
@@ -254,6 +257,30 @@ def _clear_scratch(checkout: CheckoutSeam, where: Path, *, added: bool = False) 
     return failed if where.exists() else None
 
 
+def _queue_refuses(
+    wt: WorktreeSeam, refused: list[str], generated: Sequence[str], mirrors: bool
+) -> list[str]:
+    """Which of *refused* the queue's build would still refuse (R4), in their order. The
+    probe merges main INTO the PR head, so its stages 2 and 3 are swapped against the
+    queue's, whose combination side (stage 2) is main's."""
+    held = wt.unmerged_stages()
+
+    def read(path: str) -> str | None:
+        try:
+            return wt.read(path)
+        except OSError, UnicodeDecodeError:
+            return None  # no text there: a real conflict
+
+    def stages(path: str) -> dict[int, str]:
+        mine = held.get(path, {})
+        swap = {2: 3, 3: 2}
+        return {swap.get(n, n): mode for n, mode in mine.items()}
+
+    kinds = classify_conflicts(refused, generated, read, stages)
+    keep = {*kinds.real, *([] if mirrors else [*kinds.whole, *kinds.regenerate])}
+    return [p for p in refused if p in keep]
+
+
 def trial_conflicts(
     checkout: CheckoutSeam,
     main: str,
@@ -262,12 +289,20 @@ def trial_conflicts(
     *,
     scratch_root: Path | None = None,
     warn: Callable[[str], None] | None = None,
+    generated: Sequence[str] = (),
+    mirrors: bool = False,
 ) -> list[str]:
     """R17: the paths on which PR head *head* really conflicts with *main* (what the queue's build
     would refuse), by a trial merge in a scratch worktree that is always aborted and
     removed. A version file whose PR change is the version alone, and a lockfile when the
     repo relocks, are resolved, not conflicts. Writes nothing the repo keeps. A scratch
-    worktree the cleanup could not clear is said to *warn*; it never masks the verdict."""
+    worktree the cleanup could not clear is said to *warn*; it never masks the verdict.
+
+    R4 of spec 2026-11-27-queue-followups: the rest is sorted as the queue's build sorts it
+    (`regen.classify_conflicts` over the repo's *generated* globs): `reviewed:` stamp and
+    generated-block hunks are resolved, and whole generated paths too when the repo
+    declares *mirrors*. Not modelled: a rebase replay, a merge onto an earlier entry, a
+    mirrors run that fails."""
     own = scratch_root is None
     root = Path(tempfile.mkdtemp(prefix="fr-conflict-probe-")) if scratch_root is None else (
         scratch_root
@@ -278,8 +313,12 @@ def trial_conflicts(
         _clear_scratch(checkout, where)  # a probe's leftover: `worktree add` says if it stays
         wt = checkout.add_worktree(where, head)
         conflicted, refused = merge_main(wt, main, version)
-        if conflicted:
-            wt.abort_merge()
+        try:  # the classification reads the merge's conflicted state, so it runs first
+            if refused:
+                refused = _queue_refuses(wt, refused, generated, mirrors)
+        finally:  # and a failing read never skips the abort (l-errors-r3)
+            if conflicted:
+                wt.abort_merge()
         return refused
     finally:
         try:  # cleanup never masks what is in flight, and never skips the temp root
