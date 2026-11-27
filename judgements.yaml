@@ -10750,6 +10750,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T14:08:03.205781Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T14:08:36.591929Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -11878,6 +11893,8 @@ batches:
     at: '2026-11-27T13:59:48.250360Z'
     keys:
     - super-fr#1515
+  - kind: post_merge
+    at: '2026-11-27T14:08:30.064713Z'
 - id: arch-isolation-split
   title: '#1318: split the free functions out of isolation/local.py'
   ids:
