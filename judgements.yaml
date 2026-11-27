@@ -11225,6 +11225,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T17:20:37.580975Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T17:20:40.971287Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -12299,6 +12314,11 @@ batches:
     runner: herdr
     handle: w3V:p6
     branch: feat/batch-export-drift
+  - kind: approval
+    at: '2026-11-27T17:19:55.403532Z'
+    pr: 1736
+    head: 12af8744f9b96914c6bd578057126a839f5c7cb5
+    patch_id: b773c4d801c0b6205241c8702c0a852d8e426443
 - id: arch-shared-helpers
   title: '#1318: shared duplicate-key YAML detector, record placement and hermetic-git fixtures, small
     duplicate readers'
