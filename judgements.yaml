@@ -11806,6 +11806,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T21:50:31.200878Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T21:50:33.619390Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -13238,6 +13253,11 @@ batches:
     runner: herdr
     handle: w3X:p4
     branch: feat/batch-arch-triage-leaves
+  - kind: approval
+    at: '2026-11-27T21:50:10.678088Z'
+    pr: 1746
+    head: a18b6300deae1790c3a04a067cbbb5fff547b1f2
+    patch_id: 208d8cd308491e33615c275163d77ee75edc9296
 - id: arch-run-verdict
   title: '#1318: run_cmd.py refuses through a typed verdict; its clusters move to fr/run'
   ids:
