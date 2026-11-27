@@ -1252,9 +1252,9 @@ def test_a_quoted_profile_key_never_ends_up_duplicated(repo: Path) -> None:
         ],
     )
     assert res.exit_code == 0, res.output
-    from fr.artifacts.structure import _StrictLoader
+    from fr.yamlio import StrictLoader
 
-    data = yaml.load((repo / PROFILES).read_text(), Loader=_StrictLoader)  # noqa: S506
+    data = yaml.load((repo / PROFILES).read_text(), Loader=StrictLoader)  # noqa: S506
     assert data["profiles"] == {"dev": {"purpose": "new", "secrets": []}}
 
 
