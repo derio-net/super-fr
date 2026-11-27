@@ -281,3 +281,8 @@ The section now says reads stop at the first pane with background work and an un
 ### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: fr-triage.md states the writer rule but did not cover its files
 
 covers now lists triage_kanban_cmd.py and triage_drive_loop.py; the paragraph names dwell.json.bad.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved-2 created=2026-11-27T21:54:45+00:00 phase=2 state=open resolves=p2-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1756 -->
+### p2-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1756] · resolves p2-r6: docs/triage/README.md's export sentence was already inaccurate before this change (phase 2)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1756.
