@@ -11372,6 +11372,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-27T18:36:31.474697Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-27T18:36:54.575706Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -12429,6 +12444,13 @@ batches:
     run: 2026-11-27-feat-batch-queue-followups
     archive: chore/closeout-2026-11-27-1
     archived: 1743
+  - kind: claims_released
+    at: '2026-11-27T18:36:54.575706Z'
+    keys:
+    - super-fr#1680
+    - super-fr#1676
+    - super-fr#1663
+    - super-fr#1695
 - id: closeout-state
   title: Close-outs and batches never stuck as started or Running
   ids:
@@ -12461,6 +12483,11 @@ batches:
     run: 2026-11-27-feat-batch-closeout-state
     archive: chore/closeout-2026-11-27-1
     archived: 1743
+  - kind: claims_released
+    at: '2026-11-27T18:36:54.575706Z'
+    keys:
+    - super-fr#1601
+    - super-fr#1626
 - id: export-drift
   title: Triage export refuses to overwrite a repo-side edit; targeted import
   ids:
@@ -12550,6 +12577,13 @@ batches:
     run: 2026-11-26-feat-batch-arch-shared-helpers
     archive: chore/closeout-2026-11-27-1
     archived: 1743
+  - kind: claims_released
+    at: '2026-11-27T18:36:54.575706Z'
+    keys:
+    - super-fr#1512
+    - super-fr#1513
+    - super-fr#1514
+    - super-fr#1523
 - id: arch-run-ledger
   title: '#1318: move the write ledger out of run_cmd.py into fr/run/writes.py'
   ids:
@@ -12593,6 +12627,10 @@ batches:
     run: 2026-11-26-feat-batch-arch-run-ledger
     archive: chore/closeout-2026-11-27-1
     archived: 1743
+  - kind: claims_released
+    at: '2026-11-27T18:36:54.575706Z'
+    keys:
+    - super-fr#1515
 - id: arch-isolation-split
   title: '#1318: split the free functions out of isolation/local.py'
   ids:
@@ -12623,6 +12661,10 @@ batches:
     run: 2026-11-26-feat-batch-arch-isolation-split
     archive: chore/closeout-2026-11-27-1
     archived: 1743
+  - kind: claims_released
+    at: '2026-11-27T18:36:54.575706Z'
+    keys:
+    - super-fr#1517
 - id: arch-plan-ops-split
   title: '#1318: split self-review, the spec table and the refactor-gate read out of plan_ops.py'
   ids:
@@ -12680,6 +12722,10 @@ batches:
     run: 2026-11-26-feat-batch-arch-plan-ops-split
     archive: chore/closeout-2026-11-27-1
     archived: 1743
+  - kind: claims_released
+    at: '2026-11-27T18:36:54.575706Z'
+    keys:
+    - super-fr#1518
 - id: triage-privacy
   title: 'Triage privacy: outsider text never reaches worker sessions or the state ref unfenced'
   ids:
@@ -13976,6 +14022,14 @@ closeouts:
   - "D\tdocs/superpowers/usage/2026-11-26-feat-batch-arch-run-ledger.yaml"
   - "D\tdocs/superpowers/usage/2026-11-27-feat-batch-closeout-state.yaml"
   - "D\tdocs/superpowers/usage/2026-11-27-feat-batch-queue-followups.yaml"
+- repo: derio-net/super-fr
+  item: derio-net/super-fr/run/closeout-2026-11-27-2
+  branch: chore/closeout-2026-11-27-2
+  at: '2026-11-27T18:36:34.718594Z'
+  runner: herdr
+  handle: w3V:p9
+  planned:
+  - export-drift
 queues:
 - repo: derio-net/super-fr
   wave: 22
