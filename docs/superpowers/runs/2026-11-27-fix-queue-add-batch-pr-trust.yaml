@@ -3,11 +3,13 @@ run: 2026-11-27-fix-queue-add-batch-pr-trust
 workflow: fr-debugging@1
 branch: fix/queue-add-batch-pr-trust
 started: '2026-11-27T20:01:35+00:00'
-cursor: debug
+cursor: review
 steps:
   debug:
-    state: running
-    at: '2026-11-27T20:08:05+00:00'
+    state: done
+    at: '2026-11-27T20:08:14+00:00'
+    emitted:
+      debug: docs/superpowers/journals/debug/2026-11-27-queue-add-batch-pr-trust.md
     units:
       step/debug:
         attempts:
@@ -15,6 +17,8 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 73a20abc-81a8-48e9-93b3-322956e3669f
+          returned: '2026-11-27T20:08:14+00:00'
+          outcome: done
   review:
     state: pending
   deliver:

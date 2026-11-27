@@ -1,9 +1,0 @@
-schema_version: 12
-run: 2026-11-27-fix-queue-add-batch-pr-trust
-step: debug
-outcome: done
-journal: []
-resolves: []
-emitted:
-  debug: docs/superpowers/journals/debug/2026-11-27-queue-add-batch-pr-trust.md
-evidence: {}

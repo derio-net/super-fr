@@ -1,0 +1,70 @@
+schema_version: 2
+run: 2026-11-27-fix-queue-add-batch-pr-trust
+captures:
+- host: h-30e4c85c
+  harness: claude-code
+  mode: host-worktree
+  captured_at: '2026-11-27T20:08:14+00:00'
+  at:
+  - resolve:debug
+  sessions:
+  - session: 73a20abc-81a8-48e9-93b3-322956e3669f
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 40
+        cache_write: 120240
+        cache_read: 2267173
+        output: 9897
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 8
+      other:
+        usd: null
+        turns: 4
+      paperwork:
+        usd: null
+        turns: 6
+    steps:
+      (outside run):
+        usd: null
+        turns: 1
+        input: 2
+        cache_write: 83075
+        cache_read: 26244
+        output: 221
+      debug:
+        usd: null
+        turns: 17
+        input: 38
+        cache_write: 37165
+        cache_read: 2240929
+        output: 9676
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 1
+          input: 2
+          cache_write: 83075
+          cache_read: 26244
+          output: 221
+        debug:
+          usd: null
+          turns: 17
+          input: 38
+          cache_write: 37165
+          cache_read: 2240929
+          output: 9676
+    units:
+      step/debug:
+        orchestrator:
+          usd: null
+          turns: 1
+          input: 2
+          cache_write: 1455
+          cache_read: 145029
+          output: 485
