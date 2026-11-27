@@ -47,6 +47,20 @@ def fail_exit(message: str, code: int = 2) -> typer.Exit:
     return exit_
 
 
+def fail_text(exc: BaseException, who: str = "") -> str:
+    """The message of *exc*: what a `fail_exit` carries (`FAIL_MESSAGE`), else `str(exc)`; a
+    bare `typer.Exit` names its exit code (prefixed by *who* when given), never empty."""
+    if isinstance(exc, typer.Exit):
+        said = str(getattr(exc, FAIL_MESSAGE, "") or "")
+        return said or f"{who or 'exit'} exited {exc.exit_code}".strip()
+    return str(exc) or type(exc).__name__
+
+
+def takeback_failed(back: BaseException) -> str:
+    """What a failed dispatch's report adds when taking its start record back failed too."""
+    return f"; taking back its start record failed too: {fail_text(back)}"
+
+
 class DriverRefusal(Exception):  # noqa: N818 - the name the spec gives it
     """A failure only the operator can fix: the looping driver stops (exit *code*).
     *said* is true when the message was already printed where it was raised."""
@@ -128,7 +142,7 @@ def classify(exc: BaseException) -> DriverRefusal | TransientPassFailure:
         cause = f"exit:{raiser}"
         # `_fail` printed its text as it raised; a bare `Exit` is raised after its site
         # printed its own reason, so the fallback (never an empty message) is not printed
-        text = str(getattr(exc, FAIL_MESSAGE, "") or "") or f"{raiser} exited {exc.exit_code}"
+        text = fail_text(exc, raiser)
         said = True
         if exc.exit_code == 2:
             return DriverRefusal(cause, text, said=said)

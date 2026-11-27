@@ -1,0 +1,20 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-closeout-state
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3]
+refactor: {}
+journal:
+  - kind: discovery
+    id: p1-dedupe-key
+    title: "The take-back's words must stay out of _dispatch_failed's dedupe key"
+    body: "A runner error with no `code` keys the dedupe on the whole message, so appending the take-back error to it re-said the stop every pass. `_dispatch_failed` takes the take-back text as a separate `also` that is said with the first report and never keyed."
+    phase: 1
+  - kind: discovery
+    id: p1-module-budget
+    title: "triage_batch_cmd.py sits at its 8300-line budget"
+    body: "The shared take-back wording lives in `fr.triage.drive_errors.takeback_failed` (beside `fail_text`) so the module stays within budget (8299)."
+    phase: 1
+resolves: []
+evidence: {}

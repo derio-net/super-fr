@@ -271,7 +271,7 @@ from fr.triage.claims import stale as claim_stale
 from fr.triage.components import page
 from fr.triage.cursor import answer_at
 from fr.triage.dedupe import candidates
-from fr.triage.drive_errors import DriverRefusal, TransientPassFailure, classify
+from fr.triage.drive_errors import DriverRefusal, TransientPassFailure, classify, takeback_failed
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
 from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
@@ -7467,10 +7467,12 @@ class _Driver:
             handle = runner.dispatch(item)
         except Exception as exc:  # the runner's own failure: nothing started, so
             # the record is taken back and a later pass starts it
-            _write(self.target, judgements.batches, facts, read=after, read_errors=True)
-            return self._dispatch_failed(
-                batch, f"runner `{launch.runner}` failed to dispatch {item.id}: {exc}", exc
-            ), False
+            message, also = f"runner `{launch.runner}` failed to dispatch {item.id}: {exc}", ""
+            try:  # its own guard: a failing take-back never hides the dispatch error
+                _save(self.target, judgements.batches, facts, read=after)
+            except Exception as back:  # noqa: BLE001
+                also = takeback_failed(back)
+            return self._dispatch_failed(batch, message, exc, also), False
         if handle and handle != item.id:  # the runner's own handle, once it is known
             known = started.model_copy(update={"handle": handle})
             final = recorded.model_copy(update={"events": [*recorded.events[:-1], known]})
@@ -7552,10 +7554,12 @@ class _Driver:
         try:
             handle = runner.dispatch(item)
         except Exception as exc:  # the runner's own failure: nothing started, taken back
-            save_closeouts(path, read, read=[*read, marker])
-            return self._dispatch_failed(
-                members[0], f"runner `{launch.runner}` failed to dispatch {item.id}: {exc}", exc
-            ), False
+            message, also = f"runner `{launch.runner}` failed to dispatch {item.id}: {exc}", ""
+            try:  # its own guard: a failing take-back never hides the dispatch error
+                save_closeouts(path, read, read=[*read, marker])
+            except Exception as back:  # noqa: BLE001
+                also = takeback_failed(back)
+            return self._dispatch_failed(members[0], message, exc, also), False
         if handle and handle != item.id:  # the runner's own handle, once it is known
             save_closeouts(path, [*read, marker.model_copy(update={"handle": handle})],
                            read=[*read, marker])  # fmt: skip
@@ -7673,20 +7677,23 @@ class _Driver:
             return f"{action.detail}; no session can take it: the operator's", True
         return f"{action.detail}; handed back to its session {action.key}", True
 
-    def _dispatch_failed(self, batch: Batch, message: str, cause: BaseException | None) -> str:
+    def _dispatch_failed(
+        self, batch: Batch, message: str, cause: BaseException | None, also: str = ""
+    ) -> str:
         """A runner failed to start *batch*'s session (gh#931): as a refused merge
         (rg-4), reported in full once per batch and cause and tried again on a later
         pass; `--once` exits 1. Nothing was written, so the retry is a fresh start.
 
         The cause is the runner error's `code` when it carries one: each retry opens a
-        new tab, so herdr's words name a different pane every pass."""
+        new tab, so herdr's words name a different pane every pass. *also* (a failed
+        take-back, gh#1601) is said once and never keyed."""
         self.failed_write = True
         code = getattr(cause, "code", None)
         key = f"dispatch\0{batch.id}\0{code if isinstance(code, str) else message}"
         if key in self.reported:
             return "stopped again: the runner failed to dispatch (reported above)"
         self.reported.add(key)
-        return f"stopped: {message}"
+        return f"stopped: {message}{also}"
 
     def _append(self, judgements: Judgements, facts: Facts, batch: Batch, event: Any) -> Batch:
         new = batch.model_copy(update={"events": [*batch.events, event]})
