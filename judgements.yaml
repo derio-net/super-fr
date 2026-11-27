@@ -10677,6 +10677,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-27T13:39:27.187333Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -11694,6 +11701,12 @@ batches:
   wave: 25
   after:
   - landing-method
+  events:
+  - kind: dispatch
+    at: '2026-11-27T13:39:36.780907Z'
+    runner: herdr
+    handle: w3V:p7
+    branch: feat/batch-queue-followups
 - id: closeout-state
   title: Close-outs and batches never stuck as started or Running
   ids:
@@ -11850,6 +11863,10 @@ batches:
     - docs/reference/cli.md
     - docs/reference/workflow-shapes.md
     delivered: held
+  - kind: claims_released
+    at: '2026-11-27T13:40:36.430493Z'
+    keys:
+    - super-fr#1518
 - id: triage-privacy
   title: 'Triage privacy: outsider text never reaches worker sessions or the state ref unfenced'
   ids:
