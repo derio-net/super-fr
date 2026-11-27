@@ -89,9 +89,14 @@ _RECORD_SCHEMA = 1
 class BadRecord(TriageError):  # noqa: N818 - a refusal, beside TriageError
     """The repo-side record is a symlink, not a regular file, or does not parse (R3)."""
 
-    def __init__(self, path: Path, why: str) -> None:
-        self.why, self.root = why, path.parent
-        super().__init__(f"{path} {why}; `fr triage state export --force` rewrites it")
+    def __init__(self, path: Path, why: str, *, forceable: bool = True) -> None:
+        self.why, self.root, self.forceable = why, path.parent, forceable
+        fix = (
+            "`fr triage state export --force` rewrites it"
+            if forceable
+            else "remove it by hand, then export again (`--force` writes only a regular file)"
+        )
+        super().__init__(f"{path} {why}; {fix}")
 
 
 class Drift(NamedTuple):
@@ -314,14 +319,15 @@ def _hash(root: Path, rel: str) -> str | None:
         data = _read(root, rel)
     except _SymlinkError:
         return None
-    except OSError as exc:
-        raise TriageError(f"cannot read {root / rel}: {exc.strerror or exc}") from exc
+    except (OSError, ValueError) as exc:  # ValueError: a NUL in a path (p1-r1)
+        why = getattr(exc, "strerror", None) or exc
+        raise TriageError(f"cannot read {root / rel}: {why}") from exc
     return None if data is None else hashlib.sha256(data).hexdigest()
 
 
 def _record_path(rel: object) -> bool:
     """Whether a record key is a plain relative path to a durable file."""
-    if not isinstance(rel, str) or not rel or rel.startswith("/"):
+    if not isinstance(rel, str) or not rel or rel.startswith("/") or "\0" in rel:
         return False
     parts = rel.split("/")
     if any(p in ("", ".", "..") for p in parts):
@@ -338,8 +344,10 @@ def read_record(root: Path) -> dict[str, str] | None:
         data = _read(root, RECORD_FILE)
     except _SymlinkError:
         raise BadRecord(path, "is a symlink, not read") from None
-    except OSError as exc:
-        raise BadRecord(path, f"cannot be read ({exc.strerror or exc})") from exc
+    except OSError as exc:  # a directory or fifo there cannot be forced over (p1-r2)
+        regular = exc.errno not in (errno.EINVAL, errno.EISDIR)
+        why = f"cannot be read ({exc.strerror or exc})" if regular else "is not a regular file"
+        raise BadRecord(path, why, forceable=regular) from exc
     if data is None:
         return None
     try:
@@ -377,18 +385,24 @@ def stop_on(
 
 
 def drift_stop_text(
-    exc: ExportDrift | BadRecord, *, scope_args: Sequence[str], path: str, at: str
+    exc: ExportDrift | BadRecord, *, scope_args: Sequence[str], path: str, at: str | None
 ) -> str:
-    """`stop_on`'s reason: for drift, `drift_text` with the driver's commands; for a bad
-    record, the record named with its fault and the forced export that rewrites it."""
+    """The operator text for a refused export into *path* (R3, R4): for drift, `drift_text`
+    with commands that carry *scope_args* (the caller's own scope options, so they paste as
+    printed, p1-r3); for a bad record, the record named with its fault and its remedy (the
+    forced export that rewrites it, or removing it by hand when `--force` cannot, p1-r2).
+    *at*, the default-branch sha the driver read; None from the hand command."""
     rel = f"{path}/{exc.root.name}"
     force = ["fr", "triage", "state", "export", *scope_args, "--to", path, "--force"]
     if isinstance(exc, ExportDrift):
         imp = ["fr", "triage", "state", "import", *scope_args, "--from", path]
         return f"{rel} was " + drift_text(exc.drift, import_argv=imp, force_argv=force, at=at)
+    where = "a checkout of the default branch" + (f" at or after {at}" if at else "")
+    if not exc.forceable:
+        return f"{rel}/{RECORD_FILE} {exc.why}: remove it in {where}, then export again"
     return (
-        f"{rel}/{RECORD_FILE} {exc.why}: mend or remove it in a checkout of the default "
-        f"branch at or after {at}, or run `{shlex.join(force)}` there, which rewrites it"
+        f"{rel}/{RECORD_FILE} {exc.why}: mend or remove it in {where}, "
+        f"or run `{shlex.join(force)}` there, which rewrites it"
     )
 
 
@@ -511,7 +525,10 @@ def _sync(
     if selected is not None:
         have = {rel for rel, _ in entries}
         for rel, link in durable_entries(dest):
-            if rel not in selected or rel in have or _symlinked_dest(src, rel):
+            if rel not in selected or rel in have:
+                continue
+            if _symlinked_dest(src, rel):  # under a repo-side symlink: never judged (p1-r4)
+                skipped.append(Skipped(rel, SYMLINK))
                 continue
             try:
                 refused = None if not link else SYMLINK_DEST
@@ -552,11 +569,25 @@ def _stamp(root: Path, owner: str, *, take_over: bool) -> bool:
     return True
 
 
+def _refuse_non_regular(root: Path, name: str) -> None:
+    """Refuse (`TriageError`) when `root/name` exists and is neither a regular file nor a
+    symlink: a directory or fifo is never opened for writing and never removed (p1-r2)."""
+    try:
+        mode = os.lstat(root / name).st_mode  # the last part unfollowed; `contained` did the rest
+    except FileNotFoundError, NotADirectoryError:
+        return
+    if not (stat.S_ISREG(mode) or stat.S_ISLNK(mode)):
+        raise TriageError(
+            f"{root / name} is not a regular file; remove it by hand, then export again"
+        )
+
+
 def _write_root_file(root: Path, name: str, data: bytes, *, replace_link: bool = False) -> None:
     """Write *name* in *root* from the root's descriptor with `O_NOFOLLOW`: a name swapped
     for a symlink is refused (`TriageError`), or unlinked first when *replace_link*."""
     parent = _open_dir(root, (), create=True)
     try:
+        _refuse_non_regular(root, name)
         try:
             fd = _open(name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, dir_fd=parent, mode=0o644)
         except _SymlinkError:
@@ -612,6 +643,8 @@ def export_state(
     if not force and (recorded := read_record(root)) is not None:
         if drift := find_drift(state_dir, root, recorded):
             raise ExportDrift(drift, base=base, root=root)
+    for name in (OWNER_FILE, RECORD_FILE):  # before a byte moves, so a refusal is whole
+        _refuse_non_regular(root, name)
     report = _sync(state_dir, root, keep_newer=False)
     copied = list(report.copied)
     if restamp:

@@ -975,3 +975,118 @@ def test_the_import_verb_takes_only_and_prints_removed(tmp_path: Path) -> None:
     assert "removed origins/manifest.yaml" in text and "copied board/manifest.yaml" in text
     refused = CliRunner().invoke(app, ["triage", "state", *args, "--only", "../x"])
     assert refused.exit_code == 2, refused.output
+
+
+# ------------------------------------- phase 1 review: hostile records and recovery
+
+
+@pytest.mark.parametrize(
+    "key", ["history/a\0b", "../judgements.yaml", "/abs/judgements.yaml", "facts.json"]
+)
+def test_a_hostile_record_key_is_a_bad_record_never_a_path(tmp_path: Path, key: str) -> None:
+    """p1-r1: a record key from a cloned repo is validated before it reaches a descriptor
+    open; a NUL, a `..`, an absolute or a non-durable key is a refusal, not a traceback."""
+    import json
+
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "repo" / SCOPE_NAME
+    export_state(state, *_at(dest), owner=HOST)
+    (dest / RECORD_FILE).write_text(
+        json.dumps({"schema": 1, "files": {key: "0" * 64}}), encoding="utf-8"
+    )
+    before = _bytes(dest)
+
+    with pytest.raises(BadRecord):
+        export_state(state, *_at(dest), owner=HOST)
+    assert _bytes(dest) == before
+
+
+def test_a_record_named_path_that_is_a_repo_side_symlink_is_not_drift(tmp_path: Path) -> None:
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "repo" / SCOPE_NAME
+    export_state(state, *_at(dest), owner=HOST)
+    secret = tmp_path / "secret"
+    secret.write_text("PRIVATE\n", encoding="utf-8")
+    (dest / "board" / "manifest.yaml").unlink()
+    (dest / "board" / "manifest.yaml").symlink_to(secret)  # recorded path, now a link
+
+    report = export_state(state, *_at(dest), owner=HOST)
+
+    assert _skipped(report)["board/manifest.yaml"] == SYMLINK_DEST
+    assert secret.read_text(encoding="utf-8") == "PRIVATE\n"
+
+
+def test_a_directory_record_is_refused_and_force_names_the_hand_fix(tmp_path: Path) -> None:
+    """p1-r2: `--force` writes only a regular file, so a directory at the record is named
+    with the hand fix, in both the refusal and the forced run; nothing is written."""
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "repo" / SCOPE_NAME
+    export_state(state, *_at(dest), owner=HOST)
+    (dest / RECORD_FILE).unlink()
+    (dest / RECORD_FILE).mkdir()
+    (state / "judgements.yaml").write_text("schema: 3\n# newer\n", encoding="utf-8")
+    before = _bytes(dest)
+
+    with pytest.raises(BadRecord) as caught:
+        export_state(state, *_at(dest), owner=HOST)
+    assert not caught.value.forceable and "remove it by hand" in str(caught.value)
+    with pytest.raises(TriageError, match="not a regular file; remove it by hand"):
+        export_state(state, *_at(dest), owner=HOST, force=True)
+    assert (dest / RECORD_FILE).is_dir()
+    assert (dest / "judgements.yaml").read_text(encoding="utf-8") == "schema: 3\n"
+    assert {k: v for k, v in _bytes(dest).items() if k != "judgements.yaml"} == {
+        k: v for k, v in before.items() if k != "judgements.yaml"
+    }
+
+
+def test_only_reports_a_state_only_path_under_a_repo_side_symlinked_dir(tmp_path: Path) -> None:
+    """p1-r4: a named path the repo cannot be judged on (it lies under a repo-side
+    symlink) is skipped and reported, never removed from the state."""
+    src, state = _imported(tmp_path)
+    shutil.rmtree(src / "architecture")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (src / "architecture").symlink_to(elsewhere, target_is_directory=True)
+
+    report = import_state(*_at(src), state, force=False, only=["architecture/hurts.html"])
+
+    assert report.removed == ()
+    assert _skipped(report)["architecture/hurts.html"] == SYMLINK
+    assert (state / "architecture" / "hurts.html").exists()
+
+
+def test_the_remedy_the_refusal_prints_clears_the_drift(tmp_path: Path) -> None:
+    """p1-r7: the recovery R3 advertises, end to end: `import --only` each drifted path
+    (copying the repo's edits and additions, removing what the repo deleted), then export
+    again, which now finds no drift and keeps every repo edit."""
+    state, dest = _drifted(tmp_path)
+    with pytest.raises(ExportDrift) as caught:
+        export_state(state, *_at(dest), owner=HOST)
+
+    report = import_state(*_at(dest), state, force=False, only=[d.path for d in caught.value.drift])
+
+    assert sorted(report.removed) == ["origins/manifest.yaml"]
+    assert "history/repo-only.html" in report.copied  # the state lacked it
+    again = export_state(state, *_at(dest), owner=HOST)
+    assert "board/manifest.yaml" not in again.copied
+    assert (dest / "board" / "manifest.yaml").read_text(encoding="utf-8") == "edited in the repo\n"
+    assert (dest / "architecture" / "both.html").read_text(encoding="utf-8") == "repo\n"
+    assert not (dest / "origins" / "manifest.yaml").exists()
+
+
+def test_the_export_verbs_remedy_carries_its_own_scope_options(tmp_path: Path) -> None:
+    """p1-r3: the hand command's refusal prints commands with the scope options it was
+    given, so they paste as printed."""
+    state = _state(tmp_path / "state")
+    out = tmp_path / "docs" / "triage"
+    args = ("export", "--to", str(out), "--repo", SCOPE, "--dir", str(state))
+    assert _invoke(*args).exit_code == 0  # type: ignore[attr-defined]
+    (out / SCOPE_NAME / "board" / "manifest.yaml").write_text("edited\n", encoding="utf-8")
+
+    refused = CliRunner().invoke(app, ["triage", "state", *args])
+
+    assert refused.exit_code == 2, refused.output
+    flat = " ".join(refused.output.split())
+    scope = f"--repo {SCOPE} --dir {state.resolve()}"
+    assert f"fr triage state import {scope} --from {out}" in flat, flat
+    assert f"fr triage state export {scope} --to {out} --force" in flat, flat

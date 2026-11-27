@@ -7886,6 +7886,7 @@ class _Driver:
             if where.exists():  # fr's own scratch, not a worktree: replaced (p4-r10)
                 shutil.rmtree(where)
             worktree = checkout.add_worktree(where, f"origin/{default}")
+            at = checkout.rev_parse(f"origin/{default}")  # read before, never in a handler
         except (TriageError, OSError) as exc:
             return self._export_failed(wave, f"export wave {wave}: {exc}")
         try:
@@ -7896,8 +7897,11 @@ class _Driver:
                 )  # never takes over another scope's export (gh#1101), never forced (R4)
             except (ExportDrift, BadRecord) as exc:  # the repo changed it: the operator's
                 self._export_refusals += 1
-                at, args = checkout.rev_parse(f"origin/{default}"), self.scope_args
-                text = stop_on(exc, self.target, repo, scope_args=args, path=config.path, at=at)
+                args = self.scope_args
+                try:
+                    text = stop_on(exc, self.target, repo, scope_args=args, path=config.path, at=at)
+                except OSError as err:  # the stop is not written: still a refusal (p1-r5)
+                    text = f"{exc} (its Need was not recorded: {err.strerror or err})"
                 return f"refused, nothing committed or pushed: {text}"
             except TriageError as exc:
                 self._export_refusals += 1

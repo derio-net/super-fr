@@ -3586,7 +3586,7 @@ def test_an_export_that_changes_nothing_records_no_pr_and_opens_none(
     assert _head() not in _git(clone, "branch", "-r")
 
 
-@pytest.mark.parametrize("how", ["edit", "bad-record"])
+@pytest.mark.parametrize("how", ["edit", "delete", "bad-record"])
 def test_an_export_over_a_repo_side_edit_stops_with_a_need_and_pushes_nothing(
     tmp_path: Path, world: World, git_checkout: GitDriveCheckout, how: str
 ) -> None:
@@ -3598,7 +3598,7 @@ def test_an_export_over_a_repo_side_edit_stops_with_a_need_and_pushes_nothing(
 
     from fr.triage.model import load_facts
     from fr.triage.render import _needs_section
-    from fr.triage.state_sync import RECORD_FILE, export_state
+    from fr.triage.state_sync import RECORD_FILE, export_state, import_state
     from fr.triage.views import NEED_LABELS, needs_you
 
     state = _finished_wave(tmp_path, world)
@@ -3607,6 +3607,8 @@ def test_an_export_over_a_repo_side_edit_stops_with_a_need_and_pushes_nothing(
     if how == "edit":
         (clone / SCOPE_DIR / "board" / "manifest.yaml").write_text("edited\n", encoding="utf-8")
         (clone / SCOPE_DIR / "board" / "fragment it's.html").write_text("f\n", encoding="utf-8")
+    elif how == "delete":
+        (clone / SCOPE_DIR / "board" / "manifest.yaml").unlink()
     else:
         (clone / SCOPE_DIR / RECORD_FILE).write_text("not json\n", encoding="utf-8")
     _git(clone, "add", ".")
@@ -3635,6 +3637,9 @@ def test_an_export_over_a_repo_side_edit_stops_with_a_need_and_pushes_nothing(
         )  # fmt: skip
         assert command in stop.reason, stop.reason
         assert "changed board/manifest.yaml" in stop.reason
+    elif how == "delete":
+        assert "deleted board/manifest.yaml" in stop.reason
+        assert "--only board/manifest.yaml" in stop.reason
     else:
         assert RECORD_FILE in stop.reason
     facts = load_facts(state / "facts.json")
@@ -3647,19 +3652,21 @@ def test_an_export_over_a_repo_side_edit_stops_with_a_need_and_pushes_nothing(
     )
     assert 'data-need="export-drift"' in page and "Triage export drifted from the repo" in page
 
-    # the repo's edit reaches the state (or the record is mended): the next export clears it
-    if how == "edit":
-        _git(clone, "rm", "--quiet", f"{SCOPE_DIR}/board/fragment it's.html")
-        (clone / SCOPE_DIR / "board" / "manifest.yaml").write_text(
-            "sections: []\n", encoding="utf-8"
-        )
-    else:
+    # the remedy the stop prints: the repo's edit reaches the state by `import --only` (or
+    # the record is mended by a forced export), and the next export clears the stop (p1-r7)
+    if how == "bad-record":
         export_state(state, clone, SCOPE_DIR, owner=_sid(), force=True)
-    _git(clone, "add", ".")
-    _git(clone, "commit", "--quiet", "-m", "mended")
-    _git(clone, "push", "--quiet", "origin", "main")
+        _git(clone, "add", ".")
+        _git(clone, "commit", "--quiet", "-m", "mended")
+        _git(clone, "push", "--quiet", "origin", "main")
+    else:
+        only = [a for a in shlex.split(stop.reason.split("`")[1]) if a != "--only"][-2:]
+        paths = only if how == "edit" else ["board/manifest.yaml"]
+        import_state(clone, SCOPE_DIR, state, force=False, only=paths)
     code, out = _export_drive(state, "--once", "--yes")
     assert f"export-drift:{REPO}" not in load_stops(state), out
+    if how == "delete":
+        assert not (state / "board" / "manifest.yaml").exists()
 
 
 def test_an_orphan_is_reused_with_the_drivers_own_commit_never_its_foreign_one(
