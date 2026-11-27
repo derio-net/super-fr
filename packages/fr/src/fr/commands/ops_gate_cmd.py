@@ -72,6 +72,15 @@ class OpsWorkspace:
         git(["fetch", "--quiet", "origin"], self.path)
         self._tree.rebase_onto(new_base, upstream)
 
+    def is_ancestor(self, sha: str) -> bool:
+        from fr.ops.gate import SHA_RE
+        from fr.triage.gitseam import GitError, git, git_ok
+
+        if not SHA_RE.match(sha or ""):
+            raise GitError(f"{sha!r} is not a full commit sha")
+        git(["fetch", "--quiet", "origin"], self.path)  # objects only, as merge_commit
+        return git_ok(["merge-base", "--is-ancestor", sha, "HEAD"], self.path)
+
     def merge_commit(self, sha: str, message: str) -> str:
         from fr.ops.gate import SHA_RE, MergeConflict
         from fr.triage.gitseam import GitError, git, git_ok

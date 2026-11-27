@@ -597,3 +597,15 @@ def test_merge_commit_refuses_anything_but_a_commit_sha(
     with pytest.raises(GitError, match="nothing merged"):
         OpsWorkspace(ops).merge_commit(arg, "m")
     assert _out(ops, "rev-parse", "HEAD") == before
+
+
+def test_is_ancestor_says_whether_the_ops_branch_holds_the_sha(
+    origin_and_ops: tuple[Path, Path],
+) -> None:
+    """Review p1-r5: a merge of a commit the branch already holds would change nothing."""
+    from fr.commands.ops_gate_cmd import OpsWorkspace
+
+    origin, ops = origin_and_ops
+    ws = OpsWorkspace(ops)
+    assert ws.is_ancestor(_out(ops, "rev-parse", "origin/main"))
+    assert not ws.is_ancestor(_commit(origin, "ops.yaml", "apply: new\n"))
