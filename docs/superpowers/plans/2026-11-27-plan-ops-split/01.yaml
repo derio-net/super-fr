@@ -1,0 +1,116 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Split self-review, the spec table, rework and the refactor-gate read out
+    of plan_ops.py
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  tier: standard
+  files:
+  - packages/fr/src/fr/plan_ops.py
+  - packages/fr/src/fr/plan_errors.py
+  - packages/fr/src/fr/_plan_io.py
+  - packages/fr/src/fr/spec_table.py
+  - packages/fr/src/fr/plan_rework.py
+  - packages/fr/src/fr/plan_review/*
+  - packages/fr/src/fr/record/gates.py
+  - packages/fr/src/fr/migrate.py
+  - packages/fr/src/fr/cli.py
+  - packages/fr/src/fr/commands/*_cmd.py
+  - packages/fr-dispatch/src/fr_dispatch/__init__.py
+  - tests/unit/*
+  - docs/explainers/*.md
+  - docs/reference/*.md
+  - docs/*.md
+  - .changes/feat-batch-arch-plan-ops-split.yaml
+  estimate_lines: 3600
+tasks:
+- number: 1
+  title: Pin the target module boundaries in a failing test (R8, R9)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add tests/unit/test_plan_ops_split.py. It asserts (a) each of fr.plan_errors, fr._plan_io, fr.spec_table, fr.plan_rework and every module of fr.plan_review imports nothing from fr.plan_ops (read the imports with `ast`, as tests/unit/test_import_direction.py does, including function-local imports); (b) every R9 name is importable from fr.plan_ops and is the same object as in its new home (e.g. `plan_ops.self_review is fr.plan_review.self_review`, `plan_ops.PlanEditError is fr.plan_errors.PlanEditError`, `plan_ops.rework_create is fr.plan_rework.rework_create`, `plan_ops.worktree_of is fr._plan_io.worktree_of`, `plan_ops.OPS_FR_FLOOR is fr.plan_review.OPS_FR_FLOOR`); (c) `fr.record.gates._refactor_justifications` exists and `fr.plan_ops` has no `_refactor_justifications`. Run `uv run pytest tests/unit/test_plan_ops_split.py -q --no-cov` and confirm it fails on the missing modules.
+- number: 2
+  title: Leaf error module and private I/O module (R4, R6)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      GREEN: create packages/fr/src/fr/plan_errors.py holding `PlanEditError` (moved verbatim, docstring kept) and packages/fr/src/fr/_plan_io.py holding `worktree_of`, `_stage`, `_coerce_step_texts` and `_yaml_dump` (moved verbatim with the imports they need). plan_ops.py imports them back (`from fr.plan_errors import PlanEditError`, `from fr._plan_io import ...`) so every plan_ops caller keeps working. Repoint `PlanEditError` imports in commands/apply_cmd.py:47, commands/undispatch_cmd.py:32, fr_dispatch/__init__.py:36 and migrate.py to fr.plan_errors, and `_stage`/`worktree_of` in migrate.py and commands/plan_cmd.py to fr._plan_io. Run `uv run pytest tests/unit/test_plan_ops.py tests/unit/test_v2_plan_ops.py -q --no-cov`: green.
+- number: 3
+  title: Spec table module (R5)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      GREEN: move the "Implementation Plans" table section (`_SPEC_TABLE_HEADER_RE` through `_append_spec_row`, plan_ops.py:540-666) verbatim into packages/fr/src/fr/spec_table.py, importing PlanEditError from fr.plan_errors and write_text_atomic itself. plan_ops.create imports `_append_spec_row` from fr.spec_table; migrate.py:757-770 uses `spec_table._SPEC_TABLE_HEADER_RE`, `_ensure_section_text`, `_append_spec_row`. Repoint tests that import the table privates (test_v2_plan_ops.py:136/:170/:184, any `_validate_spec_section`/`_CANONICAL_HEADER_*` import) to fr.spec_table. Run the plan_ops and migrate tests: green.
+- number: 4
+  title: Self-review package, one journal reader, refactor-gate read to gates.py (R1,
+    R2, R3)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      GREEN: create packages/fr/src/fr/plan_review/ with vocabulary.py (lint regexes, phrase tables, `_strip_fenced_code`, `_note_defers_forward`, `_not_ticked_steps`), journal.py (`_spec_journal_slug` and `journal_entries(repo_root, scope, slug) -> list[JournalEntry]`: read-resolved path, missing file or JournalParseError → `[]`), checks.py (`ReviewIssue`, `_trailing_manual_block`, every sub-check incl. `OPS_FR_FLOOR`; `_spec_journal_entries(plan)` becomes a call to `journal_entries`), and __init__.py (`self_review`, re-exporting `ReviewIssue`, `OPS_FR_FLOOR`, `_trailing_manual_block`, `_manual_placement_issues`). Split checks.py further along sub-check lines if it passes ~800 lines. Bodies move verbatim except the journal read. Delete the moved code from plan_ops.py and re-export the R9 names there.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: move `_TASK_ID_RE` and `_refactor_justifications` into packages/fr/src/fr/record/gates.py (replace the lazy `from fr.plan_ops import _refactor_justifications` at gates.py:29); its journal read becomes `journal_entries(root, "plan", plan.meta.plan)`. Keep the name `_TASK_ID_RE` (record/model.py:112's anchored pattern is unrelated; do not merge). Repoint run_cmd.py:5131 (`_manual_placement_issues`) and plan_cmd.py's `self_review` import to fr.plan_review, and tests importing moved review privates (`_phase_sizing_issues`, `_tier_issues`, `_DISPATCH_RES`, `_RE_DISPATCH_HEAD`, `_strip_fenced_code`, `_acceptance_link_issues`, `_refactor_justifications`) to their new homes. Run `uv run pytest tests/unit -q --no-cov -k "review or plan or gate or dispatch_lint or tier or sizing or ops"`: green, with no assertion edited.
+- number: 5
+  title: Rework module (R7)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      GREEN: move `_REWORK_SUFFIX_RE`, `_PLAN_HOMES`, `_feature_root_of`, `_next_rework_number` (with its nested `_scan`), `rework_create`, `_find_prior_rework`, `rework_add_origin`, `ReworkRecord` and `rework_list` verbatim into packages/fr/src/fr/plan_rework.py, importing `space_for` and the path helpers from fr.artifacts.paths, `_stage`/`_yaml_dump` from fr._plan_io, PlanEditError from fr.plan_errors and `_append_spec_row` from fr.spec_table. plan_ops re-exports the four public rework names; plan_cmd.py imports them from fr.plan_rework. Repoint tests/unit/test_plan_ops_feature_root.py (the `space_for` patch to `fr.plan_rework`, and `_feature_root_of`/`_next_rework_number`) and other rework-private uses. Run test_plan_ops_split.py and the rework tests: green.
+- number: 6
+  title: Guards, docs, budget and fragment (R10, R11, R13, R14, R15)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      GREEN: widen tests/unit/test_run_durability.py:105's parametrize to add "_plan_io.py", "spec_table.py", "plan_rework.py" (no assertion change). Update the docstrings at commands/run_cmd.py:798, :5123 and cli.py:7 to the new paths, and plan_ops.py's module docstring to say where the moved code went. Lower the plan_ops.py budget in tests/unit/test_tripwire_module_budget.py to the new line count plus about 50 (within MAX_HEADROOM); plan_ops.py stays in HELD. Add .changes/feat-batch-arch-plan-ops-split.yaml (`bump: patch`, one-line summary).
+  - id: P1.T6.S2
+    text: |-
+      GREEN: edit docs/explainers/01-fr-goal.md:879 to name `self_review` in `packages/fr/src/fr/plan_review/`. Run `uv run fr docs check --base origin/main`; for each page it reports for an edited caller, move its `reviewed` stamp to today with the note `still true: import-only change` (or edit the claim if one moved). Re-run until clean.
+  - id: P1.T6.S3
+    text: |-
+      REFACTOR: grep packages/ and tests/ for any remaining `plan_ops.<moved name>` use or `from fr.plan_ops import <moved private>`; there must be none. Run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, the mypy command from AGENTS.md, and last the fast tier `uv run pytest --fr-scope origin/main -n 2 -q --no-cov`.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-27T11:18:22+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-27T11:18:22+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-27T11:18:22+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-27T11:18:22+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-27T11:18:22+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-27T11:18:22+00:00'
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: '2026-11-27T11:18:22+00:00'
+      note: null
+    P1.T6.S2:
+      state: x
+      ticked_at: '2026-11-27T11:18:22+00:00'
+      note: null
+    P1.T6.S3:
+      state: x
+      ticked_at: '2026-11-27T11:18:22+00:00'
+      note: null
+  completion:
+    at: '2026-11-27T11:18:22+00:00'
+    note: null
+    observed_prs: []

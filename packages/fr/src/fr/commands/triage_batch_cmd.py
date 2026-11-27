@@ -70,6 +70,7 @@ from fr.commands.triage_cmd import (
     RepoOpt,
     WorkspaceOpt,
     _load_state,
+    _previous_facts,
     _scope,
     _sync_with_ref,
     batch_app,
@@ -163,6 +164,8 @@ from fr.triage.batch import (
     effective_handle,
     foreign_batch_prs,
     last_dispatch,
+    left_scope,
+    left_scope_note,
     lifecycle_events,
     mixed_themes,
     parse_refs,
@@ -258,6 +261,7 @@ from fr.triage.batch_merge import (
 )
 from fr.triage.batch_version import read_source, reserve
 from fr.triage.check import batch_awaits_live
+from fr.triage.checkouts import checkout_map, unclone_reasons
 from fr.triage.claim_sync import (
     ClaimEnv,
     ClaimOp,
@@ -271,7 +275,14 @@ from fr.triage.claims import stale as claim_stale
 from fr.triage.components import page
 from fr.triage.cursor import answer_at
 from fr.triage.dedupe import candidates
-from fr.triage.drive_errors import DriverRefusal, TransientPassFailure, classify
+from fr.triage.drive_errors import (
+    COLLECTED_TAKEBACK,
+    PER_BATCH_TAKEBACK,
+    DriverRefusal,
+    TransientPassFailure,
+    classify,
+    takeback_failed,
+)
 from fr.triage.drive_lock import DRIVE_LOCK, lock_holder
 from fr.triage.drive_lock import lock_text as _lock_text
 from fr.triage.driver import HOST, Driver, Mailbox, driver_of_holder
@@ -340,6 +351,7 @@ from fr.triage.operator_entries import (
     lineage_reads,
     operator_reads,
 )
+from fr.triage.orphan import ORPHANED_HELP, orphan_refusal, retire
 from fr.triage.pacing import Pacer
 from fr.triage.privacy import VisibilityUnreadable, guard_write
 from fr.triage.probe import PassPlan
@@ -882,7 +894,7 @@ def _wave_columns(batch: Batch, batches: list[Batch], facts: Facts | None) -> st
     closeout = closeout_state(batch)
     wave = "-" if batch.wave is None else str(batch.wave)
     after = f"  after {deps}" if deps else ""
-    return f"  wave {wave}{after}  close-out {closeout}"
+    return f"  wave {wave}{after}  close-out {closeout}{left_scope_note(batch, facts)}"
 
 
 def _warn_mixed_themes(batch: Batch, judgements: Judgements) -> None:
@@ -1087,6 +1099,7 @@ def batch_cancel_command(
     batch_id: Annotated[str, typer.Argument(help="The batch to withdraw.")],
     reason: Annotated[str, typer.Option("--reason", help="Why; posted on each member.")] = "",
     yes: Annotated[bool, typer.Option("--yes", help="Act; without it, print the plan.")] = False,
+    orphaned: Annotated[bool, typer.Option("--orphaned", help=ORPHANED_HELP)] = False,
     checkout_path: CheckoutOpt = None,
     repo: RepoOpt = None,
     org: OrgOpt = None,
@@ -1097,6 +1110,21 @@ def batch_cancel_command(
     target, facts, judgements = _load_state(_scope(repo, org), dir_override, workspace)
     batch = _find(judgements.batches, batch_id)
     stage = derive_batch_stage(batch, facts)
+    if (why := orphan_refusal(batch, facts, orphaned=orphaned)) is not None:
+        _fail(why)
+    if orphaned:  # 2026-11-27-closeout-state R8: only the cancel event, nothing on the forge
+        say = partial(console.print, markup=False)
+        retire(
+            batch,
+            yes=yes,
+            reason=reason,
+            at=_now_after(batch),
+            say=say,
+            save=lambda b: _write(
+                target, _replace(judgements.batches, b), facts, read=judgements.batches
+            ),
+        )
+        return
     # An obsolete batch (never dispatched, every member closed) is cancelled to retire it:
     # it withdraws nothing, so only the cancel event is appended (2026-11-22-triage-hardening R9).
     if stage in CLOSED_OUT and stage != "obsolete":
@@ -3996,40 +4024,8 @@ def _batch_slug(scope: Scope, repo_name: str) -> str:
     return scope.target
 
 
-def _checkout_map(
-    values: list[str] | None, scope: Scope, repos: set[str]
-) -> dict[str, Path | None]:
-    """`--checkout REPO=PATH`, repeatable, keyed by lower-cased OWNER/REPO.
-
-    A single-repo scope defaults to the current git toplevel (None), as `batch
-    dispatch` does; any other scope needs a mapping for every repo with a batch to
-    drive, refused before anything runs."""
-    out: dict[str, Path | None] = {}
-    for value in values or []:
-        name, sep, where = value.partition("=")
-        if not sep or name.count("/") != 1 or not where:
-            _fail(f"--checkout takes REPO=PATH (OWNER/REPO=/path/to/clone), got {value!r}")
-        out[name.lower()] = Path(where).expanduser()
-    if scope.kind == "repo":
-        stray = sorted(set(out) - {scope.target.lower()})
-        if stray:
-            _fail(
-                f"--checkout names {', '.join(stray)}, which is not this scope's repo "
-                f"{scope.target}"
-            )
-        out.setdefault(scope.target.lower(), None)
-        return out
-    if scope.kind == "group":
-        stray = sorted(set(out) - {r.lower() for r in scope.repos})
-        if stray:
-            _fail(f"--checkout names {', '.join(stray)}, which is not in this scope's group")
-        repos = set(
-            scope.repos
-        )  # a group needs a clone for EVERY repo, not only those with batches
-    missing = sorted(r for r in repos if r.lower() not in out)
-    if missing:
-        _fail(f"give --checkout REPO=PATH for {', '.join(missing)}: no clone is known for it")
-    return out
+def _left(batch: Batch, facts: Facts | None) -> bool:
+    return facts is not None and left_scope(batch, facts)
 
 
 def _chosen(batches: list[Batch], named: list[str] | None) -> list[Batch]:
@@ -4539,6 +4535,7 @@ class _Driver:
         # as dispatched and a proposed one dispatch on default config. Its batches sit
         # this pass out; the in-flight cap and dependencies still count them (gh#921).
         unread = {s.repo: s.reason for s in facts.skipped}
+        unread = {**unclone_reasons(repos.values(), self.checkout_paths), **unread}
         chosen = _chosen(judgements.batches, self.named)
         self._unread = {r: why for r, why in unread.items()
                         if any(repos.get(b.id) == r for b in chosen)}  # fmt: skip
@@ -7463,10 +7460,12 @@ class _Driver:
             handle = runner.dispatch(item)
         except Exception as exc:  # the runner's own failure: nothing started, so
             # the record is taken back and a later pass starts it
-            _write(self.target, judgements.batches, facts, read=after, read_errors=True)
-            return self._dispatch_failed(
-                batch, f"runner `{launch.runner}` failed to dispatch {item.id}: {exc}", exc
-            ), False
+            message, also = f"runner `{launch.runner}` failed to dispatch {item.id}: {exc}", ""
+            try:  # its own guard: a failing take-back never hides the dispatch error
+                _save(self.target, judgements.batches, facts, read=after)
+            except Exception as back:  # noqa: BLE001
+                also = takeback_failed(back, PER_BATCH_TAKEBACK)
+            return self._dispatch_failed(batch, message, exc, also), False
         if handle and handle != item.id:  # the runner's own handle, once it is known
             known = started.model_copy(update={"handle": handle})
             final = recorded.model_copy(update={"events": [*recorded.events[:-1], known]})
@@ -7548,10 +7547,12 @@ class _Driver:
         try:
             handle = runner.dispatch(item)
         except Exception as exc:  # the runner's own failure: nothing started, taken back
-            save_closeouts(path, read, read=[*read, marker])
-            return self._dispatch_failed(
-                members[0], f"runner `{launch.runner}` failed to dispatch {item.id}: {exc}", exc
-            ), False
+            message, also = f"runner `{launch.runner}` failed to dispatch {item.id}: {exc}", ""
+            try:  # its own guard: a failing take-back never hides the dispatch error
+                save_closeouts(path, read, read=[*read, marker])
+            except Exception as back:  # noqa: BLE001
+                also = takeback_failed(back, COLLECTED_TAKEBACK)
+            return self._dispatch_failed(members[0], message, exc, also), False
         if handle and handle != item.id:  # the runner's own handle, once it is known
             save_closeouts(path, [*read, marker.model_copy(update={"handle": handle})],
                            read=[*read, marker])  # fmt: skip
@@ -7669,20 +7670,29 @@ class _Driver:
             return f"{action.detail}; no session can take it: the operator's", True
         return f"{action.detail}; handed back to its session {action.key}", True
 
-    def _dispatch_failed(self, batch: Batch, message: str, cause: BaseException | None) -> str:
+    def _dispatch_failed(
+        self, batch: Batch, message: str, cause: BaseException | None, also: str = ""
+    ) -> str:
         """A runner failed to start *batch*'s session (gh#931): as a refused merge
         (rg-4), reported in full once per batch and cause and tried again on a later
         pass; `--once` exits 1. Nothing was written, so the retry is a fresh start.
 
         The cause is the runner error's `code` when it carries one: each retry opens a
-        new tab, so herdr's words name a different pane every pass."""
+        new tab, so herdr's words name a different pane every pass. *also* (a failed
+        take-back, gh#1601) is deduped on its own key: said once, even when it first fails
+        on a repeat dispatch failure."""
         self.failed_write = True
         code = getattr(cause, "code", None)
         key = f"dispatch\0{batch.id}\0{code if isinstance(code, str) else message}"
+        new_also = bool(also) and f"{key}\0takeback" not in self.reported
+        if new_also:
+            self.reported.add(f"{key}\0takeback")
+        else:
+            also = ""
         if key in self.reported:
-            return "stopped again: the runner failed to dispatch (reported above)"
+            return f"stopped again: the runner failed to dispatch (reported above){also}"
         self.reported.add(key)
-        return f"stopped: {message}"
+        return f"stopped: {message}{also}"
 
     def _append(self, judgements: Judgements, facts: Facts, batch: Batch, event: Any) -> Batch:
         new = batch.model_copy(update={"events": [*batch.events, event]})
@@ -8138,12 +8148,19 @@ def build_driver(
     except TriageError as exc:
         _fail(str(exc))
     chosen = _chosen(known, batch_ids) if known else []
-    names = {_batch_slug(scope, b.repo_name) for b in chosen}
+    facts_path = target / "facts.json"
+    try:
+        facts = _previous_facts(facts_path, scope)  # unusable facts count as absent
+        # a batch whose repo left the scope is driven no more: no clone is asked for it
+        names = {_batch_slug(scope, b.repo_name) for b in chosen if not _left(b, facts)}
+        checkouts = checkout_map(checkout, scope, names)
+    except TriageError as exc:
+        _fail(str(exc))
     return _Driver(
         scope,
         target,
         named=batch_ids,
-        checkouts=_checkout_map(checkout, scope, names),
+        checkouts=checkouts,
         max_inflight=max_inflight,
         yes=yes,
         workspace_prefix=workspace_prefix,

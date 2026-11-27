@@ -12,7 +12,7 @@ a three-column `| id | requirement | source |` table instead; the parser reads
 its `id` and `requirement` columns and ignores `source`, so both forms give
 the same ids and text.
 
-Readers: phase sizing (`fr.phase_sizing`, `fr.plan_ops`, `fr.proportionality`),
+Readers: phase sizing (`fr.phase_sizing`, `fr.plan_review`, `fr.proportionality`),
 visual evidence (`fr.run.visual`) and the PR body's post-merge section
 (`fr.record.pr_body`). The one disk read here is `load_spec_matrix`.
 """

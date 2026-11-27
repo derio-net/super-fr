@@ -102,7 +102,9 @@ def test_a_failed_plan_write_leaves_the_phase_file_intact(
     assert phase.read_text() == original
 
 
-@pytest.mark.parametrize("module", ["plan_ops.py", "run/model.py"])
+@pytest.mark.parametrize(
+    "module", ["plan_ops.py", "_plan_io.py", "spec_table.py", "plan_rework.py", "run/model.py"]
+)
 def test_no_plain_write_text_in_the_cursor_and_plan_writers(module: str) -> None:
     """Every write in these modules replaces a file someone relies on; a plain
     `write_text` is the truncate-then-write this batch removes."""

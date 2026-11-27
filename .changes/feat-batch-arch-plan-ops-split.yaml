@@ -1,0 +1,2 @@
+bump: patch
+summary: plan_ops.py is split; self-review, the spec table, rework and the refactor-gate read move to their own modules, with no change in behaviour

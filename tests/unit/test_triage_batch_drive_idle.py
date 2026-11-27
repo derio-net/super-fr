@@ -65,7 +65,7 @@ def _dispatched(world: World, tmp_path: Path, *, pr: bool = False) -> None:
 
 def _driver(tmp_path: Path) -> Any:
     return triage_batch_cmd._Driver(
-        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={},
+        triage_batch_cmd._scope(REPO, None), tmp_path, named=None, checkouts={REPO.lower(): None},
         max_inflight=4, yes=True, scope_args=["--repo", REPO, "--dir", str(tmp_path)],
     )  # fmt: skip
 
