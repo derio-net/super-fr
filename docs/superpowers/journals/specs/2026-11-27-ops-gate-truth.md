@@ -330,3 +330,8 @@ Phase 2 serves its own ask: the step-to-row link and the row term of every post-
 ### phase-split-2026-11-27-ops-gate-truth-p3 · decision · ask: derived Definition of Done (#1621 part B, R17-R20)
 
 Phase 3 serves its own ask: the derived DoD, fr run dod, the briefs and the final line. It derives from phase 2's gate_items.
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-27-ops-gate-truth-p1 created=2026-11-27T22:05:06+00:00 -->
+### tier-2026-11-27-ops-gate-truth-p1 · decision · hard: changes the DevOps gate's stage sequencing and op-closure rules
+
+Phase 1 reopens ops already closed, forgets recorded stages and merges into the pushed ops branch: a change to a gate path every devops-gated run relies on.
