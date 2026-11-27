@@ -85,3 +85,110 @@ requirements.py, plan_ops.py and _yaml.py docstrings now name fr.plan_review, fr
 ### p1-r2-resolved · finding [fixed] · resolves p1-r2: Reviewed-stamp note differs from R14's literal wording (phase 1)
 
 The colon form breaks the page's YAML front matter (discovery logged by the executor), so the spec's R14 now states the comma form the pages carry (3d771d421).
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-27T11:33:19+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · AGENTS.md calls plan_ops.py one of "the five largest modules"; after the split it is 641 lines
+
+AGENTS.md:913-914; three other modules are now larger. The tripwire list itself still matches.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r1 created=2026-11-27T11:33:19+00:00 state=open review_scope=in -->
+### l-simplicity-r1 · finding [open] (reviewer: in scope) · fr.record now holds two module-private _TASK_ID_RE with different regexes
+
+record/gates.py:15 (unanchored, casefolded) vs record/model.py:112 (anchored).
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r2 created=2026-11-27T11:33:19+00:00 state=open review_scope=out -->
+### l-simplicity-r2 · finding [open] (reviewer: out of scope) · journal_entries is a generic reader housed in plan_review; four modules hand-roll the same read
+
+archive_followups.py, usage/compare.py, record/pr_body.py, triage/ledger.py. Natural home fr.journal.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r3 created=2026-11-27T11:33:19+00:00 state=open review_scope=out -->
+### l-simplicity-r3 · finding [open] (reviewer: out of scope) · _spec_journal_entries docstring restates the rule journal_entries owns
+
+plan_review/journal.py:45-50, verbatim-moved text.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r4 created=2026-11-27T11:33:19+00:00 state=open review_scope=out -->
+### l-simplicity-r4 · finding [open] (reviewer: out of scope) · spec_table's underscore names are imported across modules
+
+plan_ops, plan_rework, migrate; they crossed modules through plan_ops before the split.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-27T11:33:19+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · The split test's import reader skipped relative imports
+
+test_plan_ops_split._imported_modules required level == 0.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-27T11:33:19+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · record/gates.py was not in the import-direction check
+
+It imported fr.plan_ops lazily before the split; nothing pinned that it no longer does.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-27T11:33:19+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · The merged journal_entries reader had no parse-error test and no archived plan-scope test
+
+Missing file was covered through both callers; archived only for the spec scope.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-27T11:33:19+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · test_plan_ops_keeps_its_writers used hasattr only
+
+It could not tell a writer defined in plan_ops from a re-export.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-27T11:33:19+00:00 state=open review_scope=out -->
+### l-tests-r5 · finding [open] (reviewer: out of scope) · plan_review/ is not in the write_text guard list
+
+It writes nothing today.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-r1 created=2026-11-27T11:33:19+00:00 -->
+### lens-review-r1 · review · Lens review — docs-accuracy, simplicity, tests over the whole plan_ops split
+
+Three independent reviewers, one per lens, over the feature diff from da66accc5 and the run's shape file (no contradiction found).
+docs-accuracy: every touched page true; one stale AGENTS.md phrase. simplicity: no duplicated shim or helper; one name clash, three out-of-scope notes.
+tests: no assertion changed and every patch target still takes effect; four gaps in the new split test, one out-of-scope note.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-27T11:33:19+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: AGENTS.md calls plan_ops.py one of "the five largest modules"; after the split it is 641 lines
+
+AGENTS.md and the tripwire docstring now say "five held modules" (d5f058433).
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r1-resolved created=2026-11-27T11:33:19+00:00 state=refuted resolves=l-simplicity-r1 -->
+### l-simplicity-r1-resolved · finding [refuted] · resolves l-simplicity-r1: fr.record now holds two module-private _TASK_ID_RE with different regexes
+
+The spec (2026-11-27-plan-ops-split-design.md:105-108, R1) keeps the name _TASK_ID_RE on purpose: the move is verbatim, and record/model.py:112 is an unrelated pattern not to be merged. Both are module-private, so no reader of one meets the other.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r2-resolved created=2026-11-27T11:33:19+00:00 state=open resolves=l-simplicity-r2 out_of_scope=true -->
+### l-simplicity-r2-resolved · finding [out-of-scope] · resolves l-simplicity-r2: journal_entries is a generic reader housed in plan_review; four modules hand-roll the same read
+
+The spec puts journal_entries in plan_review/journal.py; moving it and adopting it elsewhere is new work. Filed as derio-net/super-fr#1727.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r3-resolved created=2026-11-27T11:33:19+00:00 state=open resolves=l-simplicity-r3 out_of_scope=true -->
+### l-simplicity-r3-resolved · finding [out-of-scope] · resolves l-simplicity-r3: _spec_journal_entries docstring restates the rule journal_entries owns
+
+Verbatim-moved docstring, which the spec keeps unchanged; folded into derio-net/super-fr#1727.
+
+<!-- fr:journal kind=finding scope=plan id=l-simplicity-r4-resolved created=2026-11-27T11:33:19+00:00 state=open resolves=l-simplicity-r4 out_of_scope=true -->
+### l-simplicity-r4-resolved · finding [out-of-scope] · resolves l-simplicity-r4: spec_table's underscore names are imported across modules
+
+Pre-existing: the names crossed modules through plan_ops before the split; the move did not widen it.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-27T11:33:19+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: The split test's import reader skipped relative imports
+
+_imported_modules resolves relative imports against the file's package; a parametrized test pins every spelling (relative, absolute, function-local).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-27T11:33:19+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: record/gates.py was not in the import-direction check
+
+record/gates.py is in the import-direction parametrization.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-27T11:33:19+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: The merged journal_entries reader had no parse-error test and no archived plan-scope test
+
+A direct journal_entries test covers missing, archived-only and unparseable journals for both the spec and plan scopes.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-27T11:33:19+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: test_plan_ops_keeps_its_writers used hasattr only
+
+The writers test checks __module__ == "fr.plan_ops".
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-27T11:33:19+00:00 state=open resolves=l-tests-r5 out_of_scope=true -->
+### l-tests-r5-resolved · finding [out-of-scope] · resolves l-tests-r5: plan_review/ is not in the write_text guard list
+
+plan_review writes nothing, so the guard has nothing to cover; this change adds no write there.
