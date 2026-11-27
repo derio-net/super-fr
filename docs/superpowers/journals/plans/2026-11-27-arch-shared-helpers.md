@@ -62,3 +62,46 @@ The five modules import only `hermetic_git  # noqa: F401` (f3af52681); the seven
 ### p1-r3-resolved · finding [out-of-scope] · resolves p1-r3: parse_as_utc body-scan guard would not catch a re-added copy of the removed readers (phase 1)
 
 True, but not caused by this change: the guard is exactly what spec R8 asks for, and widening it means deciding about three other naive-to-UTC readers outside this batch. Filed as a follow-up at deliver.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-27T09:56:55+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · test_gatebackfill_closes.py:90 still copies the null-device GIT_CONFIG setenv; hand-listed guards cannot catch it
+
+tests/unit/test_gatebackfill_closes.py:90-91 set GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM=1 (beside its
+HOME); tests/unit/test_hermetic_git.py's MODULES list never looks at it. Reviewer also proposed globbing the R4
+record guard in tests/unit/test_record_helpers.py.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-27T09:56:55+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · No test requests the hermetic_git fixture and asserts the env it sets; activation is only checked by AST text
+
+tests/unit/test_hermetic_git.py tested apply_hermetic_git directly and the usefixtures marks as text only.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-27T09:56:55+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · The parse_aware/parse_as_utc swaps at _created_since, _pr_time and _worth_reading have no caller-level tests for awkward inputs
+
+collect.py:1346, triage_batch_cmd.py:2423 and usage/backfill.py:165 had no tests for None, empty, naive or garbage stamps.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-27T09:56:55+00:00 -->
+### lens-review-1 · review · Lens review: docs-accuracy none; tests 3 findings (l-tests-r1..r3), all fixed
+
+docs-accuracy: the nine stamped pages, the rule, its mirror and sync-opencode.py checked against the code; the
+--gate help stays byte-identical; the shape file matches the diff. No findings.
+tests: three in-scope findings, fixed in 74767434d.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-27T09:56:55+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: test_gatebackfill_closes.py:90 still copies the null-device GIT_CONFIG setenv; hand-listed guards cannot catch it
+
+test_gatebackfill_closes.py keeps its HOME and calls apply_hermetic_git(monkeypatch); test_hermetic_git.py gains
+a glob over tests/unit/*.py that fails any module but hermetic_git.py pointing GIT_CONFIG_GLOBAL at the null device
+itself. The R4 record guard stays scoped to its eleven modules: a glob false-positives on four modules that write
+into r1.records for other reasons (test_migration_trigger, test_run_resolve_tests_ci, test_run_suite_reuse,
+test_run_tests_log_opencode). Spec R5 and Background updated.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-27T09:56:55+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: No test requests the hermetic_git fixture and asserts the env it sets; activation is only checked by AST text
+
+test_hermetic_git.py runs the fixture itself and asserts both variables; test_gatebackfill_render.py gains a probe that its module-level usefixtures takes effect.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-27T09:56:55+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: The parse_aware/parse_as_utc swaps at _created_since, _pr_time and _worth_reading have no caller-level tests for awkward inputs
+
+tests/unit/test_timestamp_callers.py parametrizes _created_since and _pr_time over None, empty, garbage, naive, Z and offset stamps; test_usage_backfill.py tests _worth_reading with unreadable, naive old, naive recent and Z captured_at.
