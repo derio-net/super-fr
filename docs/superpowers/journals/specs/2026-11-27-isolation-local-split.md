@@ -142,3 +142,6 @@ run_kind: none
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-isolation-local-split-p3-1 created=2026-11-27T09:09:36+00:00 -->
 ### phase-split-2026-11-27-isolation-local-split-p3-1 · decision · review-size: slice 3 of #1517 is reviewed on its own; the four moves together are ~2,500 diff lines (operator decision q-scope)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-27-isolation-local-split-p4-1 created=2026-11-27T09:09:38+00:00 -->
+### phase-split-2026-11-27-isolation-local-split-p4-1 · decision · review-size: slice 4 of #1517 is reviewed on its own; the four moves together are ~2,500 diff lines (operator decision q-scope)
