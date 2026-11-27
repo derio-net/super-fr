@@ -28,7 +28,7 @@ rows:
       than markup escaping, or a command module (one named allowance), and CI fails
       a planted import of any of them
     origin:
-    - spec:2026-11-27-run-verdict#R9
+    - spec:2026-11-27-run-verdict#R10
     levels: {}
     status: not-implemented
     notes: ''
