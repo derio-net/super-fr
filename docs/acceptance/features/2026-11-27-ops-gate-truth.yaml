@@ -39,8 +39,8 @@ rows:
     acceptance: fr gate pass refuses a devops or tester gate while a row that gate owns
       is not walk-verified, or a step it owns has no ran/n/a outcome
     origin:
-    - spec:2026-11-27-ops-gate-truth#R8
-    - spec:2026-11-27-ops-gate-truth#R9
+    - spec:2026-11-27-ops-gate-truth#R10
+    - spec:2026-11-27-ops-gate-truth#R11
     levels: {}
     status: not-implemented
     notes: ''
