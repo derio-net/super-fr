@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from fr.isolation.local import fetch_placement, run_network
+from fr.isolation.branchrefs import fetch_placement, run_network
 from fr.isolation.preserve import TeardownReport
 from fr.isolation.reap import GcAction
 from fr.isolation.runner import Runner, subprocess_runner

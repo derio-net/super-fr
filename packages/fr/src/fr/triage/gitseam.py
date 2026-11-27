@@ -1455,7 +1455,8 @@ class Worktree:
         (the archive then holds the batch on its own); a read that fails raises `GitError`
         carrying the cause (l-errors-r11)."""
         from fr.closeout import branch_artifacts
-        from fr.isolation.local import branch_changed_paths, recorded_start, resolve_branch_refs
+        from fr.isolation.branchrefs import resolve_branch_refs
+        from fr.isolation.local import branch_changed_paths, recorded_start
         from fr.isolation.runner import subprocess_runner
         from fr.isolation.types import IsolationError
 
