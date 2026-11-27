@@ -36,5 +36,13 @@ steps:
           reviewer: aacf187ff2e64198d
           findings: d-fix-1
   deliver:
-    state: pending
+    state: running
+    at: '2026-11-27T20:09:13+00:00'
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-27T20:09:13+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 73a20abc-81a8-48e9-93b3-322956e3669f
 fr_version: 9.1.0rc10
