@@ -1,0 +1,28 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-arch-isolation-gc
+workflow: fr-goal@1
+branch: feat/batch-arch-isolation-gc
+started: '2026-11-27T14:04:56+00:00'
+cursor: brainstorm
+steps:
+  brainstorm:
+    state: pending
+  spec-review:
+    state: pending
+  plan:
+    state: pending
+  plan-review:
+    state: pending
+  implement:
+    state: pending
+    members:
+    - implement-phase
+    - review-phase
+  journal-check:
+    state: pending
+  lens-review:
+    state: pending
+  deliver:
+    state: pending
+fr_version: 9.1.0rc7
+issue: 1521
