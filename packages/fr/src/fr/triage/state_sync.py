@@ -33,8 +33,9 @@ that wrote it (`OWNER_FILE`) and refuses a root another scope id stamped unless 
 take it over: a second scope's export would otherwise replace the first's judgements,
 origins and snapshots (gh#1101). The stamp is not durable state; import never reads it.
 
-Every export also writes `RECORD_FILE` beside the stamp: JSON naming each durable file it
-left equal to the state's copy with that copy's sha256 (spec 2026-11-27-export-drift R1).
+Every export also writes `RECORD_FILE` beside the stamp: JSON naming each durable file the
+root holds once it is done (a repo-only one included) with its sha256 (spec
+2026-11-27-export-drift R1).
 The next export compares the repo-side root with it, so a file someone edited, deleted or
 added in the repo since is drift, and the export refuses before a byte moves instead of
 reverting the edit (R2, R3); `force` overwrites. With no record nothing is drift, and the
@@ -81,7 +82,7 @@ SYMLINK_DEST = "the destination is a symlink, not written through"
 NEWER = "newer in the state directory; --force overwrites it"
 IDENTICAL = "identical"
 OWNER_FILE = "exported-by"  # the scope id that exports into this root (gh#1101)
-RECORD_FILE = "exported-files"  # what the last export left equal to the state (R1)
+RECORD_FILE = "exported-files"  # what the root held after the last export (R1)
 _RECORD_SCHEMA = 1
 
 
@@ -573,10 +574,13 @@ def _write_root_file(root: Path, name: str, data: bytes, *, replace_link: bool =
         writer.write(data)
 
 
-def _record_bytes(root: Path, report: SyncReport) -> bytes:
-    """The record of *report*: every path it copied or found identical, hashed from *root*."""
-    equal = [*report.copied, *(s.path for s in report.skipped if s.reason == IDENTICAL)]
-    files = {rel: digest for rel in sorted(equal) if (digest := _hash(root, rel)) is not None}
+def _record_bytes(root: Path) -> bytes:
+    """The record of the repo-side *root* after an export: every durable regular file it
+    holds, hashed from *root*, the ones only the repo has included. A file the state never
+    had is then known as it stood at this export, so only a later repo edit is drift, and a
+    first (no-record) or forced export settles it (p1-bootstrap-repo-only-files-drift-forever)."""
+    held = [rel for rel, link in durable_entries(root) if not link]
+    files = {rel: digest for rel in sorted(held) if (digest := _hash(root, rel)) is not None}
     body = {"schema": _RECORD_SCHEMA, "files": files}
     return (json.dumps(body, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
@@ -599,7 +603,7 @@ def export_state(
 ) -> SyncReport:
     """Copy *state_dir*'s durable state into the repo-side root `contained(base, rel)`
     (`<dir>/<scope>/`), overwriting what is there, stamp it with *owner*, the exporting
-    scope's id, and write the record of what it left equal to the state (R1). Refused
+    scope's id, and write the record of what the root holds after it (R1). Refused
     before a byte moves when another scope id stamped the root, unless *take_over*, and,
     unless *force*, when the record is bad (`BadRecord`) or the repo changed a file since
     it was written (`ExportDrift`, R2, R3)."""
@@ -613,7 +617,7 @@ def export_state(
     if restamp:
         _write_root_file(root, OWNER_FILE, f"{owner}\n".encode())
         copied.append(OWNER_FILE)
-    record = _record_bytes(root, report)
+    record = _record_bytes(root)
     if _old_record(root) != record:
         _write_root_file(root, RECORD_FILE, record, replace_link=force)
         copied.append(RECORD_FILE)

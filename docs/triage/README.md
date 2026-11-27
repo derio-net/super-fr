@@ -23,7 +23,7 @@ regenerated.
 | `drive-pages.json` | the driver | the unfinished waves and whether a snapshot is owed, so a restarted or re-homed driver carries on; no line counts. Travels in the state ref; not exported |
 | `snapshots/` | `fr triage backlog`, and the driver | one per change the board shows when `fr triage backlog` runs by hand; from the driver, one on its first page-writing pass when it has no `drive-pages.json` (and the board differs from the latest) and one each time a wave finishes. The backlog page's "Since last report" and the history page's timeline. Not reproducible |
 | `authored-src/` | by hand | the sources of the built fragments (below) |
-| `exported-files` | `fr triage state export` | what the last export wrote, each file with its sha256; the next export refuses a file changed since. Not state: import never reads it |
+| `exported-files` | `fr triage state export` | every durable file this folder held after the last export, each with its sha256; the next export refuses a file changed since. Not state: import never reads it |
 
 Left out on purpose, because fr rebuilds them: `facts.json`, `origins-facts.json` and the
 rendered pages (`backlog.html`, `issues.html`, `batches.html`, `origins.html`,

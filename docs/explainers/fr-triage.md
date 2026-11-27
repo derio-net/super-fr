@@ -103,7 +103,7 @@ every change. `fr triage state export --to <dir>` and `import --from <dir>` copy
 from a repo.
 
 The state directory is the source, and only an export writes the repo copy. Each export also
-writes `exported-files` there, a record of each file it wrote and its hash. If someone then
+writes `exported-files` there, a record of each file the repo copy then holds and its hash. If someone then
 edits, deletes or adds a file in the repo copy, the next export stops before it writes
 anything, so it cannot undo that edit, and it names each file. To keep the edit, take it into
 the state first: `fr triage state import --from <dir> --only <path>` moves only the paths you

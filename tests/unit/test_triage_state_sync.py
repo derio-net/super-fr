@@ -658,7 +658,7 @@ def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def test_an_export_records_every_durable_file_it_left_equal_to_the_state(tmp_path: Path) -> None:
+def test_an_export_records_every_durable_file_the_root_holds(tmp_path: Path) -> None:
     import json
 
     state = _state(tmp_path / "state")
@@ -762,8 +762,32 @@ def test_force_overwrites_the_drifted_files_and_rewrites_the_record(tmp_path: Pa
     record = read_record(dest)
     assert record is not None
     assert record["board/manifest.yaml"] == _sha(dest / "board" / "manifest.yaml")
-    assert "history/repo-only.html" not in record  # the state has no copy of it
+    # the state has no copy of it: kept as the repo has it, and recorded so
+    assert record["history/repo-only.html"] == _sha(dest / "history" / "repo-only.html")
     assert RECORD_FILE in report.copied
+    export_state(state, *_at(dest), owner=HOST)  # the forced export settled it: no drift
+
+
+def test_a_repo_only_file_at_the_first_export_is_recorded_not_drift_forever(
+    tmp_path: Path,
+) -> None:
+    """p1-bootstrap-repo-only-files-drift-forever: a durable file the repo copy holds and
+    the state never had, present at the no-record export, is recorded as it stands; only
+    a later repo edit of it is drift."""
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "repo" / SCOPE_NAME
+    (dest / "architecture").mkdir(parents=True)
+    (dest / "architecture" / "closing-order.html").write_text("repo\n", encoding="utf-8")
+
+    export_state(state, *_at(dest), owner=HOST)  # bootstrap: no record yet
+
+    record = read_record(dest)
+    assert record is not None and "architecture/closing-order.html" in record
+    export_state(state, *_at(dest), owner=HOST)  # unchanged since: no drift
+    (dest / "architecture" / "closing-order.html").write_text("edited\n", encoding="utf-8")
+    with pytest.raises(ExportDrift) as caught:
+        export_state(state, *_at(dest), owner=HOST)
+    assert caught.value.drift == (Drift("architecture/closing-order.html", "changed"),)
 
 
 def test_a_repo_file_equal_to_the_states_copy_is_not_drift(tmp_path: Path) -> None:

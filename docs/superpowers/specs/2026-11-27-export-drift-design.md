@@ -38,7 +38,8 @@ imported; verification is CI unit tests, with no gate.
 
 R1. Every export writes a record file `exported-files` in the repo-side root `<dir>/<scope>/`,
 beside `exported-by`: JSON, `{"schema": 1, "files": {<path>: <sha256>}}`, one entry per durable
-regular file the export left equal to the state's copy (copied or already identical), the path
+regular file the root holds after the export (those the state has and those only the repo has,
+so a first or forced export settles a repo-only file and only a later edit of it is drift), the path
 POSIX and relative to the root (JSON escapes any character a file name holds). It is not
 durable state: import never reads or copies it.
 
