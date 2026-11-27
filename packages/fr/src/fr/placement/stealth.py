@@ -29,13 +29,14 @@ import os
 import re
 import subprocess
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import urlparse
 
 from fr.artifacts import paths
+from fr.config.space import CONFIG_SUFFIX, SPACE_DIR, rel
 from fr.settings import SettingsError
 
 if TYPE_CHECKING:
@@ -43,8 +44,12 @@ if TYPE_CHECKING:
 
 STEALTH: Final = "stealth"
 WORKTREE_PREFIX: Final = "stealth--"
-TARGET_SETTINGS: Final = "settings.yaml"
-"""`<target-dir>/settings.yaml` on the tracking branch: the target's policy (R2)."""
+TARGET_SETTINGS: Final = rel("settings")
+"""`<target-dir>/.fr/settings.yaml` on the configuration branch `<branch>-config`, in the
+configuration clone: the target's policy (spec 2026-11-19-event-driven-a-la-carte R5)."""
+LEGACY_TARGET_SETTINGS: Final = "settings.yaml"
+"""`<target-dir>/settings.yaml` on the tracking `<branch>`: where an fr below S1 reads the
+policy. Read when the configuration branch holds none (R13), written in step (R6)."""
 QUIET_FORGE: Final = {"labels": "off", "comments": "off", "issues": "off", "pr_body": "minimal"}
 """The forge values stealth sets itself (R5, R24 "what reaches the target")."""
 PLACEMENT_SUFFIX: Final = ".stealth.json"
@@ -443,7 +448,7 @@ def tracking_root(space: paths.ArtifactSpace) -> Path:
 
 FR_OWNED_PATHS: Final = (
     *(f"{d}/" for d in paths.ARTIFACT_TREES),
-    ".fr/",
+    f"{SPACE_DIR}/",
     ".fr-isolation",
     ".claude/agents/fr-",
     ".claude/rules/acceptance-matrix.md",
@@ -676,6 +681,352 @@ def check_privacy(
 # --- entering stealth -----------------------------------------------------------------
 
 
+# --- the configuration clone (spec 2026-11-19-event-driven-a-la-carte R1, R5, R6) ----
+
+
+def config_ref(ref: StealthRef) -> StealthRef:
+    """The configuration branch of *ref*'s tracking repo: `<branch>-config`. Its clone is
+    `worktree_path(root, config_ref(ref))`, the tracking clone's name plus `-config`
+    (`fr.config.space.stealth_checkout`)."""
+    return StealthRef(ref.repo, f"{ref.branch}{CONFIG_SUFFIX}")
+
+
+def _remote_has(ref: StealthRef, cwd: Path) -> bool:
+    """Whether the tracking repo has *ref*'s branch; an unreachable repo refuses."""
+    probe = network(
+        ["git", "ls-remote", "--exit-code", _url_arg(ref.repo), f"refs/heads/{ref.branch}"],
+        cwd,
+    )
+    if probe.returncode in (0, 2):
+        return probe.returncode == 0
+    why = (probe.stderr or probe.stdout or "git ls-remote failed").strip()
+    raise SettingsError(
+        f"placement stealth: the tracking repo {ref.repo} is unreachable ({why}); fr "
+        "refuses before writing anything (R24 fail-fast)"
+    )
+
+
+def _at_tip(clone: Path, ref: StealthRef, rel_path: str) -> str | None:
+    """*rel_path* at the last fetched tip of *ref* in *clone*; None when absent."""
+    from fr.settings.load import show_at_commit
+
+    sha = _git(clone, "rev-parse", "--verify", "--quiet", f"{_remote_ref(ref)}^{{commit}}")
+    if sha.returncode != 0 or not sha.stdout.strip():
+        return None
+    return show_at_commit(clone, sha.stdout.strip(), rel_path)
+
+
+def _create_branch(
+    root: Path,
+    wt: Path,
+    ref: StealthRef,
+    files: dict[str, str],
+    message: str,
+    *,
+    executable: Collection[str] = (),
+) -> None:
+    """Create *ref*'s branch on the tracking repo as one orphan commit holding *files*,
+    made with plumbing in the tracking clone *wt* and pushed create-only. A branch another
+    host created meanwhile stands (the lease is lost, nothing is forced)."""
+    from fr.placement.quiet import _orphan_commit
+    from fr.triage.gitseam import GitError, PushRefusedError, push_ref_cas
+
+    check_privacy(ref, origin_url(root), target_root=root)
+    commit = _orphan_commit(wt, files, message, executable=executable)
+    try:
+        landed = push_ref_cas(wt, "origin", commit, f"refs/heads/{ref.branch}", expected_old=None)
+    except (PushRefusedError, GitError) as e:
+        raise SettingsError(
+            f"placement stealth: the tracking repo {ref.repo} refused the new branch "
+            f"{ref.branch!r} ({str(e).strip()}); nothing was written (R24)"
+        ) from e
+    if not landed:
+        from fr.settings import BranchRaceError
+
+        raise BranchRaceError(
+            f"placement stealth: another host created {ref.branch!r} on {ref.repo} first "
+            "(the create-only lease was lost); nothing was forced (review p4-r1)"
+        )
+
+
+def create_config_branch(
+    root: Path,
+    ref: StealthRef,
+    files: dict[str, str],
+    message: str,
+    *,
+    executable: Collection[str] = (),
+) -> None:
+    """Create the tracking repo's `<branch>-config` as one orphan commit holding *files*
+    (S1 R10): the migration's creation of the stealth configuration space. A branch the
+    tracking repo refuses raises `SettingsError`; nothing is forced."""
+    _create_branch(
+        root, ensure_worktree(root, ref), config_ref(ref), files, message, executable=executable
+    )
+
+
+def target_settings_texts(
+    root: Path, ref: StealthRef, target: str
+) -> tuple[str | None, str | None]:
+    """(the configuration branch's `<target>/.fr/settings.yaml`, the tracking branch's
+    `<target>/settings.yaml`), each None when absent. The configuration clone is read as
+    it was last fetched; it is absent until `adopt_config_clone` (or a write) made it."""
+    cref = config_ref(ref)
+    clone = worktree_path(root, cref)
+    wt = worktree_path(root, ref)
+    new = _at_tip(clone, cref, f"{target}/{TARGET_SETTINGS}") if (clone / ".git").exists() else None
+    old = _at_tip(wt, ref, f"{target}/{LEGACY_TARGET_SETTINGS}") if (wt / ".git").exists() else None
+    return new, old
+
+
+_CHECK_REF: Final = "refs/fr/config-check"
+"""Where `check_config_branch` fetches `<branch>-config` into the tracking clone."""
+
+
+def check_config_branch(root: Path, ref: StealthRef) -> None:
+    """Refuse a `<branch>-config` on the tracking repo that is not a configuration branch
+    (review p2-r2): fetched into the tracking clone, its tree must lie below
+    `<target-dir>/.fr/` and none of its commits be reachable from `<branch>`
+    (`fr.placement.quiet.refuse_foreign_config`). Reads only; nothing is pushed."""
+    from fr.placement.quiet import refuse_foreign_config
+
+    cref = config_ref(ref)
+    wt = ensure_worktree(root, ref)
+    done = network(
+        ["git", "fetch", "--quiet", "--no-tags", "origin",
+         f"+refs/heads/{cref.branch}:{_CHECK_REF}"],
+        wt,
+    )  # fmt: skip
+    if done.returncode != 0:
+        raise SettingsError(
+            f"placement stealth: cannot fetch {cref.text} to inspect it: "
+            f"{(done.stderr or 'git fetch failed').strip()} (R24 fail-fast)"
+        )
+    try:
+        refuse_foreign_config(
+            wt, _CHECK_REF, branch=cref.branch, depth=1, product_refs=[_remote_ref(ref)]
+        )
+    finally:
+        _git(wt, "update-ref", "-d", _CHECK_REF)
+
+
+def adopt_config_clone(root: Path, ref: StealthRef) -> Path | None:
+    """The configuration clone for *ref* (R5) when `<branch>-config` exists: cloned on
+    demand, else fetched and fast-forwarded (`ensure_worktree`). None when the tracking
+    repo has no such branch. It never creates the branch nor pushes anything: entering a
+    run fetches only (spec 2026-11-19-event-driven-a-la-carte §B; plan decision
+    p2-create-at-init-and-migration). fr creates the branch at `fr settings init
+    --stealth` and at the migration; until then a configuration read refuses
+    (`fr.config.space.ConfigSpace._missing`)."""
+    cref = config_ref(ref)
+    if not (worktree_path(root, cref) / ".git").exists() and not _remote_has(cref, root):
+        return None
+    check_config_branch(root, ref)
+    return ensure_worktree(root, cref)
+
+
+def _commit_file(
+    root: Path, ref: StealthRef, clone: Path, rel_path: str, text: str, message: str
+) -> None:
+    """Write *rel_path* = *text* in *clone* and push it compare-and-swap; nothing when it
+    already holds those bytes."""
+    path = clone / rel_path
+    try:
+        if path.read_text() == text:
+            return
+    except OSError:
+        pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    before = path.read_text() if path.exists() else None
+    path.write_text(text)
+    try:
+        outcome = commit_and_push(
+            ref, clone, [path], message, plain_commit, target_remote=origin_url(root),
+            target_root=root,
+        )  # fmt: skip
+    except BaseException:
+        _put_back(path, before)
+        raise
+    if not outcome.committed and not outcome.unchanged:
+        _put_back(path, before)
+        raise SettingsError(f"placement stealth: {outcome.reason}")
+
+
+def _put_back(path: Path, before: str | None) -> None:
+    if before is None:
+        path.unlink(missing_ok=True)
+    else:
+        path.write_text(before)
+
+
+def write_target_settings(
+    root: Path, ref: StealthRef, target: str, text: str, message: str
+) -> str | None:
+    """Write the target's settings (R5, R6; plan decision p2-config-changes-by-pr).
+
+    When the tracking repo has no `<branch>-config`, this is its creation: an orphan
+    holding `<target>/.fr/settings.yaml`, then the same bytes as `<target>/settings.yaml`
+    on `<branch>` (`write_legacy_target`). When `<branch>-config` already holds *text*,
+    only the legacy copy is landed (a retry converges). Any other change is reviewed: a
+    pull request on the TRACKING repo from `fr-config-change/<slug>` into
+    `<branch>-config`, whose URL is returned; the legacy copy follows after the merge.
+    The legacy copy ends at R14's owed release (`s1-refuse-old-paths`)."""
+    cref = config_ref(ref)
+    wt = ensure_worktree(root, ref)
+    new_rel = f"{target}/{TARGET_SETTINGS}"
+    created = False
+    if not (worktree_path(root, cref) / ".git").exists() and not _remote_has(cref, root):
+        from fr.settings import BranchRaceError
+
+        try:
+            _create_branch(root, wt, cref, {new_rel: text}, message)
+            created = True
+        except BranchRaceError:
+            pass  # another host's branch stands: read it like any existing one
+        else:
+            ensure_worktree(root, cref)
+    if not created:
+        check_config_branch(root, ref)
+        clone = ensure_worktree(root, cref)
+        if _at_tip(clone, cref, new_rel) != text:
+            from fr.config.change import open_change
+
+            check_privacy(ref, origin_url(root), target_root=root)
+            url = open_change(
+                clone, product=root, remote=ref.repo, base_branch=cref.branch,
+                base_ref=_remote_ref(cref), rel=new_rel, text=text, message=message,
+            )  # fmt: skip
+            print(
+                f"fr: opened {url}: the change to {new_rel} waits for review on "
+                f"{cref.text}; once it merges, fr brings {ref.text}:{target}/"
+                f"{LEGACY_TARGET_SETTINGS} in step",
+                file=sys.stderr,
+            )
+            return url
+    write_legacy_target(root, ref, target, text, message)
+    return None
+
+
+def settle_differing_target(
+    root: Path, ref: StealthRef, target: str, new_text: str, new_sha: str, old_sha: str
+) -> None:
+    """The target's two settings files differ (R6): refuse, saying whether the old one
+    lags (an earlier first-parent version of the configuration branch's file, naming
+    `fr settings sync`) or neither matches. Never writes; the quiet twin is
+    `fr.placement.quiet._settle_differing`."""
+    from fr.placement.quiet import _blob, lag_refusal, legacy_lags, mismatch_refusal
+
+    del new_text
+    cref = config_ref(ref)
+    new_at = f"{cref.text}:{target}/{TARGET_SETTINGS} ({new_sha})"
+    old_at = f"{ref.text}:{target}/{LEGACY_TARGET_SETTINGS} ({old_sha})"
+    old_blob = _blob(
+        worktree_path(root, ref), f"{_remote_ref(ref)}:{target}/{LEGACY_TARGET_SETTINGS}"
+    )
+    what = "the target's two settings files"
+    if legacy_lags(
+        worktree_path(root, cref), _remote_ref(cref), f"{target}/{TARGET_SETTINGS}", old_blob
+    ):
+        raise lag_refusal(what, new_at, old_at)
+    raise mismatch_refusal(what, new_at, old_at)
+
+
+def sync_plan_target(root: Path, ref: StealthRef, target: str) -> Any:
+    """The stealth `fr settings sync` preview: syncs both clones and fetches the tracking
+    repo's change branches into the configuration clone, then reads."""
+    from fr.placement.quiet import (
+        CHANGE_REFSPEC,
+        SyncPlan,
+        _blob,
+        change_fetch_problem,
+        changes_since,
+        legacy_lags,
+    )
+
+    cref = config_ref(ref)
+    wt = ensure_worktree(root, ref)
+    clone = worktree_path(root, cref)
+    new_rel, old_rel = f"{target}/{TARGET_SETTINGS}", f"{target}/{LEGACY_TARGET_SETTINGS}"
+    new_at, old_at = f"{cref.text}:{new_rel}", f"{ref.text}:{old_rel}"
+    if not (clone / ".git").exists():
+        return SyncPlan(new_at, old_at, "none")
+    ensure_worktree(root, cref)
+    unlabelled = change_fetch_problem(
+        network(
+            ["git", "fetch", "--quiet", "--no-tags", "--prune", "origin", CHANGE_REFSPEC], clone
+        )
+    )
+    new_text, old_text = target_settings_texts(root, ref, target)
+    if new_text is None:
+        return SyncPlan(new_at, old_at, "none")
+    tip = _git(clone, "rev-parse", _remote_ref(cref)).stdout.strip()
+    blob = _blob(clone, f"{_remote_ref(cref)}:{new_rel}") or ""
+    new_at, old_at = f"{new_at} ({tip[:12]})", f"{old_at}"
+    if old_text is None:
+        # lens review l-errors-r1: a write stopped between its two pushes; the old file
+        # follows from the tip the operator checks (`--yes --expect <tip>`). It is copied
+        # as it is, so it must be a valid target settings file first (verification v-r4,
+        # as quiet checks `parse_switch_text`): a malformed one refuses here.
+        from fr.settings.load import parse_target_text
+
+        parse_target_text(new_text, f"{cref.text}:{new_rel}")
+        commits = changes_since(clone, _remote_ref(cref), new_rel, "")
+        return SyncPlan(
+            new_at, f"{old_at} (absent)", "absent", commits, new_text, tip, blob, unlabelled
+        )
+    if new_text == old_text:
+        return SyncPlan(new_at, old_at, "in-step", tip=tip, blob=blob)
+    old_blob = _blob(wt, f"{_remote_ref(ref)}:{old_rel}")
+    if old_blob is None or not legacy_lags(clone, _remote_ref(cref), new_rel, old_blob):
+        return SyncPlan(new_at, old_at, "mismatch", tip=tip, blob=blob)
+    commits = changes_since(clone, _remote_ref(cref), new_rel, old_blob)
+    return SyncPlan(new_at, old_at, "lags", commits, new_text, tip, blob, unlabelled)
+
+
+def sync_legacy_target(root: Path, ref: StealthRef, target: str, *, expect: str | None) -> Any:
+    """`fr settings sync --yes --expect <tip>` under stealth: refuse unless the fetched
+    tip is *expect* and the old file lags, then `write_legacy_target`."""
+    from fr.placement.quiet import expect_refusal, mismatch_refusal, settled_message
+
+    plan = sync_plan_target(root, ref, target)
+    if plan.state == "mismatch":
+        raise mismatch_refusal("the target's two settings files", plan.new_at, plan.old_at)
+    if plan.state in ("lags", "absent") and plan.text is not None:
+        refused = expect_refusal(plan, expect)
+        if refused is not None:
+            raise refused
+        message = settled_message(root, plan.text, f"bring {target}'s old settings in step")
+        write_legacy_target(root, ref, target, plan.text, message)
+    return plan
+
+
+_LEGACY_ATTEMPTS: Final = 3
+
+
+def write_legacy_target(root: Path, ref: StealthRef, target: str, text: str, message: str) -> None:
+    """`<target>/settings.yaml` on the tracking `<branch>` = *text* (R6), robust against
+    the branch moving: the tracking clone is synced (fetched, fast-forwarded or replayed)
+    immediately before the commit, and a compare-and-swap push lost to another host is
+    retried a bounded number of times. Nothing is forced."""
+    from fr.artifacts.commit import StealthPushError
+
+    rel = f"{target}/{LEGACY_TARGET_SETTINGS}"
+    last: Exception | None = None
+    for _ in range(_LEGACY_ATTEMPTS):
+        wt = ensure_worktree(root, ref)  # sync: fetch, then fast-forward or replay
+        try:
+            _commit_file(root, ref, wt, rel, text, message)
+            return
+        except StealthPushError as e:
+            last = e
+            continue
+    raise SettingsError(
+        f"placement stealth: {ref.text} kept moving while fr wrote {rel}; "
+        f"{_LEGACY_ATTEMPTS} compare-and-swap pushes were lost. Nothing was forced; run the "
+        "command again"
+    ) from last
+
+
 def enter(root: Path, branch: str, ref: StealthRef) -> dict[str, str]:
     """Everything `up` and `run start` do under stealth before anything is written in the
     target: the tracking repo reachable with its branch, privacy, the feature id free,
@@ -689,6 +1040,7 @@ def enter(root: Path, branch: str, ref: StealthRef) -> dict[str, str]:
     target = target_dir(root)
     wt = ensure_worktree(root, ref)
     check_owner(wt / target, fid, branch, STEALTH)
+    adopt_config_clone(root, ref)
     _REACHED.add(ref.text)
     return marker_entry(ref, target)
 

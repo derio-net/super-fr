@@ -8,7 +8,7 @@
 # feat/q carries no fr path and no chore(fr) subject, every `fr` commit after the root
 # touches one feature path; acceptance rows land on `fr`, `fr archive --all` refuses (R25: --branch), and a
 # `git add -A` code commit plus `fr push` puts no fr path or chore(fr) subject on origin's
-# main or feat/q; deleting `fr` on origin makes `fr run start` (its fetch) refuse, naming
+# main or feat/q; deleting `fr-config` and `fr` on origin makes `fr run start` (its fetch) refuse, naming
 # both placements. Nothing reaches a forge.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
@@ -147,8 +147,11 @@ for b in feat/ql feat/qf; do
 done
 cd "$wt" || fail "cd $wt"
 
-# The switch deleted on origin's side only (review p3-r11): the local tracking ref still
-# says quiet, so only `run start`'s own fetch can notice, and it refuses, naming both.
+# The switch deleted on origin's side only (review p3-r11): the local tracking refs still
+# say quiet, so only `run start`'s own fetch can notice, and it refuses, naming both. The
+# switch lives on `fr-config` (spec 2026-11-19-event-driven-a-la-carte R5) with the old
+# `fr:settings.yaml` as its fallback (R13), so both branches go.
+git --git-dir="$origin" branch -D fr-config >/dev/null || fail "delete fr-config on origin"
 git --git-dir="$origin" branch -D fr >/dev/null || fail "delete fr on origin"
 run_fr out run start fr-goal --branch feat/q --run-id r-gone
 [ "$RC" -ne 0 ] || fail "run start did not refuse after origin's fr was deleted: $out"

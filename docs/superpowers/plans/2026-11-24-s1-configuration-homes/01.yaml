@@ -1,0 +1,122 @@
+schema_version: 2
+phase:
+  number: 1
+  title: The configuration space resolver and its tripwire (R1-R4, R22)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - s1-config-root
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/config/**
+  - packages/fr/src/fr/artifacts/paths.py
+  - packages/fr/src/fr/commands/settings_cmd.py
+  - packages/fr/src/fr/docs/load.py
+  - packages/fr/src/fr/lenses/**
+  - packages/fr/src/fr/ops/load.py
+  - packages/fr/src/fr/debt/engine.py
+  - packages/fr/src/fr/verification/rows.py
+  - packages/fr/src/fr/settings/check.py
+  - packages/fr/src/fr/run/ci_evidence.py
+  - packages/fr/src/fr/record/pr_body.py
+  - packages/fr/src/fr/triage/queue_exec.py
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/settings/remote.py
+  - packages/fr/src/fr/tracker/github.py
+  - tests/**/*.py
+  - .changes/feat-event-driven-a-la-carte.yaml
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Smoke
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Smoke: create `packages/fr/src/fr/config/__init__.py` and `packages/fr/src/fr/config/space.py` with a module docstring naming spec `2026-11-19-event-driven-a-la-carte` (S1, #1653), and `tests/unit/test_config_space.py` with one test that imports `fr.config.space` and asserts the docstring names the spec. Add the change fragment `.changes/feat-event-driven-a-la-carte.yaml` (`bump: minor`, summary: "Repo configuration moves into .fr/ and follows the placement: a fr-config branch under quiet, the tracking repo's config branch under stealth; shipped defaults get one home; triage state lives in the host cache"). Run `uv run pytest tests/unit/test_config_space.py -q --no-cov` — green.
+- number: 2
+  title: ConfigSpace under repo, quiet and stealth (R1, R2)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in `tests/unit/test_config_space.py`, with the placement fixtures `tests/unit/test_placement_quiet.py` and `test_settings_load.py` already use (a product repo with an `origin` bare remote; an `origin/fr` switch; a stealth marker naming a tracking clone), assert `config_space(root)` returns: under repo `dir == <root>/.fr`, `default_ref == "origin/<default>"`; under quiet `dir == ~/.cache/fr/worktrees/<main>/fr-config/.fr` (HOME pointed at tmp) and `default_ref == "origin/fr-config"`; under stealth `dir == <config clone>/<target-dir>/.fr` and `default_ref == "origin/<branch>-config"`. `at_default(".fr/ci.yaml")` returns the file's text at that ref or `None`.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: implement `ConfigSpace` (frozen dataclass: `placement`, `dir`, `checkout`, `default_ref`) and `config_space(root)` in `fr/config/space.py` on top of `fr.artifacts.paths.space_for` and `fr.placement.stealth.marker_tracking`; `at_default(rel)` reads by commit with the same helper `settings/load.py` uses (`show_at_commit`). The quiet worktree path and the stealth config-clone path (`stealth--<slug>-config`) are computed here and nowhere else. Tests green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: `settings/load.py`'s quiet and stealth readers keep their own logic until P2; leave a one-line comment there pointing at `fr.config.space`. ruff and mypy green on the touched files.
+- number: 3
+  title: at_pair and the feature-branch rule (R3)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests assert `at_pair(rel, base, head)` reads `base` and `head` under repo, and under quiet and stealth returns the configuration branch tip's text for both sides whatever `base`/`head` are.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: implement `at_pair`; move `run/ci_evidence.py` (`.fr/ci.yaml` at base and HEAD), `lenses/rules.py` (`require:` of both) and `record/pr_body.py`'s changed-`.fr/lenses.yaml` check onto it. Their existing tests stay green.
+- number: 4
+  title: Move the .fr readers onto the resolver (R1, R4)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests that, under quiet, `fr.docs.load`, `fr.lenses.resolve`, `fr.ops.load`, `fr.debt.engine` and `fr.verification.rows` read their file from the quiet configuration directory and ignore the product's; and that the first such read in a process prints one stderr line `fr: ignoring the product checkout's .fr/ under quiet: <files>` (never for `isolation-allow`).
+  - id: P1.T4.S2
+    text: |-
+      GREEN: route the working-tree readers through `config_space(root).dir`, and the default-branch readers (`settings/check.py`, `triage/queue_exec.py`'s `.fr/ci.yaml`, `lenses/resolve.review_lenses`) through `at_default`. Forge-side readers (`triage/collect.py`, `settings/remote.py`, `tracker/github.py`) read `.fr/<file>` at `fr-config` through the forge when that ref carries a quiet switch, else at the default branch, via one helper `fr.config.space.forge_ref(client, repo)`. Add the once-per-process ignored-product notice.
+- number: 5
+  title: The tripwire (R2, R22)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: `tests/unit/test_tripwire_config_space.py` parses every `packages/*/src/**/*.py` with `ast` and collects path constructions naming `.fr` or `.fr/...`: a `Constant` str argument of a `Path(...)` call, an operand of `/` (`BinOp(Div)`), or an argument of `open`, `read_text`, `show_at_commit` or a list literal passed to a call whose first element is `"show"`. Messages (`print`, `typer.echo` and the other echo helpers, exception constructors, f-strings) are excluded. It asserts the set outside `fr/config/space.py`, `fr/artifacts/paths.py` and `fr/artifacts/*migration*`/`fr/config/migrate*.py` is empty; a second test feeds it a fixture module holding one construction and one message and expects exactly the construction. Expected: red, listing today's constructions.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: replace each listed construction with a `config_space` call or a named constant in `fr/config/space.py` (e.g. `SPACE_FILES = {"ci": "ci.yaml", ...}`). The tripwire is green; `uv run pytest --fr-scope -n 2 -q --no-cov` is green.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-24T23:31:33+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-24T23:31:33+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-24T23:31:33+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-24T23:31:33+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-24T23:31:33+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-24T23:31:33+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-24T23:31:33+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-24T23:31:33+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-24T23:31:33+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-24T23:31:33+00:00'
+      note: null
+  completion:
+    at: '2026-11-24T23:31:33+00:00'
+    note: null
+    observed_prs: []

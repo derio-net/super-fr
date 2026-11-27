@@ -14,7 +14,7 @@ from fr.triage.regen import is_generated
 pytestmark = pytest.mark.own_artifacts
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS = ("sync-readme", "sync-opencode", "sync-hermes", "sync-agents-data", "sync-lenses-data")
+SCRIPTS = ("sync-readme", "sync-opencode", "sync-hermes", "sync-agents-data", "sync-defaults-data")
 
 
 def _config() -> TriageConfig:
@@ -41,7 +41,8 @@ WRITTEN_IN_WHOLE = (
     ".hermes/skills/fr/fr-triage/SKILL.md",
     ".hermes/SOUL.d/super-fr-rules.md",
     "packages/fr/src/fr/agents/fr-phase-executor.md",
-    "packages/fr/src/fr/lens_manifests/security.yaml",
+    "packages/fr/src/fr/defaults/lenses/security.yaml",
+    "packages/fr/src/fr/defaults/workflows/fr-goal.yaml",
 )
 
 

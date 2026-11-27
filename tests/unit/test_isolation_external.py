@@ -22,7 +22,7 @@ from typing import Any
 
 import pytest
 from fr.isolation.external import ExternalTarget
-from fr.isolation.local import subprocess_runner
+from fr.isolation.runner import subprocess_runner
 from fr.isolation.types import IsolationError, IsolationState, load_state
 
 from tests.unit.test_isolation import make_repo

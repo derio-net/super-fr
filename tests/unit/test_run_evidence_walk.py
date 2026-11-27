@@ -163,7 +163,10 @@ def test_both_shipped_shapes_declare_walk_on_deliver(name: str) -> None:
     from fr.workflow.model import parse_manifest
 
     root = Path(__file__).resolve().parents[2]
-    for copy in (root / "plugins/super-fr/workflows", root / "packages/fr/src/fr/workflows"):
+    for copy in (
+        root / "plugins/super-fr/defaults/workflows",
+        root / "packages/fr/src/fr/defaults/workflows",
+    ):
         manifest = parse_manifest((copy / f"{name}.yaml").read_text())
         (deliver,) = [s for s in manifest.steps if s.id == "deliver"]
         assert "walk" in deliver.evidence, copy
@@ -363,6 +366,7 @@ def test_the_two_allowed_shapes_are_a_walk(command: str) -> None:
         "FR_X=1 fr verification walk --run w1",
         "PATH=/tmp/evil:$PATH fr verification walk --run w1",
         "FR_SHIPPED_VERIFICATIONS_DIR=/tmp/v fr verification walk --run w1",
+        "FR_SHIPPED_DEFAULTS_DIR=/tmp/v fr verification walk --run w1",
         "env fr verification walk --run w1",
         "cd /w && FR_X=1 fr verification walk --run w1",
         "/opt/bin/fr verification walk --run w1",

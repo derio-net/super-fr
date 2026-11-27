@@ -24,6 +24,6 @@ def require_tracker(repo_root: Path) -> None:
     if resolve_tracking(repo_root).type == "none":
         raise TrackerRequiredError(
             "this repo declares `tracking: {type: none}` in "
-            ".devcontainer/fr-profiles.yaml — there is no issue tracker to write "
+            ".fr/profiles.yaml — there is no issue tracker to write "
             "to. Declare a tracker there to use this command."
         )

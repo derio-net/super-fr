@@ -33,7 +33,15 @@ def env(tmp_path, monkeypatch):
 
 
 def _cfg(root: Path) -> Path:
-    return root / "docs" / "superpowers" / "plan-config.yaml"
+    from fr.artifacts.paths import config_kind_path
+
+    return config_kind_path(root, "plan-config")  # `.fr/plan-config.yaml` (S1 R9)
+
+
+def _old(root: Path) -> Path:
+    from fr.artifacts.paths import LEGACY_CONFIG
+
+    return root / LEGACY_CONFIG["plan-config"]
 
 
 def test_dry_run_is_default_and_writes_nothing(env):
@@ -98,6 +106,23 @@ def test_force_overwrites_existing(env):
     assert res.exit_code == 0, res.output
     assert "WROTE" in res.output
     assert "YYYY-MM-DD-{name}.md" in cfg.read_text()
+
+
+def test_an_old_path_config_counts_as_existing(env):
+    """Review p4-r9: the old `docs/superpowers/plan-config.yaml` is the repo's file until it
+    moves (R13): it is skipped, and `--force` writes the new path and removes the old one,
+    so the repo never holds both (R12)."""
+    repos_dir, _ = env
+    root = _checkout(repos_dir, "super-fr")
+    old = _old(root)
+    old.parent.mkdir(parents=True)
+    old.write_text("plan:\n  filename: custom\n")
+    res = runner.invoke(app, ["repos", "sync", "derio-net/super-fr", "--yes"])
+    assert res.exit_code == 0 and "SKIP" in res.output and str(old) in res.output
+    assert not _cfg(root).exists()
+    res = runner.invoke(app, ["repos", "sync", "derio-net/super-fr", "--yes", "--force"])
+    assert res.exit_code == 0, res.output
+    assert "YYYY-MM-DD-{name}.md" in _cfg(root).read_text() and not old.exists()
 
 
 def test_collection_is_union_of_manifest_and_args(env):

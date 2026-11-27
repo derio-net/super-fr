@@ -14,15 +14,10 @@ from typing import Any
 
 import pytest
 from fr.isolation.hostworktree import HostWorktreeTarget
-from fr.isolation.local import (
-    LocalWorktreeDevcontainerTarget,
-    ReapHazard,
-    ReapRefused,
-    branch_changed_paths,
-    branch_changes_present,
-    devcontainer_id,
-    subprocess_runner,
-)
+from fr.isolation.landing import branch_changed_paths, branch_changes_present
+from fr.isolation.local import LocalWorktreeDevcontainerTarget
+from fr.isolation.reap import ReapHazard, ReapRefused
+from fr.isolation.runner import devcontainer_id, subprocess_runner
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
@@ -2356,7 +2351,7 @@ def test_spawn_failure_does_not_break_flow(tmp_path: Path, monkeypatch: pytest.M
 def test_default_target_does_not_spawn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # The library default spawner is a no-op — a directly-constructed Target
     # (as in tests, and gc's own sibling teardowns) never forks a real sweep.
-    from fr.isolation.local import _noop_gc_spawn
+    from fr.isolation.runner import _noop_gc_spawn
 
     target = LocalWorktreeDevcontainerTarget(make_repo(tmp_path, ["dev"], default="dev"))
     assert target._gc_spawner is _noop_gc_spawn
@@ -3341,7 +3336,7 @@ def test_branch_blob_was_on_base_cost_is_constant_per_commit_count(tmp_path: Pat
     path — not one `git rev-parse` per commit in `merge_base..base_ref`. A
     generated report/matrix file is touched by nearly every later PR, so an
     O(N) scan multiplies across every workspace in a gc sweep."""
-    from fr.isolation.local import _branch_blob_was_on_base
+    from fr.isolation.landing import _branch_blob_was_on_base
 
     def _build(parent: Path, n_rewrites: int) -> Path:
         parent.mkdir()

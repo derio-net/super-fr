@@ -37,9 +37,11 @@ def make_repo(tmp_path: Path, *, remote: str | None = None) -> Path:
 
 
 def write_profiles_yaml(repo: Path, content: str) -> None:
-    d = repo / ".devcontainer"
+    """The profile declarations at their S1 home, `.fr/profiles.yaml`: the old
+    `.devcontainer/fr-profiles.yaml` is still read but says it is at its old location."""
+    d = repo / ".fr"
     d.mkdir(parents=True, exist_ok=True)
-    (d / "fr-profiles.yaml").write_text(content)
+    (d / "profiles.yaml").write_text(content)
 
 
 def _repo_at(root: Path, *, remote: str | None = None) -> Path:

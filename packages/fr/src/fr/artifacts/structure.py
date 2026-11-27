@@ -30,6 +30,7 @@ with it.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -770,3 +771,93 @@ def validate_agents(path: Path) -> list[str]:
             f"`fr migrate artifacts --yes` (or `fr init agents`) to re-render it"
         )
     return problems
+
+
+# --- the moved configuration kinds (spec 2026-11-19-event-driven-a-la-carte S1 §D) ---------
+#
+# Each validator is the reader the file already has: what fr would refuse when reading it.
+
+
+def _reader_problems(path: Path, read: Callable[[Path], object]) -> list[str]:
+    try:
+        read(path)
+    except Exception as e:  # noqa: BLE001 — every reader's own refusal is the problem
+        return [str(e)]
+    return []
+
+
+def validate_workflow_config(path: Path) -> list[str]:
+    """A repo workflow manifest: `fr workflow check`'s parse and structural checks."""
+    from fr.workflow.check import check_workflow
+    from fr.workflow.model import parse_manifest
+
+    try:
+        manifest = parse_manifest(path.read_text())
+    except Exception as e:  # noqa: BLE001 — WorkflowError, or an unreadable file
+        return [str(e)]
+    return check_workflow(manifest, None)
+
+
+def validate_verification_config(path: Path) -> list[str]:
+    """A repo verification strategy: `fr verification check`'s parse and checks."""
+    from fr.verification.check import check_strategy
+    from fr.verification.model import parse_strategy
+
+    try:
+        manifest = parse_strategy(path.read_text(), str(path))
+    except Exception as e:  # noqa: BLE001 — VerificationError, or an unreadable file
+        return [str(e)]
+    return check_strategy(manifest)
+
+
+def validate_models_config(path: Path) -> list[str]:
+    from fr.models import load_models
+
+    return _reader_problems(path, load_models)
+
+
+def validate_trackers_config(path: Path) -> list[str]:
+    from fr.tracker.model import load_trackers
+
+    return _reader_problems(path, load_trackers)
+
+
+def validate_plan_config(path: Path) -> list[str]:
+    """The plan format: a YAML mapping (what `validate-plans.sh` and `fr repair` read)."""
+    return _load_mapping(path)[1]
+
+
+def validate_settings_location(path: Path) -> list[str]:
+    """The settings file at either location: the settings model (`fr.settings.load`)."""
+    from fr.settings.load import parse_settings_text
+
+    return _reader_problems(
+        path, lambda p: parse_settings_text(p.read_text(), source=str(p), servable=False)
+    )
+
+
+def validate_isolation_allow(path: Path) -> list[str]:
+    """The base-clone edit allowlist: one glob a line (`#` comments, blanks ignored)."""
+    import fnmatch
+
+    problems: list[str] = []
+    for n, line in enumerate(path.read_text().splitlines(), start=1):
+        glob = line.strip()
+        if not glob or glob.startswith("#"):
+            continue
+        if glob.count("[") != glob.count("]"):
+            problems.append(f"line {n}: `{glob}` has an unbalanced `[`")
+            continue
+        try:
+            re.compile(fnmatch.translate(glob))
+        except re.error as e:
+            problems.append(f"line {n}: `{glob}` is not a glob ({e})")
+    return problems
+
+
+def validate_quiet_config(path: Path) -> list[str]:
+    """A product `.fr/` file moved to `fr-config` (R11): its YAML parses to a mapping;
+    `candidate-install` (a program) is not YAML."""
+    if path.suffix != ".yaml":
+        return []
+    return _load_mapping(path)[1]

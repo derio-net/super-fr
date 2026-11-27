@@ -141,8 +141,10 @@ def migrate_repo(
             _rewrite_spec_table(spec_md, repo_root=repo_root)
 
     # Strip dead keys from the repo's plan-config.yaml (save_to + dispatch:).
-    cfg = sp / "plan-config.yaml"
-    if cfg.is_file():
+    from fr.repair import repairable_plan_config
+
+    cfg = repairable_plan_config(repo_root)
+    if cfg is not None and cfg.is_file():
         new_text, removals = strip_dead_keys(cfg.read_text())
         if removals:
             verb = "would remove" if dry_run else "removed"

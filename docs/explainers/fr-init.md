@@ -12,7 +12,7 @@ covers:
   - plugins/super-fr/skills/fr-init/SKILL.md
   - packages/fr/src/fr/commands/init_cmd.py
   - packages/fr/src/fr/commands/services_cmd.py
-reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-13 init's writers refuse in a stealth workspace (placement-resolver p4-r3)
+reviewed: 2026-11-25 profile declarations move to `.fr/profiles.yaml` in the configuration space (S1 R9); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-13 init's writers refuse in a stealth workspace (placement-resolver p4-r3)
 ---
 
 ## Why is the profile the contract?
@@ -48,8 +48,13 @@ fr init scaffold --repo . --profile admin --purpose "deploys and forge writes" \
 ```
 
 The first call writes `.devcontainer/dev/devcontainer.json`, adds the profile to
-`.devcontainer/fr-profiles.yaml`, marks it the default, and commits both (on the quiet
-placement it writes them and leaves the commit to you). The second adds
+`.fr/profiles.yaml`, marks it the default, and commits both. A repo that has not migrated
+yet keeps its declarations in `.devcontainer/fr-profiles.yaml`; scaffold adds to that file
+until `fr migrate artifacts --yes` moves it. Under the quiet and stealth placements the
+declarations live on the configuration branch, where a change is a pull request. Under
+quiet, scaffold writes the old path until that branch holds the declarations. Then it
+refuses and tells you to add the profile to `.fr/profiles.yaml` on that branch by a pull
+request. Under stealth, scaffold refuses before it writes anything (see below). The second adds
 a profile that expects two secret names. For each secret, scaffold writes a commented
 placeholder into the host-only env file and never overwrites a value you have already
 put there.
@@ -109,7 +114,7 @@ may reach a stealth target.
 
 ## Which services does the repo record?
 
-`.devcontainer/fr-profiles.yaml` also records three services for the repo: `forge`, `ci`
+`.fr/profiles.yaml` also records three services for the repo: `forge`, `ci`
 and `tracking`, each with a type and an optional host. `fr services` prints what resolved
 and where each value came from (`--json` for machines). Scaffold takes
 `--ci none|github-actions|gitlab-ci|gitea-actions|auto` and

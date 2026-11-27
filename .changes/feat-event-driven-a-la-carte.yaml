@@ -1,0 +1,2 @@
+bump: minor
+summary: "Repo configuration moves into .fr/ and follows the placement: a fr-config branch under quiet, the tracking repo's config branch under stealth; shipped defaults get one home; triage state lives in the host cache"

@@ -16,7 +16,7 @@ covers:
   - packages/fr-cncd/src/**
   - packages/fr-herdr/src/fr_herdr/runner.py
   - packages/fr-claude-cloud/src/**
-reviewed: 2026-11-27 still true, import-only change (plan_ops split); 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-19 the dedup failure reason (#1499) and the cncd symlink refusal (#1501); 2026-11-15 no shipped tick caller; preflight reasons; issues stranded on the removed VK runner
+reviewed: 2026-11-27 still true, import-only change (plan_ops split); 2026-11-27 still true, isolation/local.py split into modules (#1517), no reader-visible change; 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-19 the dedup failure reason (#1499) and the cncd symlink refusal (#1501); 2026-11-15 no shipped tick caller; preflight reasons; issues stranded on the removed VK runner
 ---
 
 ## Why does the plan stay the source of truth?

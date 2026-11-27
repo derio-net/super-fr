@@ -13,8 +13,8 @@ from fr.record.model import RECORD_SCHEMA_VERSION
 pytestmark = pytest.mark.own_artifacts
 
 REPO = Path(__file__).resolve().parents[2]
-SHIPPED = REPO / "plugins" / "super-fr" / "workflows" / "fr-goal.yaml"
-PACKAGED = REPO / "packages" / "fr" / "src" / "fr" / "workflows" / "fr-goal.yaml"
+SHIPPED = REPO / "plugins" / "super-fr" / "defaults" / "workflows" / "fr-goal.yaml"
+PACKAGED = REPO / "packages" / "fr" / "src" / "fr" / "defaults" / "workflows" / "fr-goal.yaml"
 
 # The spec's own §5.C.1 example, ellipses filled in.
 SPEC_EXAMPLE = textwrap.dedent(

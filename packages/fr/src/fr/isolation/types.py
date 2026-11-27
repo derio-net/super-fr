@@ -11,7 +11,7 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError
@@ -572,8 +572,31 @@ def discover_profiles(repo_root: Path) -> list[str]:
     return sorted(p.parent.name for p in base.glob("*/devcontainer.json"))
 
 
-def profiles_config(repo_root: Path) -> dict[str, Any]:
-    cfg = repo_root / ".devcontainer" / "fr-profiles.yaml"
+def profiles_path(repo_root: Path) -> Path:
+    """The profile declarations of the product checkout *repo_root*: `.fr/profiles.yaml`
+    in its configuration space, or `.devcontainer/fr-profiles.yaml` while only that one
+    exists (spec 2026-11-19-event-driven-a-la-carte R9, R13). The `.devcontainer/<profile>/`
+    directories stay in the product (§E)."""
+    from fr.config.space import located
+
+    return located(Path(repo_root), "profiles")
+
+
+def profiles_config(repo_root: Path, *, unknown_ok: bool = False) -> dict[str, Any]:
+    """The profile declarations as a mapping. Under quiet and stealth they decide secrets
+    env-files, the ops profile and the services fr trusts, so they are read from the
+    configuration branch's fetched tip and, unless that branch is protected, without
+    their security-relevant keys (`fr.config.degraded.read_profiles`, review p4-r3): the
+    repo degrades, it is never locked out. *unknown_ok* is for read-only callers, which
+    take that degraded view when protection cannot be read."""
+    from fr.config.space import config_space
+
+    cfg = profiles_path(repo_root)
+    space = config_space(Path(repo_root))
+    if space.placement != "repo":
+        from fr.config.degraded import read_profiles
+
+        return cast(dict[str, Any], read_profiles(space, cfg, unknown_ok=unknown_ok))
     if cfg.is_file():
         return yaml.safe_load(cfg.read_text()) or {}
     return {}
@@ -626,7 +649,7 @@ def resolve_profile(repo_root: Path, name: str | None) -> str:
             return available[0]
         raise IsolationError(
             f"multiple profiles ({', '.join(available)}) and no default in "
-            ".devcontainer/fr-profiles.yaml — pass --profile or set a default via fr-init."
+            ".fr/profiles.yaml — pass --profile or set a default via fr-init."
         )
     if name not in available:
         raise IsolationError(f"unknown profile {name!r}; available: {', '.join(available)}")

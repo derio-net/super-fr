@@ -351,7 +351,12 @@ def test_the_repo_config_is_read_once_at_the_default_branch_into_facts() -> None
     assert config.version.set_ == "uv run --no-project python scripts/bump-version.py {version}"
     assert config.version.relock is None
     assert config.stale_dispatch_days == 5
-    assert forge.called("read_file_at_ref") == [{"repo": REPO, "path": CONFIG_PATH, "ref": "HEAD"}]
+    # The quiet switch probe at `fr-config` (spec 2026-11-19-event-driven-a-la-carte R1),
+    # then the config itself at the default branch.
+    assert forge.called("read_file_at_ref") == [
+        {"repo": REPO, "path": ".fr/settings.yaml", "ref": "fr-config"},
+        {"repo": REPO, "path": CONFIG_PATH, "ref": "HEAD"},
+    ]
 
 
 def test_an_absent_config_is_no_entry_and_the_defaults_apply() -> None:

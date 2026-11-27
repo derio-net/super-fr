@@ -184,6 +184,11 @@ def main(
     # The cloud remedy block (spec 2026-10-07-cloud-triage R23, §H), once, after fr's own
     # error: failures note their items instead of appending it (p7-r3).
     ctx.call_on_close(_print_cloud_remedy)
+    # Spec 2026-11-19-event-driven-a-la-carte R7: a branch's protection answer is this
+    # command's, never an earlier one's (a test's CliRunner reuses one process).
+    from fr.config.protection import forget as _forget_protection
+
+    _forget_protection()
     # super-fr#1511: a cursor's lost-update check compares against what THIS
     # command read, so an earlier invocation in the same process (CliRunner, an
     # embedding host) never counts as this one's read.

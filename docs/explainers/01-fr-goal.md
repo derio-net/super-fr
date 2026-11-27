@@ -27,8 +27,8 @@ standalone: true
 standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
-  - plugins/super-fr/workflows/fr-goal.yaml
-reviewed: 2026-11-24 the spec carries a design shape, the lens reviewers read the run shape file, and the PR shows it as Shape of the change (show-me-visuals); 2026-11-23 the settle check is the last deliver check, after the description read-back; a merged PR settles and a closed one is refused (lens review); the agent settles the PR before and after deliver, three fix rounds at most (R9, R10); deliver checks that the draft PR has settled, merges cleanly and has finished CI, under git.settle (pr-readiness-wait); 2026-11-21 a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
+  - plugins/super-fr/defaults/workflows/fr-goal.yaml
+reviewed: 2026-11-25 the shipped shapes moved to `plugins/super-fr/defaults/workflows/` (S1 R15), and a repo's own shape lives in `.fr/workflows/` in its configuration space, used under quiet or stealth only while that branch is protected (S1 R7, R9); 2026-11-24 the spec carries a design shape, the lens reviewers read the run shape file, and the PR shows it as Shape of the change (show-me-visuals); 2026-11-23 the settle check is the last deliver check, after the description read-back; a merged PR settles and a closed one is refused (lens review); the agent settles the PR before and after deliver, three fix rounds at most (R9, R10); deliver checks that the draft PR has settled, merges cleanly and has finished CI, under git.settle (pr-readiness-wait); 2026-11-21 a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
 ---
 
 ## What does fr-goal do?
@@ -169,7 +169,7 @@ feature at the point where it joins the whole.
 ### Why is the pipeline a manifest and not a script?
 
 Here are two steps from the shape that runs when you ask for `fr-goal` with no
-argument (`plugins/super-fr/workflows/fr-goal.yaml`):
+argument (`plugins/super-fr/defaults/workflows/fr-goal.yaml`):
 
 ```yaml
 workflow: fr-goal
@@ -274,8 +274,12 @@ earlier step wrote. The tool can also tell whether the inputs a step depends on
 actually exist before it dispatches anything anywhere.
 
 The tool looks up shapes in one order: your repository's
-`docs/superpowers/workflows/<name>.yaml` first, then the copy shipped with the
-plugin. A repository file of the same name replaces the shipped shape whole.
+`.fr/workflows/<name>.yaml` first, then the copy shipped with the plugin. That
+`.fr/` directory sits wherever the repository keeps its configuration. Usually
+that is the repository itself. Under the quiet and stealth placements it is a
+separate configuration branch, and fr uses a shape from there only while the
+forge protects that branch. A repository file of the same name replaces the
+shipped shape whole.
 There is no field-by-field merging, and that is a decision, not an omission. A
 list of steps that is half yours and half the plugin's fails in ways that are
 very hard to see.
@@ -292,7 +296,7 @@ stays the same: it does not shrink when the goal does. On a goal that fits in on
 phase, those fixed costs were most of the bill.
 
 `fr-goal-light`
-(`plugins/super-fr/workflows/fr-goal-light.yaml`) is the same pipeline with
+(`plugins/super-fr/defaults/workflows/fr-goal-light.yaml`) is the same pipeline with
 one review stage fewer before any code exists. The agent writes the plan
 first. Then a single reviewer reads the specification and the plan together.
 `fr-goal`, by contrast, reviews the specification first and the plan in a stage
@@ -1367,7 +1371,7 @@ for a flag that bends this one.
 | Input or boundary | Source | Effect |
 |---|---|---|
 | Goal and autonomy request | Operator prompt | Defines scope and activates the skill. |
-| Workflow shape | `docs/superpowers/workflows/<name>.yaml`, else the shipped copy | Defines the steps, their kinds, gates, and dispatch granularity. |
+| Workflow shape | `.fr/workflows/<name>.yaml`, else the shipped copy | Defines the steps, their kinds, gates, and dispatch granularity. |
 | Run record | `docs/superpowers/runs/<run-id>.yaml` | Tracks the cursor, each step's outcome, and what it emitted. |
 | Product decisions | One question round (rarely two) | Constrains the spec and all later work. |
 | Devcontainer profile | `.devcontainer/<profile>/devcontainer.json` | Defines isolated execution. |
@@ -1807,4 +1811,4 @@ autonomous work from silently making operator decisions.
 
 For a compact list of the surrounding skills and commands, run `fr skills`.
 The canonical contract is `plugins/super-fr/skills/fr-goal/SKILL.md`, and the
-shipped shape it drives is `plugins/super-fr/workflows/fr-goal.yaml`.
+shipped shape it drives is `plugins/super-fr/defaults/workflows/fr-goal.yaml`.

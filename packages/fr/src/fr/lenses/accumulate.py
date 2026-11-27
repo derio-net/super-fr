@@ -22,10 +22,9 @@ from fr.git import GitUnavailableError
 from fr.lenses.model import Lens, LensError
 from fr.lenses.resolve import effective_lenses, review_lenses
 from fr.lenses.rules import (
-    base_config_text,
+    config_texts,
     default_ref,
     every_rule,
-    head_config_text,
     matched,
     rules_in_force,
 )
@@ -144,8 +143,8 @@ def lens_set_for(
     """The lens set from the named journals and the branch's diff. Raises `LensError`."""
     added = _added(root, spec_slug, plan_slug)
     ref = base_ref if base_ref is not None else default_ref(root)
-    base_text = base_config_text(root, ref)
-    rules = rules_in_force(base_text, head_config_text(root))
+    base_text, head_text = config_texts(root, ref)
+    rules = rules_in_force(base_text, head_text)
     head = effective_lenses(root)
     effective = review_lenses(root, base_text, has_base=ref is not None)
     base, changed = _changed(root, ref)

@@ -1,0 +1,52 @@
+{
+  "_comment": "Behavioural cases both edit-gate engines must decide identically (review p2-r6). tests/unit/test_isolation_decision_cases.py drives plugins/super-fr/hooks/lib/fr-isolation-decision.sh with them, packages/fr-opencode-plugin/test/decision-cases.test.ts drives marker.ts. A switch side is null (no ref), {\"settings\": null} (the ref without the file) or {\"settings\": <text>}.",
+  "switch": [
+    {"id": "new-only-quiet", "new": {"settings": "placement: quiet\n"}, "old": null, "read": true, "enabled": true, "quiet": true},
+    {"id": "old-only-quiet", "new": null, "old": {"settings": "placement: quiet\n"}, "read": true, "enabled": true, "quiet": true},
+    {"id": "both-identical", "new": {"settings": "placement: quiet\n"}, "old": {"settings": "placement: quiet\n"}, "read": true, "enabled": true, "quiet": true},
+    {"id": "differ-new-repo", "new": {"settings": "placement: repo\n"}, "old": {"settings": "placement: quiet\n"}, "read": true, "enabled": true, "quiet": false},
+    {"id": "differ-old-repo", "new": {"settings": "placement: quiet\n"}, "old": {"settings": "placement: repo\n"}, "read": true, "enabled": true, "quiet": false},
+    {"id": "differ-trailing-newline", "new": {"settings": "placement: quiet\n"}, "old": {"settings": "placement: quiet\n\n"}, "read": true, "enabled": true, "quiet": false},
+    {"id": "new-wins-when-old-absent", "new": {"settings": "placement: repo\n"}, "old": null, "read": true, "enabled": false, "quiet": false},
+    {"id": "new-ref-without-file-falls-back", "new": {"settings": null}, "old": {"settings": "placement: quiet\n"}, "read": true, "enabled": true, "quiet": true},
+    {"id": "neither", "new": null, "old": null, "read": false, "enabled": false, "quiet": false},
+    {"id": "non-canonical-quiet", "new": {"settings": "placement: 'quiet'\n"}, "old": null, "read": true, "enabled": true, "quiet": false}
+  ],
+  "allowlist": [
+    {"id": "new-allowlist", "rel": ".fr/isolation-allow", "protected": true},
+    {"id": "old-allowlist", "rel": ".fr-isolation-allow", "protected": true},
+    {"id": "marker", "rel": ".fr-isolation", "protected": true},
+    {"id": "upper-case", "rel": ".FR/Isolation-Allow", "protected": true},
+    {"id": "upper-marker", "rel": ".FR-ISOLATION", "protected": true},
+    {"id": "dot-segment", "rel": ".fr/./isolation-allow", "protected": true},
+    {"id": "dotdot-segment", "rel": "x/../.fr-isolation-allow", "protected": true},
+    {"id": "empty-segment", "rel": ".fr//isolation-allow", "protected": true},
+    {"id": "non-ascii-at-top", "rel": ".fr-isolatİon", "protected": true},
+    {"id": "non-ascii-in-fr", "rel": ".fr/isolatıon-allow", "protected": true},
+    {"id": "non-ascii-deep", "rel": "docs/café.md", "protected": false},
+    {"id": "plain-file", "rel": "src/main.py", "protected": false},
+    {"id": "other-fr-file", "rel": ".fr/ci.yaml", "protected": false},
+    {"id": "lookalike-name", "rel": "notes/.fr-isolation-allow.md", "protected": false}
+  ],
+  "config_tree": [
+    {"id": "quiet-settings", "depth": 0, "names": [".fr/settings.yaml"], "ok": true},
+    {"id": "quiet-nested", "depth": 0, "names": [".fr/settings.yaml", ".fr/triage/x.yaml"], "ok": true},
+    {"id": "quiet-product-file", "depth": 0, "names": [".fr/settings.yaml", "README.md"], "ok": false},
+    {"id": "quiet-bare-dir-name", "depth": 0, "names": [".fr"], "ok": false},
+    {"id": "quiet-lookalike", "depth": 0, "names": [".frx/settings.yaml"], "ok": false},
+    {"id": "quiet-quoted-name", "depth": 0, "names": ["\".fr/caf\\303\\251\""], "ok": false},
+    {"id": "stealth-one-target", "depth": 1, "names": ["target/.fr/settings.yaml"], "ok": true},
+    {"id": "stealth-two-targets", "depth": 1, "names": ["a/.fr/ci.yaml", "b/.fr/settings.yaml"], "ok": true},
+    {"id": "stealth-top-level-file", "depth": 1, "names": ["target/.fr/ci.yaml", "src.py"], "ok": false},
+    {"id": "stealth-deep-target", "depth": 1, "names": ["a/b/.fr/ci.yaml"], "ok": false},
+    {"id": "stealth-target-file", "depth": 1, "names": ["target/README.md"], "ok": false},
+    {"id": "stealth-quiet-shape", "depth": 1, "names": [".fr/settings.yaml"], "ok": false}
+  ],
+  "stealth_head": [
+    {"id": "tracking-clone", "clone": "stealth--local--t--main", "branch": "main", "head": "main", "ok": true},
+    {"id": "config-clone", "clone": "stealth--local--t--main-config", "branch": "main", "head": "main-config", "ok": true},
+    {"id": "config-head-wrong-name", "clone": "stealth--local--t--main", "branch": "main", "head": "main-config", "ok": false},
+    {"id": "other-branch", "clone": "stealth--local--t--main-config", "branch": "main", "head": "other-config", "ok": false},
+    {"id": "bare-prefix", "clone": "stealth---config", "branch": "main", "head": "main-config", "ok": false}
+  ]
+}

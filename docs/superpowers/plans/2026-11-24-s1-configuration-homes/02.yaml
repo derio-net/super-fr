@@ -1,0 +1,95 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The configuration branch, the moved switch and the edit gate (R5, R6, R8,
+    R13 for hooks)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - s1-switch-moved
+  tier: hard
+  files:
+  - packages/fr/src/fr/artifacts/paths.py
+  - packages/fr/src/fr/placement/**
+  - packages/fr/src/fr/settings/**
+  - packages/fr/src/fr/config/**
+  - packages/fr/src/fr/isolation/**
+  - plugins/super-fr/hooks/**
+  - packages/fr-opencode-plugin/src/**
+  - packages/fr-opencode-plugin/test/**
+  - tests/**/*.py
+  estimate_lines: 1000
+tasks:
+- number: 1
+  title: The switch on the configuration branch (R5)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in `tests/unit/test_placement_quiet.py` and `tests/unit/test_settings_load.py`: an `origin/fr-config` carrying `.fr/settings.yaml` with `placement: quiet` makes `read_switch` and `load_settings` return quiet settings; with only the old root `settings.yaml` on `origin/fr` they still return quiet (R13); with both present and differing they raise the switch refusal naming both refs. Stealth: `<target-dir>/.fr/settings.yaml` on `origin/<branch>-config` in the config clone is read, the old `<target-dir>/settings.yaml` on `<branch>` is the fallback.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: `paths.SWITCH_REF = "refs/remotes/origin/fr-config"`, `SWITCH_SETTINGS = ".fr/settings.yaml"`, keep `LEGACY_SWITCH_REF`/`LEGACY_SWITCH_SETTINGS` (`origin/fr`, `settings.yaml`); `stealth.TARGET_SETTINGS = "<target-dir>/.fr/settings.yaml"` on the config branch with `LEGACY_TARGET_SETTINGS`. `quiet._read` reads new then legacy and compares; `space_for` unchanged in decision order. `fr isolation up` under quiet and stealth ensures the `fr-config` worktree / config clone exist beside the memory ones.
+- number: 2
+  title: Writing both files until the owed release (R6)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: `fr settings init` under quiet writes `.fr/settings.yaml` on a `fr-config` branch (orphan, tree `.fr/` only) as a pull-request branch and writes the identical legacy root `settings.yaml` on `fr`; an fr reading only the legacy file (simulate with `quiet._read_legacy`) reads `placement: quiet`. Same for stealth with `<branch>-config` and `<target-dir>/settings.yaml`.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: one writer `fr.config.space.write_settings(space, text)` commits the configuration-branch file, then the legacy copy, byte-identical; every settings writer calls it. A comment names R14's owed entry as the end of the legacy copy.
+- number: 3
+  title: The edit gate on every harness (R5, R8, R13)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: in `tests/unit/test_isolation_decision_core.py` and `tests/unit/test_hooks_isolation_required.py`: the hook library reads `refs/remotes/origin/fr-config:.fr/settings.yaml` first and `refs/remotes/origin/fr:settings.yaml` second; two differing switches deny; a linked worktree at `~/.cache/fr/worktrees/<main>/fr-config` on `refs/heads/fr-config` with a quiet switch is a placement write target, one on another branch or elsewhere is not; the stealth config clone named by a valid stealth marker is a write target; `.fr/isolation-allow` in the toplevel is read, `.fr-isolation-allow` is the fallback, and neither is ever read from a ref.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: edit `plugins/super-fr/hooks/lib/fr-isolation-decision.sh` (the two switch reads at the `cat-file -p refs/remotes/origin/fr:settings.yaml` sites, `fr_switch_ref_maybe` learns `fr-config`, step 4's write-target structure checks, the allowlist read) and the deny texts in `plugins/super-fr/hooks/fr-isolation-required.sh` and `hooks/hermes/fr-isolation-required.sh` naming `.fr/isolation-allow`. Tests green.
+  - id: P2.T3.S3
+    text: |-
+      RED then GREEN in `packages/fr-opencode-plugin`: tests in its `test/` for the same cases against `src/marker.ts` (switch reads, write targets, `matchesAllowlist`) and the deny text in `src/index.ts`; implement; `bun test` inside `packages/fr-opencode-plugin` green. Keep the `// super-fr-parity:` markers; `uv run fr harness parity --check` green.
+  - id: P2.T3.S4
+    text: |-
+      REFACTOR: the bash library and the TS plugin share one list of switch locations; add a test in `tests/unit/test_isolation_decision_core.py` that greps both sources for the same two refs so they cannot drift. Run `uv run pytest tests/unit/test_hooks_isolation_required.py tests/unit/test_isolation_decision_core.py tests/unit/test_placement_quiet.py -q --no-cov` — green.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-25T01:53:05+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-25T01:53:05+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-25T01:53:05+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-25T01:53:05+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-25T01:53:05+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-25T01:53:05+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-11-25T01:53:05+00:00'
+      note: null
+    P2.T3.S4:
+      state: x
+      ticked_at: '2026-11-25T01:53:05+00:00'
+      note: null
+  completion:
+    at: '2026-11-25T01:53:05+00:00'
+    note: null
+    observed_prs: []

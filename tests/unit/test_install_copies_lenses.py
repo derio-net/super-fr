@@ -1,5 +1,5 @@
-"""Drift guard: `plugins/super-fr/lenses/` rides install.sh's wholesale marketplace rsync
-(spec 2026-11-12-review-lenses R1), as `plugins/super-fr/workflows/` does."""
+"""Drift guard: `plugins/super-fr/defaults/lenses/` rides install.sh's wholesale marketplace rsync
+(spec 2026-11-12-review-lenses R1), as `plugins/super-fr/defaults/workflows/` does."""
 
 from __future__ import annotations
 
@@ -14,7 +14,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_the_shipped_lenses_exist() -> None:
-    assert sorted(p.name for p in (REPO_ROOT / "plugins" / "super-fr" / "lenses").glob("*.yaml"))
+    assert sorted(
+        p.name for p in (REPO_ROOT / "plugins" / "super-fr" / "defaults" / "lenses").glob("*.yaml")
+    )
 
 
 def test_the_marketplace_rsync_does_not_exclude_lenses() -> None:

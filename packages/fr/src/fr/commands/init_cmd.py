@@ -27,7 +27,9 @@ init_app = typer.Typer(
 def scaffold(
     repo: Path = typer.Option(Path("."), help="Repo root (default: cwd)."),
     profile: str = typer.Option(..., help="Profile name (e.g. dev, readonly, admin)."),
-    purpose: str = typer.Option(..., help="One-line purpose, recorded in fr-profiles.yaml."),
+    purpose: str = typer.Option(
+        ..., help="One-line purpose, recorded in the profile declarations (.fr/profiles.yaml)."
+    ),
     tool: list[str] = typer.Option(
         [],
         help="Tool to include (repeatable; <tool>\\[@<version>]; known tools: "
@@ -53,8 +55,9 @@ def scaffold(
         help="Which forge this repo lives on: github, gitlab, or gitea. "
         "Picks the devcontainer CLI-install step (github-cli feature vs a "
         "versioned glab/tea binary install) and is recorded as the `forge:` "
-        "service in fr-profiles.yaml. Omitted: the forge is declared only when "
-        "the origin is a recognised one, and the GitHub CLI feature is used.",
+        "service in the profile declarations (.fr/profiles.yaml). Omitted: the forge "
+        "is declared only when the origin is a recognised one, and the GitHub CLI "
+        "feature is used.",
     ),
     host: str | None = typer.Option(
         None,
@@ -81,14 +84,15 @@ def scaffold(
     ops: bool | None = typer.Option(
         None,
         "--ops/--no-ops",
-        help="Make this an ops profile: `ops: true` in fr-profiles.yaml, FR_PROFILE in the "
-        "container, and your ops-trust store mounted read-only (fr ops apply/attest/seal "
-        "run only there). Left unset, an existing ops profile stays one; --no-ops removes it.",
+        help="Make this an ops profile: `ops: true` in the profile declarations "
+        "(.fr/profiles.yaml), FR_PROFILE in the container, and your ops-trust store "
+        "mounted read-only (fr ops apply/attest/seal run only there). Left unset, an "
+        "existing ops profile stays one; --no-ops removes it.",
     ),
 ) -> None:
-    """Write + commit .devcontainer/<profile>/ and the fr-profiles.yaml entry, plus
-    host secrets placeholders. The commit is what lets `fr isolation up` see the
-    profile; pass --no-commit to write only."""
+    """Write and commit .devcontainer/<profile>/ and its entry in the profile
+    declarations (.fr/profiles.yaml), plus host secrets placeholders. The commit is
+    what lets `fr isolation up` see the profile; pass --no-commit to write only."""
     if backend is not None and backend not in ("github", "gitlab", "gitea"):
         typer.echo(
             f"error: --backend must be one of github, gitlab, gitea; got {backend!r}", err=True
