@@ -78,3 +78,38 @@ a capture task: fixtures and a test, nothing pre-existing to clean
 ### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
 
 a verbatim move that must keep its bytes; the only cleanup (unused imports left in run_cmd) was done in the green step
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-27T18:35:50+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · pickup_cmd._say prints through a highlight-on Console, while the old warning used run_cmd's highlight=False console, so a TTY warning is no longer byte-identical (phase 2)
+
+packages/fr/src/fr/commands/pickup_cmd.py `_say`; pickup's err_console is Console(stderr=True) with highlighting on. Fix - pass highlight=False.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-27T18:35:50+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · fr docs check fails - fr-brainstorming-and-plan.md (pickup_cmd.py) and verification-strategies.md (baseline.py) have no updated reviewed stamp (phase 2)
+
+Both pages stay true; the change is an import re-point. Fix - stamp both.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-27T18:35:50+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · run-verdict acceptance fragment's layering-row note still says the adopt.py allowance exists until slice 2, which this phase removed (phase 2)
+
+docs/acceptance/features/2026-11-27-run-verdict.yaml run-engine-cli-free note. Fix - set-status --notes with current wording.
+
+<!-- fr:journal kind=review scope=plan id=review-p2-1 created=2026-11-27T18:35:50+00:00 phase=2 -->
+### review-p2-1 · review · phase 2 reviewed by an independent reviewer; 3 findings, all in scope, all fixed (phase 2)
+
+Reviewer confirmed byte identity of all seven unit_key Says and the drift warning, the run_cmd adapters keep refusals at the same frame for _advance_once, derive, resolve_in_process and the claim/resolve paths, record/apply.py reaches no RunRefusal-raising function, fixtures captured in 74f3a5ee8 before the move with no dead driver, no compat re-export, layering names kept, budget +20; ran 446 tests green. Findings p2-r1 (pickup warning highlighting), p2-r2 (two page stamps), p2-r3 (stale row note), all fixed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-27T18:35:50+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: pickup_cmd._say prints through a highlight-on Console, while the old warning used run_cmd's highlight=False console, so a TTY warning is no longer byte-identical (phase 2)
+
+pickup_cmd._say passes highlight=False; test_pickup_prints_the_drift_warning_unhighlighted failed before the fix and passes after.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-27T18:35:50+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: fr docs check fails - fr-brainstorming-and-plan.md (pickup_cmd.py) and verification-strategies.md (baseline.py) have no updated reviewed stamp (phase 2)
+
+Stamped fr-brainstorming-and-plan.md and verification-strategies.md, plus fr-exit-gates.md which covers the latter; fr docs check reports 33 pages current.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-27T18:35:50+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: run-verdict acceptance fragment's layering-row note still says the adopt.py allowance exists until slice 2, which this phase removed (phase 2)
+
+set-status --notes on run-engine-cli-free now names the single workspace.py allowance.
