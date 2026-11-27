@@ -16,8 +16,8 @@ rows:
     origin:
     - spec:2026-11-27-run-verdict#R1
     - spec:2026-11-27-run-verdict#R2
-    - spec:2026-11-27-run-verdict#R6
-    - spec:2026-11-27-run-verdict#R8
+    - spec:2026-11-27-run-verdict#R7
+    - spec:2026-11-27-run-verdict#R9
     levels: {}
     status: not-implemented
     notes: ''
