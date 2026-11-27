@@ -190,6 +190,8 @@ carrying `data-cutoff-hidden` when its wave is hidden.
 ## Verification
 
 gate: developer
+settle.conflicts: report — batch board-session-state: the wave driver owns this PR's mergeability
+settle.ci: report — batch board-session-state: the wave driver owns this PR's CI
 - batch-card-waits-for: none — CI unit tests over `wait_of`'s table and the card, plus fr-goal's browser checks at review and deliver over a page rendered from fixture state
 - batch-card-background-wait: none — CI unit tests over `HerdrRunner.session_background` with captured screens and over `read_sessions` with a fake runner
 - batch-lane-owners: none — CI unit tests over the config model and the column header, plus fr-goal's browser checks at review and deliver
