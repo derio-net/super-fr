@@ -840,7 +840,8 @@ class LocalWorktreeDevcontainerTarget:
         # Deliberately NOT `self.verify_merge(state)` — the tempting reuse and
         # the wrong one (spec §3.3). verify_merge is fetch + branch_changes_present
         # + `self._pr(state)`, and that third call shells out to gh/glab/tea; gc
-        # has already made exactly that call one line earlier (`_gc_one`) to
+        # has already made exactly that call one line earlier
+        # (`GcSweeper._gc_one`, fr.isolation.gc) to
         # classify the workspace, so reusing verify_merge would buy a SECOND
         # host-CLI round trip per reap candidate on a host-wide sweep, only to
         # recompute a PR state the caller is already holding — and then discard
@@ -849,7 +850,7 @@ class LocalWorktreeDevcontainerTarget:
         # TOTAL, never raising (phase-2 review f4): `branch_changes_present`
         # raises IsolationError when `git merge-base` fails (unrelated
         # histories, a base ref that vanished between the fetch and here).
-        # A guard that raises is worse than one that refuses — `_gc_one`'s
+        # A guard that raises is worse than one that refuses — `GcSweeper._gc_one`'s
         # `if dry_run:` arms sit OUTSIDE their `try`, so an exception escaping
         # here aborts the whole host-wide sweep, breaking gc's documented
         # "one failed workspace never aborts the sweep" invariant. Unknown
