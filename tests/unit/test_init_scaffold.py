@@ -24,6 +24,19 @@ pytestmark = pytest.mark.own_artifacts
 runner = CliRunner()
 
 
+def _declarations(repo: Path) -> Path:
+    """Where scaffold wrote the profile declarations: `.fr/profiles.yaml` (spec
+    2026-11-19-event-driven-a-la-carte R9) on a fresh repo, the old
+    `.devcontainer/fr-profiles.yaml` when the test seeded that one (R13)."""
+    new = repo / ".fr" / "profiles.yaml"
+    return new if new.exists() else repo / ".devcontainer" / "fr-profiles.yaml"
+
+
+def _written_version(repo: Path) -> int:
+    """3 at the new path, 2 at the old one."""
+    return 3 if _declarations(repo).parent.name == ".fr" else 2
+
+
 @pytest.fixture(autouse=True)
 def _no_forge_call(monkeypatch: pytest.MonkeyPatch) -> None:
     """`--tracking auto` asks the forge; no test here may. Issues read as
@@ -99,7 +112,7 @@ def test_scaffold_commits_profile_by_default(repo: Path) -> None:
     assert "chore(fr): scaffold dev devcontainer profile" in _log_subjects(repo)
     tracked = _tracked(repo)
     assert ".devcontainer/dev/devcontainer.json" in tracked
-    assert ".devcontainer/fr-profiles.yaml" in tracked
+    assert ".fr/profiles.yaml" in tracked
 
 
 def test_scaffold_commit_is_scoped(repo: Path) -> None:
@@ -311,7 +324,7 @@ def test_scaffold_writes_profile_yaml_and_envfile(repo: Path, tmp_path: Path) ->
     assert "/.config/fr/secrets/" in " ".join(cfg["runArgs"])
     assert "fr" in cfg["customizations"] and "vk" not in cfg["customizations"]
 
-    profiles = yaml.safe_load((repo / ".devcontainer" / "fr-profiles.yaml").read_text())
+    profiles = yaml.safe_load(_declarations(repo).read_text())
     assert profiles["default"] == "dev"
     assert profiles["profiles"]["dev"]["purpose"] == "day-to-day development"
     assert profiles["profiles"]["dev"]["secrets"] == ["GH_TOKEN"]
@@ -353,7 +366,7 @@ def test_scaffold_second_profile_keeps_first(repo: Path) -> None:
         ],
     )
     assert res.exit_code == 0, res.output
-    profiles = yaml.safe_load((repo / ".devcontainer" / "fr-profiles.yaml").read_text())
+    profiles = yaml.safe_load(_declarations(repo).read_text())
     assert profiles["default"] == "dev"  # unchanged
     assert set(profiles["profiles"]) == {"dev", "readonly"}
 
@@ -379,7 +392,7 @@ def test_an_unknown_tool_is_refused_before_the_exists_check(repo: Path) -> None:
     """p3r-f4: tool resolution runs FIRST — rerunning over an existing profile
     with a bad --tool reports the tool, not "--force", and touches nothing."""
     assert scaffold(repo).exit_code == 0
-    profiles = repo / ".devcontainer" / "fr-profiles.yaml"
+    profiles = _declarations(repo)
     before = profiles.read_bytes()
     res = scaffold(repo, "--tool", "nosuchtool")
     assert res.exit_code == 2, res.output
@@ -610,7 +623,7 @@ def test_scaffold_profile_writes_backend_and_host_to_profiles_yaml(repo: Path) -
     scaffold_profile(
         repo, "dev", "purpose", tools=[], secrets=[], backend="gitlab", host="gitlab.mycorp.com"
     )
-    data = yaml.safe_load((repo / ".devcontainer" / "fr-profiles.yaml").read_text())
+    data = yaml.safe_load(_declarations(repo).read_text())
     assert data["forge"] == {"type": "gitlab", "host": "gitlab.mycorp.com"}
     assert "backend" not in data and "host" not in data
 
@@ -622,7 +635,7 @@ def test_scaffold_profile_github_default_omits_backend_key(repo: Path) -> None:
     identically."""
     _initial_commit(repo)
     scaffold_profile(repo, "dev", "purpose", tools=[], secrets=[])
-    data = yaml.safe_load((repo / ".devcontainer" / "fr-profiles.yaml").read_text())
+    data = yaml.safe_load(_declarations(repo).read_text())
     assert "backend" not in data
     assert "host" not in data
 
@@ -643,7 +656,7 @@ def test_cli_backend_flag_reaches_scaffold_profile(repo: Path) -> None:
     _initial_commit(repo)
     res = scaffold(repo, "--backend", "gitlab", "--host", "gitlab.mycorp.com")
     assert res.exit_code == 0, res.output
-    data = yaml.safe_load((repo / ".devcontainer" / "fr-profiles.yaml").read_text())
+    data = yaml.safe_load(_declarations(repo).read_text())
     assert data["forge"] == {"type": "gitlab", "host": "gitlab.mycorp.com"}
     assert "backend" not in data and "host" not in data
     config = json.loads((repo / ".devcontainer" / "dev" / "devcontainer.json").read_text())
@@ -729,10 +742,11 @@ def test_this_repos_own_uv_profiles_carry_it() -> None:
 # --- fr-profiles services (spec 2026-09-28-fr-profiles-services §3.C, §3.E.1, R8) ---
 
 PROFILES = ".devcontainer/fr-profiles.yaml"
+"""The old declarations path: a file a test seeds there stays there (R13)."""
 
 
 def _profiles(repo: Path) -> dict:
-    return yaml.safe_load((repo / PROFILES).read_text())
+    return yaml.safe_load(_declarations(repo).read_text())
 
 
 def _real_ci(repo: Path, forge: str = "github") -> None:
@@ -752,7 +766,7 @@ def test_scaffold_writes_schema_2_and_nested_services(repo: Path) -> None:
     res = scaffold(repo, "--backend", "gitlab", "--host", "gl.example.com", "--ci", "none")
     assert res.exit_code == 0, res.output
     data = _profiles(repo)
-    assert data["schema_version"] == 2
+    assert data["schema_version"] == _written_version(repo)
     assert data["forge"] == {"type": "gitlab", "host": "gl.example.com"}
     assert data["ci"] == {"type": "none"}
     assert data["tracking"] == {"type": "none"}  # issues disabled by the autouse fake
@@ -839,7 +853,7 @@ def test_scaffold_over_a_v1_file_migrates_it_in_process(repo: Path) -> None:
     res = scaffold(repo, "--ci", "none", "--tracking", "none")
     assert res.exit_code == 0, res.output
     data = _profiles(repo)
-    assert data["schema_version"] == 2
+    assert data["schema_version"] == _written_version(repo)
     assert set(data["profiles"]) == {"old", "dev"}
     assert data["forge"] == {"type": "gitlab", "host": "gl.example.com"}
     assert "backend" not in data and "host" not in data

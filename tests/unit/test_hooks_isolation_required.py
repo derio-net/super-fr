@@ -287,3 +287,105 @@ def test_a_repo_with_only_legacy_archived_plans_blocks_a_base_edit(tmp_path: Pat
     (d / "_meta.yaml").write_text("plan: x\n")
     assert not (repo / "docs" / "superpowers" / "plans").exists()
     assert decision(run_hook(payload(repo / "a.py"), env={"PATH": "/usr/bin:/bin"})) == "deny"
+
+
+# --- S1 (spec 2026-11-19-event-driven-a-la-carte R5, R8, R13) through the hook --------
+
+
+def test_the_deny_names_the_new_allowlist(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    result = run_hook(payload(repo / "src.py"))
+    reason = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "`.fr/isolation-allow`" in reason
+    assert ".fr-isolation-allow" not in reason
+
+
+def test_the_new_allowlist_in_the_working_tree_allows(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    (repo / ".fr").mkdir()
+    (repo / ".fr" / "isolation-allow").write_text("notes/**\n")
+    assert allowed(run_hook(payload(repo / "notes" / "a.md")))
+    assert decision(run_hook(payload(repo / "src.py"))) == "deny"
+
+
+def test_the_fr_config_worktree_is_a_write_target_and_its_switch_is_read(
+    tmp_path: Path,
+) -> None:
+    from tests.unit.test_isolation_decision_core import quiet_config_worktree
+
+    home = tmp_path / "home"
+    wt = quiet_config_worktree(tmp_path, home)
+    env = {"HOME": str(home), "PATH": "/usr/bin:/bin"}
+    assert allowed(run_hook(payload(wt / ".fr" / "ci.yaml"), env))
+    # the product checkout, quiet through fr-config alone, stays blocked
+    assert decision(run_hook(payload(tmp_path / "q" / "prod" / "src.py"), env)) == "deny"
+
+
+# --- review p2-r5: the allowlist never unlocks itself -------------------------------------
+
+
+@pytest.mark.parametrize("allow_at", [".fr/isolation-allow", ".fr-isolation-allow"])
+@pytest.mark.parametrize("edited", [".fr/isolation-allow", ".fr-isolation-allow"])
+def test_no_allowlist_allows_an_edit_to_either_allowlist(
+    tmp_path: Path, allow_at: str, edited: str
+) -> None:
+    """A `*` (or `.fr/**`) line would otherwise let an edit tool rewrite the allowlist
+    itself, and with it every later decision: both files are outside every allowlist."""
+    repo = fr_repo(tmp_path)
+    allow = repo / allow_at
+    allow.parent.mkdir(exist_ok=True)
+    allow.write_text("*\n.fr/**\n.fr-isolation-allow\n")
+    assert allowed(run_hook(payload(repo / "anything.py")))
+    assert decision(run_hook(payload(repo / edited))) == "deny"
+    assert decision(run_hook(payload(repo / edited, tool="Write"))) == "deny"
+
+
+def _star_allow(repo: Path) -> None:
+    (repo / ".fr").mkdir(exist_ok=True)
+    (repo / ".fr" / "isolation-allow").write_text("*\n")
+
+
+def test_no_allowlist_allows_an_edit_to_the_isolation_marker(tmp_path: Path) -> None:
+    repo = fr_repo(tmp_path)
+    _star_allow(repo)
+    assert decision(run_hook(payload(repo / ".fr-isolation"))) == "deny"
+    assert decision(run_hook(payload(repo / ".FR-Isolation"))) == "deny"
+
+
+def test_an_alias_of_a_protected_file_is_refused_by_identity(tmp_path: Path) -> None:
+    """A symlink or hard link names the allowlist under another name: dev+inode decides."""
+    repo = fr_repo(tmp_path)
+    _star_allow(repo)
+    (repo / "notes").mkdir()
+    (repo / "notes" / "link").symlink_to(repo / ".fr" / "isolation-allow")
+    os.link(repo / ".fr" / "isolation-allow", repo / "notes" / "hard")
+    assert decision(run_hook(payload(repo / "notes" / "link"))) == "deny"
+    assert decision(run_hook(payload(repo / "notes" / "hard"))) == "deny"
+    assert allowed(run_hook(payload(repo / "notes" / "plain.md")))
+
+
+@pytest.mark.parametrize("name", [".fr-isolatİon", ".fr/isolatıon-allow", "ﬁle"])
+def test_a_non_ascii_name_beside_the_protected_files_is_refused(tmp_path: Path, name: str) -> None:
+    """Unicode case folding or normalisation could name a protected file: fail closed."""
+    repo = fr_repo(tmp_path)
+    _star_allow(repo)
+    assert decision(run_hook(payload(repo / name))) == "deny"
+    assert allowed(run_hook(payload(repo / "docs" / "café.md")))
+
+
+def test_a_deny_over_differing_switches_names_the_sync(tmp_path: Path) -> None:
+    """Spec R6, decision p2-config-changes-by-pr: the hook cannot write, so it names the
+    fr command that brings the old copy in step."""
+    from tests.unit.test_isolation_decision_core import push_config_switch, quiet_repo
+
+    repo = quiet_repo(tmp_path, settings="placement: quiet\n")
+    env = {"PATH": "/usr/bin:/bin"}
+    reason = json.loads(run_hook(payload(repo / "src.py"), env).stdout)["hookSpecificOutput"][
+        "permissionDecisionReason"
+    ]
+    assert "fr settings sync" not in reason
+    push_config_switch(repo, "placement: quiet\n# reviewed\n")
+    reason = json.loads(run_hook(payload(repo / "src.py"), env).stdout)["hookSpecificOutput"][
+        "permissionDecisionReason"
+    ]
+    assert "fr settings sync" in reason and "origin/fr-config:.fr/settings.yaml" in reason

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fr.artifacts.paths import emitted_path
+from fr.config.space import rel as config_rel
 from fr.journal.model import (
     JournalEntry,
     JournalParseError,
@@ -107,6 +108,9 @@ HEADING_REVIEW_LENSES = "## Review lenses"
 section must still pass `missing_sections` (spec 2026-11-12-review-lenses R12)."""
 
 _CLOSED_OUT = frozenset({"out-of-scope", "deferred"})
+
+LENS_CONFIG = config_rel("lenses")
+"""The repo's lens config, `.fr/lenses.yaml` in its configuration space."""
 
 
 def missing_sections(body: str, required: Sequence[str] = REQUIRED_SECTIONS) -> list[str]:
@@ -1475,6 +1479,24 @@ def _lens_finding_cells(lens: str, entries: list[JournalEntry]) -> str:
     return ", ".join(out) or "none"
 
 
+def _lens_config_changed(
+    repo_root: Path, merge_base: str | None, changed: tuple[str, ...] | None
+) -> bool:
+    """Did this branch change `.fr/lenses.yaml`? Its text at the merge-base and at HEAD
+    (`fr.config.space.at_pair`): never under quiet and stealth, where a feature branch
+    cannot change configuration (spec 2026-11-19-event-driven-a-la-carte R3)."""
+    from fr.config.space import config_space
+    from fr.settings import SettingsError
+
+    if merge_base is None or LENS_CONFIG not in (changed or ()):
+        return False
+    try:
+        base, head = config_space(repo_root).at_pair(LENS_CONFIG, merge_base, "HEAD")
+    except SettingsError:
+        return True
+    return base != head
+
+
 def _no_lens_review(repo_root: Path, state: RunState) -> str:
     """The section for a run with no `lens-review` step: its shape declares none (like
     `fr-debugging`), its run predates the step, or, when the shape cannot be resolved or
@@ -1505,8 +1527,8 @@ def _review_lenses(repo_root: Path, state: RunState) -> str:
         return f"The lens set could not be read: {e}"
     entries = [e for _scope, _slug, es in _journals(repo_root, state) for e in es]
     note = (
-        "\n\nThis branch changed the repo's lens config (`.fr/lenses.yaml`)."
-        if ".fr/lenses.yaml" in (lenses.changed or ())
+        f"\n\nThis branch changed the repo's lens config (`{LENS_CONFIG}`)."
+        if _lens_config_changed(repo_root, lenses.merge_base, lenses.changed)
         else ""
     )
     # What `lens_set` warned about (a journalled lens the repo since disabled, a

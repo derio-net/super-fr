@@ -83,8 +83,17 @@ def test_the_light_plan_step_declares_single_phase() -> None:
 
 
 def test_the_wheel_copy_is_byte_identical() -> None:
-    canonical = REPO_ROOT / "plugins" / "super-fr" / "workflows" / "fr-goal-light.yaml"
-    wheel = REPO_ROOT / "packages" / "fr" / "src" / "fr" / "workflows" / "fr-goal-light.yaml"
+    canonical = REPO_ROOT / "plugins" / "super-fr" / "defaults" / "workflows" / "fr-goal-light.yaml"
+    wheel = (
+        REPO_ROOT
+        / "packages"
+        / "fr"
+        / "src"
+        / "fr"
+        / "defaults"
+        / "workflows"
+        / "fr-goal-light.yaml"
+    )
     assert wheel.read_bytes() == canonical.read_bytes()
 
 

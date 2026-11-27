@@ -24,6 +24,11 @@ class SettingsError(Exception):
     """The settings file (or the fr reading it) cannot be served; names file and key."""
 
 
+class BranchRaceError(SettingsError):
+    """A create-only push lost its lease: another host created the branch first
+    (review p4-r1). Nothing was forced; the caller re-fetches and reads what stands."""
+
+
 def load_settings(repo_root: Path) -> EffectiveSettings:
     """The effective settings of *repo_root* (see `fr.settings.load`)."""
     from fr.settings.load import load_settings as _load
@@ -78,9 +83,7 @@ def spec_policy_problems(repo_root: Path, spec_path: Path) -> list[str]:
     return problems
 
 
-TRACKING_NONE: Final = (
-    "tracking: none (.devcontainer/fr-profiles.yaml declares `tracking: {type: none}`)"
-)
+TRACKING_NONE: Final = "tracking: none (.fr/profiles.yaml declares `tracking: {type: none}`)"
 """Why a forge write is off when the services declaration, not a setting, turns it off."""
 
 

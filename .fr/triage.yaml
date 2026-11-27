@@ -53,7 +53,7 @@ mirrors:
   - [uv, run, --frozen, python, scripts/sync-opencode.py]
   - [uv, run, --frozen, python, scripts/sync-hermes.py]
   - [uv, run, --frozen, python, scripts/sync-agents-data.py]
-  - [uv, run, --frozen, python, scripts/sync-lenses-data.py]
+  - [uv, run, --frozen, python, scripts/sync-defaults-data.py]
 generated:
   - ".opencode/skills/*"         # sync-opencode.py: skill mirrors and their .source notes
   - ".opencode/instructions/*"   # sync-opencode.py: rule mirrors
@@ -62,4 +62,4 @@ generated:
   - ".hermes/skills/fr/*"        # sync-hermes.py: skill mirrors and their .source notes
   - ".hermes/SOUL.d/super-fr-rules.md"           # sync-hermes.py: the rules block
   - "packages/fr/src/fr/agents/*.md"             # sync-agents-data.py: the wheel's agents
-  - "packages/fr/src/fr/lens_manifests/*.yaml"   # sync-lenses-data.py: the wheel's lenses
+  - "packages/fr/src/fr/defaults/*.yaml"        # sync-defaults-data.py: the wheel's shipped defaults

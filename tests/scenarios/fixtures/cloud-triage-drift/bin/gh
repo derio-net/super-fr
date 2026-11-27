@@ -13,7 +13,10 @@ tests/fixtures/github_rest (captured live 2026-10-08, that directory's README):
   (`docs/superpowers/runs/r-bN.yaml`, the batch's run cursor), so all three share its
   head sha and therefore its captured CI;
 - the run cursors at that head are fr's own artifact (a run cursor), written by the
-  scenario into $DRIFT_CURSORS/r-bN.yaml, not a forge record.
+  scenario into $DRIFT_CURSORS/r-bN.yaml, not a forge record;
+- DERIVED from the captured contents 404 (`docs/no-such-path`): the read of
+  `.fr/settings.yaml` at `fr-config` (the quiet switch probe, spec 2026-11-19 R1), which
+  this repo has no branch for, answers that same not-found.
 
 The open-issue and closed-PR lists, and the members' comments (read by the claim
 refresh, which then writes nothing), answer `[]`, GitHub's own empty page. Anything else
@@ -67,6 +70,11 @@ def answer(line: str) -> str | None:
     }
     if line in fixed:
         return cap(fixed[line])
+    if line == f"{RAW}{R}/contents/.fr/settings.yaml?ref=fr-config":
+        err = json.loads(cap("repo_contents_docs_no-such-path.error.json"))
+        sys.stdout.write(err["stdout"])
+        sys.stderr.write(err["stderr"])
+        sys.exit(int(err["exit"]))
     if line in (f"{R}/issues?state=open&per_page=100&page=1",
                 f"{R}/pulls?state=all&per_page=100&page=1",
                 *(f"{R}/issues/{n}/comments?per_page=100&page=1" for n in MEMBERS)):

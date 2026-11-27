@@ -115,14 +115,14 @@ one artifact kind.
   - `fr isolation verify-merge`: Verify a merged branch's changes actually reached the base branch.
   - `fr isolation gc`: Reconcile isolation workspaces host-wide.
 - `fr init`: Repo initialization: devcontainer profile scaffolding (driven by fr-init).
-  - `fr init scaffold`: Write + commit .devcontainer/<profile>/ and the fr-profiles.yaml entry, plus host secrets placeholders.
+  - `fr init scaffold`: Write and commit .devcontainer/<profile>/ and its entry in the profile declarations (.fr/profiles.yaml), plus host secrets placeholders.
   - `fr init agents`: Render fr's two dispatched agents into .claude/agents/ and commit them.
   - `fr init validator-wrapper`: Write scripts/validate-plans.sh (0755) and stage it — the harness-neutral remedy every isolation guard names when a plan repo is missing the wrapper.
 - `fr cloud`: Claude Code cloud sessions: check the environment, print its setup script.
   - `fr cloud doctor`: Print every cloud prerequisite and its state; exits 1 when any fails.
   - `fr cloud setup-script`: Print the cloud environment setup script (paste it into the environment's Setup script; new sessions run it).
 - `fr repos`: Instrument locally-checked-out repos (driven by the operator's collection).
-  - `fr repos sync`: Write docs/superpowers/plan-config.yaml into each checked-out repo.
+  - `fr repos sync`: Write .fr/plan-config.yaml into each checked-out repo (a pull request to the configuration branch under quiet and stealth).
 - `fr journal`: Scope-keyed durable run-state (spec\|plan\|debug): add / render / check.
   - `fr journal add`: Append one entry to ``docs/superpowers/journals/<slug>.md``.
   - `fr journal resolve`: Append a resolution record closing one finding.
@@ -233,6 +233,7 @@ one artifact kind.
   - `fr settings init`: Write `.fr/settings.yaml` with every key commented out at its default.
   - `fr settings show`: Print the effective settings and each key's source.
   - `fr settings paths`: Print the artifact path resolver's answers, for hooks and plugins.
+  - `fr settings sync`: Bring the old settings copy in step after a reviewed change.
   - `fr settings check`: Validate the settings: schema, servable placement, coherence.
 - `fr placement`: Move fr's artifacts between placements: move, migrate-branch.
   - `fr placement move`: Copy, verify, switch, then remove: every step idempotent and resumable.

@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -62,9 +63,15 @@ from fr.artifacts.registry import (
     ArtifactError,
     ArtifactKind,
     iter_paths_of,
+    no_stamp_write,
     own_feature,
 )
 from fr.artifacts.text import NotUtf8Error
+
+MIGRATING_ROOT: ContextVar[Path | None] = ContextVar("MIGRATING_ROOT", default=None)
+"""The repo root `run_migrations` is applying under, for a hop whose artifact does not
+sit in it (S1's `settings-location`: the old switch lives in the `fr` worktree, and the
+configuration space it creates carries the PRODUCT checkout's files)."""
 
 
 def describe(e: BaseException) -> str:
@@ -122,6 +129,27 @@ class SchemaMigration:
     runner writes no stamp, records the removal (`PlannedAction.removed`) and
     fails the artifact if the path is still there. Only the last hop may retire:
     `MigrationRegistry.register` refuses anything else."""
+    relocates: bool = False
+    """The hop MOVES the artifact (spec 2026-11-19-event-driven-a-la-carte S1 §D.3): `fn`
+    leaves it at `destination(path)` and the source gone. The runner writes no stamp
+    (a location-stamped kind's move is its stamp; a body-stamped one's `fn` writes it),
+    stages the rename (`PlannedAction.moved_to`), and validates the file at its
+    destination. Unlike `retires`, it may be any hop of the chain. A destination that
+    already exists with other bytes than the source is R12's refusal: that artifact
+    fails, naming both paths, and the rest migrate."""
+    destination: Callable[[Path], Path] | None = None
+    """Where a relocating hop puts *path*; required when `relocates`. It may be *path*
+    itself: a file already at its destination whose stamp did not land (the crash
+    window) is finished in place."""
+    expected: Callable[[Path], bytes] | None = None
+    """The bytes a relocating hop gives the file at its destination, when they are not
+    the source's own (profiles 2 -> 3 writes its new stamp): a destination already
+    holding them is a move that happened, not R12's clash."""
+    keeps: Callable[[Path], bool] | None = None
+    """For a relocating hop: True when its `fn` leaves the SOURCE in place (stealth, spec
+    2026-11-19-event-driven-a-la-carte R10 as amended: no deletion is committed on the
+    target's branch). The runner then does not require the source gone and records no
+    removal; the kind's `owns` stops claiming the kept file."""
 
     def __post_init__(self) -> None:
         if self.to_version <= self.from_version:
@@ -129,6 +157,10 @@ class SchemaMigration:
                 f"{self.kind}: a schema migration must move the version forward, "
                 f"got {self.from_version} -> {self.to_version}"
             )
+        if self.relocates and self.destination is None:
+            raise ValueError(f"{self.kind}: a relocating migration needs a destination")
+        if self.relocates and self.retires:
+            raise ValueError(f"{self.kind}: a migration either relocates or retires, not both")
 
     @property
     def summary(self) -> str:
@@ -188,6 +220,13 @@ class PlannedAction:
     """Companion files the migration wrote beside `path` (`SchemaMigration.fn`)."""
     removed: tuple[Path, ...] = ()
     """Paths the step deleted (a retiring step's own artifact), staged as removals."""
+    moved_to: Path | None = None
+    """A relocating step's destination (S1 §D.3): `path` was moved here, so the commit
+    stages both, which git records as a rename."""
+    untouched: bool = False
+    """The step changed nothing at `path`: a location-stamped kind's hop that does not
+    move its file (S1 `settings-location` creates the configuration branch and keeps the
+    old switch as R6's legacy copy). Only `also_wrote` is staged."""
 
     @property
     def is_repair(self) -> bool:
@@ -234,8 +273,10 @@ class MigrationReport:
         """
         seen: dict[Path, None] = {}
         for a in self.applied:
-            seen[a.path] = None
-            for companion in (*a.also_wrote, *a.removed):
+            if not a.untouched:
+                seen[a.path] = None
+            moved = (a.moved_to,) if a.moved_to is not None else ()
+            for companion in (*a.also_wrote, *a.removed, *moved):
                 seen[companion] = None
         return tuple(seen)
 
@@ -546,6 +587,15 @@ def _actions_for(
             )
         ]
     for m in chain:
+        moved_to = None
+        if m.relocates and m.destination is not None:
+            try:
+                moved_to = m.destination(path)
+                refusal = both_paths_refusal(path, moved_to, _expected(m, path, moved_to))
+            except Exception as e:
+                return [], [FailedAction(name, path, m.summary, describe(e))]
+            if refusal is not None:
+                return [], [FailedAction(name, path, m.summary, refusal)]
         actions.append(
             PlannedAction(
                 kind=name,
@@ -553,8 +603,11 @@ def _actions_for(
                 summary=m.summary,
                 from_version=m.from_version,
                 to_version=m.to_version,
+                moved_to=moved_to,
             )
         )
+        if moved_to is not None:
+            break  # later hops run at the destination, planned there next time
     for r in reg.repairs(name):
         try:
             needed = r.applies(path)
@@ -590,6 +643,10 @@ def _held(
             if action.repair is not None
             else steps.get((action.from_version, action.to_version))  # type: ignore[arg-type]
         )
+        if isinstance(step, SchemaMigration) and step.relocates and action.moved_to is not None:
+            reason = veto(action.moved_to)
+            if reason is not None:
+                return f"its destination {action.moved_to} {reason}"
         if step is None or step.companions is None:
             continue
         try:
@@ -698,8 +755,14 @@ def run_migrations(
 
     applied: list[PlannedAction] = []
     skipped: list[PlannedAction] = []
-    for name, kind, path, actions in planned:
-        done, failures = _apply_to_one(reg, name, kind, path)
+    token = MIGRATING_ROOT.set(Path(repo_root))
+    try:
+        results = [
+            (actions, _apply_to_one(reg, name, kind, path)) for name, kind, path, actions in planned
+        ]
+    finally:
+        MIGRATING_ROOT.reset(token)
+    for actions, (done, failures) in results:
         applied.extend(done)
         failed.extend(failures)
         # `skipped` means "planned, then found unnecessary — another writer got
@@ -802,6 +865,102 @@ def _key(action: PlannedAction) -> tuple[object, ...]:
     return (action.path, action.from_version, action.to_version, action.repair)
 
 
+def both_paths_refusal(
+    source: Path, destination: Path, expected: bytes | None = None
+) -> str | None:
+    """R12's refusal when *destination* already holds OTHER bytes than *source* (both a
+    file's old and new path exist), else None. A destination holding the source's own
+    bytes is a move that already happened (a crash after the copy, or the configuration
+    branch created with it): finishing it loses nothing."""
+    if destination == source or not destination.exists():
+        return None
+    try:
+        want = source.read_bytes() if expected is None else expected
+        if destination.is_file() and destination.read_bytes() == want:
+            return None
+    except OSError:
+        pass
+    return (
+        f"both {source} and {destination} exist: fr will not choose between them. Keep the "
+        f"one you want, delete the other, and run `fr migrate artifacts --yes` again (S1 R12)"
+    )
+
+
+def _expected(step: SchemaMigration, path: Path, dest: Path) -> bytes | None:
+    if step.expected is None or dest == path or not dest.exists():
+        return None
+    return step.expected(path)
+
+
+def relocate_file(source: Path, destination: Path) -> None:
+    """Move *source* to *destination* on disk (a destination already holding the same
+    bytes is kept, the source removed). The commit stages both, so a tracked file's move
+    is a rename in history; an untracked one stays untracked (`commit_migration`)."""
+    if source.is_symlink():
+        raise ValueError(f"{source} is a symlink: fr moves the file itself, never a link to it")
+    refusal = both_paths_refusal(source, destination)
+    if refusal is not None:
+        raise FileExistsError(refusal)
+    if destination == source:
+        return
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        source.unlink()
+    else:
+        os.replace(source, destination)
+
+
+def _relocate(
+    name: str, kind: ArtifactKind, path: Path, step: SchemaMigration
+) -> tuple[PlannedAction | None, FailedAction | None]:
+    """One relocating hop: `fn` moves *path* to its destination; the runner checks the
+    source is gone, the destination is there at the hop's version and valid. No stamp
+    is written (S1 §D.2, §D.3)."""
+    assert step.destination is not None
+    try:
+        dest = step.destination(path)
+        refusal = both_paths_refusal(path, dest, _expected(step, path, dest))
+        if refusal is not None:
+            return None, FailedAction(name, path, step.summary, refusal)
+        also_wrote = tuple(step.fn(path) or ())
+    except Exception as e:
+        return None, FailedAction(name, path, step.summary, describe(e))
+    wrote = (*also_wrote, dest) if dest != path else also_wrote
+
+    def failure(why: str) -> tuple[None, FailedAction]:
+        return None, FailedAction(name, path, step.summary, why, also_wrote=wrote)
+
+    kept = dest != path and step.keeps is not None and step.keeps(path)
+    if dest != path and path.exists() and not kept:
+        return failure(f"the relocating step returned but {path} still exists")
+    if not dest.is_file():
+        return failure(f"the relocating step returned but {dest} is not there")
+    try:
+        landed = kind.read_version(dest)
+        problems = kind.validate(dest)
+    except Exception as e:
+        return failure(describe(e))
+    if landed != step.to_version:
+        return failure(
+            f"after the move {dest} reads as version {landed}, not {step.to_version} ({kind.stamp})"
+        )
+    if problems:
+        return failure(f"{dest} is not valid after the move: {'; '.join(problems)}")
+    return (
+        PlannedAction(
+            kind=name,
+            path=path,
+            summary=step.summary,
+            from_version=step.from_version,
+            to_version=step.to_version,
+            also_wrote=also_wrote,
+            removed=(path,) if dest != path and not kept else (),
+            moved_to=dest if dest != path else None,
+        ),
+        None,
+    )
+
+
 def _apply_to_one(
     reg: MigrationRegistry, name: str, kind: ArtifactKind, path: Path
 ) -> tuple[list[PlannedAction], list[FailedAction]]:
@@ -830,6 +989,15 @@ def _apply_to_one(
         if not chain:
             break
         step = chain[0]
+        if step.relocates:
+            moved, failure = _relocate(name, kind, path, step)
+            if failure is not None:
+                failed.append(failure)
+                return applied, failed
+            assert moved is not None
+            applied.append(moved)
+            path = moved.moved_to or path  # None: finished in place (the crash window)
+            continue
         try:
             also_wrote = tuple(step.fn(path) or ())
         except Exception as e:
@@ -892,6 +1060,7 @@ def _apply_to_one(
                 from_version=step.from_version,
                 to_version=step.to_version,
                 also_wrote=also_wrote,
+                untouched=kind.write_version is no_stamp_write,
             )
         )
     else:

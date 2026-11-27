@@ -733,12 +733,12 @@ rsync -a --delete --exclude='.git' --exclude='__pycache__' --exclude='.venv' \
   --exclude='.venv-container' --exclude='.coverage*' \
   "$PLUGIN_ROOT/" "$MARKETPLACE_DIR/"
 echo "  Copied plugin into $MARKETPLACE_DIR"
-# Shipped workflow manifests (plugins/super-fr/workflows/*.yaml, spec §4.A)
-# ride this same wholesale rsync — no separate cp line, unlike rules/ or the
-# OpenCode skill mirror below, both of which target a destination OUTSIDE
-# this tree. fr.workflow.resolve.default_shipped_workflows_dir()'s fallback
+# Shipped defaults (plugins/super-fr/defaults/{workflows,verifications,lenses}/,
+# spec 2026-11-19-event-driven-a-la-carte R15) ride this same wholesale rsync — no
+# separate cp line, unlike rules/ or the OpenCode skill mirror below, both of which
+# target a destination OUTSIDE this tree. fr._shipped's marketplace fallback
 # ($HOME/.claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/
-# workflows) is exactly $MARKETPLACE_DIR/plugins/super-fr/workflows —
+# defaults/<kind>) is exactly $MARKETPLACE_DIR/plugins/super-fr/defaults/<kind> —
 # pinned by tests/integration/test_install_sh.py's TestInstallWorkflows so a
 # future --exclude here can't silently unship a manifest.
 

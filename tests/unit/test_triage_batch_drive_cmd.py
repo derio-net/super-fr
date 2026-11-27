@@ -2590,6 +2590,8 @@ def test_the_merge_context_follows_each_passs_config_without_a_second_methods_re
             return {"default": None, "allowed": ["squash", "merge"]}
 
     class _Clone:
+        path = tmp_path  # no clone: the repo placement (S1 R7 reads the space from here)
+
         def __init__(self) -> None:
             self.config: dict[str, Any] = {}
             self.fetches = 0
@@ -2677,6 +2679,8 @@ def test_a_stale_config_refuses_with_code_two_and_leaves_the_repo_unchecked(
     from fr.commands.triage_batch_cmd import ForgeReadError
 
     class _Clone:
+        path = tmp_path  # no clone: the repo placement
+
         def fetch(self) -> None:
             return None
 

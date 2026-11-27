@@ -164,7 +164,15 @@ def default_trackers_path() -> Path:
 
 REPO_TRACKERS_REL = Path(KIND_DIRS["trackers"])
 """Repo-level override path (spec §4.G), read the same way `fr.models`
-reads `docs/superpowers/models.yaml` — resolution is repo over user."""
+reads the repo's models file — resolution is repo over user."""
+
+
+def repo_trackers_path(repo_root: Path) -> Path:
+    """The repo's trackers file: `.fr/trackers.yaml` in the configuration space, or the old
+    path while only that one exists (spec 2026-11-19-event-driven-a-la-carte R9, R13)."""
+    from fr.config.space import located
+
+    return located(Path(repo_root), "trackers")
 
 
 def resolve_instance_mapping(

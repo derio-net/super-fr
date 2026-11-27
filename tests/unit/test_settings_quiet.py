@@ -122,3 +122,120 @@ def test_check_applies_r5_across_every_quiet_feature(repo: Path) -> None:
     problems = check_settings(repo)
     assert [p.id for p in problems] == ["gates-off-with-ops"]
     assert "deploy" in problems[0].message
+
+
+# --- S1 (spec 2026-11-19-event-driven-a-la-carte R5, R6): both switches, in step -----------
+
+
+def test_init_quiet_writes_fr_config_and_the_identical_legacy_switch(
+    repo: Path, tmp_path: Path
+) -> None:
+    from fr.placement.quiet import _read_legacy
+
+    result = _fr(repo, "settings", "init", "--quiet")
+    assert result.exit_code == 0, result.output
+    origin = tmp_path / "origin.git"
+    sha = git(origin, "rev-parse", "refs/heads/fr-config").strip()
+    assert git(origin, "rev-list", "--parents", "-n1", sha).split() == [sha]  # orphan
+    assert git(origin, "ls-tree", "-r", "--name-only", sha).split() == [".fr/settings.yaml"]
+    new = git(origin, "show", f"{sha}:.fr/settings.yaml")
+    old = git(origin, "show", "refs/heads/fr:settings.yaml")
+    assert new == old and "\nplacement: quiet\n" in new
+    assert load_settings(repo).ref == "refs/remotes/origin/fr-config"
+    # an fr below S1 reads only the old file, and reads quiet from it
+    legacy = _read_legacy(repo)
+    assert legacy is not None and legacy.settings.placement == "quiet"
+
+
+def test_init_quiet_refuses_when_origin_already_has_fr_config(repo: Path, tmp_path: Path) -> None:
+    from tests.unit.test_placement_quiet import push_config_branch
+
+    push_config_branch(repo, None)
+    result = _fr(repo, "settings", "init", "--quiet")
+    assert result.exit_code == 2
+    assert "fr-config" in result.output and "already" in result.output
+    assert git(tmp_path / "origin.git", "branch", "--list", "fr").strip() == ""
+
+
+def test_write_settings_again_with_the_same_text_changes_nothing(
+    repo: Path, tmp_path: Path
+) -> None:
+    from fr.config.space import quiet_config_space, write_settings
+
+    assert _fr(repo, "settings", "init", "--quiet").exit_code == 0
+    origin = tmp_path / "origin.git"
+    text = git(origin, "show", "refs/heads/fr-config:.fr/settings.yaml")
+    heads = [git(origin, "rev-parse", b).strip() for b in ("fr-config", "fr")]
+    assert write_settings(quiet_config_space(repo), text, message="chore(fr): settings") is None
+    assert [git(origin, "rev-parse", b).strip() for b in ("fr-config", "fr")] == heads
+
+
+def test_init_quiet_on_an_old_quiet_repo_creates_fr_config_from_the_old_switch(
+    repo: Path, tmp_path: Path
+) -> None:
+    """Decision p2-create-at-init-and-migration: an existing quiet repo (switch only at
+    `origin/fr:settings.yaml`) gets its configuration space at `fr settings init --quiet`,
+    holding the old switch's bytes; the old file is untouched."""
+    from tests.unit.test_placement_quiet import QUIET
+
+    push_fr_branch(repo, QUIET)
+    origin = tmp_path / "origin.git"
+    fr_before = git(origin, "rev-parse", "refs/heads/fr").strip()
+    result = _fr(repo, "settings", "init", "--quiet")
+    assert result.exit_code == 0, result.output
+    assert "fr-config" in result.output
+    sha = git(origin, "rev-parse", "refs/heads/fr-config").strip()
+    assert git(origin, "rev-list", "--parents", "-n1", sha).split() == [sha]  # orphan
+    assert git(origin, "show", f"{sha}:.fr/settings.yaml") == QUIET
+    assert git(origin, "rev-parse", "refs/heads/fr").strip() == fr_before
+    assert load_settings(repo).ref == "refs/remotes/origin/fr-config"
+
+
+def _refuse_pushes_of(origin: Path, ref: str) -> Path:
+    hook = origin / "hooks" / "pre-receive"
+    hook.write_text(
+        "#!/bin/sh\nwhile read old new ref; do\n"
+        f'  [ "$ref" = "{ref}" ] && {{ echo "refusing $ref" >&2; exit 1; }}\n'
+        "done\nexit 0\n"
+    )
+    hook.chmod(0o755)
+    return hook
+
+
+def test_a_half_initialised_quiet_repo_is_finished_by_sync(repo: Path, tmp_path: Path) -> None:
+    """Lens review l-errors-r1: `fr settings init --quiet` pushed `fr-config`, then origin
+    refused `fr`. The retry must not dead-end: init names the sync, whose preview shows the
+    absent old copy and whose `--yes --expect <tip>` lands it, so an older fr reads quiet."""
+    from fr.placement.quiet import _read_legacy
+
+    origin = tmp_path / "origin.git"
+    hook = _refuse_pushes_of(origin, "refs/heads/fr")
+    first = _fr(repo, "settings", "init", "--quiet")
+    assert first.exit_code == 2, first.output
+    assert git(origin, "branch", "--list", "fr-config").strip()
+    assert not git(origin, "branch", "--list", "fr").strip()
+    hook.unlink()
+
+    retry = _fr(repo, "settings", "init", "--quiet")
+    assert retry.exit_code == 2
+    tip = git(origin, "rev-parse", "refs/heads/fr-config").strip()
+    flat = " ".join(retry.output.split())
+    assert "fr settings sync" in flat and "--yes --expect" in flat, retry.output
+
+    preview = _fr(repo, "settings", "sync")
+    assert preview.exit_code == 0, preview.output
+    assert "absent" in preview.output and tip in preview.output
+    assert f"fr settings sync --yes --expect {tip}" in preview.output
+    assert not git(origin, "branch", "--list", "fr").strip()  # the preview writes nothing
+
+    stale = _fr(repo, "settings", "sync", "--yes", "--expect", "0" * 40)
+    assert stale.exit_code == 2 and not git(origin, "branch", "--list", "fr").strip()
+
+    done = _fr(repo, "settings", "sync", "--yes", "--expect", tip)
+    assert done.exit_code == 0, done.output
+    assert git(origin, "show", "fr:settings.yaml") == git(
+        origin, "show", "fr-config:.fr/settings.yaml"
+    )
+    legacy = _read_legacy(repo)
+    assert legacy is not None and legacy.settings.placement == "quiet"
+    assert "in step" in _fr(repo, "settings", "sync").output

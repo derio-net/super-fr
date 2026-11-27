@@ -196,21 +196,39 @@ class HostCheckout:
         """Three answers (l-errors-r5): True (`queue:` declared), False (`.fr/triage.yaml` is
         absent from the freshly fetched default branch, or has no block), and a read that
         failed, which stops the stage with the error: an unreadable config is never "merge
-        by hand"."""
+        by hand". Under quiet and stealth the file is the configuration branch's
+        (`fr.config.space.at_default`)."""
         import yaml
 
+        from fr.config.space import config_space, rel
         from fr.ops.gate import StageFailed
+        from fr.settings import SettingsError
         from fr.triage.gitseam import Checkout, GitError, git, git_ok
 
         at = f"origin/{default}"
         try:
             Checkout.at(self.primary).refresh_remote_branch(default)
-            if not git_ok(["cat-file", "-e", f"{at}:.fr/triage.yaml"], self.primary):
+            space = config_space(self.primary)
+            if space.ref is None:
+                path = space.tree_path("triage")
+                if not git_ok(["cat-file", "-e", f"{at}:{path}"], self.primary):
+                    return False
+                text: str | None = git(["show", f"{at}:{path}"], self.primary)
+            else:
+                from fr.config.protection import read_checked
+
+                at = space.ref
+                space.at_default("triage")  # a missing configuration space refuses first
+                text = read_checked(  # the freshly fetched tip, protected (p3-r2)
+                    space, None, "triage", "release to the merge queue its `queue:` names",
+                    guarded=lambda t: "queue" in (yaml.safe_load(t) or {}),
+                )  # fmt: skip
+            if text is None:
                 return False
-            data = yaml.safe_load(git(["show", f"{at}:.fr/triage.yaml"], self.primary))
-        except (GitError, yaml.YAMLError) as exc:
+            data = yaml.safe_load(text)
+        except (GitError, yaml.YAMLError, SettingsError) as exc:
             raise StageFailed(
-                f"cannot read .fr/triage.yaml at {at} to tell whether the merge queue serves "
+                f"cannot read {rel('triage')} at {at} to tell whether the merge queue serves "
                 f"this repo: {exc}; nothing released"
             ) from exc
         return isinstance(data, dict) and isinstance(data.get("queue"), dict)

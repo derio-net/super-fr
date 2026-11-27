@@ -52,6 +52,18 @@ def is_post_merge(strategy: str | None, repo_root: Path | None) -> bool:
     return resolve_strategy(strategy, repo_root).when == "post-merge"
 
 
+def install_path(program: str, repo_root: Path) -> Path:
+    """Where the repo-relative install *program* is: a configuration file (`.fr/...`, the
+    candidate-install contract) in the run's configuration space (spec
+    2026-11-19-event-driven-a-la-carte R1), anything else in the product checkout. Raises
+    `SettingsError` when the configuration space cannot be resolved."""
+    from fr.config.space import config_space, in_space
+
+    if in_space(program):
+        return config_space(repo_root).file(program)
+    return repo_root / program
+
+
 def install_problem(manifest: StrategyManifest, repo_root: Path) -> str | None:
     """Why the repo cannot run the manifest's install program, or `None`.
 
@@ -64,7 +76,12 @@ def install_problem(manifest: StrategyManifest, repo_root: Path) -> str | None:
     program = manifest.install[0]
     if "/" not in program or program.startswith("/"):
         return None
-    path = repo_root / program
+    from fr.settings import SettingsError
+
+    try:
+        path = install_path(program, repo_root)
+    except SettingsError as exc:
+        return f"strategy {manifest.verification!r} needs the repo's `{program}`: {exc}"
     if path.is_file() and os.access(path, os.X_OK):
         return None
     return (

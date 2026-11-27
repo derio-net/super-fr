@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/gatebackfill/**
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-17 a tracker close reports every error kind and never raises (batch triage-intake)
+reviewed: 2026-11-25 the profile declarations are `.fr/profiles.yaml` (S1 R9); 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-17 a tracker close reports every error kind and never raises (batch triage-intake)
 ---
 
 # `fr gate backfill` — bring old owed work into the gate lanes
@@ -252,7 +252,7 @@ a forge that cannot do an operation. The exit code is 1 when any entry failed.
 
 ## Tracking `none` and the repo's forge settings
 
-Under `tracking: {type: none}` in `.devcontainer/fr-profiles.yaml`, `--yes` writes only the PR gate
+Under `tracking: {type: none}` in `.fr/profiles.yaml`, `--yes` writes only the PR gate
 labels: no tracker, no comment, no `fr:awaiting-live`. The plan file and summary still list every
 owed item. An unreadable services declaration stops the command before any write.
 

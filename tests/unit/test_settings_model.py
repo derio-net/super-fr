@@ -39,7 +39,7 @@ def test_yaml_booleans_read_as_on_off() -> None:
         ({"forge": {"pr_body": "tiny"}}, "forge.pr_body"),
         ({"git": {"push": "never"}}, "git.push"),
         ({"artifacts": {"gates": "maybe"}}, "artifacts.gates"),
-        ({"schema": 2}, "schema"),
+        ({"schema": 3}, "schema"),
         ({"schema": True}, "schema"),
         ({"schema": "1"}, "schema"),
         ({"artifacts": {"spec": "off"}}, "artifacts.spec"),

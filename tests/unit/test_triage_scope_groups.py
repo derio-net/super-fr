@@ -93,7 +93,7 @@ def test_a_group_with_a_repeated_repo_name_is_refused_before_anything_is_written
     assert not (tmp_path / "s").exists() and forge.calls == []
     subprocess.run(["git", "init", "--quiet", str(tmp_path / "ws")], check=True)
     monkeypatch.chdir(tmp_path / "ws")
-    default = state_dir(Scope.group(["one/same", "two/same"]))
+    default = state_dir(Scope.group(["one/same", "two/same"]), prepare=False)
     assert not default.exists()
 
 

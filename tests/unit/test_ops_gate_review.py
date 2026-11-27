@@ -45,6 +45,7 @@ def test_a_pr_modified_ops_profile_is_refused_before_anything_comes_up(ops_root:
     diff = next(a for a, _ in host.calls if a[:1] == ["diff"] and ".devcontainer/ops" in a)
     assert diff[1:3] == ["origin/main", HEAD]
     assert ".devcontainer/ops" in diff and ".devcontainer/fr-profiles.yaml" in diff
+    assert ".fr/profiles.yaml" in diff
 
 
 def test_a_reused_workspace_is_checked_too(ops_root: Path) -> None:
@@ -83,8 +84,9 @@ def test_a_merged_pr_is_cut_from_the_default_branch_tip(ops_root: Path) -> None:
     up = next(a for a, _ in host.calls if a[:2] == ["isolation", "up"])
     assert up[up.index("--base") + 1] == TIP
     assert _host(ops_root).cut() == TIP and _host(ops_root).head() == HEAD
-    assert ["diff-tip", "origin/main", TIP, ".devcontainer/ops",
-            ".devcontainer/fr-profiles.yaml"] in [a for a, _ in host.calls]  # fmt: skip
+    diff_tip = ["diff-tip", "origin/main", TIP, ".devcontainer/ops",
+                ".devcontainer/fr-profiles.yaml", ".fr/profiles.yaml"]  # fmt: skip
+    assert diff_tip in [a for a, _ in host.calls]
     assert ("rebase", ("origin/main", TIP)) in tree.calls
 
 

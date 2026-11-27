@@ -15,6 +15,7 @@ reads (`run_cmd._latest_tests_witness`).
 
 from __future__ import annotations
 
+import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -23,15 +24,18 @@ from typing import Any, Literal
 import yaml
 
 from fr.checkstate import is_superseded
+from fr.config.space import ConfigSpace, config_space, rel
 from fr.git import GitUnavailableError, git_answer
 
 CI_PENDING_EXIT = 75
 """`fr run resolve`'s exit while a gate check has not finished (EX_TEMPFAIL):
 not idle, not refused — the unit stays held until CI ends."""
 
-CI_CONFIG = ".fr/ci.yaml"
+CI_CONFIG = rel("ci")
 """The repo's gate-check declaration, `gate_checks: [<name>, ...]`, read at the
-PR's base (`origin/<base>`) and at HEAD (§I gate checks)."""
+PR's base (`origin/<base>`) and at HEAD (§I gate checks). Under quiet and stealth
+both sides are the configuration branch's tip (spec 2026-11-19-event-driven-a-la-carte
+R3, `fr.config.space`)."""
 
 WALK_LIMIT = 50
 """How many first-parent ancestors of HEAD (HEAD included) may stand in as the
@@ -84,19 +88,86 @@ def _git(repo_root: Path, *args: str) -> str:
     return res.stdout
 
 
-def load_gate_checks(repo_root: Path, rev: str = "HEAD") -> list[str] | None:
-    """The gate-check names `.fr/ci.yaml` declares at *rev*; None when *rev*
-    has no such file (or *rev* does not resolve, as an `origin/<base>` never
-    fetched does not). A file that is not `gate_checks:` with a non-empty list
-    of names is refused, never read as "no gates"."""
+def _pinned(repo_root: Path) -> ConfigSpace | None:
+    """The configuration space when a feature branch cannot change it (quiet, stealth:
+    R3), else None (`repo`, where the branch's own commits are read)."""
+    from fr.settings import SettingsError
+
     try:
-        res = git_answer(repo_root, "show", f"{rev}:{CI_CONFIG}")
-    except GitUnavailableError as e:
-        raise CiEvidenceRefused(f"tests: ci — git could not read {CI_CONFIG}: {e}") from e
-    if res.returncode != 0:
+        space = config_space(repo_root)
+    except SettingsError as e:
+        raise CiEvidenceRefused(f"cannot tell where {CI_CONFIG} lives: {e}") from e
+    return None if space.ref is None else space
+
+
+GUARDED_CI_KEYS = ("gate_checks", "tests", "fast_tier")
+"""The `ci.yaml` keys that are trust or executable configuration (spec R7, review p3-r1):
+`gate_checks` chooses what CI must prove, `tests` relaxes `deliver`'s suite evidence to CI,
+`fast_tier` is a command fr puts into an executor's brief."""
+
+_IGNORED_SAID: set[tuple[str, str]] = set()
+"""`(product checkout, reason)` pairs whose ignored `ci.yaml` keys this process has named."""
+
+
+def _at_tip(space: ConfigSpace) -> str | None:
+    """`ci.yaml` at the configuration branch's tip (both sides of every pair, R3), read only
+    when the forge enforces protection on that branch (R7, review p3-r1). When it does not,
+    the file is ignored, as though absent (every key fr reads from it is guarded), and the
+    reason is said once: no `tests: ci`, so a local full-suite log is owed at `deliver`, no
+    `fast_tier` in any brief, and the gate set falls back to the base's required checks. A
+    failed protection read refuses, and so does a failed fetch of the tip, or an origin that
+    is not the repository whose rules are read (`fetch_tip`)."""
+    from fr.settings import SettingsError
+
+    try:
+        text = space.at_default(CI_CONFIG)
+    except SettingsError as e:
+        raise CiEvidenceRefused(f"git could not read {CI_CONFIG}: {e}") from e
+    if text is None:
         return None
     try:
-        data = yaml.safe_load(res.stdout)
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return text  # every reader refuses it as not YAML; nothing is trusted from it
+    keys = [k for k in GUARDED_CI_KEYS if isinstance(data, dict) and k in data]
+    if not keys:
+        return text
+    from fr.config.protection import (
+        NotEnforced,
+        ProtectionReadError,
+        fetch_tip,
+        ignored_line,
+        protection_of,
+    )
+
+    try:
+        answer = protection_of(space)
+    except ProtectionReadError as e:
+        raise CiEvidenceRefused(f"fr will not read {', '.join(keys)} in {CI_CONFIG}: {e}") from e
+    if not isinstance(answer, NotEnforced):
+        # Enforced: the keys are trusted only at the tip fetched from the repository whose
+        # rules were read (lens review l-security-r3, like `read_checked`); a
+        # remote-tracking ref moved locally, or fetched from another origin, proves no review.
+        try:
+            fetch_tip(space, f"read {', '.join(keys)} in {CI_CONFIG}")
+            return space.at_default(CI_CONFIG)
+        except SettingsError as e:
+            raise CiEvidenceRefused(str(e)) from e
+    said = (str(space.product), answer.reason)
+    if said not in _IGNORED_SAID:
+        _IGNORED_SAID.add(said)
+        line = ignored_line(keys, answer, f"{CI_CONFIG} on {space.default_ref}")
+        print(
+            f"fr: {line}. Until it is protected, a local full-suite log is owed at deliver, "
+            "no fast_tier reaches a brief, and the base's required checks are the gate set",
+            file=sys.stderr,
+        )
+    return None
+
+
+def _gate_checks_of(text: str, rev: str) -> list[str]:
+    try:
+        data = yaml.safe_load(text)
     except yaml.YAMLError as e:
         raise CiEvidenceRefused(f"{CI_CONFIG} at {rev} is not YAML: {e}") from e
     names = data.get("gate_checks") if isinstance(data, dict) else None
@@ -112,6 +183,25 @@ def load_gate_checks(repo_root: Path, rev: str = "HEAD") -> list[str] | None:
     return [n.strip() for n in names]
 
 
+def load_gate_checks(repo_root: Path, rev: str = "HEAD") -> list[str] | None:
+    """The gate-check names `.fr/ci.yaml` declares at *rev*; None when *rev*
+    has no such file (or *rev* does not resolve, as an `origin/<base>` never
+    fetched does not). A file that is not `gate_checks:` with a non-empty list
+    of names is refused, never read as "no gates". Under quiet and stealth *rev*
+    is the configuration branch's tip, whatever it is given (R3)."""
+    space = _pinned(repo_root)
+    if space is not None:
+        text = _at_tip(space)
+        return None if text is None else _gate_checks_of(text, str(space.default_ref))
+    try:
+        res = git_answer(repo_root, "show", f"{rev}:{CI_CONFIG}")
+    except GitUnavailableError as e:
+        raise CiEvidenceRefused(f"tests: ci — git could not read {CI_CONFIG}: {e}") from e
+    if res.returncode != 0:
+        return None
+    return _gate_checks_of(res.stdout, rev)
+
+
 _ABSENT_AT_HEAD = (
     f"path '{CI_CONFIG}' does not exist in 'HEAD'",
     f"path '{CI_CONFIG}' exists on disk, but not in 'HEAD'",
@@ -124,7 +214,10 @@ def _ci_yaml_at_head(repo_root: Path) -> dict[str, Any] | None:
     """`.fr/ci.yaml` at HEAD as a mapping; None when HEAD has no such path or the
     file is empty. Every other failure (an unborn HEAD, an unreadable object) is
     refused, never read as "absent", and so is a file that is not a YAML mapping
-    (l-errors-r4)."""
+    (l-errors-r4). Under quiet and stealth it is the configuration branch's tip (R3)."""
+    space = _pinned(repo_root)
+    if space is not None:
+        return _ci_mapping(_at_tip(space))
     try:
         res = git_answer(repo_root, "show", f"HEAD:{CI_CONFIG}")
     except GitUnavailableError as e:
@@ -136,8 +229,14 @@ def _ci_yaml_at_head(repo_root: Path) -> dict[str, Any] | None:
             f"git could not read {CI_CONFIG} at HEAD: "
             f"{res.stderr.strip() or f'exit {res.returncode}'}"
         )
+    return _ci_mapping(res.stdout)
+
+
+def _ci_mapping(text: str | None) -> dict[str, Any] | None:
+    if text is None:
+        return None
     try:
-        data = yaml.safe_load(res.stdout)
+        data = yaml.safe_load(text)
     except yaml.YAMLError as e:
         raise CiEvidenceRefused(f"{CI_CONFIG} at HEAD is not YAML: {e}") from e
     if data is None:
@@ -224,7 +323,12 @@ def declared_gates(repo_root: Path, base: str | None) -> list[str] | None:
     one its base declares. *base* None reads `origin/HEAD` (the default branch).
     None when neither declares any."""
     base_rev = f"origin/{base}" if base else "origin/HEAD"
-    found = [load_gate_checks(repo_root, base_rev), load_gate_checks(repo_root, "HEAD")]
+    space = _pinned(repo_root)
+    if space is not None:  # both sides are the configuration branch's tip (R3)
+        text = _at_tip(space)
+        found = [None if text is None else _gate_checks_of(text, str(space.default_ref))]
+    else:
+        found = [load_gate_checks(repo_root, base_rev), load_gate_checks(repo_root, "HEAD")]
     if all(f is None for f in found):
         return None
     return list(dict.fromkeys(n for f in found for n in f or []))

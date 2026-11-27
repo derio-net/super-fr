@@ -22,11 +22,12 @@ from typing import Any, Final, Literal
 import yaml
 from pydantic import BaseModel
 
+from fr.config.space import rel
 from fr.git import GitRefusal, GitUnavailableError, git_answer, remote_default_ref, remote_name
 from fr.settings import SettingsError
 from fr.settings.model import PLACEMENTS, Settings, parse_settings
 
-SETTINGS_PATH: Final = ".fr/settings.yaml"
+SETTINGS_PATH: Final = rel("settings")
 SERVABLE_PLACEMENTS: Final = frozenset({"repo", "quiet", "stealth"})
 """The placements this fr can serve."""
 
@@ -190,6 +191,34 @@ def _resolve_source(root: Path) -> tuple[str | None, str | None, str, Source]:
     return None, None, "no default branch found: defaults", "defaults"
 
 
+def parse_target_text(text: str | None, source: str) -> tuple[Any, Settings]:
+    """A stealth target's settings file, validated: its YAML, its schema, and no
+    `placement` other than `stealth`. One validation for the stealth settings read and the
+    stealth `fr settings sync` (verification v-r4), as quiet's `parse_switch_text` is for
+    the quiet switch. Raises `SettingsError`."""
+    data = _yaml_of(text, source)
+    settings = parse_settings(data, source=source)
+    if _present(data, "placement") and settings.placement != "stealth":
+        raise SettingsError(
+            f"{source}: placement: {settings.placement} cannot be set in a target's stealth "
+            "settings file; it says `placement: stealth` (or nothing)"
+        )
+    return data, settings
+
+
+def default_commit(repo_root: Path) -> tuple[str, str] | None:
+    """`(qualified ref, commit sha)` of the default ref `read_at_default` reads (None: no
+    default ref). Raises `SettingsError` like it."""
+    root = Path(repo_root)
+    try:
+        if git_answer(root, "rev-parse", "--git-dir").returncode != 0:
+            return None
+        ref, sha, _, _ = _resolve_source(root)
+    except GitUnavailableError:
+        return None
+    return None if sha is None or ref is None else (ref, sha)
+
+
 def read_at_default(repo_root: Path, path: str) -> str | None:
     """*path* as the default ref's commit has it (None: absent, or no default ref).
 
@@ -267,10 +296,10 @@ def _repo_file(settings: Settings) -> Settings:
 
 
 def _quiet(root: Path) -> EffectiveSettings | None:
-    """R2 under quiet: the policy is the `fr` branch's root settings.yaml, read from
-    `origin/fr` by commit. A `.fr/settings.yaml` on the default branch is ignored, and
-    the note says so."""
-    from fr.artifacts.paths import SWITCH_REF, SWITCH_SETTINGS
+    """R2 under quiet: the policy is the switch, `origin/fr-config:.fr/settings.yaml`
+    (spec 2026-11-19-event-driven-a-la-carte R5), or the old root settings.yaml on `fr`
+    when that is the only one (R13), read by commit. A `.fr/settings.yaml` on the default
+    branch is ignored, and the note says so."""
     from fr.placement.quiet import switch
 
     found = switch(root)
@@ -278,7 +307,7 @@ def _quiet(root: Path) -> EffectiveSettings | None:
         return None
     settings = found.settings
     sources = {k: ("quiet" if _present(found.data, k) else "default") for k in _leaf_keys(settings)}
-    note = f"quiet: read from origin/fr:{SWITCH_SETTINGS} ({found.sha[:12]})"
+    note = f"quiet: read from {found.source} ({found.sha[:12]})"
     try:
         _, sha, _, _ = _resolve_source(root)
         ignored = sha is not None and _show(root, sha) is not None
@@ -286,21 +315,26 @@ def _quiet(root: Path) -> EffectiveSettings | None:
         ignored = False
     if ignored:
         note += f"; {SETTINGS_PATH} on the default branch is ignored under quiet"
-    return EffectiveSettings(settings, sources, SWITCH_REF, note, None, "quiet")
+    return EffectiveSettings(settings, sources, found.ref, note, None, "quiet")
 
 
 _STEALTH_NOTICED: set[str] = set()
 
 
 def _stealth(root: Path) -> EffectiveSettings | None:
-    """R2 under stealth: the policy is `<target-dir>/settings.yaml` on the tracking ref,
-    read by commit in the tracking worktree; a target's `.fr/settings.yaml` is ignored
+    """R2 under stealth: the policy is `<target-dir>/.fr/settings.yaml` on the tracking
+    repo's `<branch>-config`, read by commit in the configuration clone (spec
+    2026-11-19-event-driven-a-la-carte R5), or the old `<target-dir>/settings.yaml` on the
+    tracking ref when the configuration branch holds none (R13); the two differing
+    refuses, naming both (R6). A target's `.fr/settings.yaml` is ignored
     and fr prints that it was. Stealth sets the forge keys itself (R5, R24): the
     effective values are always the quiet ones, and an explicit contrary value is
     reported in `contrary` for `fr settings check` and `fr run start` to refuse."""
     from fr.placement.stealth import (
+        LEGACY_TARGET_SETTINGS,
         QUIET_FORGE,
         TARGET_SETTINGS,
+        config_ref,
         marker_tracking,
         worktree_path,
     )
@@ -311,22 +345,34 @@ def _stealth(root: Path) -> EffectiveSettings | None:
     ref, target = found
     wt = worktree_path(root, ref)
     qualified = f"refs/remotes/origin/{ref.branch}"
-    rel = f"{target}/{TARGET_SETTINGS}"
-    source = f"{ref.text}:{rel}"
+    old_rel = f"{target}/{LEGACY_TARGET_SETTINGS}"
     sha = _commit_of(wt, qualified) if (wt / ".git").exists() else None
     if sha is None:
         raise SettingsError(
             f"placement stealth: cannot read the tracking ref {ref.text} in {wt}; re-run "
             f"`fr isolation up --stealth {ref.text}` (R24 fail-fast)"
         )
-    text = _show(wt, sha, rel)
-    data = _yaml_of(text, source)
-    settings = parse_settings(data, source=source)
-    if _present(data, "placement") and settings.placement != "stealth":
-        raise SettingsError(
-            f"{source}: placement: {settings.placement} cannot be set in a target's stealth "
-            "settings file; it says `placement: stealth` (or nothing)"
-        )
+    old_text = _show(wt, sha, old_rel)
+    cref = config_ref(ref)
+    clone = worktree_path(root, cref)
+    new_rel = f"{target}/{TARGET_SETTINGS}"
+    new_sha = (
+        _commit_of(clone, f"refs/remotes/origin/{cref.branch}")
+        if (clone / ".git").exists()
+        else None
+    )
+    new_text = _show(clone, new_sha, new_rel) if new_sha is not None else None
+    if new_text is not None and old_text is not None and new_text != old_text:
+        from fr.placement.stealth import settle_differing_target
+
+        settle_differing_target(root, ref, target, new_text, f"{new_sha or ''}"[:12], sha[:12])
+    text: str | None
+    if new_text is not None and new_sha is not None:
+        text, rel_path, sha, source = new_text, new_rel, new_sha, f"{cref.text}:{new_rel}"
+        qualified = f"refs/remotes/origin/{cref.branch}"
+    else:
+        text, rel_path, source = old_text, old_rel, f"{ref.text}:{old_rel}"
+    data, settings = parse_target_text(text, source)
     contrary = tuple(
         f"forge.{key}"
         for key, value in QUIET_FORGE.items()
@@ -353,7 +399,7 @@ def _stealth(root: Path) -> EffectiveSettings | None:
             _STEALTH_NOTICED.add(str(root))
             print(
                 f"fr: settings: placement stealth: the target's {SETTINGS_PATH} is ignored; "
-                f"the tracking repo's {rel} wins (R24)",
+                f"the tracking repo's {rel_path} wins (R24)",
                 file=sys.stderr,
             )
     return EffectiveSettings(settings, sources, qualified, note, None, "stealth", contrary=contrary)

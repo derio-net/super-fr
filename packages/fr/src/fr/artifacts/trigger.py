@@ -52,6 +52,7 @@ Three properties this module is built around:
 from __future__ import annotations
 
 import os
+import re
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -129,8 +130,8 @@ with no super-fr checkout at all, which is the case where blocking it behind
 the command's whole purpose is to work where there is no checkout to be
 stale. `fr triage` (2026-09-21 fr-triage, spec §3.F′) meets the promise
 strictly: it never reads or writes a registered artifact, and every file it
-writes is under its own state directory (`<workspace>/.fr/triage-state/<scope>/`,
-kept out of git by an `info/exclude` line, or `--dir`; 2026-10-07 cloud-triage R4),
+writes is under its own state directory (`~/.cache/fr/triage/<scope>/`, its own git
+repository, or `--dir`; 2026-11-19 R17, moved there from a clone's `.fr/triage-state/`),
 plus its own state ref, the orphan branch `refs/heads/fr-triage/<scope-id>` (R5), which
 shares no history with the code and holds no registered artifact. Its batch verbs
 (2026-09-25 triage-batches, spec §5) also write the forge — labels, marker comments,
@@ -900,13 +901,19 @@ CARRY_LINE: Final = (
 )
 
 
+_SUBJECT_COUNT_RE: Final = re.compile(r"^chore\(fr\): migrate (\d+) artifacts? ")
+
+
 def _commit_notice(outcome: Any) -> str | None:
     """`fr: migrated and committed <n> artifact(s): <subject> (<sha>)`, or None."""
     if not getattr(outcome, "committed", False):
         return None
     message = getattr(outcome, "message", None) or ""
     subject = message.splitlines()[0] if message else "chore(fr): migrate"
-    n = len(getattr(outcome, "paths", ()) or ())
+    # The subject's count is the artifact count (a move's two staged paths are one
+    # artifact, `migration_commit_message`); the staged paths are only the fallback.
+    counted = _SUBJECT_COUNT_RE.match(subject)
+    n = int(counted.group(1)) if counted else len(getattr(outcome, "paths", ()) or ())
     sha = getattr(outcome, "sha", None)
     return f"{COMMIT_NOTICE_PREFIX} {n} artifact(s): {subject}" + (f" ({sha})" if sha else "")
 

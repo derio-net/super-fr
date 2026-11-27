@@ -1,4 +1,7 @@
-"""Replacement previews and lock losers never import/sync workspace state.
+"""Replacement previews and lock losers never move, import or sync state.
+
+Since S1 the state is `~/.cache/fr/triage/<scope>/` (spec 2026-11-19 R17), the cache
+repository; a clone's old copy is moved only by a preparing command (R18).
 
 The remote is a disposable bare git repository; no test reaches the real forge.
 """
@@ -9,6 +12,7 @@ import pytest
 from fr.cli import app
 from fr.commands import triage_batch_cmd as cmd
 from fr.commands import triage_cmd
+from fr.triage.gitseam import init_state_repo
 from fr.triage.model import Scope, legacy_state_dir, load_judgements
 from fr.triage.scope_config import scope_id
 from fr.triage.state_ref import push_state
@@ -23,7 +27,11 @@ env = _replacement_env_fixture
 
 def snapshot(state, workspace):
     return (
-        {str(p.relative_to(state)): p.read_bytes() for p in state.rglob("*") if p.is_file()},
+        {
+            str(p.relative_to(state)): p.read_bytes()
+            for p in state.rglob("*")
+            if p.is_file() and ".git" not in p.relative_to(state).parts
+        },
         (workspace / ".git/info/exclude").read_bytes(),
     )
 
@@ -60,8 +68,8 @@ def remote_state(env, tmp_path, monkeypatch):
     _git(tmp_path, "init", "--quiet", str(workspace))
     _git(tmp_path, "init", "--quiet", str(other))
     _git(tmp_path, "init", "--quiet", "--bare", str(remote))
-    state = workspace / ".fr/triage-state" / scope.name
-    state.mkdir(parents=True)
+    state = legacy_state_dir(scope)
+    init_state_repo(state)
     for name in ("judgements.yaml", "facts.json"):
         (state / name).write_bytes((env[0] / name).read_bytes())
     (state / "scope-durable.yaml").write_text(f"state_repo: {REPO}\n")
@@ -73,7 +81,7 @@ def remote_state(env, tmp_path, monkeypatch):
         scope=scope,
         state_repo=REPO,
         client=_Private(),
-        repo=workspace,
+        repo=state,
     )
     updated = other / "state"
     updated.mkdir()
@@ -119,20 +127,20 @@ def test_preview_and_lock_loser_leave_remote_updated_state_and_exclude_untouched
     assert env[3].calls == ([] if yes else ["inspect"])
 
 
-def test_preview_never_imports_legacy_state_or_writes_exclude(env, tmp_path):
-    workspace = tmp_path / "empty-workspace"
+def test_preview_never_moves_a_clone_copy_or_creates_the_cache(env, tmp_path):
+    workspace = tmp_path / "old-workspace"
     _git(tmp_path, "init", "--quiet", str(workspace))
     scope = Scope(kind="repo", target=REPO)
-    legacy = legacy_state_dir(scope)
-    legacy.mkdir(parents=True)
+    old = workspace / ".fr/triage-state" / scope.name  # an fr below S1 left it here
+    old.mkdir(parents=True)
     for name in ("judgements.yaml", "facts.json"):
-        (legacy / name).write_bytes((env[0] / name).read_bytes())
-    state = workspace / ".fr/triage-state" / scope.name
-    before = snapshot(state, workspace)
+        (old / name).write_bytes((env[0] / name).read_bytes())
+    (workspace / ".git/info/exclude").write_text(".fr/triage-state/\n")
+    before = snapshot(old, workspace)
     result = invoke(env, workspace)
-    assert result.exit_code == 2  # preview uses existing workspace state only
-    assert not state.exists()
-    assert snapshot(state, workspace) == before
+    assert result.exit_code == 2  # preview reads the cache only, and moves nothing
+    assert not legacy_state_dir(scope).exists()
+    assert snapshot(old, workspace) == before
     assert not env[3].calls
 
 

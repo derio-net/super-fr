@@ -221,6 +221,83 @@ def ensure_excluded(root: Path, entry: str) -> bool:
     return True
 
 
+def remove_excluded(root: Path, entry: str) -> bool:
+    """Drop every line that says exactly *entry* from `<common dir>/info/exclude`; whether
+    it wrote. The file is rewritten atomically, so a crash leaves the old or the new one."""
+    exclude = common_dir(root) / "info" / "exclude"
+    try:
+        text = exclude.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return False
+    lines = text.splitlines(keepends=True)
+    kept = [line for line in lines if line.rstrip("\r\n") != entry]
+    if len(kept) == len(lines):
+        return False
+    tmp = exclude.with_name(f".{exclude.name}.{os.getpid()}.tmp")
+    tmp.write_text("".join(kept), encoding="utf-8")
+    os.replace(tmp, exclude)
+    return True
+
+
+STATE_REPO_EXCLUDE = "*\n"
+"""The cache repository's whole `info/exclude` (spec 2026-11-19 R17): it ignores every file,
+because the repository exists only to hold the state ref's objects."""
+
+
+def init_state_repo(path: Path) -> None:
+    """Make *path* a git repository of its own whose `info/exclude` ignores everything (spec
+    2026-11-19 R17, §G); nothing when it already is one. No template is copied, so no hook a
+    user's `init.templateDir` names ever runs in it."""
+    if (path / ".git").is_dir():
+        return
+    path.mkdir(parents=True, exist_ok=True)
+    _run(["git", "init", "--quiet", "--template=", str(path)], path, timeout=GIT_TIMEOUT_SECONDS)
+    info = path / ".git" / "info"
+    info.mkdir(parents=True, exist_ok=True)
+    (info / "exclude").write_text(STATE_REPO_EXCLUDE, encoding="utf-8")
+
+
+def worktree_paths(root: Path) -> list[Path]:
+    """Every worktree registered in the repository of the clone at *root*, the main one
+    first (`git worktree list --porcelain`), as git names them."""
+    out = git(["worktree", "list", "--porcelain"], root)
+    return [
+        Path(line[len("worktree ") :]) for line in out.splitlines() if line.startswith("worktree ")
+    ]
+
+
+def worktree_unsafe(path: Path) -> str | None:
+    """Why the worktree at *path* may not be removed without losing work, or None: local
+    changes (tracked or untracked), or commits at its HEAD that no branch, tag or
+    remote-tracking ref holds (unpushed work a removal would leave to the reflog). A git
+    that cannot say is a reason too: unknown is never clean."""
+    try:
+        if git(["status", "--porcelain", "--untracked-files=all"], path).strip():
+            return "it has local changes"
+        if git(["rev-parse", "--verify", "--quiet", "HEAD"], path).strip():
+            ahead = git(
+                ["rev-list", "--count", "HEAD", "--not", "--branches", "--tags", "--remotes"],
+                path,
+            ).strip()
+            if ahead not in ("", "0"):
+                return f"it has {ahead} commit(s) no branch, tag or remote holds"
+    except GitError as exc:
+        return f"git cannot say whether it is clean ({exc})"
+    return None
+
+
+def remove_clean_worktree(path: Path, root: Path) -> None:
+    """`git worktree remove` *path* (never forced: a worktree git will not remove plainly is
+    kept, consistent with `Checkout.add_worktree`, review r3-f6), run in the clone at
+    *root*. Raises `GitError` when git refuses."""
+    git(["worktree", "remove", str(path)], root)
+
+
+def prune_worktrees(root: Path) -> None:
+    """`git worktree prune` in the clone at *root*: forget worktrees whose directory is gone."""
+    git_ok(["worktree", "prune"], root)
+
+
 # ------------------------------------------------- the state ref (a branch, CAS-pushed)
 
 _REF_IDENTITY = {
