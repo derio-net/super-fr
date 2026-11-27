@@ -1,0 +1,1 @@
+refused: the PR body lacks required section(s): ## Findings, ## Out-of-scope findings, ## Shape of the change, ## Pre-merge verification owed, ## Post-merge verification owed, ## Manual operations, ## PR settle, ## Proportionality, ## Cost. Update it from fr's render — `EDIT-PR` — and resolve again
