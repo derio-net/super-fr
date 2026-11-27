@@ -50,3 +50,18 @@ docs/reference/dispatch-lifecycle.md (covers fr_herdr/runner.py) carries a 2026-
 ### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
 
 budget and stamps only, nothing to clean
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1 created=2026-11-27T10:24:06+00:00 phase=4 state=open review_scope=in -->
+### p4-r1 · finding [open] (reviewer: in scope) · R2 AST guard (test_isolation_network_timeouts.py:281-302) misses relative imports (`from .local import X`, `from . import local`) (phase 4)
+
+fr/isolation already uses relative imports (agent_worktrees.py:44-45); the guard compared node.module only.
+
+<!-- fr:journal kind=review scope=plan id=review-p4-1 created=2026-11-27T10:24:06+00:00 phase=4 -->
+### review-p4-1 · review · phase 4 review (landing.py move + whole feature): 1 finding (p4-r1) (phase 4)
+
+Dispatched reviewer confirmed byte-identical bodies, landing.py imports per R2, only LocalWorktreeDevcontainerTarget/IsolationError/_git_common_dir still imported from local (own use), the branch_changes_present string patch still effective (58 tests), R7 class untouched across the feature, budget 2125 for 2084 lines, seven stamps with fr docs check exit 0; judged the comma in the stamp note correct (a colon is invalid YAML). Raised p4-r1, fixed in ded94bed5.
+
+<!-- fr:journal kind=finding scope=plan id=p4-r1-resolved created=2026-11-27T10:24:06+00:00 phase=4 state=fixed resolves=p4-r1 -->
+### p4-r1-resolved · finding [fixed] · resolves p4-r1: R2 AST guard (test_isolation_network_timeouts.py:281-302) misses relative imports (`from .local import X`, `from . import local`) (phase 4)
+
+ded94bed5: `_local_imports` resolves relative imports against fr.isolation; planted tests cover absolute, aliased, relative, parent-relative and lazy forms plus a negative sibling case; 27 passed.
