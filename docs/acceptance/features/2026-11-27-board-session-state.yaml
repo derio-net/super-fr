@@ -40,9 +40,13 @@ rows:
       kind or a failed read reports no background, and a failed read adds a page note.
     origin:
     - spec:2026-11-27-board-session-state#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_session_activity.py#test_an_idle_claude_pane_with_a_shell_is_background_and_nothing_else_is_read
+      - super-fr:tests/unit/test_session_activity.py#test_a_failed_background_read_is_one_note_and_statuses_are_kept
+    status: ci
+    notes: captured screens through HerdrRunner.session_background; read_sessions with
+      fake runners
     verify: none
   - id: batch-lane-owners
     capability: Triage Batches page
