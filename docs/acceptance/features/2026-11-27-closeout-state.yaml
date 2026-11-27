@@ -41,7 +41,9 @@ rows:
     origin:
     - spec:2026-11-27-closeout-state#R7
     - spec:2026-11-27-closeout-state#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_left_scope_verbs.py#test_cancel_without_the_flag_names_it
+    status: ci
+    notes: x
     verify: none
