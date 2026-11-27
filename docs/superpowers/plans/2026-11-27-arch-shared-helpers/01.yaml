@@ -1,7 +1,7 @@
 schema_version: 2
 phase:
   number: 1
-  title: Shared helpers from the
+  title: "Shared helpers from the #1318 review: strict YAML loader, timestamp readers, record placement, hermetic git (R1-R9)"
   tag: agentic
   depends_on: []
   tracking_issue: null
@@ -19,6 +19,8 @@ phase:
   - packages/fr/src/fr/usage/compare.py
   - packages/fr/src/fr/usage/backfill.py
   - packages/fr/src/fr/debt/engine.py
+  - packages/fr/src/fr/run/liveness.py
+  - packages/fr/src/fr/triage/claims.py
   - tests/unit/*.py
   - .claude/rules/artifact-versioning.md
   - .opencode/instructions/artifact-versioning.md
@@ -46,13 +48,13 @@ tasks:
   steps:
   - id: P1.T2.S1
     text: |-
-      RED: tests that `fr journal add --help`'s --gate text equals today's literal "--kind decision only: the gate role that owns it (developer|reviewer|tester|devops|owner|security)." and names every member of fr.gates.GATES; tests for fr.utc_time.parse_as_utc (None and "" give None, garbage gives None, "...Z" gives UTC, naive gives UTC, an offset is kept); extend tests/unit/test_triage_timestamps.py's body scan so a second function with parse_as_utc's body outside fr/utc_time.py fails. Run them and see them fail.
+      RED: add tests/unit/test_journal_gate_help.py — find the `--gate` click parameter of `journal add` in typer.main.get_command(app) and assert its `.help` equals today's literal "--kind decision only: the gate role that owns it (developer|reviewer|tester|devops|owner|security)." and names every member of fr.gates.GATES (never the rendered --help, which rich wraps); add tests/unit/test_utc_time.py for fr.utc_time.parse_as_utc(value: object) (None, "" and a non-string such as 5 give None, garbage gives None, "...Z" gives UTC, naive gives UTC, an offset is kept); extend tests/unit/test_triage_timestamps.py's body scan so a second function with parse_as_utc's body outside fr/utc_time.py fails. Run them and see them fail.
   - id: P1.T2.S2
     text: |-
-      GREEN: build the --gate help from get_args(Gate); _created_since reads through parse_aware (unknown still yes); _pr_time returns parse_aware(str(stamp) if stamp else None); add fr/utc_time.py with parse_as_utc; remove usage/compare._instant and debt/engine._parse in favour of it; backfill's _worth_reading uses it and still returns True on None. Existing collect, triage batch, usage compare, backfill and debt tests pass.
+      GREEN: build the --gate help from get_args(Gate); _created_since reads through parse_aware (unknown still yes); _pr_time returns parse_aware(str(stamp) if stamp else None); add fr/utc_time.py with parse_as_utc; remove usage/compare._instant and debt/engine._parse in favour of it; backfill's _worth_reading uses it and still returns True on None; remove run/liveness._parse_instant (stalled_attempts calls parse_as_utc(attempt.dispatched)) and triage/claims._created (its caller calls parse_as_utc(comment.get("created_at"))). Existing collect, triage batch, usage compare, backfill, debt, liveness and claims tests pass.
   - id: P1.T2.S3
     text: |-
-      REFACTOR: drop imports the removals left unused and check no test imports the removed private names (grep tests for `_instant` and `engine import _parse`); ruff and mypy clean.
+      REFACTOR: drop imports the removals left unused and check no test imports the removed private names (grep tests for `_instant`, `engine import _parse`, `_parse_instant` and `claims import _created`); ruff and mypy clean.
 - number: 3
   title: Record placement helper (R4)
   steps:
@@ -73,12 +75,12 @@ tasks:
       RED: add tests/unit/test_hermetic_git.py — apply_hermetic_git on a fresh MonkeyPatch sets GIT_CONFIG_GLOBAL=os.devnull and GIT_CONFIG_NOSYSTEM=1 and undo() restores the prior values (set and unset cases); an AST check that each of test_gatebackfill_{candidates,delivery,discharged,render}.py, test_merge_evidence.py and test_status_owed.py names "hermetic_git" in a usefixtures mark and has no setenv call naming either variable. See it fail.
   - id: P1.T4.S2
     text: |-
-      GREEN: add tests/unit/hermetic_git.py (apply_hermetic_git plus a function-scoped, non-autouse fixture hermetic_git); in the six modules import it (noqa F401), declare pytestmark usefixtures (merging any existing pytestmark) and delete their copies; test_status_owed.py keeps an autouse _stub_archive_fetch fixture for its fr.archive._fetch stub. The six modules pass, and so do the modules that import helpers from test_merge_evidence.py.
+      GREEN: add tests/unit/hermetic_git.py (apply_hermetic_git plus a function-scoped, non-autouse fixture hermetic_git); in the six modules import it (noqa F401), declare pytestmark usefixtures (merging any existing pytestmark) and delete their copies; test_status_owed.py keeps an autouse _stub_archive_fetch fixture for its fr.archive._fetch stub; test_merge_evidence.stub_fetch replaces its own two setenv calls with apply_hermetic_git(monkeypatch), keeping its signature. The six modules pass, and so do the modules that import helpers from test_merge_evidence.py.
   - id: P1.T4.S3
     text: |-
       REFACTOR: remove unused `os` imports left behind; ruff clean.
 - number: 5
-  title: Prose, docs currency, fragment and full checks (R9)
+  title: "Prose, docs currency, fragment and full checks (R9); not TDD-shaped: prose, mirrors and stamps only, with nothing to test-drive (the mirror tripwires and fr docs check are its tests)"
   steps:
   - id: P1.T5.S1
     text: |-

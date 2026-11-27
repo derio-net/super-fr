@@ -49,7 +49,14 @@ changes. Each slice moves a copy to one owner and adds a guard so that no new co
      value as `None`. That is a different contract from `parse_aware`'s, and
      `fr/triage/timestamps.py`'s docstring keeps it out of that module.
      `tests/unit/test_triage_timestamps.py` already fails when a second function has
-     `parse_aware`'s body.
+     `parse_aware`'s body. The review found two more readers with the same contract that the
+     issue did not list: `_parse_instant` (`run/liveness.py:307`, where a non-string gives
+     `None` through `TypeError`) and `_created` (`triage/claims.py:174`, where a non-string
+     gives `None`). Both are folded in too, so the one-owner claim is true.
+- **A second hermetic-git copy.** `test_merge_evidence.stub_fetch` (`tests/unit/test_merge_evidence.py:36-48`)
+  sets the same two variables before it stubs `fr.archive._fetch`. Six other modules import it
+  (`test_archive_all_debug.py`, `test_archive_branch.py`, `test_archive_cmd.py`,
+  `test_status_cmd.py`, `test_status_sweep.py`, `test_archive_nudge_landed.py`).
 
 ## Requirements
 
@@ -57,10 +64,10 @@ R1. One duplicate-key detector exists: `fr.yamlio.StrictLoader`, a `yaml.SafeLoa
 R2. Each reader keeps its own error translation. The artifact validator, lenses and scaffold see the same `ConstructorError` message and marks as today. The harness reader raises the same `HarnessError` text. An unhashable key is still skipped by the duplicate check. Callers of plain `safe_load` do not become strict.
 R3. `fr/yamlio.py` imports nothing from `fr`, and no module under `packages/*/src` other than `fr/yamlio.py` defines a `construct_mapping` method. A test guards both.
 R4. One test helper, `tests.unit.record_helpers.write_record(root, text, *, stem="implement-phase__phase-1") -> Path`, writes a record to `root/docs/superpowers/runs/r1.records/<stem>.yaml` with the exact bytes it is given. Each of the eleven modules calls it and passes its own historical payload explicitly. None keeps a placement function of its own. A test guards this, and one test checks the helper's path and bytes.
-R5. One fixture-only test module, `tests/unit/hermetic_git.py`, defines the function-scoped, non-autouse fixture `hermetic_git`, which sets `GIT_CONFIG_GLOBAL=os.devnull` and `GIT_CONFIG_NOSYSTEM=1` through a `MonkeyPatch`. The six modules activate it explicitly. None of them keeps its own `setenv` of those two variables. `test_status_owed.py` keeps its `fr.archive._fetch` stub in a fixture of its own. A test guards the six modules, and a test shows the variables are restored after use.
-R6. The `--gate` help of `fr journal add` is built from `get_args(fr.gates.Gate)` and stays byte-identical. A test checks that it names every member of `GATES`.
+R5. One fixture-only test module, `tests/unit/hermetic_git.py`, defines the function-scoped, non-autouse fixture `hermetic_git`, which sets `GIT_CONFIG_GLOBAL=os.devnull` and `GIT_CONFIG_NOSYSTEM=1` through a `MonkeyPatch`. The six modules activate it explicitly. None of them keeps its own `setenv` of those two variables. `test_status_owed.py` keeps its `fr.archive._fetch` stub in a fixture of its own. `test_merge_evidence.stub_fetch` sets the variables by calling the shared `apply_hermetic_git(monkeypatch)`, so its importers keep the same environment. A test guards the six modules, and a test shows the variables are restored after use.
+R6. The `--gate` option's help string for `fr journal add` is built from `get_args(fr.gates.Gate)` and stays byte-identical. A test reads that string from the click parameter (not the rendered `--help`, which rich wraps) and checks that it names every member of `GATES`.
 R7. `_created_since` and `_pr_time` read their stamps through `parse_aware`. An unknown or naive creation time still counts as yes in `_created_since`, and `_pr_time` still returns `None` for one.
-R8. One reader, `fr.utc_time.parse_as_utc(text: str | None) -> datetime | None`, holds the naive-as-UTC contract: missing or unparseable gives `None`, `Z` gives UTC, and a naive time is read as UTC. `usage/compare.py`, `debt/engine.py` and `usage/backfill.py` use it. Each keeps its own handling of `None` (backfill still treats an unreadable `captured_at` as worth reading). The body scan in `tests/unit/test_triage_timestamps.py` also fails when a second function has `parse_as_utc`'s body.
+R8. One reader, `fr.utc_time.parse_as_utc(value: object) -> datetime | None`, holds the naive-as-UTC contract: a value that is missing, empty, not a string or unparseable gives `None`, `Z` gives UTC, and a naive time is read as UTC. `usage/compare.py`, `debt/engine.py`, `usage/backfill.py`, `run/liveness.py` and `triage/claims.py` use it. Each keeps its own handling of `None` (backfill still treats an unreadable `captured_at` as worth reading). The body scan in `tests/unit/test_triage_timestamps.py` also fails when a second function has `parse_as_utc`'s body.
 R9. Prose that names the old owner names the new one: `.claude/rules/artifact-versioning.md` (and its generated OpenCode mirror) and the two comments in `scripts/sync-opencode.py` and `tests/unit/test_opencode_agent_mirror.py`.
 
 ## Design
@@ -102,7 +109,9 @@ modules and fails when any of them defines a function whose body holds both the 
 the fixture `hermetic_git(monkeypatch)` that calls it. Each of the six modules imports the
 fixture (`# noqa: F401`) and declares `pytestmark = pytest.mark.usefixtures("hermetic_git")`,
 merged with any `pytestmark` it already has. `test_status_owed.py` keeps an autouse
-`_stub_archive_fetch` fixture for its `fr.archive._fetch` stub. The guard
+`_stub_archive_fetch` fixture for its `fr.archive._fetch` stub. `test_merge_evidence.stub_fetch`
+replaces its two `setenv` calls with `apply_hermetic_git(monkeypatch)` and keeps its signature, so
+the six modules that import it do not change. The guard
 (`tests/unit/test_hermetic_git.py`) uses an AST check that each of the six modules names
 `hermetic_git` in a `usefixtures` mark and calls `setenv` with neither variable name. A
 restoration test calls `apply_hermetic_git` on a fresh `MonkeyPatch`, calls `undo()`, and
@@ -111,7 +120,9 @@ checks that the previous values are back.
 ### Readers (R6–R8)
 
 - `journal_cmd.py`: `help=f"--kind decision only: the gate role that owns it ({'|'.join(get_args(Gate))})."`.
-  The test compares the help to the literal string from today and checks every `GATES` member.
+  The test (`tests/unit/test_journal_gate_help.py`) finds the `--gate` parameter of `journal add`
+  in `typer.main.get_command(app)` and compares its `.help` to today's literal string, then checks
+  every `GATES` member.
 - `collect.py`: `created = parse_aware(pr.created_at)`; `return created is None or created >= at`.
 - `triage_batch_cmd.py`: `_pr_time` becomes `return parse_aware(str(stamp) if stamp else None)`.
   Its callers do not change.
@@ -120,6 +131,12 @@ checks that the previous values are back.
   removed, and their callers call `parse_as_utc`. `backfill._worth_reading` becomes
   `at = parse_as_utc(mine.captured_at); if at is None: return True`. Python ≥3.14 already
   accepts `Z` in `fromisoformat`, so backfill's old lack of a `Z` replacement changes nothing.
+  `liveness._parse_instant` and `claims._created` are removed: `stalled_attempts` calls
+  `parse_as_utc(attempt.dispatched)`, and `claims` calls `parse_as_utc(comment.get("created_at"))`.
+  The non-string check in `parse_as_utc` covers liveness's old `TypeError` catch and claims's
+  old `isinstance` check.
+- `tests/unit/test_utc_time.py` tests `parse_as_utc` directly: `None`, `""`, a non-string,
+  garbage, `Z`, naive and an offset.
 - `test_triage_timestamps.py`'s scan gains `parse_as_utc` as a second owner: a function with
   either reader's body outside its owning module fails.
 
@@ -147,13 +164,25 @@ packages/fr/src/fr/
   usage/compare.py          - _instant                 → parse_as_utc
   usage/backfill.py         ~ inline parse             → parse_as_utc
   debt/engine.py            - _parse                   → parse_as_utc
+  run/liveness.py           - _parse_instant           → parse_as_utc
+  triage/claims.py          - _created                 → parse_as_utc
 tests/unit/
   record_helpers.py         + write_record             ← 11 modules drop _record_file
-  hermetic_git.py           + hermetic_git fixture     ← 6 modules drop _hermetic_git setenv
+  hermetic_git.py           + apply_hermetic_git, fixture ← 6 modules drop setenv copies;
+                                                           test_merge_evidence.stub_fetch calls it
   test_yamlio_strict.py     + single owner, import purity, default error
   test_record_helpers.py    + no placement copies, helper bytes/path
   test_hermetic_git.py      + activation, no setenv copies, restoration
+  test_journal_gate_help.py + --gate help string from Gate
+  test_utc_time.py          + parse_as_utc contract
   test_triage_timestamps.py ~ scan also guards parse_as_utc
+  test_init_scaffold.py     ~ import yamlio.StrictLoader
+  test_opencode_agent_mirror.py ~ comment names the new owner
+.claude/rules/artifact-versioning.md  ~ detector is fr.yamlio.StrictLoader
+.opencode/instructions/artifact-versioning.md  ~ regenerated mirror
+scripts/sync-opencode.py              ~ comment names the new owner
+.changes/feat-batch-arch-shared-helpers.yaml  + patch fragment
+docs/** pages fr docs check names     ~ reviewed stamp only
 ```
 
 ## Verification
