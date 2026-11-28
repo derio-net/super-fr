@@ -58,11 +58,11 @@
       "truncated": false
     },
     "arch-plan-ops-record": {
-      "column": "running",
-      "column_since": "2026-11-28T17:44:07.462352Z",
+      "column": "needs-developer",
+      "column_since": "2026-11-28T17:58:04.753227Z",
       "column_first_seen": false,
-      "wait": "agent",
-      "wait_since": "2026-11-28T17:53:53.225335Z",
+      "wait": "you",
+      "wait_since": "2026-11-28T17:58:04.753227Z",
       "wait_first_seen": false,
       "intervals": [
         {
@@ -84,6 +84,13 @@
           "wait": "you",
           "start": "2026-11-28T17:49:05.657221Z",
           "end": "2026-11-28T17:53:53.225335Z",
+          "first_seen": false
+        },
+        {
+          "column": "running",
+          "wait": "agent",
+          "start": "2026-11-28T17:53:53.225335Z",
+          "end": "2026-11-28T17:58:04.753227Z",
           "first_seen": false
         }
       ],
