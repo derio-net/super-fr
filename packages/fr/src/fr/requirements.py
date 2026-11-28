@@ -121,28 +121,40 @@ def _legacy_rows(lines: list[str], first_line_no: int) -> list[tuple[str, str, i
     return rows
 
 
-def _table_rows(lines: list[str], first_line_no: int) -> list[tuple[str, str, int]] | None:
-    """A two-column table's `(id, requirement, line)` rows, or `None` when the
-    section holds no `| ID | Requirement |` header (any case). The rows run from
-    the line after the delimiter row to the first line that is not a row; one of
-    other than two cells raises, naming its line."""
+def _table_body(lines: list[str], first_line_no: int) -> list[tuple[list[str], int]] | None:
+    """A two-column table's rows as `(cells, line)`, or `None` when the section
+    holds no `| ID | Requirement |` header (any case). The rows run from the line
+    after the delimiter row to the first line that is not a row."""
     for idx, line in enumerate(lines):
         if _is_row(line) and [c.lower() for c in _split_row(line)] == _TABLE_HEADER:
             break
     else:
         return None
-    rows: list[tuple[str, str, int]] = []
+    rows: list[tuple[list[str], int]] = []
     for offset, line in enumerate(lines[idx + 2 :], start=idx + 2):
         if not _is_row(line):
             break
-        cells = _split_row(line)
-        if len(cells) != 2:
-            raise RequirementsError(
-                f"line {first_line_no + offset}: requirements table row has {len(cells)} "
-                "cells, expected 2 (escape a literal | as \\|)"
-            )
-        rows.append((cells[0], cells[1], first_line_no + offset))
+        rows.append((_split_row(line), first_line_no + offset))
     return rows
+
+
+def _cell_count_error(cells: list[str], line_no: int) -> str:
+    return (
+        f"line {line_no}: requirements table row has {len(cells)} cells, expected 2 "
+        "(escape a literal | as \\|)"
+    )
+
+
+def _table_rows(lines: list[str], first_line_no: int) -> list[tuple[str, str, int]] | None:
+    """A two-column table's `(id, requirement, line)` rows, or `None` when there
+    is no such table. A row of other than two cells raises, naming its line."""
+    body = _table_body(lines, first_line_no)
+    if body is None:
+        return None
+    for cells, line_no in body:
+        if len(cells) != 2:
+            raise RequirementsError(_cell_count_error(cells, line_no))
+    return [(cells[0], cells[1], line_no) for cells, line_no in body]
 
 
 @dataclass(frozen=True)
@@ -238,6 +250,33 @@ def list_layout(spec_text: str) -> ListLayout | None:
     if _table_rows(*section) is not None:
         return None
     return _walk_list(*section)
+
+
+def table_form_problems(spec_text: str, stamp: int) -> list[str]:
+    """What `fr validate artifacts` refuses in a spec stamped `stamp` (2 or
+    later, R7): each `R<n>.` list line (or id-like line) in `## Requirements`,
+    and each `| ID | Requirement |` row of other than two cells, by line. A
+    pre-5.0 three-column table is not refused."""
+    section = _locate_section(spec_text)
+    if section is None or _legacy_rows(*section) is not None:
+        return []
+    lines, first_line_no = section
+    found: list[tuple[int, str]] = []
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if _LIST_ITEM_RE.match(stripped) or _ID_LIKE_RE.match(stripped):
+            n = first_line_no + idx
+            found.append(
+                (
+                    n,
+                    f"line {n}: stamped fr_schema {stamp} but the requirement is in the "
+                    "R<n>. list form; write it as an | ID | Requirement | table row",
+                )
+            )
+    for cells, line_no in _table_body(lines, first_line_no) or []:
+        if len(cells) != 2:
+            found.append((line_no, _cell_count_error(cells, line_no)))
+    return [message for _, message in sorted(found)]
 
 
 def _list_rows(lines: list[str], first_line_no: int) -> list[tuple[str, str, int]]:
