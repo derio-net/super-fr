@@ -2263,3 +2263,21 @@ def test_p3_r1_a_manual_tick_made_on_the_ops_branch_counts(ops_root: Path) -> No
     run(gate)
 
     assert "the DevOps stage is complete" in said, said
+
+
+def test_p3_r1_a_manual_tick_the_head_carries_at_the_archived_location_is_excluded_too(
+    ops_root: Path,
+) -> None:
+    """Security review: the head's copy is looked up wherever `run_plan_dir` can resolve the
+    plan (live and archived), so carrying it at the other location escapes nothing."""
+    _real_plan(ops_root, manual="x")
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _all_recorded(ops_root, tree)
+    text = (ops_root / PLAN / "02.yaml").read_text()
+    tree.head_files["docs/superpowers/implemented/plans/p/02.yaml"] = text
+
+    run(gate)
+
+    assert "the DevOps stage is complete" not in said
+    assert any(line.startswith("  manual phases: phase 2 [manual]") for line in said), said

@@ -1440,31 +1440,38 @@ def _head_exclusions(gate: Gate, tree: OpsTree) -> tuple[set[str], dict[str, set
 
 def head_manual_ticks(tree: OpsTree, head: str, run: RunState, plan_rel: str) -> set[int]:
     """The `[manual]` phases whose tick the pinned PR head itself carries (R20): complete in
-    the head's own phase file, with the same step and completion state there as in the ops
-    workspace. PR-controlled, so such a tick counts as not there inside the stage; one the
-    ops branch makes (or re-records) after the head changes the state and counts."""
+    a copy of the phase file the head holds, at ANY location `run_plan_dir` can resolve
+    (the live plan and the archived one, security review), with the same step and
+    completion state there as in the ops workspace. PR-controlled, so such a tick counts
+    as not there inside the stage; one the ops branch makes (or re-records) after the head
+    changes the state and counts."""
     import yaml
 
-    from fr.verification.exit import run_plan_dir
+    from fr.verification.exit import IMPLEMENTED_PLANS_REL, run_plan_dir
 
     plan_dir = run_plan_dir(tree.path, run)  # live, or archived by stage 8
     if plan_dir is None:
         return set()
+    homes = (plan_rel, (IMPLEMENTED_PLANS_REL / Path(plan_rel).name).as_posix())
     out: set[int] = set()
     for local in sorted(plan_dir.glob("[0-9][0-9].yaml")):
-        text = tree.show(head, f"{plan_rel}/{local.name}")
-        if not text:
-            continue
         try:
-            at_head, here = yaml.safe_load(text), yaml.safe_load(local.read_text())
-        except yaml.YAMLError as exc:  # never an empty exclusion: a refusal
-            raise StageFailed(
-                f"the PR head's {plan_rel}/{local.name} cannot be read ({exc})", code=2
-            ) from exc
-        phase = (at_head or {}).get("phase") or {}
-        state = (at_head or {}).get("state")
-        if phase.get("tag") == "manual" and _ticked(state) and state == (here or {}).get("state"):
-            out.add(int(phase.get("number", 0)))
+            here = yaml.safe_load(local.read_text()) or {}
+        except (OSError, yaml.YAMLError) as exc:
+            raise StageFailed(f"{local} cannot be read ({exc})", code=2) from exc
+        for home in homes:
+            rel = f"{home}/{local.name}"
+            text = tree.show(head, rel)
+            if not text:
+                continue
+            try:
+                at_head = yaml.safe_load(text) or {}
+            except yaml.YAMLError as exc:  # never an empty exclusion: a refusal
+                raise StageFailed(f"the PR head's {rel} cannot be read ({exc})", code=2) from exc
+            phase = at_head.get("phase") or {}
+            state = at_head.get("state")
+            if phase.get("tag") == "manual" and _ticked(state) and state == here.get("state"):
+                out.add(int(phase.get("number", 0)))
     return out
 
 
