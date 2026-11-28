@@ -1,20 +1,36 @@
-"""A spec's `## Requirements` list, and the matrix rows that cite it (spec
-`2026-09-29-spec-is-the-contract-design.md` §B).
+"""A spec's `## Requirements` section, and the matrix rows that cite it (spec
+`2026-09-29-spec-is-the-contract-design.md` §B; the table form is spec
+`2026-11-26-spec-requirements-table-design.md` R1-R3).
 
-The section is a plain numbered list, one requirement per line:
+Authors write a two-column table, one row per requirement:
 
-    R1. <text>
-    R2. <text>
+    | ID | Requirement |
+    |----|-------------|
+    | R1 | <text> |
+    | R2 | <text, a literal \\| escaped> |
+
+Every row starts and ends with `|`; a `\\|` inside a cell is a literal `|`, and
+a row of other than two cells is an error naming its line. The header is read
+in any case.
+
+Two older forms still read to the same ids and text, so archived and
+unmigrated specs keep their meaning:
+
+- the `R<n>. <text>` list (optionally behind a `-`/`*` bullet), where the
+  non-blank lines directly after a requirement line are its continuation,
+  joined with single spaces, and a line that starts like an id but is
+  malformed (`R9a. ...`) is an error;
+- the pre-5.0 three-column `| id | requirement | source |` table, whose
+  `source` column is ignored.
 
 It carries no quote, no source and no gate on its content: the spec is the
-contract, so a requirement says what it says. Specs written before 5.0.0 hold
-a three-column `| id | requirement | source |` table instead; the parser reads
-its `id` and `requirement` columns and ignores `source`, so both forms give
-the same ids and text.
+contract, so a requirement says what it says.
 
 Readers: phase sizing (`fr.phase_sizing`, `fr.plan_review`, `fr.proportionality`),
-visual evidence (`fr.run.visual`) and the PR body's post-merge section
-(`fr.record.pr_body`). The one disk read here is `load_spec_matrix`.
+visual evidence (`fr.run.visual`), the PR body's post-merge section
+(`fr.record.pr_body`), and the spec 1 -> 2 rewrite
+(`fr.artifacts.spec_requirements_table`, through `list_layout`). The one disk
+read here is `load_spec_matrix`.
 """
 
 from __future__ import annotations
@@ -55,6 +71,7 @@ class RequirementsError(Exception):
 
 _REQUIREMENTS_HEADING = "## Requirements"
 _LEGACY_HEADER = ["id", "requirement", "source"]
+_TABLE_HEADER = ["id", "requirement"]
 _ID_RE = re.compile(r"^R[1-9][0-9]*$")
 _LIST_ITEM_RE = re.compile(r"^(?:[-*]\s+)?(R[1-9][0-9]*)\.\s+(\S.*)$")
 """`R<n>. <text>`, optionally behind a Markdown `-`/`*` bullet."""
@@ -101,6 +118,30 @@ def _legacy_rows(lines: list[str], first_line_no: int) -> list[tuple[str, str, i
     return rows
 
 
+def _table_rows(lines: list[str], first_line_no: int) -> list[tuple[str, str, int]] | None:
+    """A two-column table's `(id, requirement, line)` rows, or `None` when the
+    section holds no `| ID | Requirement |` header (any case). The rows run from
+    the line after the delimiter row to the first line that is not a row; one of
+    other than two cells raises, naming its line."""
+    for idx, line in enumerate(lines):
+        if _is_row(line) and [c.lower() for c in _split_row(line)] == _TABLE_HEADER:
+            break
+    else:
+        return None
+    rows: list[tuple[str, str, int]] = []
+    for offset, line in enumerate(lines[idx + 2 :], start=idx + 2):
+        if not _is_row(line):
+            break
+        cells = _split_row(line)
+        if len(cells) != 2:
+            raise RequirementsError(
+                f"line {first_line_no + offset}: requirements table row has {len(cells)} "
+                "cells, expected 2 (escape a literal | as \\|)"
+            )
+        rows.append((cells[0], cells[1], first_line_no + offset))
+    return rows
+
+
 def _list_rows(lines: list[str], first_line_no: int) -> list[tuple[str, str, int]]:
     """The `R<n>. <text>` lines, in order. Any other line is prose and is
     left alone."""
@@ -117,7 +158,10 @@ def _rows(spec_text: str) -> list[tuple[str, str, int]]:
     if section is None:
         return []
     legacy = _legacy_rows(*section)
-    return legacy if legacy is not None else _list_rows(*section)
+    if legacy is not None:
+        return legacy
+    table = _table_rows(*section)
+    return table if table is not None else _list_rows(*section)
 
 
 def has_requirements(spec_text: str) -> bool:
@@ -135,7 +179,10 @@ def parse_requirements(spec_text: str) -> Requirements:
         raise RequirementsError(f"no `{_REQUIREMENTS_HEADING}` section found")
     rows = _rows(spec_text)
     if not rows:
-        raise RequirementsError(f"`{_REQUIREMENTS_HEADING}` holds no `R<n>. <text>` line")
+        raise RequirementsError(
+            f"`{_REQUIREMENTS_HEADING}` holds no requirement "
+            "(an `| ID | Requirement |` table row or an `R<n>. <text>` line)"
+        )
     items: list[Requirement] = []
     last = 0
     for rid, text, line_no in rows:
