@@ -12,10 +12,7 @@ description: >
 **Announce at start:** "I'm using fr-devops-gate to run the DevOps stage of run <id>."
 Check the setting first: if `fr settings show --json` reports `artifacts.gates` as `off`,
 no gate is computed, labelled or held, so `gate:devops` never applies and there is no
-DevOps stage to run. Stop there.
-Under `forge.comments: off` a pass writes no gate-pass comment: `fr gate pass` swaps the
-label alone and closes no tracker (a close is a comment), so record what passed the gate
-in the run's journal instead. Under `forge.labels: off` there is no gate label to pass.
+DevOps stage to run. Stop there. (`forge.labels` and `forge.comments`: the explainer.)
 
 A run whose plan carries ops does not end at `deliver`. Its DevOps stage applies the
 pre-merge ops, releases the PR to the merge queue (which lands it), applies the post-merge ops, records the devops Test Plan
@@ -79,8 +76,10 @@ confirming anything:
 
 ## Attest, or write a check?
 
-Attest an UNVERIFIABLE op (`fr ops attest <op> --note "<what you did and saw>"`, at a terminal)
-only when no probe could tell; if any command could read the result, write that `check:`.
+Attest an UNVERIFIABLE op at a terminal, from the ops workspace: `fr isolation exec
+--branch chore/ops-<slug> -- fr ops attest <op> --note "<what you did and saw>" --plan
+<plan>` (a runbook op needs `--plan` too). Attest only when no probe could tell; if any
+command could read the result, write that `check:`. An op with a `check:` cannot be attested.
 
 ## Confirming the release
 
@@ -111,7 +110,8 @@ A step names the rows it proves with `(rows: <id>, …)` after its op pointer; r
 it is walked only when each harness it owes has a latest passing walk the head does not carry.
 Stage 5 asks about every devops row still not walked (`ran <evidence>` or `owed <why>`); stage 6
 stops before `fr gate pass` while anything is owed, printing one `fr acceptance set-status --walk`
-per owed harness. Run by hand, `fr gate pass` judges the merged tree (fr ops guide, rows a gate owns).
+per owed harness. Run by hand, `fr gate pass` judges the checkout as it is
+(fr ops guide, rows a gate owns).
 
 ## What the stage never does
 

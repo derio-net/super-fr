@@ -299,10 +299,12 @@ stay valid.
 
 ### When the default branch moved
 
-Stages 4, 5, 6 and 7 first compare the ops workspace with `origin/<default>`. They do this
-each time they run, reruns too. They compare two things:
+Stages 4, 5, 6 and 7 first fetch `origin/<default>` and compare the ops workspace with it.
+They do this each time they run, reruns too. If the fetch fails, the stage stops with exit 2
+and names the error. It never compares against an old copy of the default branch. They
+compare two things:
 
-- each op that the run's plan loads, by id, on its full definition;
+- each op that the run's plan loads, by id, on its full definition, runbook ops included;
 - the Test Plan steps of the run's spec.
 
 Rows are not compared. The ops branch records row walks that the default branch does not have
@@ -316,17 +318,23 @@ stage stops and changes nothing.
 If you confirm, the stage does these steps in order:
 
 1. It commits the workspace's records under `docs/` on the ops branch.
-2. It merges `origin/<default>` into the ops branch with a merge commit. It merges the
+2. It reopens each changed or added op, and forgets the stages after the one it goes back
+   to. It writes both to the host state before the merge.
+3. It merges `origin/<default>` into the ops branch with a merge commit. It merges the
    exact commit that it compared and that the question names, also if the branch moved after.
-3. It pushes the ops branch, leased on the sha that fr last pushed.
-4. It reopens each changed or added op.
+4. It pushes the ops branch, leased on the sha that fr last pushed.
 5. It asks for trust again, on the merged content, before a probe or an apply runs.
 
 The stage uses a merge, not a rebase, because the ops branch is already pushed. A merge
 only adds a commit, so the pushed branch moves forward only and the lease stays correct.
 
 A merge that conflicts is aborted. The workspace stays at the records commit, and the stage
-stops. It names the conflicted paths and the commands to merge by hand.
+stops. It names the conflicted paths and the commands to merge by hand. The ops are already
+reopened at that point, and the later stages are already forgotten, so a rerun after your
+merge applies them again. If the merge commit itself fails, the stage stops and tells you to
+run `git merge --abort` in the workspace first. In both cases the host state keeps the
+commit you are told to merge. The next run adds that commit's journal entries to the ones
+that do not close a reopened op.
 
 A reopened op is open until stage 4 completes again. A closure recorded before the update
 does not close it. Only its live status, or evidence recorded after the update, closes it.

@@ -208,7 +208,9 @@ reads the run's **Definition of Done**. fr derives it, and nobody writes it: it 
 items of each post-merge gate, the plan's `[manual]` phases, and the open `owed` entries of
 the run's journals. The stage says `the DevOps stage is complete` only when every item is
 discharged. Otherwise it says `every stage ran; still owed:` and lists each owed item. Rerun
-it, and it says the same, after `every stage is already done; nothing ran`.
+it, and it says the same, after `every stage is already done; nothing ran`. Owed items do
+not change the exit code, because tester walks are owed by design after the stage. If the
+Definition of Done cannot be read, the stage says so and exits 2.
 
 `fr pickup --run` follows the same rule. Once all eight stages are on record, it does not
 print the DevOps brief again. It says the stage is complete only when the Definition of Done
