@@ -1,0 +1,2 @@
+bump: minor
+summary: "From fr 9.2 the S1 transition ends: old configuration paths, the old settings copy and the per-kind FR_SHIPPED_*_DIR variables are refused (FR_OLD_PATHS=refuse ends it early); configuration argv naming .fr/ runs only from the protected tip"
