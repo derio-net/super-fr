@@ -94,3 +94,57 @@ the change is one early refusal and a constant help line in sync_cmd, plus a reg
 ### p1-fr-ended-option · discovery · pytest --fr-ended runs the suite past S1's gate; a test of the old forms is marked s1_open or s1_open_subprocess (phase 1)
 
 tests/conftest.py adds `--fr-ended`: every test not marked `s1_open` runs with `fr.__version__` patched to 9.2.0 and `FR_OLD_PATHS=refuse` in the environment (so an fr subprocess is past the gate too); an `s1_open` test keeps its in-process gate open but gets the same environment, so one that drives an fr subprocess on the open side shows up and is marked `s1_open_subprocess` (skipped once the gate has ended or under --fr-ended). Proof run for review fix p1-old-form-fixtures-red-at-9-2: `uv run pytest tests -q --no-cov -n 6 -p no:randomly --fr-ended` gave 43 failed, 96 errors in 23 files, 19968 passed (1:42:53); those files were fixed and rerun on both sides (with and without --fr-ended) until green. Helpers: tests/unit/test_placement_quiet.push_quiet_switch / quiet_repo_both (both switches in step), tests/unit/config_paths.profiles_file, tests/unit/shipped_env.defaults_root (FR_SHIPPED_DEFAULTS_DIR for a flat per-kind dir). For phase 4: the scenario work can force the ended side the same way (FR_OLD_PATHS=refuse), and the per-kind FR_SHIPPED_*_DIR test sites already moved (only tests/unit/test_shipped_defaults_resolve.py and tests/unit/test_run_evidence_walk.py's literal string still name them), so the R14 tripwire should pass as soon as it lands.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-28T14:22:41+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · fr migrate artifacts reads the old switch before its mover scope opens (phase 1)
+
+`migrate_cmd.py:203` calls `require_migrated_layout` (`common.py:94` -> `quiet._read`) outside
+`transition.moving()`, so past the gate a repo whose switch is only the old one is refused and told
+to run the command it is running. The other movers (`fr repair`, `fr repos sync`) had the same shape.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-28T14:22:41+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · past the gate the settings-location stamp stays 1, so every command is refused (phase 1)
+
+`config/migrate.py:216-226` stamps the old switch 2 only while its bytes equal the fr-config copy. Past
+the gate the old copy is never rewritten, so after the first fr-config change the stamp stays 1,
+`_create_space` refuses (`config_migration.py:215-222`) and `trigger.py:757-770` refuses every command.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-28T14:22:41+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · docstrings still promise the old settings copy without 'before fr 9.2' (phase 1)
+
+`space.py:279-282`, `settings_cmd.py:63-66, 122-126, 249-253` and the user-facing
+`config_migration.py:231-232` description promise the old copy is kept in step with no qualifier (R4).
+
+<!-- fr:journal kind=review scope=plan id=p1-review-1 created=2026-11-28T14:22:41+00:00 phase=1 -->
+### p1-review-1 · review · phase 1 review: three in-scope findings (p1-r1, p1-r2, p1-r3), all fixed (phase 1)
+
+Reviewer ab27c72758b4ecafc (feature-dev:code-reviewer, claude-opus-5-5) reviewed the phase 1 diff
+044bc18ee..0ad25840b against R1-R6 and R10. Findings p1-r1, p1-r2, p1-r3, all in scope. It suggested
+the errors lens, already on the feature. The open implement-phase finding
+p1-old-form-fixtures-red-at-9-2 was fixed in the same round.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-28T14:22:41+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: fr migrate artifacts reads the old switch before its mover scope opens (phase 1)
+
+9f66412c9: `fr migrate artifacts`, `fr repair` and `fr repos sync` open the mover scope at their CLI
+entry; `ensure_space` is a mover (421b9b5a6). CliRunner tests on the ended side in
+tests/unit/test_config_space_transition.py.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-28T14:22:41+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: past the gate the settings-location stamp stays 1, so every command is refused (phase 1)
+
+421b9b5a6: past the gate `settings_stamp` counts the old switch as current once fr-config holds a
+settings file. Test in tests/unit/test_settings_old_copy_transition.py, red with the fix stashed.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-28T14:22:41+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: docstrings still promise the old settings copy without 'before fr 9.2' (phase 1)
+
+421b9b5a6: the docstrings and the settings-location description say "before fr 9.2", with a test.
+
+<!-- fr:journal kind=finding scope=plan id=p1-old-form-fixtures-red-at-9-2-resolved created=2026-11-28T14:22:41+00:00 phase=1 state=fixed resolves=p1-old-form-fixtures-red-at-9-2 -->
+### p1-old-form-fixtures-red-at-9-2-resolved · finding [fixed] · resolves p1-old-form-fixtures-red-at-9-2: About 58 more test modules build fixtures in old forms and turn red once fr is 9.2 (R10) (phase 1)
+
+c99c4a13d, 3270370a6, e94edc898: fixtures moved to the new forms, old-form behaviour tests marked
+s1_open / s1_open_subprocess, and `pytest --fr-ended` (tests/conftest.py) runs the suite past the gate.
+The --fr-ended run found 139 red in 23 files; those files then passed on both sides (discovery
+p1-fr-ended-option). CI on 1da6bd65c: all seven test shards green (docs-check red until phase 4).
