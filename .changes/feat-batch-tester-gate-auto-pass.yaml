@@ -1,0 +1,2 @@
+bump: minor
+summary: the wave driver passes a walked post-merge gate on a merged PR outside every batch, as it does for a batch's PR
