@@ -212,8 +212,8 @@ def test_the_template_owes_nothing_the_resolve_gate_derives_itself() -> None:
     """gh#653: the template kept its own copy of the derived set, and that copy
     had already drifted (`single-phase` was missing). Every name the gate
     derives — read from the gate, not restated here — must stay off `owed:`."""
-    from fr.commands.run_cmd import _DERIVED_EVIDENCE
     from fr.record.template import render_template
+    from fr.workflow.artifacts import DERIVED_EVIDENCE
 
     text = render_template(
         run="r1",
@@ -222,7 +222,7 @@ def test_the_template_owes_nothing_the_resolve_gate_derives_itself() -> None:
         allowed=frozenset({"evidence"}),
         tick_ids=[],
         refactor_tasks=[],
-        evidence=["review", *sorted(_DERIVED_EVIDENCE)],
+        evidence=["review", *sorted(DERIVED_EVIDENCE)],
         emitted=[],
         resolve="fr run resolve r1 --step s",
     )

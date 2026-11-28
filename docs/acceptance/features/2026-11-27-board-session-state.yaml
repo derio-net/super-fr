@@ -1,0 +1,170 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-27-board-session-state
+repo: derio-net/super-fr
+rows:
+  - id: batch-card-waits-for
+    capability: Triage Batches page
+    acceptance: Every non-terminal card on the Batches page names the one party it waits
+      for (you with the lane role, agent, background, ci, queue, dependency), decided
+      by a fixed precedence after the column, which it never changes.
+    origin:
+    - spec:2026-11-27-board-session-state#R1
+    - spec:2026-11-27-board-session-state#R2
+    - spec:2026-11-27-board-session-state#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_waits.py#test_row_8_a_working_front_session_is_the_agent
+      - super-fr:tests/unit/test_triage_waits.py#test_every_card_but_a_done_one_shows_a_wait_pill_that_names_its_party
+    status: ci
+    notes: wait_of's 13 rows, the close-out front and the pill are unit-tested
+    verify: none
+    visual:
+      states:
+      - wait-you-reviewer
+      - wait-agent
+      - wait-background
+      - wait-ci
+      - wait-queue
+      - wait-dependency
+      - terminal-no-wait
+      - phone-width-long-ids
+  - id: batch-card-background-wait
+    capability: Triage Batches page
+    acceptance: An idle Claude batch session under the herdr runner whose screen shows
+      running shells, monitors or subagents waits for background; another runner, agent
+      kind or a failed read reports no background, and a failed read adds a page note.
+    origin:
+    - spec:2026-11-27-board-session-state#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_session_activity.py#test_an_idle_claude_pane_with_a_shell_is_background_and_nothing_else_is_read
+      - super-fr:tests/unit/test_session_activity.py#test_a_failed_background_read_is_one_note_and_statuses_are_kept
+    status: ci
+    notes: captured screens through HerdrRunner.session_background; read_sessions with
+      fake runners
+    verify: none
+  - id: batch-lane-owners
+    capability: Triage Batches page
+    acceptance: A repo's .fr/triage.yaml lane_owners names owners per Needs-you lane;
+      each Needs-you column header shows them or 'owner unassigned', per repo when they
+      differ, and a lane card names them; an unknown lane key is refused.
+    origin:
+    - spec:2026-11-27-board-session-state#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_lane_owners.py#test_the_header_names_the_owners_or_says_unassigned
+      - super-fr:tests/unit/test_triage_lane_owners.py#test_an_unknown_lane_key_is_ignored_and_never_refuses_the_config
+    status: ci
+    notes: config model, column header, lane card wait line and the ignored-key note
+      are unit-tested
+    verify: none
+    visual:
+      states:
+      - owners-named
+      - owner-unassigned
+      - owners-per-repo
+      - lane-card-owners
+  - id: batch-dwell-ledger
+    capability: Triage Batches page
+    acceptance: Every Batches page write records, in a dwell ledger carried by the state
+      ref, when each batch entered its current column and wait, closing the previous
+      interval; a first sighting is marked, a departed batch is dropped, and an unreadable
+      ledger is an empty one plus a note.
+    origin:
+    - spec:2026-11-27-board-session-state#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_dwell.py#test_a_column_change_closes_an_interval_and_restarts_only_the_column
+      - super-fr:tests/unit/test_triage_state_ref.py#test_a_moved_ref_overwrites_a_locally_changed_dwell_ledger_without_a_conflict
+      - super-fr:tests/unit/test_triage_kanban_cmd.py#test_write_board_beside_a_live_driver_observes_in_memory_and_stores_nothing
+    status: ci
+    notes: observe, the cap, first-seen, load notes, the one-writer rule and the fetch
+      exemption are unit-tested in CI
+    verify: none
+  - id: batch-card-dwell-line
+    capability: Triage Batches page
+    acceptance: Each card shows how long it has been in its column and waiting for its
+      party, marked 'at least' when first seen in that state; a terminal card shows
+      only its column time.
+    origin:
+    - spec:2026-11-27-board-session-state#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_dwell.py#test_card_dwell_marks_each_first_seen_part
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_a_card_shows_its_dwell_line_under_the_hint
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_a_done_card_shows_only_its_column_time
+    status: ci
+    notes: card_dwell, its format boundaries and the rendered line are unit-tested in
+      CI; browser-checked at phase 2
+    verify: none
+    visual:
+      states:
+      - dwell-minutes
+      - dwell-hours
+      - dwell-days
+      - dwell-first-seen
+      - terminal-column-only
+  - id: batch-wave-time-summary
+    capability: Triage Batches page
+    acceptance: The Batches page shows per wave the time its batches spent per column
+      and per wait party and the longest batch per column, hidden with the waves the
+      cutoff hides.
+    origin:
+    - spec:2026-11-27-board-session-state#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_dwell.py#test_wave_time_sums_a_two_batch_wave_and_names_the_longest
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_time_per_wave_has_a_block_per_wave_after_the_queue_and_marks_the_cutoff
+      - super-fr:tests/unit/test_triage_kanban_render.py#test_the_cutoff_script_hides_the_marked_wave_blocks_too
+    status: ci
+    notes: wave_time and the Time per wave section, cutoff marker included, are unit-tested
+      in CI; browser-checked at phase 2
+    verify: none
+    visual:
+      states:
+      - wave-one-batch
+      - wave-several-batches
+      interactions:
+      - expand-wave-block
+      - toggle-cutoff
+  - id: batch-background-live
+    capability: Triage Batches page
+    acceptance: On a live herdr, a dispatched Claude batch session idle at its prompt
+      with a background shell shows 'waits for background' on the next Batches page,
+      and 'waits for agent' after the shell ends.
+    origin:
+    - spec:2026-11-27-board-session-state#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: live
+amendments:
+  - row: batch-card-waits-for
+    op: reword
+    base: 0
+    acceptance: Every card on the Batches page outside the Done column names the one
+      party it waits for (you with the lane role, agent, background, ci, queue, dependency),
+      decided by a fixed precedence after the column, which it never changes.
+    why: 'spec-review s1: only a Done card has no wait'
+  - row: batch-lane-owners
+    op: reword
+    base: 0
+    acceptance: A repo's .fr/triage.yaml lane_owners names owners per Needs-you lane;
+      each Needs-you column header shows them or 'owner unassigned', per repo when they
+      differ, and a lane card names them; an unknown lane key is ignored and named in
+      a page note, never refusing the config.
+    why: 'spec-review s9: an unknown lane key is ignored, never refused'
+  - row: batch-dwell-ledger
+    op: reword
+    base: 0
+    acceptance: Every Batches page observation records, in a dwell ledger carried by
+      the state ref and stored only by its one writer, when each batch entered its current
+      column and wait, closing the previous interval; first sightings and truncation
+      are marked, a departed batch is dropped, a fetch adopts the ref's ledger, and
+      an unreadable ledger is an empty one plus a note.
+    why: 'spec-review s5, s7: one writer, defined interval semantics'

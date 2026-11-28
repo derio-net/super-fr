@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -339,6 +340,190 @@ def test_write_board_judges_idleness_by_the_wall_clock(
         r"idle, dispatched \d+ min ago, no PR as of \d{4}-\d\d-\d\d \d\d:\d\d UTC", card
     )
     assert 'class="card needs-you"' in card
+
+
+# ------------------------------------------- the dwell ledger's one writer (R5)
+
+T_DWELL = datetime(2026, 11, 27, 9, 0, tzinfo=UTC)
+
+
+def _dwell(tmp_path: Path) -> dict[str, Any]:
+    return json.loads((tmp_path / "dwell.json").read_text(encoding="utf-8"))
+
+
+def test_write_board_stores_the_ledger_when_no_live_driver_holds_the_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    entry = _dwell(tmp_path)["batches"]["b1"]
+    assert entry["column"] == "proposed" and entry["column_first_seen"] is True
+    _setup(tmp_path, _dispatch_event("b1"))
+    later = T_DWELL + timedelta(minutes=45)
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=later)
+    entry = _dwell(tmp_path)["batches"]["b1"]
+    assert entry["column"] == "running" and len(entry["intervals"]) == 1
+    assert 'class="dwell"' in _column(path.read_text(encoding="utf-8"), "running")
+
+
+def test_write_board_beside_a_live_driver_observes_in_memory_and_stores_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    monkeypatch.setattr(triage_kanban_cmd, "live_driver", lambda target: "pid 1, started x")
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    assert not (tmp_path / "dwell.json").exists()
+    card = _column(path.read_text(encoding="utf-8"), "proposed")
+    assert '<span class="dwell">in Proposed ≥0m · waits for queue ≥0m</span>' in card
+
+
+def test_write_board_as_the_driver_always_stores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    monkeypatch.setattr(triage_kanban_cmd, "live_driver", lambda target: "pid 1, started x")
+    write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL, writer=True)
+    assert set(_dwell(tmp_path)["batches"]) == {"b1"}
+
+
+def test_write_board_with_writer_false_never_stores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL, writer=False)
+    assert not (tmp_path / "dwell.json").exists()
+
+
+def _lease(tmp_path: Path, expires: datetime) -> None:
+    """A lease another host's (or a cloud session's) driver holds, as the state ref carries
+    it: no local `drive.lock` names that driver."""
+    body = {
+        "holder": "s:cloud:other-host",
+        "started": (expires - timedelta(hours=1)).isoformat(),
+        "expires": expires.isoformat(),
+    }
+    (tmp_path / "lease.yaml").write_text(yaml.safe_dump(body), encoding="utf-8")
+
+
+def test_write_board_beside_an_unexpired_lease_stores_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r1: a driver on another host or in the cloud holds no local lock, only the lease;
+    a render here must not store (and so push) the ledger it does not own."""
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    _lease(tmp_path, T_DWELL + timedelta(minutes=30))
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    assert not (tmp_path / "dwell.json").exists()
+    assert 'class="dwell"' in _column(path.read_text(encoding="utf-8"), "proposed")
+
+
+def test_write_board_beside_an_expired_lease_stores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    _lease(tmp_path, T_DWELL - timedelta(minutes=1))
+    write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    assert set(_dwell(tmp_path)["batches"]) == {"b1"}
+
+
+def test_write_board_with_no_lease_and_no_lock_stores(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    assert not (tmp_path / "lease.yaml").exists()
+    write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    assert set(_dwell(tmp_path)["batches"]) == {"b1"}
+
+
+def test_a_non_writer_render_leaves_the_ledger_bytes_and_so_the_ref_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p2-r1: `_push_if_changed` pushes only when a `REF_FILES` entry changed, and
+    `dwell.json` is the one a render writes; a render beside a live lease changes no byte
+    of it, even though the board moved and the in-memory ledger closed an interval."""
+    from fr.triage.state_ref import REF_FILES
+
+    assert "dwell.json" in REF_FILES
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    before = (tmp_path / "dwell.json").read_bytes()
+    _lease(tmp_path, T_DWELL + timedelta(hours=2))
+    _setup(tmp_path, _dispatch_event("b1"))
+    later = T_DWELL + timedelta(minutes=45)
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=later)
+    assert (tmp_path / "dwell.json").read_bytes() == before
+    assert 'class="dwell"' in _column(path.read_text(encoding="utf-8"), "running")
+    assert not any(p.name.startswith("dwell.json.") for p in tmp_path.iterdir())
+
+
+def test_an_unreadable_ledger_is_one_page_note_and_starts_over(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    (tmp_path / "dwell.json").write_text("{garbage", encoding="utf-8")
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    page = path.read_text(encoding="utf-8")
+    assert page.count("dwell.json: not usable") == 1
+    assert set(_dwell(tmp_path)["batches"]) == {"b1"}  # rewritten, not a crash
+
+
+def test_a_writer_keeps_the_unusable_ledger_as_dwell_json_bad_and_names_the_path_and_loc(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    bad = b'{"schema": 1, "batches": {"b1": {"column": "nowhere"}}}'
+    (tmp_path / "dwell.json").write_bytes(bad)
+    (tmp_path / "dwell.json.bad").write_bytes(b"older")
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    page = path.read_text(encoding="utf-8")
+    assert (tmp_path / "dwell.json.bad").read_bytes() == bad
+    assert f"{tmp_path / 'dwell.json'}: not usable" in page and "batches.b1.column" in page
+    assert "was moved to" in page and "dwell.json.bad" in page
+    assert set(_dwell(tmp_path)["batches"]) == {"b1"}
+
+
+def test_a_reader_leaves_the_unusable_ledger_where_it_is(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+    (tmp_path / "dwell.json").write_text("{garbage", encoding="utf-8")
+    write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL, writer=False)
+    assert (tmp_path / "dwell.json").read_text(encoding="utf-8") == "{garbage"
+    assert not (tmp_path / "dwell.json.bad").exists()
+
+
+def test_dwell_json_bad_never_rides_on_the_state_ref() -> None:
+    from fr.triage import state_ref
+
+    assert state_ref._allowed("dwell.json") and not state_ref._allowed("dwell.json.bad")
+
+
+def test_a_ledger_that_cannot_be_stored_is_a_note_and_the_page_still_renders(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage import dwell
+
+    _setup(tmp_path)
+    _use(monkeypatch, _Inspector())
+
+    def refuse(*_a: Any, **_k: Any) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(dwell, "store", refuse)
+    path, _ = write_board(SCOPE, tmp_path, scope_args=["--repo", REPO], refresh=0, now=T_DWELL)
+    page = path.read_text(encoding="utf-8")
+    assert f"dwell times are not stored: {tmp_path / 'dwell.json'}: disk full" in page
 
 
 # ---------------------------------------------------------------- --watch (R12)

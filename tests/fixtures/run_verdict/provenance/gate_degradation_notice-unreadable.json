@@ -1,0 +1,5 @@
+{
+  "queued": [],
+  "returned": "gate: your harness (claude-code) is verified by reading the session, but no readable transcript for this session \u2014 so this gate is advisory now.\n      Put the questions to the operator (with your harness's question tool where it has one) and STOP until they answer.\n      fr cannot verify who answered this gate, so its resolve must say: `answered_by: operator` (the operator answered) or `answered_by: agent` (cleared without asking) \u2014 `--answered-by` on the flag form, an `answered_by` evidence key in a record. There is no default.",
+  "unobserved": {}
+}

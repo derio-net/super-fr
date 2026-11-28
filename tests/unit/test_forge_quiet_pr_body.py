@@ -149,6 +149,7 @@ def test_minimal_under_an_outside_placement_keeps_the_render_beside_the_cursor(
     import fr.shape
     from fr.commands import run_cmd
     from fr.record.pr_body import durable_pr_body_path
+    from fr.run import deliver
 
     product = request.getfixturevalue(placement)
     root = product.root
@@ -157,14 +158,20 @@ def test_minimal_under_an_outside_placement_keeps_the_render_beside_the_cursor(
     )
     monkeypatch.setattr(fr.settings, "load_settings", lambda _root: minimal_settings)
     monkeypatch.setattr(fr.record.pr_body, "render_pr_body", lambda *_a: "## Findings\n")
-    monkeypatch.setattr(run_cmd, "_deliver_pr_ask_gate", lambda *_a: None)
+    monkeypatch.setattr(deliver, "deliver_pr_ask_gate", lambda *_a: None)
     monkeypatch.setattr(fr.shape, "deliver_shape_refusal", lambda *_a: None)
-    monkeypatch.setattr(run_cmd, "_refuse_premature_closes", lambda *_a: None)
+    monkeypatch.setattr(deliver, "refuse_premature_closes", lambda *_a: None)
     forge = SimpleNamespace(pr_body=lambda ref, cwd=None: PLAIN)
     monkeypatch.setattr(fr.hostclient, "client_for", lambda _root: forge)
     state = SimpleNamespace(run=RUN, pr=None, branch="feat/view")
 
-    run_cmd._deliver_pr_gate(root, state, "https://example.com/acme/widget/pull/1")  # type: ignore[arg-type]
+    with run_cmd._refusals():
+        deliver.deliver_pr_gate(
+            root,
+            state,  # type: ignore[arg-type]
+            "https://example.com/acme/widget/pull/1",
+            run_cmd._say,
+        )
 
     durable = durable_pr_body_path(root, RUN)
     assert not durable.resolve().is_relative_to(root.resolve())  # the case under test

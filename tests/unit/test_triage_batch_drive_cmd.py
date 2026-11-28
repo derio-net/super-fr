@@ -1709,6 +1709,24 @@ def test_the_board_copies_the_drives_repo_and_dir_only_when_given(
     assert seen == [["--repo", REPO]]
 
 
+def test_the_driver_writes_the_board_as_the_dwell_ledgers_one_writer(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """spec 2026-11-27-board-session-state R5: the driver holds drive.lock, so its render
+    passes `writer=True` and stores dwell.json."""
+    _proposed(world, tmp_path, 1)
+    seen: list[Any] = []
+
+    def _spy(scope: Any, target: Path, **kw: Any) -> Any:
+        seen.append(kw.get("writer"))
+        return target / "batches.html", 0
+
+    monkeypatch.setattr(triage_kanban_cmd, "write_board", _spy)
+    _drive(tmp_path, "--once", "--yes", "--single-pass")
+    assert seen and set(seen) == {True}
+
+
 def test_a_board_that_cannot_be_written_warns_once_per_cause_and_changes_nothing(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
     monkeypatch: pytest.MonkeyPatch,

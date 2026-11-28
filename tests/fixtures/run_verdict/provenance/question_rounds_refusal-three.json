@@ -1,0 +1,5 @@
+{
+  "queued": [],
+  "returned": "the transcript shows 3 answered question rounds since the gate blocked \u2014 there is never a round 3. A gate asked in three rounds is not one fr records as answered: decline it (`--state failed`) and re-run the step, asking at most two rounds.",
+  "unobserved": {}
+}

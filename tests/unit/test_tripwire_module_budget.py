@@ -19,7 +19,11 @@ MAX_HEADROOM = 400
 
 BUDGETS: dict[str, int] = {
     # run-write-ledger (#1515): the write ledger moved to fr/run/writes.py
-    f"{SRC}commands/run_cmd.py": 8895,
+    # run-verdict (#1519): slice 1 moved the derived verifiers to fr/run, slice 2 the lookup,
+    # slice 3 the deliver gates (fr/run/deliver.py), slice 4 the briefs (fr/run/brief.py),
+    # slice 5 the evidence verifiers (fr/run/evidence/), slice 6 (the last of #1519) the gate
+    # provenance (fr/run/provenance.py): 4091 lines, +20 headroom
+    f"{SRC}commands/run_cmd.py": 4111,
     # +25 each: batch closeout-truth (gh#1494/#1496/#1497/#1569) changes the close-out steps
     # these modules hold; the split they need is #1516 (hand-back and close-out leaves).
     # triage_batch_cmd.py, 8300: main's landing-method `_landing_hold` (spec 2026-11-26 R2,
@@ -32,7 +36,8 @@ BUDGETS: dict[str, int] = {
     f"{SRC}isolation/local.py": 1735,
     # #1518 split self-review, the spec table, rework and the refactor-gate read out.
     f"{SRC}plan_ops.py": 700,
-    f"{SRC}triage/batch_drive.py": 2275,
+    # #1516 split the value types, the wave-export leaf and the hand-back decisions out.
+    f"{SRC}triage/batch_drive.py": 1900,
 }
 
 HELD: frozenset[str] = frozenset(

@@ -1,0 +1,2 @@
+refused: deliver cannot stamp this feature's `local` rows (each needs a stamp of the suite run that covers it):
+  spec.yaml: not yaml

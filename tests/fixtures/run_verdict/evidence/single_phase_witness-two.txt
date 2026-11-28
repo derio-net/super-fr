@@ -1,0 +1,1 @@
+step/deliver: single-phase: the light shape takes one agentic phase; this plan has 2 (1, 2). Merge them, or start a new run on fr-goal.

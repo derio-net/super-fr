@@ -1,0 +1,2 @@
+refused: this branch discharges owed action(s) whose issue the PR body does not close on merge. Add each line to the body (`EDIT-PR`, or by hand under `forge.pr_body: minimal`), then resolve again:
+  Closes o/r#5

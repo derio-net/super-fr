@@ -1,0 +1,70 @@
+schema_version: 2
+phase:
+  number: 2
+  title: Lookup (B) moves to fr/run/steps.py
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - run-cmd-clusters-in-fr-run
+  - run-verdict-refusals-preserved
+  tier: standard
+  files:
+  - packages/fr/src/fr/run/steps.py
+  - packages/fr/src/fr/run/adopt.py
+  - packages/fr/src/fr/run/evidence/*.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/commands/pickup_cmd.py
+  - packages/fr/src/fr/record/apply.py
+  - packages/fr/src/fr/verification/baseline.py
+  - tests/unit/*.py
+  - tests/fixtures/run_verdict/**
+  - docs/reference/*.md
+  - docs/explainers/fr-brainstorming-and-plan.md
+  - docs/verification-strategies.md
+  estimate_lines: 1500
+tasks:
+- number: 1
+  title: Capture B's refusals and the drift warning (R9)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: with a $TMPDIR script and the recording console, capture from the CURRENT code every refusal path of `_unit_key` (member with no --item; `_group_phases` error; `tag: manual` phase; not a phase member; group given --item; non-member given --item), the drift warning of `_resolve_manifest_for_read`, and any other `raise typer.Exit` in run_cmd.py's B range (`derive_run_id` through `_complete_step`), into tests/fixtures/run_verdict/steps/<function>-<case>.txt with exit codes. Commit them. Add tests/unit/test_run_verdict_steps.py driving `fr.run.steps.unit_key` through `run_cmd._refusals()` and `fr.run.steps.resolve_manifest_for_read(..., warn=run_cmd._say)`, comparing bytes and exit codes. Fails: names absent.
+- number: 2
+  title: Move B (R4, R11)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      GREEN: move run_cmd.py's cluster B (`derive_run_id` through `_complete_step`, with `_StepDriftError`) into packages/fr/src/fr/run/steps.py, names public without the leading underscore. `unit_key` raises `RunRefusal` with Says copying each old print's markup/soft_wrap/style; `resolve_manifest_for_read(repo_root, state, warn)` sends the drift warning as a yellow-markup Say to `warn`. No typer, rich (but rich.markup) or fr.commands import. run_cmd.py imports what its body uses under the old `_` spellings and wraps every call into a moved function that can raise RunRefusal in `with _refusals():` at the call site, so `_advance_once` and `resolve_in_process` see `typer.Exit` where they did.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: migrate importers. fr/run/adopt.py imports `derive_run_id` from fr.run.steps; drop its allowance from the layering test. commands/pickup_cmd.py calls `fr.run.steps.resolve_manifest_for_read(..., warn=<a function printing the Say to its own err console with the Say's fields>)` so its output stays byte-identical. record/apply.py and verification/baseline.py import the moved names (`_resolve_manifest_for_state`, `_find_step`, `_rebind_shape`, `_emitted_plan`, `_item_phase`, …) from fr.run.steps, calling any refusing one through `run_cmd._refusals()`. Grep tests for every moved name (attribute, import, setattr, patch-string) and re-point. Run `uv run pytest tests/unit/test_run_*.py tests/unit/test_record_*.py tests/unit/test_pickup*.py tests/unit/test_run_writes_layering.py -q --no-cov -n 2`: green.
+- number: 3
+  title: Budget, docs, quality gate (R12)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      REFACTOR + quality gate: lower the run_cmd.py budget to its new length plus at most 20 (comment names slice 2). Run `uv run fr docs check` and bump each named page's `reviewed:` as in phase 1, naming slice 2. ruff format, ruff check, mypy. Commit, then run the fast tier the brief names last.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-27T18:29:45+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-27T18:29:45+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-27T18:29:45+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-27T18:29:45+00:00'
+      note: null
+  completion:
+    at: '2026-11-27T18:29:45+00:00'
+    note: null
+    observed_prs: []

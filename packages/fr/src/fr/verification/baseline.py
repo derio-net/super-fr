@@ -175,9 +175,9 @@ def spec_review_steps(repo_root: Path, state: RunState) -> tuple[str, ...]:
     in its workflow manifest (`spec-review` on fr-goal, `spec-plan-review` on
     fr-goal-light); both literal ids when the manifest cannot be resolved."""
     try:
-        from fr.commands import run_cmd
+        from fr.run.steps import resolve_manifest_checked_schema
 
-        manifest = run_cmd._resolve_manifest_checked_schema(repo_root, state)
+        manifest = resolve_manifest_checked_schema(repo_root, state)
     except Exception:  # noqa: BLE001 — a manifest we cannot read falls back to the known ids
         return _FALLBACK_STEPS
     found = [

@@ -1,0 +1,1 @@
+refused: cannot tell whether a discharged owed issue is held open (the acceptance matrix or a run journal does not read: matrix is torn); fix it, then resolve again

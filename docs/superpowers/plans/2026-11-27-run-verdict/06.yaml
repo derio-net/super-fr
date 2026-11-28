@@ -1,0 +1,69 @@
+schema_version: 2
+phase:
+  number: 6
+  title: Provenance (C) moves to fr/run/provenance.py; AGENTS.md, rows and the harness-row
+    amendment
+  tag: agentic
+  depends_on:
+  - 5
+  tracking_issue: null
+  acceptance:
+  - run-cmd-clusters-in-fr-run
+  - run-verdict-refusals-preserved
+  tier: standard
+  files:
+  - packages/fr/src/fr/run/provenance.py
+  - packages/fr/src/fr/run/*.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/apply.py
+  - tests/unit/*.py
+  - tests/fixtures/run_verdict/**
+  - AGENTS.md
+  - docs/reference/*.md
+  - docs/acceptance/features/2026-11-27-run-verdict.yaml
+  - docs/acceptance/features/2026-09-18-harness-parity-matrix.yaml
+  estimate_lines: 1200
+tasks:
+- number: 1
+  title: Capture C's refusals and warnings (R9)
+  steps:
+  - id: P6.T1.S1
+    text: |-
+      RED: capture from the CURRENT code every refusal and warning path of run_cmd.py's C range (`_gate_degradation_notice` through `_refuse_missing_emits`): question-round refusals (with `style="red"`), the gate-flag refusal, `_gate_provenance`'s two yellow warnings and its unobserved note, missing emits. Fixtures under tests/fixtures/run_verdict/provenance/ with exit codes; commit. Add tests/unit/test_run_verdict_provenance.py driving each through fr.run.provenance and the adapter, asserting the unobserved note lands in `_take_unobserved`. Fails: names absent.
+- number: 2
+  title: Move C (R8, R11)
+  steps:
+  - id: P6.T2.S1
+    text: |-
+      GREEN: move C into packages/fr/src/fr/run/provenance.py with `_GATE_DECISIONS` (ContextVar name string unchanged), names public, beside what the module already holds. Refusals raise RunRefusal; `gate_provenance` takes `warn` and notes "operator-gate" through fr.run.unobserved. run_cmd.py and record/apply.py (`derive_gate_answer`, `_clears_gate`) import from fr.run.provenance, refusing calls inside `with _refusals():`. In tests/unit/test_journal_stamp_offset.py add "run/provenance.py" to `_WRITER_MODULES`, keeping "commands/run_cmd.py" (the binding guard still stamps). Re-point every test naming a moved name. Run `uv run pytest tests/unit/test_run_*.py tests/unit/test_record_*.py tests/unit/test_journal_stamp_offset.py tests/unit/test_harness*.py -q --no-cov -n 2`: green.
+- number: 3
+  title: AGENTS.md, rows, amendment, budget, quality gate (R12, R13)
+  steps:
+  - id: P6.T3.S1
+    text: |-
+      GREEN: in AGENTS.md's `fr/run` paragraph add one or two sentences naming `verdict.py` (Say, Verdict, RunRefusal), `unobserved.py`, `steps.py`, `deliver.py`, `brief.py` and `evidence/`, and the rule that `fr/run` imports no `typer` and no console (rich.markup only), held by tests/unit/test_run_writes_layering.py. Amend the merged row: `uv run fr acceptance amend --id harness-gate-degrades-loudly --op set-status --status ci --notes "<the current note with fr.commands.run_cmd._gate_degradation_notice replaced by fr.run.provenance.gate_degradation_notice>" --why "run-verdict slice 6 moved the function" --feature 2026-11-27-run-verdict`.
+  - id: P6.T3.S2
+    text: |-
+      REFACTOR + quality gate: lower the run_cmd.py budget (comment names slice 6, the last of #1519); `uv run fr docs check` and bump named pages naming slice 6; ruff format, ruff check, mypy; `uv run fr acceptance check`. Move rows to ci with `uv run fr acceptance set-status`: run-verdict-refusals-preserved with `--level unit=` refs to the capture tests in the six tests/unit/test_run_verdict*.py files (by test name), and run-cmd-clusters-in-fr-run with refs to the budget tripwire test and the layering whole-package test, each with `--notes`. Commit, then run the fast tier the brief names last.
+state:
+  steps:
+    P6.T1.S1:
+      state: x
+      ticked_at: '2026-11-28T02:15:49+00:00'
+      note: null
+    P6.T2.S1:
+      state: x
+      ticked_at: '2026-11-28T02:15:49+00:00'
+      note: null
+    P6.T3.S1:
+      state: x
+      ticked_at: '2026-11-28T02:15:49+00:00'
+      note: null
+    P6.T3.S2:
+      state: x
+      ticked_at: '2026-11-28T02:15:49+00:00'
+      note: null
+  completion:
+    at: '2026-11-28T02:15:49+00:00'
+    note: null
+    observed_prs: []

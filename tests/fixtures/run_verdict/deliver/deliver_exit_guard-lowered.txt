@@ -1,0 +1,1 @@
+refused: the spec's verification exit waits for less than when spec-review resolved, and no operator-answered `fr verification set` covers it: a: x; b: y. Restore it, or have the operator answer it with `fr verification set ... --answered-by operator`

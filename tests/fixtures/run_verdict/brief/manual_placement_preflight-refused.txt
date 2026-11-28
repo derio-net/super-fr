@@ -1,0 +1,4 @@
+[31mimplement: this plan mis-places a manual phase — refusing to dispatch ANY of it.[0m
+  phase 2 is manual and outstanding
+  phase 3 follows it
+  re-check it with: fr plan self-review p

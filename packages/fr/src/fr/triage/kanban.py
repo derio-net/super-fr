@@ -12,7 +12,7 @@ what it would do (`drive_pass` over `drive_snapshot`) and falls back per column.
 from __future__ import annotations
 
 from collections.abc import Collection, Iterable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Literal
 
@@ -33,25 +33,22 @@ from fr.triage.batch_drive import (
     ARCHIVE_PREFIXES,
     ARCHIVE_WAIT,
     AWAITING_LIVE_HOLD,
-    CONFLICTING,
-    Action,
     IdleSession,
-    LivePr,
     Pass,
     Snapshot,
     attributed,
     checks_verdict,
     closeout_event,
     closeout_item_id,
-    conflict_at,
     default_selection,
     drive_pass,
-    held_archive_conflict,
     idle_session,
     queue_snapshot,
 )
+from fr.triage.batch_drive_types import CONFLICTING, Action, LivePr
 from fr.triage.claims import expired, from_issue_claim, held_line, held_map
 from fr.triage.components import stamp_text
+from fr.triage.handback_rules import conflict_at, held_archive_conflict
 from fr.triage.lanes import gated_pr_lane, lane_of, live_stops, unlisted_gated_prs
 from fr.triage.merge_stops import MergeStop, archive_stop_key, live_stop
 from fr.triage.mergeability import CONFLICT_HANDED_BACK_HINT, CONFLICT_HINT, conflicting
@@ -68,6 +65,7 @@ from fr.triage.model import (
 from fr.triage.readiness import Readiness, Refused, other_readiness, snapshot_readiness
 from fr.triage.stage import Stage
 from fr.triage.views import drive_snapshot, queue_unconfigured
+from fr.triage.waits import Wait, wait_of
 from fr.triage.wave_queue import queue_line
 from fr.triage.wave_report import WaveReport, wave_report
 
@@ -112,6 +110,10 @@ COLUMN_TITLES: Mapping[Column, str] = {
 """The columns, left to right (R2): the one ordered table every other read derives from."""
 
 COLUMNS: tuple[Column, ...] = tuple(COLUMN_TITLES)
+NEEDS_YOU_COLUMNS: tuple[Column, ...] = (
+    "needs-developer", "needs-reviewer", "needs-tester", "needs-devops",
+)  # fmt: skip
+"""The four Needs-you lanes: the columns that show an owner (2026-11-27-board-session-state R4)."""
 
 _COLUMN_OF_STAGE: Mapping[BatchStage, Column] = {
     "dispatched": "running",
@@ -349,6 +351,9 @@ class Card:
     readiness: Readiness | None = None
     others: tuple[Readiness, ...] = ()
     overlaps: tuple[str, ...] = ()  # plan file overlap sentences (spec 2026-11-25)
+    # Who the card waits for (spec 2026-11-27-board-session-state R1): derived after the column
+    wait: Wait | None = None
+    repo: str | None = None  # the batch's repo: the lane owners a card names are its repo's
 
     @property
     def front(self) -> Literal["batch", "closeout"]:
@@ -410,6 +415,9 @@ class ColumnView:
     title: str
     cards: tuple[Card, ...]
     gated: tuple[GatedCard, ...] = ()
+    # A Needs-you column: each of the scope's repos -> the logins that own the lane (R4);
+    # empty for every other column
+    owners: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -694,6 +702,7 @@ def _card(
     verdicts: Mapping[str, Readiness] | None = None,
     others: Mapping[str, tuple[Readiness, ...]] | None = None,
     snapshot: Snapshot | None = None,
+    background: Collection[str] = frozenset(),
 ) -> Card:
     stop = stops.get(batch.id)
     lane = lane_of(batch, facts, stop)
@@ -776,6 +785,28 @@ def _card(
     pr = batch_pr(batch, facts)
     default = facts.config_for(repo or "").defaults.launch if repo else Launch()
     launch = batch.launch
+    # The front session decides rows 8, 9 and 12 of the wait (`Card.front`'s own rule)
+    on_closeout = closeout_status not in (None, "absent", "unknown")
+    front_key = ""
+    if repo:
+        front_key = (
+            closeout_item_id(repo, batch.id) if on_closeout else batch_item_id(repo, batch.id)
+        )
+    who = wait_of(
+        column=column,
+        stage=stage,
+        lane=lane,
+        needs_you=needs_you,
+        front_status=closeout_status if on_closeout else status,
+        front_background=front_key in background,
+        checks=pr.checks if pr is not None and pr.state == "OPEN" else None,
+        has_action=batch.id in actions,
+        queued=batch.id in queued,
+        ready=batch.id in ready,
+        awaiting=batch.id in awaiting,
+        selected=batch.id in selected,
+        deps=tuple(d.state for d in deps),
+    )
     return Card(
         batch=batch,
         column=column,
@@ -806,6 +837,8 @@ def _card(
         claim_expiry=claim_expiry,
         readiness=(verdicts or {}).get(batch.id),
         others=tuple(more),
+        wait=who,
+        repo=repo,
     )
 
 
@@ -856,6 +889,18 @@ def _board_stops(
     return out
 
 
+def lane_owners_of(facts: Facts, repo: str, column: Column) -> tuple[str, ...]:
+    """The logins *repo*'s `.fr/triage.yaml` names for the Needs-you lane *column*."""
+    owners = facts.config_for(repo).lane_owners
+    return tuple(getattr(owners, column.removeprefix("needs-")))
+
+
+def _lane_owners(facts: Facts, column: Column) -> dict[str, tuple[str, ...]]:
+    if column not in NEEDS_YOU_COLUMNS:
+        return {}
+    return {repo: lane_owners_of(facts, repo, column) for repo in facts.collected}
+
+
 def build_board(
     facts: Facts,
     judgements: Judgements,
@@ -868,6 +913,7 @@ def build_board(
     ci_none: Collection[str] = (),
     scope_args: Sequence[str] | None = None,
     overlaps: Mapping[str, tuple[str, ...]] | None = None,
+    background: Collection[str] = frozenset(),
 ) -> Board:
     """One card per batch in eleven columns, sorted by wave (none last) then id (R2).
     *stops* are the driver's recorded merge stops (gh#987); one counts only while the
@@ -877,7 +923,9 @@ def build_board(
     with it the board lists the issues other scopes hold and each card's claim expiry
     (triage-claims R13), and *now* marks expired ones. *notes* are blocked sessions'
     notes by item id, from a runner that gives them (cloud-triage R15); a blocked card's
-    hint carries its note."""
+    hint carries its note. *background* are the item ids whose session sits idle while
+    background work runs (`SessionActivity`, spec 2026-11-27-board-session-state R3): it
+    changes a card's wait, never its column or hint."""
     if me and now is None:
         raise ValueError("build_board needs `now` (the clock is passed in) when given `me`")
     expiries = _own_expiries(facts, me, now) if me and now else {}
@@ -915,6 +963,7 @@ def build_board(
             verdicts=verdicts,
             others=others,
             snapshot=snapshot,
+            background=background,
         )
         for b in batches
     ]
@@ -933,6 +982,7 @@ def build_board(
             COLUMN_TITLES[key],
             tuple(c for c in cards if c.column == key),
             tuple(gated.get(key, ())),
+            _lane_owners(facts, key),
         )
         for key in COLUMNS
     )

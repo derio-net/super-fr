@@ -1,0 +1,13 @@
+{
+  "queued": [
+    [
+      "s",
+      "gate-question-rounds-brainstorm",
+      "Operator gate `brainstorm` took two question rounds",
+      "Trigger: design-risk. the shape was unclear",
+      "s.md"
+    ]
+  ],
+  "returned": null,
+  "unobserved": {}
+}

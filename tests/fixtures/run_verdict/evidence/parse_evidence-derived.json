@@ -1,0 +1,4 @@
+{
+  "returned": "raised RunStateError: --evidence proportionality= is not yours to pass \u2014 fr derives 'proportionality' itself when the unit resolves `done` (by running `fr plan proportionality` on the run's plan and hashing the report at its merge-base), and records what it saw",
+  "unobserved": {}
+}

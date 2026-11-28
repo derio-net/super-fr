@@ -462,8 +462,10 @@ def _supervise(
     def render_board() -> None:
         if scope is None:
             return
+        # The child that held drive.lock has stopped: the supervisor renders in its place,
+        # so it is the dwell ledger's one writer (board-session-state R5).
         out, _ = triage_kanban_cmd.write_board(
-            scope, target, scope_args=scope_args, prefix=workspace_prefix
+            scope, target, scope_args=scope_args, prefix=workspace_prefix, writer=True
         )
         triage_kanban_cmd.publish(scope, target, out, set())
 

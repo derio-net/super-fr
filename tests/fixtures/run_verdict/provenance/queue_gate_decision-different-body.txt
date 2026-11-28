@@ -1,0 +1,1 @@
+[31mjournal entry `gate-no-questions-brainstorm` in docs/superpowers/journals/specs/s.md already records a different body ('first') than this resolve would write ('second'). Resolve again with what that entry says, or correct the entry first if it is the one that is wrong — nothing applied.[0m

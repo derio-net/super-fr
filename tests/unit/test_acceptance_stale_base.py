@@ -12,7 +12,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from click.exceptions import Exit
 from fr.acceptance.fold import clear_fold_cache, fold
 from fr.cli import app
 from typer.testing import CliRunner
@@ -100,24 +99,25 @@ def test_rebase_moves_the_base_and_check_passes(
 
 
 def test_deliver_refuses_a_stale_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from fr.commands import run_cmd
+    from fr.run import deliver
+    from fr.run.verdict import RunRefusal
 
     root = _stale_branch(tmp_path, monkeypatch)
     clear_fold_cache()
 
-    with pytest.raises(Exit) as raised:
-        run_cmd._deliver_acceptance_gate(root)
+    with pytest.raises(RunRefusal) as raised:
+        deliver.deliver_acceptance_gate(root, lambda _line: None)
 
     assert raised.value.exit_code == 2
 
 
 def test_deliver_passes_a_current_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from fr.commands import run_cmd
+    from fr.run import deliver
 
     root = merged_repo(tmp_path)
     clear_fold_cache()
 
-    run_cmd._deliver_acceptance_gate(root)  # no raise
+    deliver.deliver_acceptance_gate(root, lambda _line: None)  # no raise
 
 
 def _no_ci(monkeypatch: pytest.MonkeyPatch) -> None:

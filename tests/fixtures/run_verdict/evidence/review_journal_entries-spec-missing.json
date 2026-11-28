@@ -1,0 +1,4 @@
+{
+  "returned": "raised RunStateError: cannot verify evidence \u2014 the spec journal <ROOT>/docs/superpowers/journals/specs/s.md does not exist. Record the review first: fr journal add --scope spec --slug s --kind review ...",
+  "unobserved": {}
+}

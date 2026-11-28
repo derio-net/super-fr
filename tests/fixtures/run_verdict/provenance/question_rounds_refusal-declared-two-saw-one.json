@@ -1,0 +1,5 @@
+{
+  "queued": [],
+  "returned": "the transcript shows 1 answered question round since the gate blocked, but this resolve declares 2. The transcript shows only one round: drop the `questions: {rounds: 2, \u2026}` declaration (or `--question-rounds 2`).",
+  "unobserved": {}
+}

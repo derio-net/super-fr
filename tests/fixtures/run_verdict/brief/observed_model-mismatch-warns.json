@@ -1,0 +1,13 @@
+{
+  "agent": "a1",
+  "agent_type": "t",
+  "bound": "claude-sonnet-5-5",
+  "dispatched": "2026-01-01T00:00:00Z",
+  "harness": null,
+  "model": "claude-opus-5",
+  "outcome": null,
+  "returned": null,
+  "session": null,
+  "synthesized": null,
+  "tier": null
+}

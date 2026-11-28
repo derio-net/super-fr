@@ -1,0 +1,97 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The dwell ledger, the card's dwell line and time per wave (R5-R7)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - batch-dwell-ledger
+  - batch-card-dwell-line
+  - batch-wave-time-summary
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/dwell.py
+  - packages/fr/src/fr/triage/kanban_render.py
+  - packages/fr/src/fr/triage/state_ref.py
+  - packages/fr/src/fr/commands/triage_kanban_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_drive_loop.py
+  - tests/unit/*.py
+  - docs/acceptance/features/2026-11-27-board-session-state.yaml
+  - docs/*.md
+  - docs/explainers/*.md
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: The pure ledger (spec §D)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests/unit/test_triage_dwell.py against `fr.triage.dwell`: with a fake clock, `observe` on a new batch sets both `*_since = now` and both first-seen; an unchanged board keeps the entry; a column change appends an interval whose start is `max(column_since, wait_since)` and whose `first_seen` is that start's, restarts only the changed `since` and clears its first-seen; a wait-only change keeps `column_since`; a departed batch is dropped; the 201st interval drops the oldest and sets `truncated`; `load` of a missing file is empty with no note, of garbage or wrong schema is empty with a note; `store` round-trips. Run: red.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/triage/dwell.py (docstring citing spec 2026-11-27-board-session-state §D): `DWELL_FILE = "dwell.json"`, `SCHEMA = 1`, `CAP = 200`, strict pydantic models `Interval(column, wait, start, end, first_seen)`, `Entry(column, column_since, column_first_seen, wait, wait_since, wait_first_seen, intervals, truncated)`, `Ledger(schema, batches)`; pure `observe(ledger, board, now) -> Ledger` (wait party from `Card.wait`, None for none); `load(state_dir) -> tuple[Ledger, str | None]`; `store(state_dir, ledger)` via `fr.artifacts.atomic.write_text_atomic`. Run: green.
+  - id: P2.T1.S3
+    text: |-
+      GREEN: `format_duration(seconds) -> str` (`45m`, `3h 12m`, `2d 4h`, `0m` under a minute), `card_dwell(entry, card, now) -> str` (`in <column title> <d> · waits for <party> <d>`, `≥` prefix per first-seen part, column only when the card has no wait), and `wave_time(ledger, board, now) -> list[WaveTime]` (per wave and one `None` wave: seconds per column and per party over closed plus open intervals, the longest batch per column, an `at_least` flag when a first-seen interval or a truncated batch contributes). Tests for each format boundary, the `≥` marks and a two-batch wave. Run: green.
+- number: 2
+  title: One writer, and fetch adopts the ref's ledger (R5)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: tests that `write_board(..., writer=None)` stores `dwell.json` when `drive.lock` names no live driver and does not store (but still renders durations from the in-memory observation) when `live_driver` reports one; that `writer=True` always stores; that the driver's `_write_board` (triage_batch_cmd.py) and the supervisor's (triage_drive_loop.py) pass `writer=True`; that `"dwell.json"` is in `state_ref.REF_FILES` (update the literal pin in tests/unit/test_triage_state_ref.py); and that `fetch_state` with a moved ref and a locally changed `dwell.json` raises no `StateRefConflict` and writes the ref's copy, while a locally changed `judgements.yaml` still raises. Run: red.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: add `"dwell.json"` to `REF_FILES` and an `OBSERVED_FILES = ("dwell.json",)` tuple in packages/fr/src/fr/triage/state_ref.py whose entries `fetch_state` leaves out of `clashes` (the existing loop then writes the ref's copy); in `write_board` load the ledger (a note on an unreadable one), observe after `build_board`, store only when `writer` is True or (`writer` is None and `live_driver(target)` is None), and pass `dwell=` to `render_board`. Run the tests plus `uv run pytest tests/unit/test_triage_state_ref.py tests/unit/test_triage_drive_pages.py -q --no-cov -n 2`: green.
+- number: 3
+  title: Render the dwell line and Time per wave, docs, quality gate
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      GREEN: in kanban_render.py `render_board(..., dwell: Ledger | None = None)` adds `<span class="dwell">` with `card_dwell` under each card's hint, and a "Time per wave" section after the queue section: per wave a `<details>` with a table (rows: columns then parties with time; columns: total, longest batch), `data-cutoff-hidden` on the waves `cutoff_hidden_waves` hides, a "no wave" block last. The render reads no clock (`rendered_at` is the now). Tests for the line, the section, the cutoff marker and the `≥` mark. Run: green.
+  - id: P2.T3.S2
+    text: |-
+      Visual check (rows batch-card-dwell-line, batch-wave-time-summary carry `visual`): render from a fixture state and ledger covering minutes, hours, days, a first-seen state, a Done card, a one-batch wave and a several-batch wave into a git-ignored worktree directory; open it at desktop and 390px, expand a wave block, toggle the cutoff, screenshot each named state and interaction, open every screenshot, and fill the step record's `visual:` section.
+  - id: P2.T3.S3
+    text: |-
+      REFACTOR + quality gate: update docs/explainers/fr-triage.md (the dwell line, Time per wave, `dwell.json` on the state ref with its one-writer rule and cadence) and any other page `uv run fr docs check` names; ruff format, ruff check, mypy over the five packages, `uv run fr docs check`. Move rows batch-dwell-ledger, batch-card-dwell-line and batch-wave-time-summary to `ci` with `uv run fr acceptance set-status --level ... --notes ...`. Commit, then run the fast tier the brief names last.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-27T21:05:29+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-27T21:05:29+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-11-27T21:05:29+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-27T21:05:29+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-27T21:05:29+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-27T21:05:29+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-27T21:05:29+00:00'
+      note: null
+    P2.T3.S3:
+      state: x
+      ticked_at: '2026-11-27T21:05:29+00:00'
+      note: null
+  completion:
+    at: '2026-11-27T21:05:29+00:00'
+    note: null
+    observed_prs: []

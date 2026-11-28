@@ -128,14 +128,17 @@ def test_an_unreadable_lens_set_refuses_the_brief(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("name", ["fr-goal", "fr-goal-light"])
 def test_the_review_phase_brief_carries_no_lens_text(name: str) -> None:
-    from fr.commands.run_cmd import _build_member_brief
+    from fr.commands.common import resolve_repo_root
+    from fr.run.brief import build_member_brief
 
     manifest = parse_manifest((SHIPPED / f"{name}.yaml").read_text())
     group = next(s for s in manifest.steps if any(m.id == "review-phase" for m in s.steps))
     member = next(m for m in group.steps if m.id == "review-phase")
     state = SimpleNamespace(run="r1", workflow=name, issue=None)
 
-    brief = _build_member_brief(member, group, "phase/3", state, None)  # type: ignore[arg-type]
+    brief = build_member_brief(  # type: ignore[arg-type]
+        member, group, "phase/3", state, None, repo_root=resolve_repo_root()
+    )
 
     assert "lens_review" not in brief
     # The record template's journal comment teaches that ANY step may add a

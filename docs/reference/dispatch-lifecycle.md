@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/item_state.py
   - packages/fr/src/fr/commands/apply_cmd.py
   - scripts/validate-plans.sh
-reviewed: 2026-11-27 still true, import-only change (plan_ops split); 2026-11-27 still true, isolation/local.py split into modules (#1517), no reader-visible change; 2026-11-25 the plan profile moves to `.fr/plan-config.yaml`, and `fr repos sync` proposes it under quiet and stealth (S1 R9, p4-r9); 2026-11-22 the ready-fr label description now names fr triage admit; the lifecycle is unchanged (triage-hardening). 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-19 a failed dedup lookup hands nothing over (#1499); the cncd symlink refusal (#1501) changes no label; 2026-11-17 still true after batch triage-intake (the new ready-fr label is an operator label of triage, not a dispatch label); 2026-11-15 no shipped tick caller; forge-off refusals checked against apply and undispatch; 2026-11-20 the two fr-queue labels (release, postmerge-done) are DevOps-stage words to the merge queue, not dispatch labels
+reviewed: 2026-11-27 board-session-state adds the optional SessionActivity protocol, described above; 2026-11-27 still true, import-only change (plan_ops split); 2026-11-27 still true, isolation/local.py split into modules (#1517), no reader-visible change; 2026-11-25 the plan profile moves to `.fr/plan-config.yaml`, and `fr repos sync` proposes it under quiet and stealth (S1 R9, p4-r9); 2026-11-22 the ready-fr label description now names fr triage admit; the lifecycle is unchanged (triage-hardening). 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-19 a failed dedup lookup hands nothing over (#1499); the cncd symlink refusal (#1501) changes no label; 2026-11-17 still true after batch triage-intake (the new ready-fr label is an operator label of triage, not a dispatch label); 2026-11-15 no shipped tick caller; forge-off refusals checked against apply and undispatch; 2026-11-20 the two fr-queue labels (release, postmerge-done) are DevOps-stage words to the merge queue, not dispatch labels
 ---
 
 # Dispatch labels and the per-repo plan profile
@@ -64,6 +64,14 @@ reports the failure. It never falls back to the defaults.
 default branch. The runner works from its own checkout of that branch, so it cannot see
 anything that is not there. The command then exits 2 and lists the paths that the runner
 cannot reach.
+
+## Optional runner protocols
+
+A runner may implement protocols beside `Runner`: `SessionInspector` (session status),
+`SessionNotes` (why a session is blocked) and `SessionActivity`. `SessionActivity` has one
+method, `session_background(items)`, and returns the ids of the items whose session is idle
+while background work runs. A runner that raises costs the Batches page one note and no
+background reading.
 
 ## The optional plan profile
 

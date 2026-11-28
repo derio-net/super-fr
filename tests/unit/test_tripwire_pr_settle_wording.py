@@ -67,11 +67,11 @@ def test_fr_debugging_settles_as_its_last_step() -> None:
 
 
 def test_the_deliver_brief_carries_one_settle_instruction() -> None:
-    from fr.commands.run_cmd import _settle_brief
+    from fr.run.brief import settle_brief
     from fr.workflow.model import Step
 
     deliver = Step(id="deliver", kind="agent", evidence=["settle"])
-    brief = _settle_brief(deliver)
+    brief = settle_brief(deliver)
     assert set(brief) == {"settle"}
     line = _norm(brief["settle"])
     assert "\n" not in brief["settle"]
@@ -89,7 +89,7 @@ def test_the_shipped_deliver_brief_carries_the_settle_line(
     manifest that drops `settle` from deliver's evidence fails here."""
     import subprocess
 
-    from fr.commands.run_cmd import _build_brief
+    from fr.run.brief import build_brief
     from fr.run.model import RunState
     from fr.settle.instructions import DELIVER_LINE
     from fr.workflow.model import parse_manifest
@@ -110,14 +110,14 @@ def test_the_shipped_deliver_brief_carries_the_settle_line(
         cursor="deliver",
         steps={},
     )
-    assert _build_brief(deliver, state)["settle"] == DELIVER_LINE
+    assert build_brief(deliver, state, repo_root=tmp_path)["settle"] == DELIVER_LINE
 
 
 def test_a_step_with_no_settle_evidence_gets_no_settle_line() -> None:
-    from fr.commands.run_cmd import _settle_brief
+    from fr.run.brief import settle_brief
     from fr.workflow.model import Step
 
-    assert _settle_brief(Step(id="spec", kind="agent", evidence=["tests"])) == {}
+    assert settle_brief(Step(id="spec", kind="agent", evidence=["tests"])) == {}
 
 
 @pytest.fixture

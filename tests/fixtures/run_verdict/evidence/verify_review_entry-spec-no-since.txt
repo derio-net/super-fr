@@ -1,0 +1,1 @@
+[31mstep/spec-review: --evidence review=sr-2 was created 2026-01-02T00:00:00+00:00, before this step opened at None — a review recorded before spec-review began is not a review of it. Record the reviewer's findings, then a new `kind=review` entry.[0m

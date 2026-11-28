@@ -1,0 +1,2 @@
+deliver: proportionality: no remote default branch; using base main (local default branch)
+deliver: cannot derive proportionality evidence — no merge-base with [origin/main]: pass --base <ref>

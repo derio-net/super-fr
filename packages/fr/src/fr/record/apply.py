@@ -57,6 +57,7 @@ from fr.journal.model import (
 )
 from fr.record.model import AmendmentItem, StepRecord, allowed_sections, present_sections
 from fr.run.debug_journal import debug_slug
+from fr.run.steps import emitted_plan
 from fr.workflow.artifacts import journal_scope
 
 _SESSION_START = "1970-01-01T00:00:00+00:00"
@@ -191,8 +192,8 @@ class _Context:
     the entry was filed as, which a step record's `resolves:` never does."""
     gate_answer: Any = None
     """When this record clears an operator gate (the brainstorm record): who the
-    gate's DERIVED provenance says answered it (`run_cmd.derive_gate_answer`,
-    the same derivation `_gate_provenance` records), with the answered rounds
+    gate's DERIVED provenance says answered it (`fr.run.provenance.derive_gate_answer`,
+    the same derivation `gate_provenance` records), with the answered rounds
     it read. Its decisions are stamped `decided_by=operator` from it (spec
     2026-10-14 R12; reviews p3-r2, p3-r3) — see `_stamped_decider`."""
     identity: tuple[str, str] | None = None
@@ -205,9 +206,10 @@ class _Context:
 
 
 def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Context, Any]:
-    from fr.commands import run_cmd
     from fr.run.adopt import AdoptError
     from fr.run.model import RunStateError, load_run_state
+    from fr.run.provenance import clears_gate, derive_gate_answer
+    from fr.run.steps import find_step, item_phase, rebind_shape, resolve_manifest_for_state
     from fr.workflow.model import WorkflowError
 
     if record.step is None:
@@ -216,8 +218,8 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
         raise RecordRefusedError(f"{record.step}: record has no `outcome` (done|failed|blocked)")
     try:
         state = load_run_state(repo_root, run_id)
-        manifest = run_cmd._resolve_manifest_for_state(repo_root, state)
-        step, parent = run_cmd._find_step(manifest, record.step)
+        manifest = resolve_manifest_for_state(repo_root, state)
+        step, parent = find_step(manifest, record.step)
     except (RunStateError, WorkflowError, AdoptError) as e:
         raise RecordRefusedError(str(e)) from e
     allowed = allowed_sections(step, parent)
@@ -231,12 +233,12 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
     if record.shape is not None:
         # §A (R1): refused before any write, by the same rules resolve applies.
         try:
-            run_cmd._rebind_shape(state, manifest, record.step, record.shape, repo_root)
+            rebind_shape(state, manifest, record.step, record.shape, repo_root)
         except RunStateError as e:
             raise RecordRefusedError(str(e)) from e
     owner_emits = tuple(step.emits) or (tuple(parent.emits) if parent is not None else ())
     scope = journal_scope(owner_emits)
-    plan_rel = run_cmd._emitted_plan(state) or record.emitted.get("plan")
+    plan_rel = emitted_plan(state) or record.emitted.get("plan")
     plan_dir = emitted_path(repo_root, plan_rel) if plan_rel else None
     slug: str | None = None
     if scope == "plan" and plan_dir is not None:
@@ -256,15 +258,15 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
         (r.emitted["spec"] for r in state.steps.values() if r.emitted and "spec" in r.emitted),
         None,
     )
-    phase = run_cmd._item_phase(record.item) if record.item else None
+    phase = item_phase(record.item) if record.item else None
     emits_ticks = "plan:ticks" in owner_emits
     current = state.steps.get(record.step)
     gate_answer = (
-        run_cmd.derive_gate_answer(
+        derive_gate_answer(
             current, no_questions=record.no_questions, claimed=record.evidence.get("answered_by")
         )
         if current is not None
-        and run_cmd._clears_gate(step, current, "done" if record.outcome == "done" else "failed")
+        and clears_gate(step, current, "done" if record.outcome == "done" else "failed")
         else None
     )
     context = _Context(

@@ -1,0 +1,4 @@
+[31mstep/deliver: --evidence walk=<ROOT>/home/.cache/fr/walks/r1/walk.log is refused:[0m
+  - step 2 [failed]
+  - uncommitted code since the walk (src/x.py...)
+  - no command of yours ran it — `fr verification walk --run r1` must run in this session since this unit opened at 2026-01-01T00:00:00+00:00, and write the log you name

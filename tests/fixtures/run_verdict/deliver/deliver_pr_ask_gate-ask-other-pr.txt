@@ -1,0 +1,1 @@
+refused: under `git.pr: ask` deliver accepts only the PR `fr pr create` opened (https://example.com/o/r/pull/7), not https://example.com/o/r/pull/9

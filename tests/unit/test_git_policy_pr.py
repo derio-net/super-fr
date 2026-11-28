@@ -10,12 +10,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import typer
 from fr.cli import app
 from fr.commands import pr_cmd
-from fr.commands.run_cmd import _deliver_pr_ask_gate, _deliver_pr_gate
 from fr.git_policy import ask as ask_mod
+from fr.run.deliver import deliver_pr_ask_gate, deliver_pr_gate
 from fr.run.model import load_run_state
+from fr.run.verdict import RunRefusal
 from typer.testing import CliRunner
 
 from tests.unit.fakes import FakeGhClient
@@ -162,20 +162,20 @@ def test_deliver_under_pr_ask_refuses_a_pr_fr_pr_create_did_not_open(tmp_path: P
     repo = _repo(tmp_path, "git:\n  pr: ask\n")
     state = load_run_state(repo, "r1")
 
-    with pytest.raises(typer.Exit) as e:
-        _deliver_pr_gate(repo, state, f"https://github.com/{SLUG}/pull/9")
+    with pytest.raises(RunRefusal) as e:
+        deliver_pr_gate(repo, state, f"https://github.com/{SLUG}/pull/9", lambda _line: None)
     assert e.value.exit_code == 2
 
     recorded = state.model_copy(update={"pr": f"https://github.com/{SLUG}/pull/7"})
-    with pytest.raises(typer.Exit):
-        _deliver_pr_ask_gate(repo, recorded, f"https://github.com/{SLUG}/pull/9")
-    _deliver_pr_ask_gate(repo, recorded, f"https://github.com/{SLUG}/pull/7")
-    _deliver_pr_ask_gate(repo, recorded, None)
+    with pytest.raises(RunRefusal):
+        deliver_pr_ask_gate(repo, recorded, f"https://github.com/{SLUG}/pull/9")
+    deliver_pr_ask_gate(repo, recorded, f"https://github.com/{SLUG}/pull/7")
+    deliver_pr_ask_gate(repo, recorded, None)
 
 
 def test_deliver_under_pr_auto_accepts_any_pr(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
-    _deliver_pr_ask_gate(repo, load_run_state(repo, "r1"), "https://example.com/o/r/pull/3")
+    deliver_pr_ask_gate(repo, load_run_state(repo, "r1"), "https://example.com/o/r/pull/3")
 
 
 # --- review p4-r4: one recorded PR per run; a request id per request -----------

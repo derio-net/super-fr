@@ -1,0 +1,4 @@
+{
+  "returned": "raised RunStateError: cannot verify evidence \u2014 plan journal <ROOT>/docs/superpowers/journals/plans/p.md is unreadable: journal entry 'x': Input should be 'decision', 'review', 'discovery', 'finding', 'repro', 'hypothesis', 'ruled-out', 'root-cause', 'owed', 'op' or 'lens'",
+  "unobserved": {}
+}

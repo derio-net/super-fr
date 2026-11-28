@@ -1,0 +1,1 @@
+[31mstep/deliver: --evidence walk=link.log is a symlink — name the log `fr verification walk --run r1` wrote.[0m

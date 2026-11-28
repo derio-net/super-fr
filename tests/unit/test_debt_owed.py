@@ -617,8 +617,8 @@ def test_under_quiet_resolve_off_the_default_branch_closes_the_issue_at_once(
 def test_under_quiet_the_pr_body_section_does_not_apply_and_deliver_asks_nothing(
     quiet_branch: Path,
 ) -> None:
-    from fr.commands.run_cmd import _refuse_unclosed_owed
     from fr.record import pr_body
+    from fr.run.deliver import refuse_unclosed_owed
     from fr.run.model import RunState
 
     state = RunState(
@@ -632,7 +632,7 @@ def test_under_quiet_the_pr_body_section_does_not_apply_and_deliver_asks_nothing
     section = pr_body._owed_discharged(quiet_branch, state)
     assert section == pr_body.OWED_NOT_APPLICABLE and section != "None."
     assert pr_body.discharged_owed(quiet_branch) == []
-    _refuse_unclosed_owed(quiet_branch, state, "a body that closes nothing", "1", "body.md")
+    refuse_unclosed_owed(quiet_branch, state, "a body that closes nothing", "1", "body.md")
 
 
 @pytest.fixture
@@ -699,8 +699,8 @@ def test_under_stealth_resolve_takes_the_close_at_once_path_and_prints_the_close
 def test_under_stealth_the_pr_body_section_does_not_apply_and_deliver_asks_nothing(
     stealth_branch: Path,
 ) -> None:
-    from fr.commands.run_cmd import _refuse_unclosed_owed
     from fr.record import pr_body
+    from fr.run.deliver import refuse_unclosed_owed
     from fr.run.model import RunState
 
     state = RunState(
@@ -714,4 +714,4 @@ def test_under_stealth_the_pr_body_section_does_not_apply_and_deliver_asks_nothi
     section = pr_body._owed_discharged(stealth_branch, state)
     assert section == pr_body.OWED_NOT_APPLICABLE and section != "None."
     assert pr_body.discharged_owed(stealth_branch) == []
-    _refuse_unclosed_owed(stealth_branch, state, "a body that closes nothing", "1", "body.md")
+    refuse_unclosed_owed(stealth_branch, state, "a body that closes nothing", "1", "body.md")

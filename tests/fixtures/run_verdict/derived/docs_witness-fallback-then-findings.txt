@@ -1,0 +1,4 @@
+deliver: docs: no remote default branch; using base main (local default branch)
+deliver: refused — `fr docs check` fails (1 finding(s)):
+  docs/a.md: [covers] changed, page did not
+    covers: packages/**

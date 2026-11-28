@@ -245,7 +245,13 @@ def test_the_script_only_applies_the_marker_and_parses_no_dates() -> None:
 
 
 def test_every_selector_the_script_queries_matches_the_markup_it_acts_on() -> None:
-    page = _page()
+    from fr.triage.dwell import Ledger, observe
+
+    board, notes = _board()
+    page = render_board(  # with a ledger, so the Time per wave blocks are there too
+        board, scope_args=SCOPE, rendered_at=AT, refresh=30, notes=notes,
+        dwell=observe(Ledger(), board, AT),
+    )  # fmt: skip
     selectors = re.findall(r'querySelector(?:All)?\("([^"]+)"\)', SCRIPT)
     assert selectors
     for sel in selectors:
@@ -776,3 +782,128 @@ def test_a_card_with_overlaps_renders_one_escaped_paragraph_and_others_none() ->
     assert "Plans overlap with &lt;b&gt;x&lt;/b&gt; on a.py &amp; b.py: fix." in body
     assert "second" in body
     assert 'class="overlap"' not in _card(page, other.batch.id)
+
+
+# ------------------------------------- dwell line and Time per wave (board-session-state R6, R7)
+
+from datetime import timedelta  # noqa: E402
+
+from fr.triage.dwell import Ledger, observe  # noqa: E402
+
+
+def _dwell_page(cards: list[Card], ledger: Ledger, at: datetime = AT) -> str:
+    from fr.triage.kanban import ColumnView
+
+    board = Board(
+        scope="example-org--widgets",
+        collected_at="2026-10-05T00:00:00Z",
+        columns=tuple(
+            ColumnView(key=k, title=k, cards=tuple(c for c in cards if c.column == k))  # type: ignore[arg-type]
+            for k in dict.fromkeys(c.column for c in cards)
+        ),
+    )
+    return render_board(board, scope_args=SCOPE, rendered_at=at, refresh=0, notes=[], dwell=ledger)
+
+
+def _two_waves() -> tuple[list[Card], Ledger]:
+    base = _cards()
+    old = _named(_as(base[0], 1, "merged", "2026-08-01T09:00:00+00:00"), "old")
+    old = replace(old, column="done", wait=None)
+    live = _named(_as(base[1], 2, "dispatched"), "live")
+    live = replace(live, column="running")
+    cards = [old, live]
+    start = AT - timedelta(hours=3, minutes=12)
+    return cards, observe(Ledger(), _board_of(cards), start)
+
+
+def _board_of(cards: list[Card]) -> Board:
+    from fr.triage.kanban import ColumnView
+
+    return Board(
+        scope="s",
+        collected_at="",
+        columns=(ColumnView(key="running", title="Running", cards=tuple(cards)),),
+    )
+
+
+def test_a_card_shows_its_dwell_line_under_the_hint() -> None:
+    cards, ledger = _two_waves()
+    page = _dwell_page(cards, ledger)
+    card = _card(page, "live")
+    hint_at = card.index('class="hint"')
+    dwell_at = card.index('<span class="dwell">')
+    assert hint_at < dwell_at < card.index("</summary>")
+    assert '<span class="dwell">in Running ≥3h 12m' in card
+
+
+def test_a_done_card_shows_only_its_column_time() -> None:
+    cards, ledger = _two_waves()
+    card = _card(_dwell_page(cards, ledger), "old")
+    line = re.search(r'<span class="dwell">([^<]*)</span>', card)
+    assert line and line.group(1) == "in Done ≥3h 12m" and "waits for" not in line.group(1)
+
+
+def test_no_ledger_renders_no_dwell_and_no_wave_section() -> None:
+    page = _page()
+    assert 'class="dwell"' not in page and "Time per wave" not in page
+
+
+def test_time_per_wave_has_a_block_per_wave_after_the_queue_and_marks_the_cutoff() -> None:
+    cards, ledger = _two_waves()
+    page = _dwell_page(cards, ledger)
+    section = page[page.index('<section class="wave-time">') :]
+    section = section[: section.index("</section>")]
+    assert "<h2>Time per wave</h2>" in section
+    blocks = re.findall(r"<details class=\"wave-time-block\"([^>]*)>(.*?)</details>", section, re.S)
+    assert [b[0].strip() for b in blocks] == ['data-wave="1" data-cutoff-hidden', 'data-wave="2"']
+    w2 = blocks[1][1]
+    assert "<summary>wave 2" in w2
+    assert (
+        '<tr><td>Running</td><td class="time">≥3h 12m</td>'
+        '<td class="longest"><span class="mono">live</span> · ≥3h 12m</td></tr>'
+    ) in w2
+    assert re.search(
+        r'<tr><td>waits for \w+</td><td class="time">≥3h 12m</td><td class="longest"></td></tr>',
+        w2,
+    )
+    assert "No time measured outside Done." in blocks[0][1]
+    assert page.index('<section class="wave-time">') < page.index('class="board"')
+
+
+def test_a_long_batch_id_wraps_in_its_own_element_and_the_table_scrolls() -> None:
+    """p2-r4: a 40-character batch id must not push the page wider than a 390px phone: the
+    id sits in its own element, its cell wraps anywhere, and the table scrolls inside its
+    block rather than widening the page."""
+    long_id = "batch-" + "x" * 34
+    assert len(long_id) == 40
+    base = _cards()
+    a = replace(_named(_as(base[0], 3, "dispatched"), long_id), column="running")
+    ledger = observe(Ledger(), _board_of([a]), AT - timedelta(minutes=75))
+    page = _dwell_page([a], ledger)
+    block = page[page.index('<details class="wave-time-block"') :]
+    block = block[: block.index("</details>")]
+    assert f'<td class="longest"><span class="mono">{long_id}</span> · ≥1h 15m</td>' in block
+    assert '<div class="wave-scroll"><table class="grid narrow">' in block
+    assert re.search(r"section\.wave-time td\.longest \{[^}]*overflow-wrap: anywhere", CSS)
+    assert re.search(r"\.wave-scroll \{[^}]*overflow-x: auto", CSS)
+
+
+def test_the_wave_table_cells_have_horizontal_padding() -> None:
+    """p2-r4: the Batches page carries no `GRID_CSS`, so the wave table pads its own cells."""
+    m = re.search(r"section\.wave-time th, section\.wave-time td \{([^}]*)\}", CSS)
+    assert m and re.search(r"padding: \d+px \d+px", m.group(1))
+    assert "padding: 0" not in m.group(1)
+
+
+def test_the_batches_with_no_wave_come_last() -> None:
+    base = _cards()
+    a = replace(_named(_as(base[0], 3, "dispatched"), "a"), column="running")
+    n = replace(_named(_as(base[1], None, "dispatched"), "n"), column="running")
+    ledger = observe(Ledger(), _board_of([a, n]), AT - timedelta(minutes=45))
+    page = _dwell_page([a, n], ledger)
+    summaries = re.findall(r'<details class="wave-time-block"[^>]*><summary>([^<]*)<', page)
+    assert summaries[0].startswith("wave 3") and summaries[-1].startswith("no wave")
+
+
+def test_the_cutoff_script_hides_the_marked_wave_blocks_too() -> None:
+    assert ".wave-time-block" in SCRIPT
