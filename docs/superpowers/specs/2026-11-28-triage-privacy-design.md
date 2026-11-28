@@ -175,6 +175,9 @@ gate: developer
 - triage-state-scan-guard: none — CI unit tests on `guard_state` over a state directory whose `merge-stops.json`, a fragment file and `requests.yaml` name a private repo, a clean directory (no refusal), sentence-final and `.git` mentions, a public and a private repo sharing a name, the export set, the all-public short circuit (no file read), an org scope with no facts and an unreadable file
 - triage-reopened-pr-uncarried: none — CI unit tests counting forge calls over two collects with a fake forge whose open-PR list is and is not cut at the limit
 
+settle.conflicts: report — batch triage-privacy: the wave driver owns this PR's mergeability
+settle.ci: report — batch triage-privacy: the wave driver owns this PR's CI
+
 Every requirement is engine or render behaviour that fakes prove in CI; no released build shows
 anything more.
 
