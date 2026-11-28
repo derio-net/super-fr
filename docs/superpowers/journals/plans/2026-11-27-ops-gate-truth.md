@@ -124,3 +124,95 @@ Independent review of the phase-1 diff (ops/refresh.py, ops/gate.py, commands/op
 ### p1-r5-resolved · finding [fixed] · resolves p1-r5: A no-op merge whose ops still differ re-prompts every stage and storms restarts to MAX_RESTARTS (phase 1)
 
 dca2c3ada + 406786085: a pinned sha already in the ops branch with drift persisting fails the stage before the prompt, naming what differs.
+
+<!-- fr:journal kind=decision scope=plan id=p2-rows-field-last created=2026-11-28T01:48:09+00:00 phase=2 -->
+### p2-rows-field-last · decision · Step.rows is the dataclass's last field, not right after op (phase 2)
+
+`_step` builds `Step(n, text, gate, raw, op, line)` positionally, so a field inserted
+after `op` would have shifted `line`. `rows` was appended after `line` with a default;
+every other caller builds `Step` by keyword or with fewer positionals.
+
+<!-- fr:journal kind=decision scope=plan id=p2-ran-vs-na-by-title created=2026-11-28T01:48:09+00:00 phase=2 -->
+### p2-ran-vs-na-by-title · decision · R13's "a step recorded ran" is read from the outcome entry's title (phase 2)
+
+`fold_step_outcomes` folds ran and n/a into one kind, `discovery`. The new
+`holds._fold_outcomes` keeps what the latest outcome says: `n/a` when its title ends
+`: n/a` (the title `fr closeout outcome` writes), `owed` for an owed entry, else `ran`;
+an owed entry resolved `fixed` reads `ran`. `holds.ran_steps` reads it. The FakeTree in
+tests/unit/test_ops_gate.py now titles its outcomes as the real command does.
+
+<!-- fr:journal kind=decision scope=plan id=p2-tester-run-resolution created=2026-11-28T01:48:09+00:00 phase=2 -->
+### p2-tester-run-resolution · decision · the tester pass resolves the run exactly as the devops pass does, refusals included (phase 2)
+
+`fr gate pass --gate tester` uses `_run_for` (R11 says "as --gate devops resolves it
+today"), so an unreadable cursor or several runs naming the head ref refuse there too.
+Outside a checkout it passes as before, unless `--run` was given (then it refuses:
+the named run's evidence cannot be read).
+
+<!-- fr:journal kind=decision scope=plan id=p2-one-walk-per-row-per-range created=2026-11-28T01:48:09+00:00 phase=2 -->
+### p2-one-walk-per-row-per-range · decision · a row named by several steps of one --step range gets one walk, from its first step (phase 2)
+
+One `AcceptanceItem` per row per record. `closeout outcome --step 1-5 --ran` on a range
+where steps 1 and 5 both name `r1` records one walk, evidence `Test Plan step 1: <e>`.
+
+<!-- fr:journal kind=decision scope=plan id=p2-probe-identity-always created=2026-11-28T01:48:09+00:00 phase=2 -->
+### p2-probe-identity-always · decision · stage 5 passes --harness fr-ops-probe --model op:<id> on every passing probe (phase 2)
+
+R9 names the probe path's walk identity. The flags are passed whenever the probe passed,
+whether or not the step names rows; with no rows they change nothing.
+
+<!-- fr:journal kind=decision scope=plan id=p2-stage6-list-excludes-head created=2026-11-28T01:48:09+00:00 phase=2 -->
+### p2-stage6-list-excludes-head · decision · stage 6's owed list excludes the PR head's walks and outcomes; fr gate pass does not (phase 2)
+
+R14's listing uses `_owed_items` (gate_items with R12's exclusions), the stage's own
+view. `fr gate pass` itself, run in the ops workspace, still folds everything the tree
+holds (unchanged from fr-ops R14). The recovery commands are printed for rows
+`row_walked` reads not walked with no exclusion, which is what the refused pass saw.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-reviewed-stamp-colon created=2026-11-28T01:48:09+00:00 phase=2 -->
+### p2-reviewed-stamp-colon · discovery · a reviewed stamp note holding a colon and a space breaks the page front matter (phase 2)
+
+`reviewed:` is a plain YAML scalar, so a note with `: ` inside (for example the rows
+pointer spelled with its colon) makes the front matter unparseable; sync-readme then
+silently dropped the page's link from the skills table. Stamp notes here avoid ": ".
+
+<!-- fr:journal kind=discovery scope=plan id=p2-docs-check-reads-commits created=2026-11-28T01:48:09+00:00 phase=2 -->
+### p2-docs-check-reads-commits · discovery · fr docs check judges committed pages; an edited but uncommitted page still reads stale (phase 2)
+
+Six pages beyond the four the plan names cover touched paths (fr-acceptance, fr-triage,
+index, gate-backfill, fr-brainstorming-and-plan, and the reference page); each was
+stamped after checking its claims still hold.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-fast-tier-skill-length created=2026-11-28T01:48:09+00:00 phase=2 -->
+### p2-fast-tier-skill-length · discovery · the fast tier caught fr-devops-gate SKILL.md over its 120-line budget (phase 2)
+
+The fast tier (9696 passed, 1 failed, 57 min on a loaded host) failed only
+test_skill_validation::test_under_120_lines[fr-devops-gate]: the new rows section
+took the skill to 131 lines. The section was folded into one paragraph (115 lines),
+the mirrors re-synced, and the skill's tests (validation, settings, both mirror
+tripwires, tool neutrality, README sync, CLI smoke) re-ran green: 202 passed.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-28T01:48:09+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+one regex and one optional field beside the op pointer; nothing repeated to fold
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-28T01:48:09+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+row_walked is four lines and close_commands is the moved printer itself; acceptance_cmd keeps a two-line wrapper
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-28T01:48:09+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+the row-walk builder is one helper (_row_walks) written once; its harness arithmetic was folded into owed_harnesses in P2.T6.S3
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-11-28T01:48:09+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+devops_blockers became the gate_blockers wrapper and gated_steps shares _gated_steps with gate_items in the green step itself
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t5 created=2026-11-28T01:48:09+00:00 phase=2 -->
+### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
+
+stage 5's row walk command and stage 6's recovery share row_walk_argv, and stages 6/7 share _owed_items, written once in the green step; the rest was deduped in P2.T6.S3
