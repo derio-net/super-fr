@@ -36,9 +36,13 @@ rows:
     - spec:2026-11-27-ops-gate-truth#R7
     - spec:2026-11-27-ops-gate-truth#R8
     - spec:2026-11-27-ops-gate-truth#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_closeout_outcome.py#test_ran_on_a_step_naming_a_row_walks_it_in_the_same_commit
+      - super-fr:tests/unit/test_closeout_outcome.py#test_p2_r1_a_walk_the_pr_head_carries_does_not_discharge_a_harness
+    status: ci
+    notes: 'unit tests with fake ports and fixture repos, run in this PR''s CI (spec
+      Verification: none)'
   - id: gate-pass-refuses-unwalked-gated-rows
     capability: 'fr gate pass: rows hold their gate'
     acceptance: fr gate pass refuses a devops or tester gate while a row that gate owns
