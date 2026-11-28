@@ -5,7 +5,8 @@ packages/fr/src/fr/
   ops/
     refresh.py        + drift(ops tree, default tip) -> changed ops / Test Plan; refresh(): commit
                         records, merge origin/<default> pinned to a sha (never rebase), leased push,
-                        re-check trust; closure_exclusions (merged-in entries never count)
+                        re-check trust; closure_exclusions (merged-in plan-journal entries never
+                        close a REOPENED op; other default-branch content is reviewed, merged evidence)
     gate.py           ~ stages 4-7 refresh first (Restart, MAX_RESTARTS=2, forget(stage));
                         stage 5 asks every devops row not walked head-free; stage 6 refuses before
                         `fr gate pass` while head-free blockers remain; stage 7 passes --run;
