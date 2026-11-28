@@ -12439,6 +12439,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-28T04:34:00.409305Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-28T04:34:28.515713Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -13902,6 +13917,10 @@ batches:
     patch_id: 73b7ad6c4cbcc23e1d4484f9d58d8c99e0b65ba6
   - kind: post_merge
     at: '2026-11-28T04:29:34.885238Z'
+  - kind: claims_released
+    at: '2026-11-28T04:34:28.515713Z'
+    keys:
+    - super-fr#1519
 - id: arch-isolation-gc
   title: '#1318: isolation/local.py garbage collection moves to a collaborator'
   ids:
@@ -13978,6 +13997,12 @@ batches:
   rationale: 'Epic #1652 sub-project S2; its only dependency, S1, merged in #1696.'
   wave: 26
   bump: minor
+  events:
+  - kind: dispatch
+    at: '2026-11-28T04:34:04.143723Z'
+    runner: herdr
+    handle: w3X:p8
+    branch: feat/batch-s2-alacarte-settings
 - id: board-session-state
   title: 'Batches page: session state, lane owners, time per column'
   ids:
