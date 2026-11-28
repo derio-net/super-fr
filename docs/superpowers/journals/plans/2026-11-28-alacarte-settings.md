@@ -359,3 +359,8 @@ The test disables fr-goal-light in real schema-3 settings on origin's default br
 ### l-tests-r8-resolved · finding [fixed] · resolves l-tests-r8: A test named for the durable copy asserts nothing about it
 
 Renamed to ..._on_the_live_pr. The durable copy is asserted by test_the_durable_render_lacks_an_off_section.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4-resolved-2 created=2026-11-28T10:39:50+00:00 state=open resolves=l-docs-accuracy-r4 tracked_by=https://github.com/derio-net/super-fr/issues/1767 -->
+### l-docs-accuracy-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1767] · resolves l-docs-accuracy-r4: 01-fr-goal.md's quiet and stealth passages still describe the settings as a root settings.yaml on origin/fr or the tracking branch
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1767.
