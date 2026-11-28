@@ -12395,6 +12395,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-28T04:17:54.505194Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-28T04:17:59.630382Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -13851,6 +13866,11 @@ batches:
     runner: herdr
     handle: w3X:p2
     branch: feat/batch-arch-run-verdict
+  - kind: approval
+    at: '2026-11-28T04:17:11.466806Z'
+    pr: 1737
+    head: 3f236d77f20d3fda6b69d6c7b36fa7f66981161a
+    patch_id: 73b7ad6c4cbcc23e1d4484f9d58d8c99e0b65ba6
 - id: arch-isolation-gc
   title: '#1318: isolation/local.py garbage collection moves to a collaborator'
   ids:
