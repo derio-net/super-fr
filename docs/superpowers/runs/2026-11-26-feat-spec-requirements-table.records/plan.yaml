@@ -5,6 +5,7 @@ outcome: done
 journal:
   - kind: decision
     id: plan-one-phase
+    global: true
     title: One agentic phase, by operator decision
     body: Operator chose "One phase" over the recommended two-phase split. The phase is tier hard (decision tier-2026-11-26-spec-requirements-table-p1 in the spec journal).
 resolves: []
