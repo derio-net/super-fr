@@ -156,6 +156,11 @@ class OpsTree(Protocol):
         """*path*'s text at *ref*, or None when it does not exist there."""
         ...
 
+    def list_files(self, ref: str, folder: str) -> list[str]:
+        """The repo-relative paths of the files directly in *folder* at *ref*, sorted; `[]`
+        when *ref* has no such folder."""
+        ...
+
     def fr(self, args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
         """This `fr` on the host with the ops workspace as its checkout."""
         ...
@@ -1253,14 +1258,18 @@ def head_walks(tree: OpsTree, head: str) -> dict[str, set[Walk]]:
     from fr.acceptance.walks import fragment_walks
     from fr.artifacts.paths import artifact_root
 
+    folder = artifact_root(tree.path) / FRAGMENTS_DIR
+    if not folder.is_relative_to(tree.path):  # not in the product: the head cannot carry it
+        return {}
     texts: list[tuple[str, str]] = []
-    for path in sorted((artifact_root(tree.path) / FRAGMENTS_DIR).glob("*.yaml")):
-        if not path.is_relative_to(tree.path):  # not in the product: the head cannot carry it
+    # the fragments the HEAD's tree holds, never the workspace's listing (l-security-r4): a
+    # fragment only the head carries still names walks the head wrote
+    for path in tree.list_files(head, folder.relative_to(tree.path).as_posix()):
+        if not path.endswith(".yaml"):
             continue
-        rel = path.relative_to(tree.path).as_posix()
-        text = tree.show(head, rel)
+        text = tree.show(head, path)
         if text:
-            texts.append((rel, text))
+            texts.append((path, text))
     try:
         return fragment_walks(texts)
     except AcceptanceError as exc:
@@ -1419,7 +1428,8 @@ def _owed_items(gate: Gate, tree: OpsTree, gate_name: StepGate) -> list[GateItem
     at_head, excluded = _head_exclusions(gate, tree)
     try:
         items = gate_items(tree.path, t.run, gate_name, exclude_walks=excluded,
-                           exclude_outcomes=at_head)  # fmt: skip
+                           exclude_outcomes=at_head,
+                           exclude_op_entries=_excluded(gate, tree))  # fmt: skip
     except OpsLoadError as exc:
         raise StageFailed(f"the plan's ops cannot be read: {exc}") from exc
     except TestPlanHeadingError as exc:
@@ -1457,6 +1467,8 @@ def head_manual_ticks(tree: OpsTree, head: str, run: RunState, plan_rel: str) ->
     for local in sorted(plan_dir.glob("[0-9][0-9].yaml")):
         try:
             here = yaml.safe_load(local.read_text()) or {}
+            if not isinstance(here, dict):
+                raise yaml.YAMLError("not a mapping")
         except (OSError, yaml.YAMLError) as exc:
             raise StageFailed(f"{local} cannot be read ({exc})", code=2) from exc
         for home in homes:
@@ -1468,10 +1480,14 @@ def head_manual_ticks(tree: OpsTree, head: str, run: RunState, plan_rel: str) ->
                 at_head = yaml.safe_load(text) or {}
             except yaml.YAMLError as exc:  # never an empty exclusion: a refusal
                 raise StageFailed(f"the PR head's {rel} cannot be read ({exc})", code=2) from exc
-            phase = at_head.get("phase") or {}
+            phase = at_head.get("phase") if isinstance(at_head, dict) else None
+            number = phase.get("number") if isinstance(phase, dict) else None
+            if not isinstance(phase, dict) or not isinstance(number, int) or number is True:
+                # fail closed (l-errors-r9): a malformed head copy is never "not ticked"
+                raise StageFailed(f"the PR head's {rel} is not a plan phase file", code=2)
             state = at_head.get("state")
             if phase.get("tag") == "manual" and _ticked(state) and state == here.get("state"):
-                out.add(int(phase.get("number", 0)))
+                out.add(number)
     return out
 
 
@@ -1487,10 +1503,12 @@ def _ticked(state: Any) -> bool:
     )
 
 
-def _say_done(gate: Gate) -> None:
+def _say_done(gate: Gate) -> str | None:
     """R20: the stage is complete only while the run's Definition of Done, read on the ops
     workspace with the PR head's own evidence excluded, is discharged; otherwise every item
-    still owed, from every group."""
+    still owed, from every group. Returns the refusal when the DoD cannot be read (the
+    command then exits 2, l-errors-r4); owed items are no failure: post-merge items such as
+    tester walks are owed by design after the stage completes."""
     from fr.run.dod import DodError, definition_of_done
 
     t = gate.target
@@ -1505,17 +1523,20 @@ def _say_done(gate: Gate) -> None:
             exclude_outcomes=at_head,
             exclude_entries={"spec": at_head, "plan": head_entry_ids(tree, head, "plan", t.slug)},
             exclude_manual_ticks=head_manual_ticks(tree, head, t.run, t.plan_rel),
+            exclude_op_entries=_excluded(gate, tree),
         )
     except (DodError, StageFailed) as exc:
         why = exc.why if isinstance(exc, StageFailed) else str(exc)
-        gate.say(f"every stage ran; the Definition of Done cannot be read: {why}")
-        return
+        why = f"every stage ran; the Definition of Done cannot be read: {why}"
+        gate.say(why)
+        return why
     if dod.discharged:
         gate.say("the DevOps stage is complete")
-        return
+        return None
     gate.say("every stage ran; still owed:")
     for line in dod.owed():
         gate.say(f"  {line}")
+    return None
 
 
 def _say_owed(gate: Gate, tree: OpsTree, gate_name: StepGate) -> list[GateItem]:
@@ -1533,13 +1554,9 @@ def _existing_pass(gate: Gate, tree: OpsTree) -> None:
     """The PR already carries `gate:devops-passed` from before a refresh (review p1-r1):
     `fr gate pass` would only re-close trackers, so the blockers are read here, on the
     refreshed workspace. The label is never removed by fr."""
-    from fr.ops.holds import devops_blockers
-    from fr.ops.load import OpsLoadError
-
-    try:
-        blockers = devops_blockers(tree.path, gate.target.run)
-    except OpsLoadError as exc:
-        raise StageFailed(f"the plan's ops cannot be read: {exc}") from exc
+    # judged head-free, as stage 6's own pass is (R12, l-security-r1); `_owed_items` refuses
+    # an unreadable plan, exit or Test Plan as stage 6 does (l-errors-r5)
+    blockers = [i.line for i in _owed_items(gate, tree, "devops")]
     if blockers:
         raise StageFailed(
             f"PR #{gate.target.pr}'s gate:devops-passed predates the refresh, and the "
@@ -1556,10 +1573,12 @@ def _recovery(gate: Gate, tree: OpsTree) -> str:
     from fr.ops.holds import gated_rows, gated_steps
 
     t = gate.target
+    at_head, head = _head_exclusions(gate, tree)  # head-free, as the refusal it explains
     open_steps = [
-        (s, kind) for s, kind in gated_steps(tree.path, t.run, "devops") if kind != "discovery"
+        (s, kind)
+        for s, kind in gated_steps(tree.path, t.run, "devops", exclude=at_head)
+        if kind != "discovery"
     ]
-    head = head_walks(tree, gate.pinned_head())
     rows = [(r, k, head_free_walks(r, head.get(r.id, set())))
             for r, k in gated_rows(tree.path, _gate_exit(tree, t.run), "devops")
             if not row_walked(r, head.get(r.id, set()))]  # fmt: skip
@@ -1764,6 +1783,7 @@ MAX_RESTARTS = 2  # a refresh merges the default branch, so a second one is a mo
 def run(gate: Gate) -> GateResult:
     """Every stage not yet done, in order; stop at the first failure, naming it."""
     from fr.spec import TestPlanHeadingError
+    from fr.triage.gitseam import GitError
 
     ran: list[int] = []
     restarts = 0
@@ -1781,6 +1801,8 @@ def run(gate: Gate) -> GateResult:
                 # The spec's Test Plan heading is a near-miss: its steps cannot be read,
                 # so no stage may decide them (super-fr#1315). A refusal, not a traceback.
                 raise StageFailed(str(exc), code=2) from exc
+            except GitError as exc:  # git's own words, never a traceback (l-errors-r2)
+                raise StageFailed(f"git failed: {exc}", code=2) from exc
             except Restart as exc:
                 restarts += 1
                 if restarts > MAX_RESTARTS:
@@ -1804,7 +1826,8 @@ def run(gate: Gate) -> GateResult:
             return GateResult(False, tuple(ran), waiting=True)
     if not ran:
         gate.say("every stage is already done; nothing ran")
-    _say_done(gate)
+    if unreadable := _say_done(gate):
+        return GateResult(False, tuple(ran), None, unreadable, 2)
     return GateResult(True, tuple(ran))
 
 

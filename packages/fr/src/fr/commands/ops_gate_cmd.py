@@ -42,6 +42,16 @@ def _prompt() -> Any:
     return TtyPrompt()
 
 
+def head_files(cwd: Path, ref: str, folder: str) -> list[str]:
+    """The paths of the files directly in *folder* at *ref* (`git ls-tree`), sorted; `[]`
+    when *ref* has no such folder. An unknown *ref* is a `GitError`."""
+    from fr.triage.gitseam import git_bytes
+
+    out = git_bytes(["ls-tree", "-z", "--name-only", "--end-of-options", ref, "--",
+                     f"{folder.rstrip('/')}/"], cwd)  # fmt: skip
+    return sorted(p.decode("utf-8", "surrogateescape") for p in out.split(b"\0") if p)
+
+
 class OpsWorkspace:
     """The ops workspace on the host: git through `gitseam.Worktree`, and this `fr`
     with the workspace as its checkout."""
@@ -57,6 +67,9 @@ class OpsWorkspace:
 
     def show(self, ref: str, path: str) -> str | None:
         return self._tree.show(ref, path)
+
+    def list_files(self, ref: str, folder: str) -> list[str]:
+        return head_files(self.path, ref, folder)
 
     def fr(self, args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
         from fr.triage.gitseam import run_this_fr

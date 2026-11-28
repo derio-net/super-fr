@@ -11,7 +11,7 @@ less those another group already reports (a Test Plan step's outcome, a manual p
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Mapping, Set
+from collections.abc import Callable, Collection, Mapping, Set
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, get_args
@@ -90,13 +90,15 @@ def definition_of_done(
     exclude_outcomes: Set[str] = frozenset(),
     exclude_entries: Mapping[str, Set[str]] | None = None,
     exclude_manual_ticks: Set[int] = frozenset(),
+    exclude_op_entries: Callable[[str], Set[str]] | None = None,
 ) -> DefinitionOfDone:
     """The Definition of Done of *run* as *repo_root* records it (R17). The exclusions are
     the DevOps stage's (R12, R20: what the pinned PR head carries discharges nothing):
-    *exclude_walks* and *exclude_outcomes* pass to `gate_items`; a resolution record whose
-    id is in *exclude_entries[scope]* does not close an owed entry of that journal; a
-    `[manual]` phase in *exclude_manual_ticks* reads unticked. Raises `DodError` when an
-    input cannot be read, a recorded plan that cannot be found included (R20)."""
+    *exclude_walks*, *exclude_outcomes* and *exclude_op_entries* pass to `gate_items`; a
+    resolution record whose id is in *exclude_entries[scope]* does not close an owed entry
+    of that journal; a `[manual]` phase in *exclude_manual_ticks* reads unticked. Raises
+    `DodError` when an input cannot be read, a recorded plan that cannot be found
+    included (R20)."""
     from fr.acceptance.model import AcceptanceError
     from fr.journal.model import JournalParseError
     from fr.ops.load import OpsLoadError
@@ -113,6 +115,7 @@ def definition_of_done(
             exclude_outcomes,
             exclude_entries or {},
             exclude_manual_ticks,
+            exclude_op_entries,
         )
     except (
         AcceptanceError,
@@ -135,6 +138,7 @@ def _derive(
     exclude_outcomes: Set[str],
     exclude_entries: Mapping[str, Set[str]],
     exclude_manual_ticks: Set[int],
+    exclude_op_entries: Callable[[str], Set[str]] | None,
 ) -> DefinitionOfDone:
     from fr.ops.holds import gate_items
     from fr.verification.exit import run_exit, run_plan_dir
@@ -144,7 +148,12 @@ def _derive(
     gates = run_exit(repo_root, run).gates
     for gate in sorted(g for g in get_args(PostMergeGate) if g in gates):
         items = gate_items(
-            repo_root, run, gate, exclude_walks=exclude_walks, exclude_outcomes=exclude_outcomes
+            repo_root,
+            run,
+            gate,
+            exclude_walks=exclude_walks,
+            exclude_outcomes=exclude_outcomes,
+            exclude_op_entries=exclude_op_entries,
         )
         steps |= {i.step for i in items if i.step is not None}
         dod_items = tuple(DodItem(i.what, i.discharged, i.why) for i in items)

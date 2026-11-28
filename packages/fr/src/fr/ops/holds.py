@@ -11,7 +11,7 @@ fresh look at the live system.
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Iterable, Mapping, Set
+from collections.abc import Callable, Collection, Iterable, Mapping, Set
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -122,12 +122,15 @@ def gate_items(
     *,
     exclude_walks: Mapping[str, Collection[Walk]] | None = None,
     exclude_outcomes: Set[str] = frozenset(),
+    exclude_op_entries: Callable[[str], Set[str]] | None = None,
 ) -> list[GateItem]:
     """Every thing `state`'s *gate* owns, discharged or not (R10): each plan op (devops
     only), each Test Plan step whose effective gate is *gate*, and each row whose
     effective gate is *gate* (none under `acceptance: off`). A walk in
-    `exclude_walks[row]` and an outcome entry id in *exclude_outcomes* do not count (the
-    DevOps stage passes the ones the pinned PR head carries, R12); given *exclude_walks*,
+    `exclude_walks[row]`, an outcome entry id in *exclude_outcomes* and an op's latest
+    plan-journal entry in `exclude_op_entries(op_id)` do not count (the DevOps stage passes
+    the ones the pinned PR head carries, R12, and for a reopened op those from before the
+    refresh, R6); given *exclude_walks*,
     every row is judged head-free (`row_walked`: its status never counts). Raises
     `fr.ops.load.OpsLoadError` when the plan's ops cannot be read."""
     from fr.ops.evidence import JournalEvidence, recorded_close, recorded_state
@@ -142,6 +145,14 @@ def gate_items(
             if lo.runbook:  # fr-ops R2: never in the R14 set
                 continue
             ev = journal.latest(lo.op.id, runbook=False)
+            if (
+                ev is not None
+                and exclude_op_entries
+                and ev.entry_id in exclude_op_entries(lo.op.id)
+            ):
+                why = "closed only by evidence the PR head carries, or from before a refresh"
+                out.append(GateItem(f"op {lo.op.id} [{lo.op.phase}]", False, why))
+                continue
             closed = recorded_close(lo, ev) is not None
             out.append(GateItem(f"op {lo.op.id} [{lo.op.phase}]", closed, recorded_state(lo, ev)))
     exit_ = run_exit(repo_root, state)
@@ -182,10 +193,16 @@ def gate_blockers(
     *,
     exclude_walks: Mapping[str, Collection[Walk]] | None = None,
     exclude_outcomes: Set[str] = frozenset(),
+    exclude_op_entries: Callable[[str], Set[str]] | None = None,
 ) -> list[str]:
     """One line per item of `gate_items` still owed; `[]` when nothing holds the gate."""
     items = gate_items(
-        repo_root, state, gate, exclude_walks=exclude_walks, exclude_outcomes=exclude_outcomes
+        repo_root,
+        state,
+        gate,
+        exclude_walks=exclude_walks,
+        exclude_outcomes=exclude_outcomes,
+        exclude_op_entries=exclude_op_entries,
     )
     return [i.line for i in items if not i.discharged]
 

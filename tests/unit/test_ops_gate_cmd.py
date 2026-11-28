@@ -609,3 +609,26 @@ def test_is_ancestor_says_whether_the_ops_branch_holds_the_sha(
     ws = OpsWorkspace(ops)
     assert ws.is_ancestor(_out(ops, "rev-parse", "origin/main"))
     assert not ws.is_ancestor(_commit(origin, "ops.yaml", "apply: new\n"))
+
+
+def test_l_security_r4_head_files_lists_the_folder_at_the_ref(tmp_path: Path) -> None:
+    import subprocess
+
+    from fr.commands.ops_gate_cmd import head_files
+
+    def git(*args: str) -> str:
+        return subprocess.run(["git", "-C", str(tmp_path), *args], check=True,
+                              capture_output=True, text=True).stdout.strip()  # fmt: skip
+
+    git("init", "-q")
+    (tmp_path / "f").mkdir()
+    (tmp_path / "f" / "a.yaml").write_text("a")
+    (tmp_path / "f" / "sub").mkdir()
+    (tmp_path / "f" / "sub" / "b.yaml").write_text("b")
+    git("add", ".")
+    git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "x")
+    sha = git("rev-parse", "HEAD")
+    (tmp_path / "f" / "a.yaml").unlink()  # the working tree no longer has it; the ref does
+
+    assert head_files(tmp_path, sha, "f") == ["f/a.yaml", "f/sub"]
+    assert head_files(tmp_path, sha, "absent") == []

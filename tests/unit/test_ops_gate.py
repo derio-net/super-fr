@@ -89,8 +89,18 @@ def ops_root(tmp_path: Path) -> Path:
     write_matrix(root, [row(SPEC, rid="r1")])
     (root / PLAN).mkdir(parents=True)
     (root / PLAN / "ops.yaml").write_text(OPS)
+    _plan_folder(root)
     save_run_state(root, _state())
     return root
+
+
+def _plan_folder(root: Path) -> None:
+    """The plan as a real folder: `_meta.yaml` and a ticked agentic phase 1."""
+    fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    for name in ("_meta.yaml", "01.yaml"):
+        shutil.copy(fixture / name, root / PLAN / name)
+    phase = root / PLAN / "01.yaml"
+    phase.write_text(phase.read_text().replace('state: " "', "state: x"))
 
 
 class FakeTree:
@@ -105,6 +115,7 @@ class FakeTree:
         self.merge_conflict: tuple[str, ...] = ()  # paths a merge_commit conflicts on
         self.on_merge: Any = None  # called on a clean merge: what the merge brings in
         self.contains: set[str] = set()  # commits the ops branch already holds
+        self.tip_files: dict[str, str] = {}  # what the default branch's tip carries, by path
 
     def snapshot_head(self) -> None:
         """Freeze the tree's current journals as what the PR head carries (p4-r2)."""
@@ -113,7 +124,16 @@ class FakeTree:
 
     def show(self, ref: str, path: str) -> str | None:
         assert ref in (HEAD, TIP)  # the cut: the PR head, or main's tip after the merge
+        if ref == TIP and path in self.tip_files:
+            return self.tip_files[path]
         return self.head_files.get(path)
+
+    def list_files(self, ref: str, folder: str) -> list[str]:
+        assert ref in (HEAD, TIP)
+        prefix = folder.rstrip("/") + "/"
+        return sorted(
+            p for p in self.head_files if p.startswith(prefix) and "/" not in p[len(prefix) :]
+        )
 
     def head(self) -> str:
         return HEAD
@@ -2201,14 +2221,16 @@ def test_r20_a_held_archive_leaves_its_manual_phase_owed_on_the_ran_path(ops_roo
     assert any(line.startswith("  manual phases: phase 2 [manual]: not ticked") for line in said)
 
 
-def test_r20_an_unreadable_dod_never_says_complete(ops_root: Path) -> None:
-    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)  # the plan folder has no _meta.yaml
+def test_r20_an_unreadable_dod_never_says_complete_and_exits_2(ops_root: Path) -> None:
+    (ops_root / PLAN / "_meta.yaml").unlink()  # the plan folder cannot be read
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
     gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
 
-    run(gate)
+    result = run(gate)
 
     assert "the DevOps stage is complete" not in said
     assert any("Definition of Done cannot be read" in line for line in said), said
+    assert not result.ok and result.code == 2  # l-errors-r4
 
 
 def test_p3_r1_a_head_carried_owed_resolution_never_makes_the_stage_complete(
@@ -2281,3 +2303,123 @@ def test_p3_r1_a_manual_tick_the_head_carries_at_the_archived_location_is_exclud
 
     assert "the DevOps stage is complete" not in said
     assert any(line.startswith("  manual phases: phase 2 [manual]") for line in said), said
+
+
+# ------------------------------------- lens review: head-free judgement everywhere (R12)
+
+
+def _journal_rel(ops_root: Path, scope: str, slug: str) -> str:
+    return journal_path(ops_root, scope, slug).relative_to(ops_root).as_posix()
+
+
+def _head_carries(tree: FakeTree, ops_root: Path, scope: str, slug: str) -> None:
+    """The PR head carries this journal as the workspace holds it now."""
+    path = journal_path(ops_root, scope, slug)
+    tree.head_files[_journal_rel(ops_root, scope, slug)] = path.read_text()
+
+
+def _stage_6_ready(ops_root: Path) -> tuple[Gate, FakeHost, FakeTree, FakeForge, list[str]]:
+    _record_stages(ops_root, 1, 2, 3, 4, 5)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    for op, phase in (("pre", "pre-merge"), ("mut", "pre-merge"), ("post", "post-merge")):
+        record_op(ops_root, "p", op=op, result="done", phase=phase)
+    return gate, host, tree, forge, said
+
+
+def test_l_security_r1_an_existing_pass_is_rejudged_head_free(ops_root: Path) -> None:
+    gate, host, tree, forge, _ = _stage_6_ready(ops_root)
+    tree.fr(["closeout", "outcome", "--run", "run-1", "--step", "1", "--ran"])
+    _head_carries(tree, ops_root, "spec", SPEC_SLUG)  # the only outcome is the head's own
+    forge.pr["labels"] = ["gate:devops-passed"]
+
+    with pytest.raises(gate_mod.StageFailed) as failed:
+        gate_mod.stage_6(gate)
+
+    assert "predates the refresh" in failed.value.why
+    assert "Test Plan step 1 (devops)" in failed.value.why
+
+
+def test_l_docs_accuracy_r2_the_recovery_names_a_step_closed_only_on_the_head(
+    ops_root: Path,
+) -> None:
+    gate, host, tree, forge, _ = _stage_6_ready(ops_root)
+    tree.fr(["closeout", "outcome", "--run", "run-1", "--step", "1", "--ran"])
+    _head_carries(tree, ops_root, "spec", SPEC_SLUG)
+
+    with pytest.raises(gate_mod.StageFailed) as failed:
+        gate_mod.stage_6(gate)
+
+    assert "closeout outcome --run run-1 --step 1 --ran" in failed.value.why
+
+
+def test_l_security_r3_a_head_carried_op_closure_holds_stage_6(ops_root: Path) -> None:
+    gate, host, tree, forge, _ = _stage_6_ready(ops_root)
+    tree.fr(["closeout", "outcome", "--run", "run-1", "--step", "1", "--ran"])
+    _head_carries(tree, ops_root, "plan", "p")  # every op closure came with the PR head
+
+    with pytest.raises(gate_mod.StageFailed) as failed:
+        gate_mod.stage_6(gate)
+
+    assert "op pre [pre-merge]: closed only by evidence the PR head carries" in failed.value.why
+    assert not _gate_passes(tree)
+
+
+def test_l_security_r3_a_head_carried_op_closure_never_makes_the_stage_complete(
+    ops_root: Path,
+) -> None:
+    _real_plan(ops_root, manual="x")
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _all_recorded(ops_root, tree)
+    _head_carries(tree, ops_root, "plan", "p")
+
+    run(gate)
+
+    assert "the DevOps stage is complete" not in said
+    assert any(line.startswith("  gate:devops: op post [post-merge]") for line in said), said
+
+
+def test_l_security_r4_head_walks_reads_a_fragment_only_the_head_carries(ops_root: Path) -> None:
+    import yaml
+
+    gate, host, tree, *_ = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    frag = yaml.safe_load((ops_root / FRAGMENT).read_text())
+    frag["rows"][0]["walks"] = [A_WALK]
+    frag["feature"] = "elsewhere"
+    tree.head_files["docs/acceptance/features/elsewhere.yaml"] = yaml.safe_dump(frag)
+
+    walks = gate_mod.head_walks(tree, HEAD)
+
+    assert walks.get("r1"), walks
+
+
+def test_l_errors_r2_a_git_failure_inside_a_stage_is_a_refusal_never_a_traceback(
+    ops_root: Path,
+) -> None:
+    from fr.triage.gitseam import GitError
+
+    _record_stages(ops_root, 1, 2, 3)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+
+    def broken(ref: str, paths: Sequence[str]) -> Path:
+        raise GitError("`git archive` timed out after 60s")
+
+    host.materialise = broken  # type: ignore[method-assign]
+
+    result = run(gate)
+
+    assert not result.ok and result.failed == 4 and result.code == 2
+    assert "git failed" in result.why and "timed out" in result.why
+
+
+def test_l_errors_r9_a_malformed_head_phase_file_fails_closed(ops_root: Path) -> None:
+    _real_plan(ops_root, manual="x")
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _all_recorded(ops_root, tree)
+    tree.head_files[f"{PLAN}/02.yaml"] = "- just\n- a list\n"
+
+    result = run(gate)
+
+    assert "the DevOps stage is complete" not in said
+    assert result.code == 2 and "is not a plan phase file" in result.why
