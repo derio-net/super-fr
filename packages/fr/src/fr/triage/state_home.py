@@ -169,6 +169,9 @@ def settle(name: str, root: Path, cache: Path, *, say: Callable[[str], None] = _
         return
     _refuse_links(root, copy)
     if not copy.is_dir():
+        if is_tombstone(copy):  # another mover finished between the two checks
+            _tidy(root, copy.parent, say)
+            return
         raise TriageError(f"{copy} is not a directory: fr does not move or delete it")
     if any(_same(root, p) for p in protected_sources()):
         raise TriageError(f"{copy} is in a protected clone: its triage state is never moved")

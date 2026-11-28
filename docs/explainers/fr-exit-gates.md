@@ -16,7 +16,7 @@ covers:
   - docs/verification-strategies.md
   - docs/exit-gates-release-walk.md
   - docs/gate-backfill.md
-reviewed: 2026-11-27 still true; docs/verification-strategies.md changed only its reviewed stamp (run-verdict, #1519); 2026-11-27 still true after queue-followups (verification-strategies.md gained only a review stamp); 2026-11-26 landing-method, a pull request the log names that the forge closed unmerged counts as landed (R7); 2026-11-25 still true; the verification-strategies page it covers gained the configuration homes and the protection rule (S1), which change no gate; the page says so; 2026-11-23 still true; gate-backfill.md and verification-strategies.md were only re-stamped for the 3.14 reformat (#1589); 2026-11-23 still true; verification-strategies gained the settle override line, which sets no gate (pr-readiness-wait). 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-21 still true; release.py's protection-refusal hint now names the "require ci-ok" ruleset and setup-release-app.sh (release-app-hardening); 2026-11-19 still true; release.py staged suite passes -m "" to keep the scenario tier (local-suite-cost); 2026-11-17 still true; gate-backfill now says a tracker close reports every error kind (batch triage-intake); 2026-11-21 the queue lands a gate:devops pull request after the stage released it and holds later entries until post-merge is done; 2026-11-20 added the merge queue's hold on a release (wave merge queue); 2026-11-19 still true; release.py staged suite passes -m "" to keep the scenario tier (local-suite-cost)
+reviewed: 2026-11-28 the Definition of Done, derived from the gates, manual phases and owed entries, `fr run dod` and the pickup briefs and the DevOps stage's final line that read it (ops-gate-truth R17-R20); 2026-11-28 `fr gate pass` refuses on the rows and steps a gate owns, for both gates, and a row counts as walked only when its latest walk passed (ops-gate-truth R10, R11); 2026-11-27 still true; docs/verification-strategies.md changed only its reviewed stamp (run-verdict, #1519); 2026-11-27 still true after queue-followups (verification-strategies.md gained only a review stamp); 2026-11-26 landing-method, a pull request the log names that the forge closed unmerged counts as landed (R7); 2026-11-25 still true; the verification-strategies page it covers gained the configuration homes and the protection rule (S1), which change no gate; the page says so; 2026-11-23 still true; gate-backfill.md and verification-strategies.md were only re-stamped for the 3.14 reformat (#1589); 2026-11-23 still true; verification-strategies gained the settle override line, which sets no gate (pr-readiness-wait). 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-21 still true; release.py's protection-refusal hint now names the "require ci-ok" ruleset and setup-release-app.sh (release-app-hardening); 2026-11-19 still true; release.py staged suite passes -m "" to keep the scenario tier (local-suite-cost); 2026-11-17 still true; gate-backfill now says a tracker close reports every error kind (batch triage-intake); 2026-11-21 the queue lands a gate:devops pull request after the stage released it and holds later entries until post-merge is done; 2026-11-20 added the merge queue's hold on a release (wave merge queue); 2026-11-19 still true; release.py staged suite passes -m "" to keep the scenario tier (local-suite-cost)
 ---
 
 ## What work cannot finish in the pull request?
@@ -81,8 +81,9 @@ removes it. Nothing about a gate lives in a file in the repo, so passing one nee
 
 A person passes a gate, or a record shows that the work the gate guards is done.
 
-- **Tester.** When the gate has acceptance rows and every one of them reads `walked` on the
-  default branch, the triage driver passes the gate itself. It never does for a run-level gate
+- **Tester.** When the gate has acceptance rows and every one of them is walked on the
+  default branch, the triage driver passes the gate itself. A row is walked when its status
+  is `walked` and its latest walk passed: a later failing walk opens it again. It never does for a run-level gate
   that no row inherits, nor for a `devops` gate added because the plan has operations: those
   need an explicit pass. Otherwise you walk the rows
   ([fr-acceptance](fr-acceptance.md)) or record the pass by hand:
@@ -91,7 +92,14 @@ A person passes a gate, or a record shows that the work the gate guards is done.
 
 - **DevOps.** The stage that does the operations, runs the probes and then passes the gate is
   its own command; [the DevOps gate](fr-devops-gate.md) covers it. `fr gate pass --gate devops`
-  refuses while any recorded operation or devops test step is still open.
+  refuses while any recorded operation, devops test step or devops row is still open.
+
+`fr gate pass` reads the run's records for both gates. The run is `--run <id>`, else the run
+whose branch is the pull request's head branch. It refuses while a step the gate owns has no
+`ran` or `n/a` outcome, or a row the gate owns is not walked, and it lists each one. For
+`--gate tester` with no run, it passes as before. A test step can name the rows it proves,
+`(rows: <id>, …)`, so that recording the step `ran` with `fr closeout outcome` also walks
+those rows.
 
 `fr gate pass` comments what passed the gate on the pull request and swaps `gate:<g>` for
 `gate:<g>-passed`. Without `--yes` it prints what it would do. It also closes the `fr:owed`
@@ -134,6 +142,16 @@ hold on the release. The script then cuts nothing, candidate or final, so a half
 is never released. When the queue is done, the release clears the hold. A hold that nobody
 refreshed for a day is ignored. `fr release status` lists what is waiting, and says when a
 hold is the reason that nothing is cut.
+
+## How do you see what a run still owes?
+
+Run `fr run dod <run-id>`. It prints the run's **Definition of Done**: each item that a
+held gate owns (ops, Test Plan steps and rows), the plan's `[manual]` phases, and the open
+`owed` entries of the run's journals. Each item is either discharged or owed, with a reason.
+fr derives this list from what the spec, plan and journals already say, so you never write
+it. The command writes no file itself, though fr may first migrate stale files, as for every
+`fr run` command. It runs on the host and exits 1 while any item is owed. The close-out brief that
+`fr pickup --run` prints ends with the same list.
 
 ## What about old work, and the DevOps stage?
 

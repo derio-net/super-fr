@@ -1,0 +1,125 @@
+schema_version: 2
+phase:
+  number: 1
+  title: 'Stale ops workspace: drift, confirmed merge refresh, reopened ops (R1-R6)'
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - ops-gate-refreshes-a-stale-ops-workspace
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/ops/refresh.py
+  - packages/fr/src/fr/ops/gate.py
+  - packages/fr/src/fr/commands/ops_gate_cmd.py
+  - packages/fr/src/fr/triage/gitseam.py
+  - tests/unit/test_ops_refresh.py
+  - tests/unit/test_ops_gate.py
+  - tests/unit/test_ops_gate_cmd.py
+  - docs/ops.md
+  - docs/explainers/fr-devops-gate.md
+  - .changes/feat-batch-ops-gate-truth.yaml
+  estimate_lines: 750
+tasks:
+- number: 1
+  title: 'Smoke: the refresh module exists and the fast tier runs it'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Create packages/fr/src/fr/ops/refresh.py with its module docstring (spec 2026-11-27-ops-gate-truth §A) and a frozen dataclass `Drift(added: tuple[str, ...], removed: tuple[str, ...], changed: tuple[str, ...], test_plan: bool)` with a `differs` property (any op id or test_plan). Add tests/unit/test_ops_refresh.py::test_drift_differs_only_when_something_moved (an empty Drift does not differ; one changed id or test_plan=True does). Add `.changes/feat-batch-ops-gate-truth.yaml` with `bump: minor` and a one-line summary of the batch. Run the brief's fast tier: green.
+- number: 2
+  title: 'drift(): ops and Test Plan compared with origin/<default> (R1, R2, R5)'
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_ops_refresh.py build two tmp trees (workspace, default) each holding the plan dir with ops.yaml and the run's spec, and test `drift(workspace_root, default_root, plan_rel, spec_rel)`: identical trees give no drift; an op whose `apply` changed is in `changed`; an op only on the default side is in `added`, only in the workspace in `removed`; a changed Test Plan step sets `test_plan`; a default tree without the plan dir raises `StageFailed` naming that dir (R5); an ops.yaml that does not load on either side raises `StageFailed` (never "equal"). Run them: red.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: implement `drift` with `fr.ops.load.load_ops` on both sides keyed by `lo.op.id` (compare `lo.op`, the frozen model), runbook ops included, and `fr.spec.test_plan_steps` of the spec on both sides (a missing spec on one side counts as changed). Wrap OpsLoadError/OSError/TestPlanHeadingError in `StageFailed` (code 2). Tests green.
+- number: 3
+  title: 'The merge port: OpsTree.merge_commit (R3)'
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: in tests/unit/test_ops_gate_cmd.py, with a real tmp git origin + clone (as the existing OpsWorkspace tests set one up, or with `git init` fixtures), test `OpsWorkspace.merge_commit("origin/main", msg)`: a clean merge leaves HEAD a merge commit with two parents and the message, after fetching origin itself; a conflicting merge raises a `MergeConflict` (new, in fr.ops.gate) carrying the conflicted paths, and leaves HEAD and the working tree exactly as before (merge aborted). Red.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: add `merge_commit(ref, message) -> str` to the `OpsTree` Protocol in ops/gate.py (docstring: never a rebase, the pushed ops branch moves forward only), `class MergeConflict(Exception)` with `paths`, and implement it on `OpsWorkspace`: `git fetch --quiet origin`, `Worktree.merge(ref)`; conflicts → `Worktree.abort_merge()` then raise MergeConflict; clean → `git commit --no-edit -m message` (add a `Worktree.commit_merge(message)` helper in triage/gitseam.py only if no existing one fits), return the new head. Add `merge_commit` to tests/unit/test_ops_gate.py's FakeTree recording its calls, with a configurable conflict. Green.
+- number: 4
+  title: Reopened ops in the host state (R6)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: tests in tests/unit/test_ops_gate.py for `HostGateState`: `set_reopened(ops, before)` / `reopened() -> (frozenset[str], frozenset[str])` round-trip; `clear_reopened()`; `forget(4)` drops stages 4..8 and keeps 1-3 and the head/cut/pushed keys. And for `apply_phase` (post-merge): an op whose evidence closes it and that is reopened is applied again (`fr ops apply <id> --yes` with the confirmation asked when its live state is open); a journal closure whose entry id is in `before` does not close a reopened op in `_unclosed`, one added after the refresh does. Red.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: add the methods to the GateState Protocol and HostGateState (`reopened` key: {ops: [...], before: [...]}); in `_closed`/`_recorded_here`/`apply_phase`/`_unclosed`, treat a reopened op as not closed by recorded evidence and exclude `before` entry ids alongside `at_head`. Stage 4's `finish` clears the reopened set. Green.
+- number: 5
+  title: refresh() wired before stages 4-7 (R1-R4, R6)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: tests in tests/unit/test_ops_gate.py (FakeHost.materialise returns a default tree you can drift): no drift → no prompt, no merge, the stage acts; drift + declined confirm → StageFailed, no commit, no merge, state unchanged; drift + confirmed → order is commit_paths(["docs"]) then merge_commit("origin/<default>") then a leased push (state.pushed) then `fr ops trust` before any `ops apply`; the confirm text names the added/removed/changed op ids and "Test Plan changed" when it did; asked even under `--yes`; MergeConflict → StageFailed naming each path and the manual `git merge origin/<default>` commands, no push; a refresh during stage 5 that reopened an op makes `run()` go back to stage 4 in the same invocation (stage 4 re-applies it) and then continue; a refresh that changed only the Test Plan reopens nothing and forgets nothing. Red.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: implement `refresh(gate, tree, stage)` in ops/refresh.py over the ports (materialise origin/<default> with the paths `_head_paths` names, removed in a finally; fetch first), set the reopened ops (changed + added) with the plan-journal entry ids present (`fr.journal.model.parse_journal` of the live plan journal), call `state.forget(4)` when stage > 4 and anything was reopened, then `gate.trust(tree)`. Call it at the top of stage_4..stage_7. Make `run()` go back to the first undone stage after a stage forgot later ones: the forgetting stage raises a `Restart` signal that `run` catches, then it continues from the first stage `recorded()` does not hold. Green.
+  - id: P1.T5.S3
+    text: |-
+      REFACTOR: keep gate.py's new code to the ports and stage hooks (logic stays in refresh.py), remove duplication between `_unclosed` and `apply_phase`'s exclusion sets, run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/` and mypy on packages/fr/src.
+- number: 6
+  title: Docs for the refresh
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      Update docs/explainers/fr-devops-gate.md and docs/ops.md: stages 4-7 compare the ops workspace with the default branch first; what the operator sees and confirms; why a merge and never a rebase; that changed ops are re-trusted and reopened, and a refresh after stage 4 goes back to stage 4. Bump each page's `reviewed:` with a note. Run `uv run fr docs check` and the brief's fast tier last: green.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-27T23:19:34+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-27T23:19:34+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-27T23:19:34+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-27T23:19:34+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-27T23:19:34+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-27T23:19:34+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-27T23:19:34+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-27T23:19:34+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-27T23:19:34+00:00'
+      note: null
+    P1.T5.S3:
+      state: x
+      ticked_at: '2026-11-27T23:19:34+00:00'
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: '2026-11-27T23:19:34+00:00'
+      note: null
+  completion:
+    at: '2026-11-27T23:19:34+00:00'
+    note: null
+    observed_prs: []

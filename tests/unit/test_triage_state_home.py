@@ -476,6 +476,32 @@ def test_two_movers_never_both_move(tmp_path: Path, cache: Path) -> None:
     assert not (cache.parent / f"{SCOPE.name}.pre-s1").exists()
 
 
+def test_a_mover_that_loses_the_race_between_its_checks_resolves_never_refuses(
+    tmp_path: Path, cache: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The flake behind `test_two_movers_never_both_move`, made deterministic: this mover saw
+    a directory, and before its `is_dir()` check another mover finished and left the
+    tombstone. That is the 'nothing left to move' case, never 'not a directory'."""
+    clone = _clone(tmp_path, "clone")
+    copy = _old_copy(clone, {"judgements.yaml": JUDGED})
+    real = state_home._refuse_links
+    raced: list[bool] = []
+
+    def other_mover_finishes_first(root: Path, path: Path) -> None:
+        real(root, path)
+        if path == copy and not raced:
+            raced.append(True)
+            monkeypatch.setattr(state_home, "_refuse_links", real)
+            state_home.settle(SCOPE.name, root, cache, say=lambda _: None)
+
+    monkeypatch.setattr(state_home, "_refuse_links", other_mover_finishes_first)
+    state_home.settle(SCOPE.name, clone, cache, say=lambda _: None)
+
+    assert raced, "the race was not replayed"
+    assert state_home.is_tombstone(copy)
+    assert (cache / "judgements.yaml").read_bytes() == JUDGED
+
+
 def test_an_old_fr_resurrecting_the_clone_copy_is_loud_never_silent(
     tmp_path: Path, cache: Path
 ) -> None:

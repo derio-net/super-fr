@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/gatebackfill/**
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-25 the profile declarations are `.fr/profiles.yaml` (S1 R9); 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-17 a tracker close reports every error kind and never raises (batch triage-intake)
+reviewed: 2026-11-28 still true; `fr gate pass` now also refuses while a step or row the gate owns is open for the resolved run, for both gates (ops-gate-truth R11); the backfill commands are unchanged; 2026-11-25 the profile declarations are `.fr/profiles.yaml` (S1 R9); 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-17 a tracker close reports every error kind and never raises (batch triage-intake)
 ---
 
 # `fr gate backfill` — bring old owed work into the gate lanes

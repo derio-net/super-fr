@@ -621,24 +621,12 @@ def _walk_from_flags(
 
 
 def _print_close_commands(root: Path, before: Row) -> None:
-    """R16: the issues this walk freed, each with the forge's close and
-    unlabel commands — nothing when forge issues are off (`forge.issues: off` or
-    `tracking: none`). fr never closes them."""
-    from fr.acceptance.walks import AWAITING_LIVE_LABEL, issues_now_closable
-    from fr.hostclient import issue_command
-    from fr.settings import forge_allows
+    """R16: the issues this walk freed and their close commands
+    (`fr.acceptance.walks.close_commands`). fr never closes them."""
+    from fr.acceptance.walks import close_commands
 
-    matrix = _load(root)
-    after = next(r for r in matrix.rows if r.id == before.id)
-    freed = issues_now_closable(matrix, before, after, root)
-    if not freed or not forge_allows(root, "issues", lenient=True):
-        return
-    w = after.walks[-1]
-    comment = f"Walk-verified ({w.strategy}, {w.harness}, {w.model}): {w.evidence}"
-    for ref in freed:
-        typer.echo(f"{ref}: every row citing it is walk-verified — close it:")
-        typer.echo("  " + issue_command(root, "issue-close", ref=ref, comment=comment))
-        typer.echo("  " + issue_command(root, "issue-unlabel", ref=ref, label=AWAITING_LIVE_LABEL))
+    for line in close_commands(root, before):
+        typer.echo(line)
 
 
 def _validate_refs(row: Row) -> None:

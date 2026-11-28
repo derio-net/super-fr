@@ -228,6 +228,32 @@ def test_the_bot_authored_legacy_issue_is_renamed(env: tuple[Gh, dict]) -> None:
     assert _mutations(gh) == ["edit_issue"]
 
 
+def _unavailable_report(**why: str) -> DebtReport:
+    return DebtReport(
+        acceptance=AcceptanceDebt(by_status={"unwired": 1}),
+        sources={k: SourceStatus(state="unavailable", why=v) for k, v in why.items()},
+        generated_at="2026-10-11T00:00:00+00:00",
+    )
+
+
+@pytest.mark.parametrize("flags", [[], ["--yes"]], ids=["preview", "yes"])
+def test_every_unavailable_source_is_named_on_stderr_before_any_write(
+    env: tuple[Gh, dict], flags: list[str]
+) -> None:
+    _, box = env
+    token = "ghp_" + "a" * 30
+    box["report"] = _unavailable_report(
+        forge=f"UnsupportedForgeOperation: `list_issues` is not supported {token}\x1b[31m",
+        git="GitError: fetch failed",
+    )
+    r = runner.invoke(app, ["debt", "issue", *flags])
+    assert r.exit_code == 0, r.output
+    err = [ln for ln in r.stderr.splitlines() if ln.startswith("unavailable: ")]
+    assert [ln.split(":")[1].strip() for ln in err] == ["forge", "git"]
+    assert "UnsupportedForgeOperation" in err[0] and "GitError: fetch failed" in err[1]
+    assert token not in r.stderr and "\x1b" not in r.stderr
+
+
 SECRET = "https://x-access-token:SECRET@github.com/o/r.git"
 
 

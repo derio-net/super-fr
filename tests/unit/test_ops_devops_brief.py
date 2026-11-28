@@ -95,20 +95,79 @@ def test_gh1275_a_finished_devops_stage_says_so_instead_of_the_brief(
 ) -> None:
     """gh#1275: once the gate's own record holds stage 8, `fr pickup --run` reports the
     stage complete and names the workspace reap, never the `fr ops gate` command again."""
-    from fr.ops.gate import HostGateState, gate_state_path
 
     monkeypatch.setenv("FR_OPS_GATE_DIR", str(tmp_path / "gate-state"))
-    _run(tmp_path, ops=True)
-    record = HostGateState(gate_state_path(tmp_path, "r1"))
-    for n in range(1, 9):
-        record.mark(n)
+    _finished(tmp_path, discharged=True)
 
     result = _invoke(tmp_path, ["pickup", "--run", "r1"])
 
     assert result.exit_code == 0, result.output
     assert "fr ops gate --run" not in result.output
-    assert "DevOps stage complete" in result.output
+    assert "DevOps stage complete" in result.output and "Nothing is left" in result.output
     assert "fr isolation down --branch feat/x" in result.output
+    assert result.output.rstrip().endswith("owed\n  (none)")  # the DoD closes it (R19)
+
+
+def _finished(repo: Path, *, discharged: bool) -> None:
+    """A run whose DevOps stage record holds all eight stages, its plan a real folder and
+    its Test Plan step ran; *discharged*: its one op is closed too, so its Definition of
+    Done is discharged."""
+    import shutil
+
+    from fr.ops.evidence import record_op
+    from fr.ops.gate import HostGateState, gate_state_path
+
+    from tests.unit.test_run_dod import FIXTURE
+
+    _run(repo, ops=True)
+    for name in ("_meta.yaml", "01.yaml"):
+        shutil.copy(FIXTURE / name, repo / PLAN / name)
+    phase = repo / PLAN / "01.yaml"
+    phase.write_text(phase.read_text().replace('state: " "', "state: x"))
+    _ran_step_1(repo)  # its one Test Plan step (devops, by the promotion) ran
+    if discharged:  # and its op is closed
+        record_op(repo, Path(PLAN).name, op="k", result="attested", phase="pre-merge",
+                  attested_by="operator")  # fmt: skip
+    record = HostGateState(gate_state_path(repo, "r1"))
+    for n in range(1, 9):
+        record.mark(n)
+
+
+def _ran_step_1(repo: Path) -> None:
+    from fr.journal.model import JournalEntry, append_journal_entry, journal_path
+
+    slug = "2026-09-30-fixture"
+    entry = JournalEntry(kind="discovery", scope="spec", id="test-plan-step-1",
+                         created="2026-09-30T10:00:00+00:00", title="Test Plan step 1: ran",
+                         body="ran it")  # fmt: skip
+    append_journal_entry(journal_path(repo, "spec", slug), slug, entry)
+
+
+def test_r19_a_finished_stage_with_owed_items_names_them_and_never_says_complete(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setenv("FR_OPS_GATE_DIR", str(tmp_path / "gate-state"))
+    _finished(tmp_path, discharged=False)
+
+    result = _invoke(tmp_path, ["pickup", "--run", "r1"])
+
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert "DevOps stage complete" not in out and "Nothing is left" not in out
+    assert "every stage (1-8) ran" in out
+    assert "  - gate:devops: op k [pre-merge]: " in out
+    assert "## Definition of Done — 1 item owed" in out
+    assert "fr ops gate --run" not in out
+
+
+def test_r19_the_in_progress_devops_brief_ends_with_the_definition_of_done(
+    tmp_path: Path,
+) -> None:
+    _run(tmp_path, ops=True)
+    result = _invoke(tmp_path, ["pickup", "--run", "r1"])
+    assert result.exit_code == 0, result.output
+    headings = [ln for ln in result.output.splitlines() if ln.startswith("#")]
+    assert headings[-1].startswith("## Definition of Done"), headings
 
 
 def test_gh1275_a_partly_run_stage_still_gets_the_brief(tmp_path: Path, monkeypatch: Any) -> None:

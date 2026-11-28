@@ -1648,6 +1648,7 @@ def adopt_cmd(
             supersede=supersede,
             dry_run=not yes,
             superseded=effects,
+            warn=lambda line: typer.echo(line, err=True),
         )
     except (AdoptError, RunStateConflictError) as e:
         err_console.print(f"[red]{escape(str(e))}[/red]")
