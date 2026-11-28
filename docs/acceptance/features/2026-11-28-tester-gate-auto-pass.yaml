@@ -115,3 +115,12 @@ amendments:
       cannot be read (both reported once), or in a drive narrowed with --batch; a failed
       write is reported and retried next pass
     why: 'spec review s2: the cursor must name this PR'
+  - row: loose-gated-pr-no-pass-without-evidence
+    op: reword
+    base: 1
+    acceptance: The driver passes nothing for a gated PR from a fork or of unknown origin,
+      or whose branch no run cursor names; a cursor recording another PR (by owner/repo
+      and number), two runs on its branch, or rows that cannot be read are reported
+      once (a repo-wide failure once per repo) and plan nothing; a drive narrowed with
+      --batch reads none; a failed write is reported and retried next pass
+    why: 'lens review l-security-r1, l-errors-r1/r2: forks excluded, mismatches reported'
