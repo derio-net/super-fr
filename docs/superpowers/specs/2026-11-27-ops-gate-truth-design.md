@@ -41,7 +41,8 @@ R1. Before stages 4, 5, 6 and 7 of `fr ops gate` act, every time they run (rerun
 included), the gate fetches the default branch and compares two things between the ops
 workspace and `origin/<default>`: the op set the run's plan loads (`fr.ops.load.load_ops`,
 op by op on its full definition) and the run's Test Plan steps. When both are equal the stage
-proceeds and says nothing.
+proceeds and says nothing. A fetch that fails fails the stage: a stale `origin/<default>` is
+never compared.
 
 R2. When either differs, the gate names each op added, removed or changed (by id) and says
 whether the Test Plan changed. It then asks the operator to confirm bringing the workspace up
@@ -177,7 +178,9 @@ Otherwise it says every stage ran and lists each item still owed, from every gro
 nothing the pinned PR head carries discharges an item there: an `owed` resolution record or a
 `[manual]` phase tick the head added counts as not there. A run that recorded a plan the
 derivation cannot find is unreadable (exit 2 for `fr run dod`, "cannot be read" in the briefs and
-the final line); only a run that recorded no plan has empty manual and plan-journal groups.
+the final line); only a run that recorded no plan has empty manual and plan-journal groups. A
+Definition of Done the final line cannot read makes `fr ops gate` exit 2; owed items keep exit 0,
+because post-merge items stay owed by design once the stage is complete.
 
 ## Design shape
 
