@@ -2545,8 +2545,10 @@ def test_l_tests_r4_the_refresh_reads_a_runbook_outside_the_head_paths(ops_root:
     (ops_root / "ops/book.yaml").write_text(
         "- id: rb\n  summary: rb\n  phase: post-merge\n  commands: [x]\n"
     )
-    ops = (ops_root / PLAN / "ops.yaml").read_text().replace(
-        "phase: post-merge, check:", "phase: post-merge, needs: [rb], check:"
+    ops = (
+        (ops_root / PLAN / "ops.yaml")
+        .read_text()
+        .replace("phase: post-merge, check:", "phase: post-merge, needs: [rb], check:")
     )
     (ops_root / PLAN / "ops.yaml").write_text(ops)
     gate, host, tree, prompt = _drifted(ops_root, 1, 3, ops=None)

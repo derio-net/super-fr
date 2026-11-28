@@ -137,6 +137,7 @@ def _refuse_on_blockers(root: Path, state: RunState, gate: StepGate) -> None:
     from fr.acceptance.model import AcceptanceError
     from fr.ops.holds import gate_blockers
     from fr.ops.load import OpsLoadError
+    from fr.settings import SettingsError
     from fr.spec import TestPlanHeadingError
     from fr.verification.spec_section import SectionError
 
@@ -146,7 +147,7 @@ def _refuse_on_blockers(root: Path, state: RunState, gate: StepGate) -> None:
         _refuse(f"run {state.run}: the plan's ops cannot be read: {exc}")
     except TestPlanHeadingError as exc:  # never a traceback, never "nothing held" (#1315)
         _refuse(f"run {state.run}: {exc}")
-    except (SectionError, AcceptanceError, OSError) as exc:
+    except (SectionError, AcceptanceError, SettingsError, OSError) as exc:  # l-errors-r6
         _refuse(f"run {state.run}: its exit cannot be read: {exc}")
     if blockers:
         lines = "\n".join(f"  {b}" for b in blockers)

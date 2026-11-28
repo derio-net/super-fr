@@ -213,22 +213,32 @@ def outcome(
         raise _refuse(str(e)) from e
     for n in numbers:
         typer.echo(f"{ids[n]}: {'n/a' if kind == 'na' else kind}")
-    if walks:
-        from fr.acceptance.walks import close_commands
-
-        for line in walks.lines:
-            typer.echo(line)
-        for before in walks.before:
-            for line in close_commands(root, before):
-                typer.echo(line)
     if not applied.committed:
         # Review p3-r3(b): the outcome is written but git does not hold it, and
-        # `fr archive` refuses to move a spec journal with uncommitted outcomes.
+        # `fr archive` refuses to move a spec journal with uncommitted outcomes. Said
+        # before the close commands, so a failure there never hides it (l-errors-r10).
         rel = journal.relative_to(root).as_posix() if journal.is_relative_to(root) else journal
         typer.echo(
             f"warning: {rel} is uncommitted — fr archive will hold the plan until it is "
             "committed (commit it on a branch, not the default branch)"
         )
+    if walks:
+        from fr.acceptance.model import AcceptanceError
+        from fr.acceptance.walks import close_commands
+
+        for line in walks.lines:
+            typer.echo(line)
+        try:
+            for before in walks.before:
+                for line in close_commands(root, before):
+                    typer.echo(line)
+        except AcceptanceError as e:  # the outcome is recorded; only the commands are not
+            err_console.print(
+                "[red]the outcome is recorded, but its close commands cannot be read: "
+                f"{escape(str(e))}[/red]",
+                soft_wrap=True,
+            )
+            raise typer.Exit(2) from e
 
 
 @dataclass(frozen=True)
@@ -321,17 +331,38 @@ def _head_walks(root: Path, sha: str) -> dict[str, set[Any]]:
     from fr.acceptance.walks import fragment_walks
     from fr.artifacts.paths import artifact_root
 
-    folder = artifact_root(root) / FRAGMENTS_DIR
     if not re.fullmatch(r"[0-9a-f]{7,64}", sha):
         raise _refuse(f"--pr-head {sha!r} is not a commit sha")
+
+    def git(*args: str) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=False)
+
+    # an unknown or unreachable head is a refusal, never "the head carries nothing"
+    if git("cat-file", "-e", f"{sha}^{{commit}}").returncode != 0:  # l-errors-r7
+        raise _refuse(f"--pr-head {sha} is not a commit in this checkout; fetch it first")
+    top = git("rev-parse", "--show-toplevel")
+    if top.returncode != 0:
+        raise _refuse(f"cannot read the PR head {sha}: {top.stderr.decode(errors='replace')}")
+    toplevel = Path(top.stdout.decode().strip()).resolve()
+    folder = (artifact_root(root) / FRAGMENTS_DIR).resolve()
+    if not folder.is_relative_to(toplevel):  # not in the product: the head cannot carry it
+        return {}
+    rel = folder.relative_to(toplevel).as_posix()
+    # the fragments the HEAD's tree holds, not the working tree's (l-security-r4)
+    listed = git("-C", str(toplevel), "ls-tree", "-z", "--name-only", sha, "--", f"{rel}/")
+    if listed.returncode != 0:
+        raise _refuse(f"cannot list {rel} at the PR head {sha}")
     texts = []
-    for path in sorted(folder.glob("*.yaml")):
-        shown = subprocess.run(
-            ["git", "-C", str(folder), "show", f"{sha}:./{path.name}"],
-            capture_output=True, text=True, check=False,
-        )  # fmt: skip
-        if shown.returncode == 0:
-            texts.append(((FRAGMENTS_DIR / path.name).as_posix(), shown.stdout))
+    for name in sorted(p.decode() for p in listed.stdout.split(b"\0") if p):
+        if not name.endswith(".yaml"):
+            continue
+        shown = git("-C", str(toplevel), "show", f"{sha}:{name}")
+        try:
+            if shown.returncode != 0:  # it was listed, so it is there: any failure refuses
+                raise ValueError(shown.stderr.decode(errors="replace").strip())
+            texts.append((name, shown.stdout.decode("utf-8")))
+        except (ValueError, UnicodeDecodeError) as e:
+            raise _refuse(f"the PR head's {name} cannot be read: {e}") from e
     try:
         return fragment_walks(texts)
     except AcceptanceError as e:
@@ -339,8 +370,9 @@ def _head_walks(root: Path, sha: str) -> dict[str, set[Any]]:
 
 
 def _shape_default(root: Path, run: str | None) -> str | None:
-    """The run's shape default strategy, or `None` without a run (or a cursor fr cannot
-    read: the section's own `strategy:` line still applies)."""
+    """The run's shape default strategy, or `None` without a run. A run named with --run
+    whose cursor cannot be read refuses (l-errors-r8): the strategy decides which walk is
+    recorded, so it is never silently dropped."""
     if run is None:
         return None
     from fr.run.model import RunStateError, parse_run_state, run_path
@@ -348,8 +380,8 @@ def _shape_default(root: Path, run: str | None) -> str | None:
 
     try:
         return shape_default(root, parse_run_state(run_path(root, run).read_text()))
-    except RunStateError, OSError:
-        return None
+    except (RunStateError, OSError) as e:
+        raise _refuse(f"the cursor of run {run} cannot be read: {e}") from e
 
 
 def _effective_outcomes(journal: Path) -> dict[int, str]:

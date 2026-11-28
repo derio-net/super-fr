@@ -317,3 +317,19 @@ def test_a_near_miss_test_plan_heading_is_a_refusal_not_a_traceback(repo: Path, 
     assert res.exit_code == 2, res.output
     assert res.exception is None or isinstance(res.exception, SystemExit)
     assert 'rename it to "## Test Plan"' in " ".join(res.output.split())
+
+
+def test_l_errors_r6_an_unreadable_setting_is_a_refusal_not_a_traceback(
+    repo: Path, forge: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.settings import SettingsError
+
+    forge(["gate:devops"])
+
+    def broken(root: Path, feature: str) -> bool:
+        raise SettingsError(".fr/settings.yaml: not a mapping")
+
+    monkeypatch.setattr("fr.settings.disabled", broken)
+    res = _pass("--gate", "devops", "--run", "run-1")
+    assert res.exit_code == 2, res.output
+    assert "its exit cannot be read" in res.output and "not a mapping" in res.output

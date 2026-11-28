@@ -562,3 +562,89 @@ def test_p2_r1_a_walk_the_pr_head_carries_does_not_discharge_a_harness(
     assert res.exit_code == 0, res.output
     assert _w_rows(root)["r2"].status == "walk-owed"  # type: ignore[attr-defined]
     assert "still owed: b" in res.output
+
+
+# --- lens review: the PR head is read from its own tree, and failures refuse -----------
+
+
+def test_l_security_r4_a_head_only_fragment_still_counts_as_the_heads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fragment the head carries that the working tree no longer has is still read."""
+    root = _walk_repo(tmp_path)
+    head_walk = {"strategy": "live", "harness": "b", "model": "m", "outcome": "pass",
+                 "at": "2026-11-27T08:00:00Z", "evidence": "head"}  # fmt: skip
+    other = "docs/acceptance/features/elsewhere.yaml"
+    (root / other).write_text(yaml.safe_dump({
+        "schema_version": 1, "feature": "elsewhere", "repo": "acme/gizmo",
+        "rows": [_w_row("r2", harnesses=["a", "b"], walks=[head_walk])],
+    }, sort_keys=False))  # fmt: skip
+    rows = [_w_row("r1", issues=["acme/gizmo#7"]),
+            _w_row("r2", harnesses=["a", "b"], walks=[head_walk]), _w_row("r3")]  # fmt: skip
+    (root / W_FRAGMENT).write_text(_w_fragment([r for r in rows if r["id"] != "r2"]))
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "the PR head walks b, in another fragment")
+    head = _git(root, "rev-parse", "HEAD").strip()
+    _git(root, "rm", "-q", other)  # the row moves back; the head's fragment is gone here
+    (root / W_FRAGMENT).write_text(_w_fragment(rows))
+    _git(root, "commit", "-qam", "row moved back with the head's walk")
+
+    res = _w(root, monkeypatch, "--step", "2", "--ran", "--evidence", "E", "--harness", "a",
+             "--pr-head", head)  # fmt: skip
+
+    assert res.exit_code == 0, res.output
+    assert _w_rows(root)["r2"].status == "walk-owed"  # type: ignore[attr-defined]
+
+
+def test_l_errors_r7_an_unknown_pr_head_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _walk_repo(tmp_path)
+    before = _commits(root)
+
+    res = _w(root, monkeypatch, "--step", "2", "--ran", "--evidence", "E", "--pr-head",
+             "0123456789abcdef0123456789abcdef01234567")  # fmt: skip
+
+    assert res.exit_code == 2, res.output
+    assert "is not a commit in this checkout" in res.output
+    assert _commits(root) == before
+
+
+def test_l_errors_r8_an_unreadable_cursor_named_with_run_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.commands import closeout_cmd
+
+    root = _walk_repo(tmp_path)
+    monkeypatch.setattr(closeout_cmd, "_spec_of_run", lambda r, run_id: root / W_SPEC)
+    cursor = root / "docs/superpowers/runs/r-broken.yaml"
+    cursor.parent.mkdir(parents=True)
+    cursor.write_text("run: [\n")
+    monkeypatch.chdir(root)
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
+
+    res = runner.invoke(app, ["closeout", "outcome", "--run", "r-broken", "--step", "1",
+                              "--ran", "--evidence", "E"])  # fmt: skip
+
+    assert res.exit_code == 2, res.output
+    assert "cursor of run r-broken cannot be read" in res.output
+
+
+def test_l_errors_r10_a_close_command_failure_is_reported_never_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.acceptance import walks as walks_mod
+    from fr.acceptance.model import AcceptanceError
+
+    root = _walk_repo(tmp_path)
+
+    def broken(*a, **k):  # noqa: ANN002, ANN003, ANN202
+        raise AcceptanceError("the fold cannot be read")
+
+    monkeypatch.setattr(walks_mod, "close_commands", broken)
+
+    res = _w(root, monkeypatch, "--step", "1", "--ran", "--evidence", "E")
+
+    assert res.exit_code == 2, res.output
+    assert "the outcome is recorded, but its close commands cannot be read" in res.output
+    assert "Traceback" not in res.output
