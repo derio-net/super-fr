@@ -1,3 +1,6 @@
+---
+fr_schema: 2
+---
 # Hermes Agent compatibility — design
 
 **Date:** 2026-07-23

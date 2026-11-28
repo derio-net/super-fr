@@ -111,7 +111,7 @@ minus `-design.md`), `plan:<slug>` — so an archive never rewrites a row. Other
 `#L<n>`. `fr acceptance report [--open] [--format md]` renders the derived report locally (git-ignored, never committed; `check` fails on a tracked one), `pages-check` says whether a Pages site would be no wider than the repo (it fails closed), `comment --pr N --yes` keeps the one PR report comment when `forge.report_comment` is on; `status` is the terminal nag;
 `digest` feeds the weekly "Acceptance debt" issue upsert.
 
-A row born from a spec's `## Requirements` list cites the requirement, not just
+A row born from a spec's `## Requirements` table cites the requirement, not just
 the spec: `--origin spec:<slug>#R<n>` (repeat `--origin` for several ids).
 A row only a live, operator-driven run can prove — never a unit test — carries `--verify live` (the old `post-merge` spelling migrates to it); `fr acceptance status` lists it only while it is debt (a debt status, contested, or an unstamped or stale `local`), and the PR body lists it under `## Post-merge verification owed`. `--verify <strategy|none>` takes any strategy `fr verification list` resolves, or `none` (verified some other way; the spec's `## Verification` says what); `set-status --verify` sets it too, and omitting the flag preserves what the row already carries.
 

@@ -135,7 +135,10 @@ rows:
 """
 )
 
-GOOD_SPEC = """# Thermosiphon rebuild
+GOOD_SPEC = """---
+fr_schema: 2
+---
+# Thermosiphon rebuild
 
 ## 1. Problem
 
@@ -714,7 +717,10 @@ def _splice_like_commit_7ece5a9(spec_text: str, replacement: str) -> str:
     return spec_text[:start] + replacement + spec_text[end:]
 
 
-SPLICEABLE_SPEC = """# Thermosiphon rebuild
+SPLICEABLE_SPEC = """---
+fr_schema: 2
+---
+# Thermosiphon rebuild
 
 ## 1. Problem
 
@@ -760,7 +766,7 @@ def test_a_heading_fused_mid_sentence_is_caught(tmp_path: Path) -> None:
     """
     seed_good_repo(tmp_path)
     fused = (
-        "# Thermosiphon rebuild\n\n"
+        "---\nfr_schema: 2\n---\n# Thermosiphon rebuild\n\n"
         "## Implementation Plans` into `PlanRef(plan, repo, file, …)`; `PlanMeta` carries\n"
         "`target_repo` and `parent_plan`.\n"
     )
@@ -1107,3 +1113,122 @@ def test_a_fragment_whose_feature_is_not_its_name_fails(tmp_path: Path) -> None:
         tmp_path, GOOD_FRAGMENT.replace(f"feature: {PLAN_SLUG}", "feature: 2019-03-05-other")
     )
     assert "feature" in problems, problems
+
+
+# --- spec stamp 2: the requirements table (spec 2026-11-26-spec-requirements-table R7)
+
+
+def _stamped_spec(tmp_path: Path, requirements: str, *, stamp: bool = True) -> Path:
+    front = "---\nfr_schema: 2\n---\n" if stamp else ""
+    path = tmp_path / "s-design.md"
+    path.write_text(f"{front}# S\n\n## Requirements\n\n{requirements}\n## Design\n\nProse.\n")
+    return path
+
+
+def _line_of(path: Path, needle: str) -> int:
+    return path.read_text().splitlines().index(needle) + 1
+
+
+def test_a_stamped_two_column_table_spec_is_valid(tmp_path: Path) -> None:
+    from fr.artifacts.structure import validate_spec
+
+    path = _stamped_spec(tmp_path, "| ID | Requirement |\n|----|----|\n| R1 | a \\| b |\n")
+    assert validate_spec(path) == []
+
+
+def test_a_stamped_spec_with_a_list_line_is_refused_naming_it(tmp_path: Path) -> None:
+    from fr.artifacts.structure import validate_spec
+
+    path = _stamped_spec(tmp_path, "| ID | Requirement |\n|----|----|\n| R1 | a |\n\nR2. x\n")
+    [problem] = validate_spec(path)
+    assert problem.startswith(f"line {_line_of(path, 'R2. x')}: stamped fr_schema 2")
+    assert "| ID | Requirement |" in problem
+
+
+def test_a_stamped_spec_with_only_a_list_is_refused_on_every_line(tmp_path: Path) -> None:
+    from fr.artifacts.structure import validate_spec
+
+    path = _stamped_spec(tmp_path, "R1. x\nR2. y\n")
+    problems = validate_spec(path)
+    assert [p.split(":")[0] for p in problems] == [
+        f"line {_line_of(path, 'R1. x')}",
+        f"line {_line_of(path, 'R2. y')}",
+    ]
+
+
+def test_a_stamped_spec_with_a_three_cell_row_is_refused_naming_it(tmp_path: Path) -> None:
+    from fr.artifacts.structure import validate_spec
+
+    path = _stamped_spec(tmp_path, "| ID | Requirement |\n|----|----|\n| R1 | a | b |\n")
+    [problem] = validate_spec(path)
+    assert problem.startswith(f"line {_line_of(path, '| R1 | a | b |')}:")
+    assert "3 cells, expected 2" in problem
+
+
+def test_a_stamped_legacy_table_spec_is_not_refused(tmp_path: Path) -> None:
+    from fr.artifacts.structure import validate_spec
+
+    path = _stamped_spec(
+        tmp_path, "| id | requirement | source |\n|---|---|---|\n| R1 | a | input |\n"
+    )
+    assert validate_spec(path) == []
+
+
+def test_an_unstamped_list_spec_is_not_checked_for_the_form(tmp_path: Path) -> None:
+    from fr.artifacts.structure import validate_spec
+
+    path = _stamped_spec(tmp_path, "R1. x\nR2. y\n", stamp=False)
+    assert validate_spec(path) == []
+
+
+def test_a_stamped_spec_with_a_lettered_list_line_is_refused_and_a_lettered_row_is_not(
+    tmp_path: Path,
+) -> None:
+    from fr.artifacts.structure import validate_spec
+
+    path = _stamped_spec(tmp_path, "| ID | Requirement |\n|----|----|\n| R9a | a |\n\nR9b. x\n")
+    [problem] = validate_spec(path)
+    assert problem.startswith(f"line {_line_of(path, 'R9b. x')}: stamped fr_schema 2")
+
+
+def test_a_stamped_spec_with_a_broken_row_inside_the_table_is_refused(tmp_path: Path) -> None:
+    from fr.artifacts.structure import validate_spec
+
+    path = _stamped_spec(
+        tmp_path, "| ID | Requirement |\n|----|----|\n| R1 | a |\n| R2 | b\n| R3 | c |\n"
+    )
+    [problem] = validate_spec(path)
+    assert problem.startswith(f"line {_line_of(path, '| R2 | b')}:")
+    assert "not a whole row" in problem
+
+
+def test_a_stamped_spec_whose_header_has_no_delimiter_row_is_refused(tmp_path: Path) -> None:
+    from fr.artifacts.structure import validate_spec
+
+    path = _stamped_spec(tmp_path, "| ID | Requirement |\n| R1 | a |\n")
+    [problem] = validate_spec(path)
+    assert problem.startswith(f"line {_line_of(path, '| R1 | a |')}:")
+    assert "delimiter row" in problem
+
+
+def test_a_stamped_table_spec_with_r_word_prose_is_valid(tmp_path: Path) -> None:
+    from fr.artifacts.structure import validate_spec
+
+    path = _stamped_spec(
+        tmp_path, "Rationale. see below\n\n| ID | Requirement |\n|----|----|\n| R1 | a |\n"
+    )
+    assert validate_spec(path) == []
+
+
+def test_a_spec_stamped_past_two_is_still_refused_for_a_list_line(tmp_path: Path) -> None:
+    """Lens l-tests-r3: the form check runs at `stamp >= 2`, not `== 2`. Through
+    `fr validate artifacts` a stamp newer than this fr is reported by the stamp check
+    alone, which stops there; `validate_spec` itself still refuses the list line."""
+    from fr.artifacts.structure import validate_spec
+
+    path = tmp_path / "s-design.md"
+    path.write_text("---\nfr_schema: 3\n---\n# S\n\n## Requirements\n\nR1. x\n")
+    [problem] = validate_spec(path)
+    assert problem.startswith(f"line {_line_of(path, 'R1. x')}: stamped fr_schema 3")
+    [issue] = [str(i) for i in validate_artifact(artifact_kind("spec"), path)]
+    assert "written for spec artifact version 3" in issue and "upgrade fr" in issue

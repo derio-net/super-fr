@@ -1,3 +1,6 @@
+---
+fr_schema: 2
+---
 # Migration drift scanner — `fr migrate scan`
 
 **Date:** 2026-06-11

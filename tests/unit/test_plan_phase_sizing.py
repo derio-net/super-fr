@@ -183,7 +183,7 @@ def test_an_unparseable_requirements_list_gives_one_not_checked_warning(tmp_path
     issues = _phase_sizing_issues(plan)
     assert len(issues) == 1
     assert issues[0].severity == "warn"
-    assert "Requirements list does not parse (" in issues[0].message
+    assert "Requirements section does not parse (" in issues[0].message
     assert "R2" in issues[0].message
     assert "sizing was not checked" in issues[0].message
 
@@ -449,3 +449,23 @@ def test_r8_an_ask_phase_sharing_its_only_ask_with_a_waived_phase_fails(tmp_path
     assert len(errors) == 1
     assert errors[0].startswith("phase 2 serves no ask of its own")
     assert "also served by phase(s) 1" in errors[0]
+
+
+@pytest.mark.parametrize(
+    ("requirements", "named"),
+    [
+        ("## Requirements\n\nR1. a\nR9ab. b\n", "R9ab"),
+        ("## Requirements\n\n| ID | Requirement |\n|----|----|\n| R1 | a | b |\n", "3 cells"),
+    ],
+    ids=["bad-id", "three-cell-row"],
+)
+def test_an_invalid_requirement_shape_warns_instead_of_crashing(
+    tmp_path: Path, requirements: str, named: str
+) -> None:
+    """Review p1-r1: `has_requirements` raised inside sizing's own except clause."""
+    repo = _repo(tmp_path, requirements=requirements)
+    plan = _plan(repo, P(skeleton=True), P(("row-r1",)))
+    [issue] = _phase_sizing_issues(plan)
+    assert issue.severity == "warn"
+    assert "Requirements section does not parse (" in issue.message
+    assert named in issue.message

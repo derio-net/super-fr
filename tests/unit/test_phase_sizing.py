@@ -103,6 +103,14 @@ def test_a_fragment_that_is_not_a_requirement_id_is_not_an_ask() -> None:
     assert phase_asks([_phase(1, "a")], m, SPEC_REF, {})[0].asks == frozenset()
 
 
+def test_a_lettered_requirement_id_is_an_ask() -> None:
+    """Spec 2026-11-26-spec-requirements-table R1: `R9a` is a requirement id."""
+    m = _matrix({"a": ["R9", "R9a"], "b": ["R9ab", "R9A"]})
+    got = _by_number(phase_asks([_phase(1, "a"), _phase(2, "b")], m, SPEC_REF, {}))
+    assert got[1].asks == {"R9", "R9a"}
+    assert got[2].asks == frozenset()
+
+
 def test_twenty_rows_in_one_phase_give_one_phase_with_all_their_asks() -> None:
     rows = {f"r{i}": [f"R{i}"] for i in range(1, 21)}
     m = _matrix(rows)

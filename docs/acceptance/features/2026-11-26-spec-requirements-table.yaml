@@ -1,0 +1,65 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-26-spec-requirements-table
+repo: derio-net/super-fr
+rows:
+  - id: spec-requirements-table-read
+    capability: spec requirements
+    acceptance: A spec's Requirements may be written as a two-column `| ID | Requirement
+      |` table that renders one requirement per row in any Markdown previewer; fr reads
+      it to the same ids and text as the R<n>. list and the pre-5.0 table, and the brainstorming
+      skill tells authors to write it
+    origin:
+    - spec:2026-11-26-spec-requirements-table#R1
+    - spec:2026-11-26-spec-requirements-table#R2
+    - spec:2026-11-26-spec-requirements-table#R3
+    - spec:2026-11-26-spec-requirements-table#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_spec_requirements_list.py#test_a_two_column_table_parses_like_the_list_and_the_legacy_table
+      - super-fr:tests/unit/test_spec_requirements_list.py#test_continuation_lines_join_the_requirement_with_single_spaces
+      - super-fr:tests/unit/test_spec_requirements_list.py#test_an_id_like_line_with_a_malformed_id_names_the_line
+      - super-fr:tests/unit/test_spec_requirements_prose.py#test_fr_brainstorming_names_the_table_its_stamp_and_the_escape
+    status: ci
+    notes: unit tests parse the table, the list with continuation lines and the legacy
+      table to the same requirements, and pin the skill wording
+    verify: none
+  - id: spec-requirements-table-migrate
+    capability: spec requirements
+    acceptance: Migrating artifacts rewrites every live spec's R<n>. list into the table
+      without changing any requirement's id or text, stamps it 2, leaves a spec it cannot
+      convert byte-identical and names it, and never touches an archived spec
+    origin:
+    - spec:2026-11-26-spec-requirements-table#R4
+    - spec:2026-11-26-spec-requirements-table#R5
+    - spec:2026-11-26-spec-requirements-table#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_spec_requirements_table_migration.py#test_a_list_spec_is_rewritten_to_the_table_and_stamped
+      - super-fr:tests/unit/test_spec_requirements_table_migration.py#test_an_unconvertible_spec_is_left_byte_identical_and_named
+      - super-fr:tests/unit/test_spec_requirements_table_migration.py#test_the_kind_is_at_two_and_reaches_it_from_one_hop_by_hop
+    status: ci
+    notes: unit tests run the 1 -> 2 rewrite over list, CRLF, table, legacy, prose-only
+      and unconvertible specs; the candidate walk is recorded at deliver
+    verify: candidate
+    scenario: tests/scenarios/spec-requirements-table.sh
+  - id: spec-requirements-table-valid
+    capability: spec requirements
+    acceptance: fr validate artifacts refuses a spec stamped 2 whose Requirements section
+      holds an R<n>. list line or a table row that is not exactly two cells, naming
+      the line
+    origin:
+    - spec:2026-11-26-spec-requirements-table#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_validate_artifacts.py#test_a_stamped_spec_with_a_list_line_is_refused_naming_it
+      - super-fr:tests/unit/test_validate_artifacts.py#test_a_stamped_spec_with_a_three_cell_row_is_refused_naming_it
+      - super-fr:tests/unit/test_validate_artifacts.py#test_a_stamped_legacy_table_spec_is_not_refused
+    status: ci
+    notes: unit tests run validate_spec over stamped specs with a list line, a three-cell
+      row and a legacy table
+    verify: none

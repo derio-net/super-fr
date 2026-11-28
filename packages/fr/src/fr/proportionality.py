@@ -166,7 +166,7 @@ def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]
         spec_journal_slug,
     )
     from fr.phase_sizing import phase_asks, split_decisions
-    from fr.requirements import RequirementsError, parse_requirements
+    from fr.requirements import RequirementsError, parse_requirements, requirement_order
     from fr.settings import disabled, disabled_because
 
     if disabled(repo_root, "acceptance"):
@@ -183,8 +183,11 @@ def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]
             raise RequirementsError("no spec at HEAD")
         spec_rel, spec_text = found
         requirements = parse_requirements(spec_text)
-    except RequirementsError:
-        return ["spec has no Requirements list; asks cannot be counted."]
+    except RequirementsError as e:
+        return [
+            f"spec's Requirements do not parse ({e}); write an `| ID | Requirement |` table "
+            "or an `R<n>.` list; asks cannot be counted."
+        ]
 
     try:
         if quiet_root(repo_root) is not None:
@@ -218,7 +221,7 @@ def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]
     asks = phase_asks(phases, matrix, f"{matrix.repo}:{spec_rel}", decisions)
 
     served = set().union(*(pa.asks for pa in asks)) & {r.id for r in requirements.items}
-    ordered = sorted(served, key=lambda r: int(r[1:]))
+    ordered = sorted(served, key=requirement_order)
     n = len(asks)
     count = (
         f"{n} agentic phase{'' if n == 1 else 's'} serve{'s' if n == 1 else ''} "

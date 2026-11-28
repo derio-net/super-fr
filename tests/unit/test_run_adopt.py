@@ -102,7 +102,7 @@ def _as_linked_worktree(repo: Path) -> Path:
 def _write_spec(repo: Path, rel: str = SPEC_REL) -> str:
     path = repo / rel
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("# Thermosiphon rebuild\n\nStatus: design\n")
+    path.write_text("---\nfr_schema: 2\n---\n# Thermosiphon rebuild\n\nStatus: design\n")
     return rel
 
 

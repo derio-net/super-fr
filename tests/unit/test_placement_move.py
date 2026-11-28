@@ -130,7 +130,7 @@ def repo_with_artifacts(tmp_path: Path) -> Path:
         root,
         "feat/beta",
         {
-            f"{SPECS}/{SPEC_B}-design.md": "# beta\n",
+            f"{SPECS}/{SPEC_B}-design.md": "---\nfr_schema: 2\n---\n# beta\n",
             f"{FRAG}/{SPEC_B}.yaml": _fragment(
                 SPEC_B,
                 [],

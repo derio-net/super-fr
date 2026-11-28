@@ -1,0 +1,80 @@
+schema_version: 2
+run: 2026-11-26-feat-spec-requirements-table
+captures:
+- host: h-26ba87cc
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-26T16:04:46+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: e0c01434-1137-4e4d-a10f-0dcc9639e6fe
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 88
+        cache_write: 344729
+        cache_read: 4089088
+        output: 30223
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 20
+      other:
+        usd: null
+        turns: 10
+      paperwork:
+        usd: null
+        turns: 15
+    steps:
+      (outside run):
+        usd: null
+        turns: 2
+        input: 4
+        cache_write: 89445
+        cache_read: 137082
+        output: 559
+      brainstorm:
+        usd: null
+        turns: 41
+        input: 84
+        cache_write: 255284
+        cache_read: 3952006
+        output: 29664
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 2
+          input: 4
+          cache_write: 89445
+          cache_read: 137082
+          output: 559
+        brainstorm:
+          usd: null
+          turns: 19
+          input: 40
+          cache_write: 151310
+          cache_read: 2395353
+          output: 18889
+      subagent:
+        brainstorm:
+          usd: null
+          turns: 22
+          input: 44
+          cache_write: 103974
+          cache_read: 1556653
+          output: 10775
+    units:
+      (unattributed):
+        subagent:
+          usd: null
+          turns: 22
+          input: 44
+          cache_write: 103974
+          cache_read: 1556653
+          output: 10775
+    briefs:
+      a926a5003cdf6c8bd: 2167

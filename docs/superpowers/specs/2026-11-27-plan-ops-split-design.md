@@ -1,3 +1,6 @@
+---
+fr_schema: 2
+---
 # Split plan_ops.py: self-review, the spec table, the refactor-gate read and rework
 
 Issue: derio-net/super-fr#1518 (architecture review for #1318, section 5.4 of
@@ -47,21 +50,23 @@ Excluded on purpose (issue #1518): `tick`/`complete_phase` stay in `plan_ops.py`
 
 ## Requirements
 
-R1. `_refactor_justifications` and `_TASK_ID_RE` move to `fr/record/gates.py`, their one caller.
-R2. The lint vocabulary, `self_review` and its sub-checks move to a new package `fr/plan_review/`, split into more than one module.
-R3. One helper reads a journal's entries for a scope and slug (read-resolved, missing or unparseable file is no entries); the spec-journal read of self-review and the plan-journal read of `_refactor_justifications` both use it.
-R4. `PlanEditError` moves to a new leaf module `fr/plan_errors.py` that imports nothing from `fr.plan_ops`.
-R5. The spec "Implementation Plans" table code moves to a new module `fr/spec_table.py`.
-R6. `worktree_of`, `_stage`, `_coerce_step_texts` and `_yaml_dump` move to a new private module `fr/_plan_io.py`.
-R7. Rework (`_REWORK_SUFFIX_RE` through `rework_list`, with `ReworkRecord`) moves to a new module `fr/plan_rework.py`.
-R8. No import cycle: `plan_errors`, `_plan_io`, `spec_table`, `plan_review` and `plan_rework` never import `fr.plan_ops`.
-R9. Every public name `fr.plan_ops` has today stays importable from it — `StepSpec`, `TaskSpec`, `PhaseSpec`, `PlanEditError`, `worktree_of`, `rewrite_phase_text`, `create`, `tick`, `complete_phase`, `set_tracking_issue`, `clear_tracking_issue`, `rework_create`, `rework_add_origin`, `rework_list`, `ReworkRecord`, `self_review`, `ReviewIssue`, `OPS_FR_FLOOR` — and so do `_trailing_manual_block` and `_manual_placement_issues`.
-R10. Every caller under `packages/` imports a moved name from its new home, not through `fr.plan_ops`, and a docstring under `packages/` that names a moved name's old path names its new one.
-R11. Tests that import or patch a moved private name import or patch it in its new home; no test assertion changes. The plain-`write_text` guard's parameter list widens to every new module holding a writer (`_plan_io.py`, `spec_table.py`, `plan_rework.py`), so the guard covers the same writes as before.
-R12. Behaviour is unchanged: self-review returns the same issues in the same order, and every writer writes and stages the same files.
-R13. The `plan_ops.py` budget in `test_tripwire_module_budget.py` drops to within its 400-line headroom of the new size; `plan_ops.py` stays a held module.
-R14. `docs/explainers/01-fr-goal.md` names `self_review`'s new path; every page `fr docs check` reports for a file this change edits (no page covers `plan_ops.py` itself) gets its `reviewed` stamp moved with the note `still true, import-only change` (a comma: a colon followed by a space breaks the page's YAML front matter), or an edit where a claim moved.
-R15. The PR adds the change fragment `.changes/feat-batch-arch-plan-ops-split.yaml` with `bump: patch`.
+| ID | Requirement |
+|----|-------------|
+| R1 | `_refactor_justifications` and `_TASK_ID_RE` move to `fr/record/gates.py`, their one caller. |
+| R2 | The lint vocabulary, `self_review` and its sub-checks move to a new package `fr/plan_review/`, split into more than one module. |
+| R3 | One helper reads a journal's entries for a scope and slug (read-resolved, missing or unparseable file is no entries); the spec-journal read of self-review and the plan-journal read of `_refactor_justifications` both use it. |
+| R4 | `PlanEditError` moves to a new leaf module `fr/plan_errors.py` that imports nothing from `fr.plan_ops`. |
+| R5 | The spec "Implementation Plans" table code moves to a new module `fr/spec_table.py`. |
+| R6 | `worktree_of`, `_stage`, `_coerce_step_texts` and `_yaml_dump` move to a new private module `fr/_plan_io.py`. |
+| R7 | Rework (`_REWORK_SUFFIX_RE` through `rework_list`, with `ReworkRecord`) moves to a new module `fr/plan_rework.py`. |
+| R8 | No import cycle: `plan_errors`, `_plan_io`, `spec_table`, `plan_review` and `plan_rework` never import `fr.plan_ops`. |
+| R9 | Every public name `fr.plan_ops` has today stays importable from it — `StepSpec`, `TaskSpec`, `PhaseSpec`, `PlanEditError`, `worktree_of`, `rewrite_phase_text`, `create`, `tick`, `complete_phase`, `set_tracking_issue`, `clear_tracking_issue`, `rework_create`, `rework_add_origin`, `rework_list`, `ReworkRecord`, `self_review`, `ReviewIssue`, `OPS_FR_FLOOR` — and so do `_trailing_manual_block` and `_manual_placement_issues`. |
+| R10 | Every caller under `packages/` imports a moved name from its new home, not through `fr.plan_ops`, and a docstring under `packages/` that names a moved name's old path names its new one. |
+| R11 | Tests that import or patch a moved private name import or patch it in its new home; no test assertion changes. The plain-`write_text` guard's parameter list widens to every new module holding a writer (`_plan_io.py`, `spec_table.py`, `plan_rework.py`), so the guard covers the same writes as before. |
+| R12 | Behaviour is unchanged: self-review returns the same issues in the same order, and every writer writes and stages the same files. |
+| R13 | The `plan_ops.py` budget in `test_tripwire_module_budget.py` drops to within its 400-line headroom of the new size; `plan_ops.py` stays a held module. |
+| R14 | `docs/explainers/01-fr-goal.md` names `self_review`'s new path; every page `fr docs check` reports for a file this change edits (no page covers `plan_ops.py` itself) gets its `reviewed` stamp moved with the note `still true, import-only change` (a comma: a colon followed by a space breaks the page's YAML front matter), or an edit where a claim moved. |
+| R15 | The PR adds the change fragment `.changes/feat-batch-arch-plan-ops-split.yaml` with `bump: patch`. |
 
 ## Design
 

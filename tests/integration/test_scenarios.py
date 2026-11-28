@@ -288,6 +288,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "archive-dry-run",
         "wave-queue-release-hold",
         "config-homes",
+        "spec-requirements-table",
     }
     assert on_disk == here
 
@@ -304,6 +305,10 @@ def test_verification_strategy_resolution(installed: Path, tmp_path: Path) -> No
 
 def test_shipped_verification_strategies(installed: Path, tmp_path: Path) -> None:
     _scenario("shipped-verification-strategies", installed, tmp_path)
+
+
+def test_spec_requirements_table(installed: Path, tmp_path: Path) -> None:
+    _scenario("spec-requirements-table", installed, tmp_path)
 
 
 def test_spec_verification_section(installed: Path, tmp_path: Path) -> None:

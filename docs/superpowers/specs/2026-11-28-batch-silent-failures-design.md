@@ -1,3 +1,6 @@
+---
+fr_schema: 2
+---
 # Silent failures: errors that report success or lose their reason
 
 Issues: derio-net/super-fr#1682, derio-net/super-fr#1668, derio-net/super-fr#1592,
@@ -50,64 +53,16 @@ value, and none of them says why.
 
 ## Requirements
 
-R1. When `fr models apply --harness opencode` exits non-zero during install, the install
-    continues and prints a `WARNING:` that names the exit code, `fr`'s own message (its
-    stderr, at most 12 lines, with a `… N more lines` line when cut, so the migration
-    gate's whole 6-7 line refusal, remedy included, fits) and the remedy: fix what `fr`
-    names, then run
-    `fr models apply --harness opencode`. When `fr` is not on PATH at that step, the
-    install continues and prints a `WARNING:` saying the tier models were not applied
-    because `fr` is not on PATH. An exit 0 prints no warning.
-R2. install.sh records every `WARNING:` it prints, including one printed from a function
-    or a subshell. When the install completes, its closing lines name the installed `fr`
-    version (`fr --version` of the `fr` on PATH, or that no `fr` is on PATH; either failure
-    is also recorded as a warning, a failing `fr --version` with its own stderr) and then repeat
-    every recorded warning, in the order printed, under a heading that gives their count.
-    An install with no warnings says so in one line. When `fr --version` itself fails, the
-    version line says so (`fr version: unknown (fr --version failed, exit <n>)`). An
-    install that fails (non-zero exit) repeats the warnings recorded before the failure, if
-    any, under the same heading, and its last line stays the existing
-    `install.sh failed (exit <n>). Rerun after fixing.`. The temporary files this adds are
-    removed on every exit, success included.
-R3. bootstrap.sh tells three cases apart for each release tag. A tag whose
-    `scripts/install.sh` is absent, or present without the channel marker, is skipped
-    without a message, as today. A tag whose `scripts/install.sh` git cannot read (the
-    listing or the read fails) stops bootstrap with exit 1 and
-    `ERROR: could not read scripts/install.sh at <tag>: <git's message>`, before anything
-    is checked out. When the remote's tag listing itself fails (`git ls-remote`), bootstrap
-    stops with exit 1 and `ERROR: could not list release tags: <git's message>` instead of
-    reporting that no installable version exists. A tag the remote lists but the managed
-    clone does not hold yet (pushed after this run's fetch) is not an unreadable tag: it is
-    skipped with `note: skipped <tag>: not in this clone yet (pushed after this run's
-    fetch); rerun to include it` on stderr. No tag is ever dropped without a message.
-    This holds on every path that lists tags: the default newest release, `--version RC`,
-    an explicit version, and the refusal's list of installable versions. `--version main`
-    lists no tags, as today, so an unreadable tag never blocks the development channel.
-R4. bootstrap.sh's marker check cannot read a marked `install.sh` as unmarked because of a
-    pipe: it does not pipe the file's content into a reader that may stop early.
-R5. `fr run adopt` still treats a PR whose state it cannot read as unknown (fail-open),
-    and prints one line on stderr, `warning: could not read the state of PR <url>: <reason>`.
-    This covers both ways an adapter reports an unread state: it raises (a login page, a
-    host refusal), or it fails soft and answers no state, which every adapter does for an
-    ordinary forge error; the reason for the second is the fixed `fr.forge_body.NO_STATE`.
-    The reason is the error's own message, redacted (`fr.debt.render.redact`), with control
-    and bidi characters replaced as `fr debt`'s `_clean` does, cut to one line of at most
-    300 characters. A login-page error is therefore named. This holds for both adopt entry
-    points, `fr run adopt` and the adoption inside `fr migrate`.
-    `fr.run` stays free of `typer` and console imports: the line reaches the operator
-    through the command layer.
-R6. `fr push`'s merged-PR guard still skips a PR whose state it cannot read (fail-open),
-    and prints the same one-line warning as R5 on stderr for it.
-R7. `fr debt` publishes a forge source that is unavailable because the backend does not
-    support an operation (`UnsupportedForgeOperation`) under the category
-    `not supported on <backend> (<tracking issue>)`, for example
-    `not supported on gitea (gh#611)`. It never publishes it as `forge error`. The backend
-    and the tracking issue reach the category only as fixed-shape tokens (a lowercase word;
-    `gh#<n>` or `<owner>/<repo>#<n>`), else the category is `not supported by this forge`.
-    Every other forge failure keeps its current category.
-R8. `fr debt issue` prints one line on stderr per unavailable source,
-    `unavailable: <source>: <reason>` (the reason redacted and cut as in R5), in preview and
-    with `--yes`, before it writes anything.
+| ID | Requirement |
+|----|-------------|
+| R1 | When `fr models apply --harness opencode` exits non-zero during install, the install continues and prints a `WARNING:` that names the exit code, `fr`'s own message (its stderr, at most 12 lines, with a `… N more lines` line when cut, so the migration gate's whole 6-7 line refusal, remedy included, fits) and the remedy: fix what `fr` names, then run `fr models apply --harness opencode`. When `fr` is not on PATH at that step, the install continues and prints a `WARNING:` saying the tier models were not applied because `fr` is not on PATH. An exit 0 prints no warning. |
+| R2 | install.sh records every `WARNING:` it prints, including one printed from a function or a subshell. When the install completes, its closing lines name the installed `fr` version (`fr --version` of the `fr` on PATH, or that no `fr` is on PATH; either failure is also recorded as a warning, a failing `fr --version` with its own stderr) and then repeat every recorded warning, in the order printed, under a heading that gives their count. An install with no warnings says so in one line. When `fr --version` itself fails, the version line says so (`fr version: unknown (fr --version failed, exit <n>)`). An install that fails (non-zero exit) repeats the warnings recorded before the failure, if any, under the same heading, and its last line stays the existing `install.sh failed (exit <n>). Rerun after fixing.`. The temporary files this adds are removed on every exit, success included. |
+| R3 | bootstrap.sh tells three cases apart for each release tag. A tag whose `scripts/install.sh` is absent, or present without the channel marker, is skipped without a message, as today. A tag whose `scripts/install.sh` git cannot read (the listing or the read fails) stops bootstrap with exit 1 and `ERROR: could not read scripts/install.sh at <tag>: <git's message>`, before anything is checked out. When the remote's tag listing itself fails (`git ls-remote`), bootstrap stops with exit 1 and `ERROR: could not list release tags: <git's message>` instead of reporting that no installable version exists. A tag the remote lists but the managed clone does not hold yet (pushed after this run's fetch) is not an unreadable tag: it is skipped with `note: skipped <tag>: not in this clone yet (pushed after this run's fetch); rerun to include it` on stderr. No tag is ever dropped without a message. This holds on every path that lists tags: the default newest release, `--version RC`, an explicit version, and the refusal's list of installable versions. `--version main` lists no tags, as today, so an unreadable tag never blocks the development channel. |
+| R4 | bootstrap.sh's marker check cannot read a marked `install.sh` as unmarked because of a pipe: it does not pipe the file's content into a reader that may stop early. |
+| R5 | `fr run adopt` still treats a PR whose state it cannot read as unknown (fail-open), and prints one line on stderr, `warning: could not read the state of PR <url>: <reason>`. This covers both ways an adapter reports an unread state: it raises (a login page, a host refusal), or it fails soft and answers no state, which every adapter does for an ordinary forge error; the reason for the second is the fixed `fr.forge_body.NO_STATE`. The reason is the error's own message, redacted (`fr.debt.render.redact`), with control and bidi characters replaced as `fr debt`'s `_clean` does, cut to one line of at most 300 characters. A login-page error is therefore named. This holds for both adopt entry points, `fr run adopt` and the adoption inside `fr migrate`. `fr.run` stays free of `typer` and console imports: the line reaches the operator through the command layer. |
+| R6 | `fr push`'s merged-PR guard still skips a PR whose state it cannot read (fail-open), and prints the same one-line warning as R5 on stderr for it. |
+| R7 | `fr debt` publishes a forge source that is unavailable because the backend does not support an operation (`UnsupportedForgeOperation`) under the category `not supported on <backend> (<tracking issue>)`, for example `not supported on gitea (gh#611)`. It never publishes it as `forge error`. The backend and the tracking issue reach the category only as fixed-shape tokens (a lowercase word; `gh#<n>` or `<owner>/<repo>#<n>`), else the category is `not supported by this forge`. Every other forge failure keeps its current category. |
+| R8 | `fr debt issue` prints one line on stderr per unavailable source, `unavailable: <source>: <reason>` (the reason redacted and cut as in R5), in preview and with `--yes`, before it writes anything. |
 
 ## Design
 

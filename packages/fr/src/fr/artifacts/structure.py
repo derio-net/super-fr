@@ -597,6 +597,19 @@ def validate_spec(path: Path) -> list[str]:
     if heading is not None and not heading.exact:
         problems.append(near_miss_message(heading))
 
+    # Spec 2026-11-26-spec-requirements-table R7: from stamp 2 the requirements are
+    # the `| ID | Requirement |` table. Function-local imports: the registry imports
+    # this module at load. A file at 1 is stale, and its migration owns the form.
+    from fr.artifacts.registry import ArtifactStampError, _read_spec_stamp
+    from fr.requirements import table_form_problems
+
+    try:
+        stamp = _read_spec_stamp(path)
+    except ArtifactStampError:
+        stamp = None  # the stamp check reports it
+    if stamp is not None and stamp >= 2:
+        problems.extend(table_form_problems(path.read_text(), stamp))
+
     # Spec 2026-11-04-repo-feature-settings R7, R8: a spec the repo's policy forbids.
     root = _checkout_of(path)
     if root is not None:

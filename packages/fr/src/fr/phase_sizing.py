@@ -40,7 +40,7 @@ WAIVING: frozenset[str] = frozenset({"tier", "risk-first", "review-size"})
 """The reasons that clear the floor: the phase exists for a reason other than
 an ask of its own."""
 
-_ASK_RE = re.compile(r"^R[1-9][0-9]*$")
+_ASK_RE = re.compile(r"^R[1-9][0-9]*[a-z]?$")  # a requirement id (fr.requirements R1)
 _REASON_RE = re.compile(r"^\s*(" + "|".join(re.escape(r) for r in REASONS) + r"):")
 
 

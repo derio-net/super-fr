@@ -1,0 +1,159 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Spec requirements as a two-column table — reader, validator, 1→2 rewrite
+    migration, prose
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - spec-requirements-table-read
+  - spec-requirements-table-migrate
+  - spec-requirements-table-valid
+  tier: hard
+  files:
+  - packages/fr/src/fr/requirements.py
+  - packages/fr/src/fr/artifacts/registry.py
+  - packages/fr/src/fr/artifacts/spec_requirements_table.py
+  - packages/fr/src/fr/artifacts/__init__.py
+  - packages/fr/src/fr/artifacts/structure.py
+  - tests/unit/test_spec_requirements_list.py
+  - tests/unit/test_spec_requirements_table_migration.py
+  - tests/unit/test_spec_requirements_prose.py
+  - tests/unit/test_validate_artifacts.py
+  - tests/unit/test_migration_runner.py
+  - tests/scenarios/spec-requirements-table.sh
+  - tests/integration/test_scenarios.py
+  - plugins/super-fr/skills/fr-brainstorming/SKILL.md
+  - plugins/super-fr/skills/fr-acceptance/SKILL.md
+  - plugins/super-fr/skills/fr-plan/SKILL.md
+  - .opencode/skills/**
+  - .hermes/skills/**
+  - docs/explainers/fr-brainstorming-and-plan.md
+  - docs/explainers/fr-acceptance.md
+  - docs/explainers/01-fr-goal.md
+  - docs/superpowers/specs/*.md
+  - docs/acceptance/features/2026-11-26-spec-requirements-table.yaml
+  - .changes/feat-spec-requirements-table.yaml
+  - .test_durations
+  estimate_lines: 1000
+tasks:
+- number: 1
+  title: Reader — two-column table form (R1, R2)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_spec_requirements_list.py add tests that (a) a `## Requirements` section holding `| ID | Requirement |` (any case), its delimiter row and rows `| R1 | text a |`, `| R2 | b `x \| y` |` parses with `parse_requirements` to the same `Requirements` as the list `R1. text a` / `R2. b `x | y`` and as the legacy `| id | requirement | source |` table with the same ids and text; (b) `has_requirements` is true for the table; (c) a row with three cells (`| R1 | a | b |`) raises `RequirementsError` whose message names that row's 1-based line number; (d) a row without a leading or trailing `|` ends the table and the section then holds no requirement (raises "holds no"), and the message names both forms; (e) the existing malformed / repeated / out-of-order id errors fire for table rows. Run `uv run pytest tests/unit/test_spec_requirements_list.py -q --no-cov` and confirm the new tests fail.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/requirements.py add `_TABLE_HEADER = ["id", "requirement"]` and `_table_rows(lines, first_line_no) -> list[tuple[str, str, int]] | None`: find the first `_is_row` line whose `_split_row` cells lowercased equal `_TABLE_HEADER`, skip the next line (delimiter), then read consecutive `_is_row` lines; a row whose cell count is not 2 raises `RequirementsError(f"line {n}: requirements table row has {k} cells, expected 2 (escape a literal | as \\|)")`. `None` when no such header. `_rows` tries `_legacy_rows`, then `_table_rows`, then `_list_rows`. Update the module docstring to describe all three forms (table first, as the form authors write) and the "holds no" error to name both: "`## Requirements` holds no requirement (an `| ID | Requirement |` table row or an `R<n>. <text>` line)". Run the test file: green.
+- number: 2
+  title: Reader — continuation lines, id-like prefixes, the shared layout (R3)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: add tests that (a) `R1. first` followed by `second line` and `third` (no blank line) parses R1's text as `first second line third`; (b) a blank line between `R1. a` and `R2. b` is accepted and both parse; (c) `R1. a`, blank, `some prose`, `R2. b` still parses R1 and R2 (the reader keeps ignoring prose between requirements) but `list_layout(text).prose` names the prose line's number; (d) a line `R9a. text` (and `- R9a. text`, `R0. x`) raises `RequirementsError` naming the line and the malformed id; (e) `list_layout` returns, per requirement, its id, joined text, first and last line index, and the section's first and last requirement line — for a table or legacy table spec it returns `None`. Confirm they fail.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: add `_ID_LIKE_RE = re.compile(r"^(?:[-*]\s+)?R\S*\.\s")` and a frozen dataclass `ListLayout(items: tuple[ListItem, ...], prose: tuple[int, ...], start: int, end: int)` with `ListItem(id, text, first, last)` (0-based indices into the section's lines, plus 1-based `line_no` for messages). `list_layout(spec_text) -> ListLayout | None` walks the section once: an `_LIST_ITEM_RE` match opens an item; a line matching `_ID_LIKE_RE` but not `_LIST_ITEM_RE` with a valid id raises; a non-blank line directly after an item line or its continuation extends the item (text joined with one space, each line stripped); a blank line closes the item; a non-blank line after a blank line is prose — recorded in `prose` only when a later requirement line follows. `_list_rows` is rebuilt on `list_layout` so the reader and the rewrite share one walk. Run the test file: green; run `uv run pytest tests/unit/test_plan_review*.py tests/unit/test_proportionality*.py -q --no-cov -n 2` and fix any fixture that relied on first-line-only text.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: keep `_locate_section` as the one section finder; make sure `_table_rows`, `_legacy_rows` and `list_layout` take the same `(lines, first_line_no)` pair and that no other module re-implements an `R<n>.` regex (`grep -rn 'R\[1-9\]' packages/*/src` lists only requirements.py and phase_sizing's id-only `_ASK_RE`). `uv run ruff check packages/fr/src/fr/requirements.py && uv run mypy packages/fr/src`.
+- number: 3
+  title: Validator — stamp 2 refuses the list form and bad rows (R7)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: in tests/unit/test_validate_artifacts.py add tests over tmp specs: front matter `fr_schema: 2` plus (a) a valid two-column table → no problem; (b) an `R1. x` line in `## Requirements` → a problem naming its line; (c) a table row `| R1 | a | b |` → a problem naming its line; (d) a legacy `| id | requirement | source |` table → no problem; (e) an unstamped spec with the list form → no form problem. Confirm they fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/artifacts/structure.py `validate_spec`, after the heading checks, import `_read_spec_stamp` from fr.artifacts.registry inside the function (the registry imports structure at load) and `fr.requirements` likewise; when the stamp is 2 or more, locate the section and report each line matching `_LIST_ITEM_RE`/`_ID_LIKE_RE` (`line N: stamped fr_schema 2 but the requirement is in the R<n>. list form; write it as an | ID | Requirement | table row`) and each two-column-table row whose cell count is not 2 (catch the `RequirementsError` from `_table_rows` and report its message). A legacy three-column header is left alone. Run the tests: green.
+- number: 4
+  title: Migration spec 1 → 2 — list rewritten to the table (R4, R5, R6)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: create tests/unit/test_spec_requirements_table_migration.py, modelled on the spec Test Plan heading repair's tests. Over a tmp repo (docs/superpowers/specs/x-design.md) assert: (a) a list spec with a wrapped requirement and an R2 holding `a | b` is rewritten to the header, delimiter and rows `| R1 | <joined> |`, `| R2 | a \| b |`, with one blank line before and after the table, every line outside the requirement lines byte-identical, and `fr_schema: 2` front matter added by the runner; (b) the same over a CRLF file keeps `\r\n` on every line; (c) a two-column-table spec, a legacy-table spec, a prose-only section and a spec with no section are only stamped (body bytes unchanged); (d) prose between requirements, an `R9a.` line and a forced round-trip mismatch (monkeypatch the row builder to drop a character) each leave the file byte-identical and unstamped, and the runner's failure for it names the file, the line, the cause and the hand fix; (e) a spec under docs/superpowers/implemented/specs/ is never located; (f) the spec kind reaches 2 from 1 hop by hop (`MIGRATIONS` chain) and `fr validate artifacts` passes on the migrated file. Confirm they fail.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/artifacts/spec_requirements_table.py with a docstring citing spec 2026-11-26-spec-requirements-table R4–R6 and the crash-window rule. `_rewrite(path)`: `read_utf8`, `splitlines(keepends=True)`; locate the section; if `list_layout` is None (table, legacy table, no section) or holds no item, return None (stamp only). Refuse (raise `ValueError` with `f"{path}:{line}: {cause} — {fix}"`) on `layout.prose` (fix: "move the prose out of the requirements list"), on a `RequirementsError` (fix: "fix the requirement id" or as its message), and after building. Build: lines before the first item; a blank line (in the file's own line ending, taken from the first requirement line) unless the previous line is blank; `| ID | Requirement |`, `|----|-------------|`, one `| <id> | <text.replace("|", "\\|")> |` per item; a blank line unless the next kept line is blank; the lines after the last item. Round trip: `parse_requirements(new) == parse_requirements(old)` else refuse (fix: "join the requirement's lines into one line in the spec, then re-run fr migrate artifacts --yes"). Then `write_text_atomic`. Register `SchemaMigration(kind="spec", from_version=1, to_version=2, fn=_rewrite, description="spec: Requirements list → | ID | Requirement | table")`; import it in fr/artifacts/__init__.py beside the other migration imports; move `spec` to `current_version=2` in registry.py with a comment citing the spec. Run the migration tests and `uv run pytest tests/unit/test_migration_runner.py tests/unit/test_tripwire_artifact_kinds.py -q --no-cov -n 2`: green.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR + quality gate: the failure text must be the one an operator sees from the CLI-entry gate — run `uv run fr migrate artifacts` (preview) over a tmp repo holding the prose-between case and check the printed reason carries the file:line, cause and fix verbatim; adjust the raise if the runner wraps it. `uv run ruff check packages/ tests/ && uv run ruff format packages/ tests/ && uv run mypy packages/fr/src`.
+- number: 5
+  title: This repo's own specs, the candidate scenario, prose and mirrors (R4, R8)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Run `uv run fr migrate artifacts` (preview) in the workspace and read every spec action. For a spec it refuses (expected: 2026-11-27-triage-leaves-split's `R9a.`, if still live), do not edit another feature's requirements: record a plan-journal discovery naming the file and line, and stop to ask the operator how to proceed before `--yes`. Otherwise run `uv run fr migrate artifacts --yes`; check `git show --stat HEAD` holds only specs, and `git diff HEAD~1 -- docs/superpowers/specs/2026-11-26-spec-requirements-table-design.md` shows this spec's R1–R8 as table rows. Run `uv run fr validate artifacts`: all valid.
+  - id: P1.T5.S2
+    text: |-
+      Write tests/scenarios/spec-requirements-table.sh on the pattern of tests/scenarios/acceptance-effective-matrix-fold.sh (source _common.sh, a fresh `git init` world with a bare origin, `fail` on each check): a fixture repo with docs/superpowers/plans/ (fr-enabled) and a list spec holding a wrapped R1 and an R2 with `a | b`; capture the installed fr's `python -c` read of `fr.requirements.parse_requirements` (via the install's interpreter) before; run the installed `fr migrate artifacts --yes`; assert the spec now has `fr_schema: 2`, the `| ID | Requirement |` header and an `a \| b` cell, that the read after equals the read before, and that `fr validate artifacts` exits 0. Add `test_spec_requirements_table(installed, tmp_path)` calling `_scenario("spec-requirements-table", installed, tmp_path)` to tests/integration/test_scenarios.py. Run `uv run pytest tests/integration/test_scenarios.py -m "" -k "spec_requirements_table or every_scenario" -q --no-cov`: green.
+  - id: P1.T5.S3
+    text: |-
+      Prose (R8): in plugins/super-fr/skills/fr-brainstorming/SKILL.md §2 replace the "plain numbered list, one requirement per line — `R1. <text>`" sentence with: a two-column table `| ID | Requirement |`, one row per requirement (`| R1 | <text> |`), the spec starting with front matter `fr_schema: 2`, a literal `|` written `\|`. In fr-acceptance/SKILL.md (:114) and fr-plan/SKILL.md (:69) say "Requirements table". Update docs/explainers/fr-brainstorming-and-plan.md (:27, :121), docs/explainers/fr-acceptance.md and docs/explainers/01-fr-goal.md (:864) to describe the table, and add a dated `reviewed` note to each. Add tests/unit/test_spec_requirements_prose.py pinning that the fr-brainstorming SKILL.md names `| ID | Requirement |`, `fr_schema: 2` and `\|`, and no longer says `R1. <text>`. Run `uv run --no-project python scripts/sync-opencode.py && uv run --no-project python scripts/sync-hermes.py`, then `uv run pytest tests/unit/test_spec_requirements_prose.py tests/unit/test_tripwire_opencode_skills_sync.py tests/unit/test_tripwire_hermes_skills_sync.py tests/unit/test_tripwire_skill_tool_neutrality.py -q --no-cov -n 2` and `uv run fr docs check`: green.
+  - id: P1.T5.S4
+    text: |-
+      Add .changes/feat-spec-requirements-table.yaml with `bump: minor` and `summary: Spec requirements are written as an | ID | Requirement | table that renders in any Markdown previewer; fr migrate artifacts rewrites live specs' R<n>. lists into it (spec kind 2).` Move the three acceptance rows with `uv run fr acceptance set-status`: spec-requirements-table-read and -valid to `ci` with their unit test levels, -migrate to `ci` with the migration test level (the candidate walk is recorded at deliver). Run the fast tier last: `uv run pytest --fr-scope -n 2 -q --no-cov`, plus `uv run ruff check packages/ tests/` and `uv run --no-project python scripts/check-change-fragment.py origin/main`: green.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-28T13:08:35+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-11-28T13:08:35+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-28T13:08:35+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-28T13:08:35+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-28T13:08:35+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-28T13:08:35+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-28T13:08:35+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-28T13:08:35+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-28T13:08:35+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-11-28T13:08:35+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-28T13:08:35+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-28T13:08:35+00:00'
+      note: null
+    P1.T5.S3:
+      state: x
+      ticked_at: '2026-11-28T13:08:35+00:00'
+      note: null
+    P1.T5.S4:
+      state: x
+      ticked_at: '2026-11-28T13:08:35+00:00'
+      note: null
+  completion:
+    at: '2026-11-28T13:08:35+00:00'
+    note: null
+    observed_prs: []

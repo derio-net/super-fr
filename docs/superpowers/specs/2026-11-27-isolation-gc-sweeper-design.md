@@ -1,3 +1,6 @@
+---
+fr_schema: 2
+---
 # isolation/local.py: garbage collection moves to a `GcSweeper` collaborator
 
 Issues: derio-net/super-fr#1521.
@@ -55,42 +58,16 @@ its annotation, so it does not join that guard.
 
 ## Requirements
 
-R1. A new module, `packages/fr/src/fr/isolation/gc.py`, defines `GcSweeper(target)`. It holds
-the fourteen moved methods under their current names, and `GcSweeper.gc(dry_run)` holds the
-current body of `LocalWorktreeDevcontainerTarget.gc`. `LocalWorktreeDevcontainerTarget.gc`
-keeps its signature and docstring summary and returns `GcSweeper(self).gc(dry_run)`. None of
-the fourteen methods remains on the target, and no forwarding method is left.
-R2. The sweeper calls every target-owned step through its target: `_labelled_containers`,
-`_sweep_dangling_images`, `_label_reap`, `_pr_from`, `run` and `repo_root`. So a
-`HostWorktreeTarget` sweep uses that class's docker-less overrides. The sibling rules do not
-change: `_reap_or_classify` and `_gc_stale_state` route through `target_for_state`, and
-`_merged_by_content` builds `type(target)(state.repo_root, runner=target.run,
-gc_spawner=_noop_gc_spawn)`.
-R3. gc behaves exactly as before: the same `GcAction` list in the same order, the same
-host-wide flock (a second sweep still returns `[]`), and the same per-workspace failure
-isolation (one workspace's error is recorded and the sweep goes on).
-R4. The nine test call sites change their receiver from the target to `GcSweeper(<that
-target>)` and nothing else. Every other gc and host-worktree test passes unchanged.
-R5. One new test shows that a `GcSweeper` calls its own target's overrides. It saves a
-host-mode state record (`profile="host"`, `target="worktree"`) whose worktree is gone, so
-`_gc_stale_state` routes it to a docker-less owner whatever the sweeper wraps. Over a
-`HostWorktreeTarget` the sweep sends no `docker` command (its `_labelled_containers` and
-`_sweep_dangling_images` overrides are reached through the target) and retires the record
-(verdict `orphan`, action `reaped`). Over a `LocalWorktreeDevcontainerTarget` the same sweep
-sends `docker ps -a --filter label=devcontainer.local_folder …` (from `_labelled_containers`).
-The two cases differ only in the sweeper's target class.
-R6. `fr.isolation.gc` is added to `ISOLATION_MODULES`, and
-`packages/fr/src/fr/isolation/gc.py` to `REMEDY_FILES` because it carries remedy text. The `isolation/local.py` budget in
-`tests/unit/test_tripwire_module_budget.py` is lowered to at most 50 lines above the module's
-new length, with a comment naming #1521.
-R7. `fr.isolation.gc` does not import `fr.isolation.local` at module level, so the two modules
-form no import cycle. `local.py` imports `GcSweeper` at module level. A test imports
-`fr.isolation.gc` first in a fresh interpreter (a subprocess, `python -P -c "import
-fr.isolation.gc"`) and expects exit 0; a module-level cycle would make that import fail.
-R8. A `patch` change fragment, `.changes/feat-batch-arch-isolation-gc.yaml`, records the move.
-The `reviewed` stamp of `docs/explainers/fr-isolation.md`, which covers
-`packages/fr/src/fr/isolation/**`, gets a note that this is a refactor with no reader-visible
-change.
+| ID | Requirement |
+|----|-------------|
+| R1 | A new module, `packages/fr/src/fr/isolation/gc.py`, defines `GcSweeper(target)`. It holds the fourteen moved methods under their current names, and `GcSweeper.gc(dry_run)` holds the current body of `LocalWorktreeDevcontainerTarget.gc`. `LocalWorktreeDevcontainerTarget.gc` keeps its signature and docstring summary and returns `GcSweeper(self).gc(dry_run)`. None of the fourteen methods remains on the target, and no forwarding method is left. |
+| R2 | The sweeper calls every target-owned step through its target: `_labelled_containers`, `_sweep_dangling_images`, `_label_reap`, `_pr_from`, `run` and `repo_root`. So a `HostWorktreeTarget` sweep uses that class's docker-less overrides. The sibling rules do not change: `_reap_or_classify` and `_gc_stale_state` route through `target_for_state`, and `_merged_by_content` builds `type(target)(state.repo_root, runner=target.run, gc_spawner=_noop_gc_spawn)`. |
+| R3 | gc behaves exactly as before: the same `GcAction` list in the same order, the same host-wide flock (a second sweep still returns `[]`), and the same per-workspace failure isolation (one workspace's error is recorded and the sweep goes on). |
+| R4 | The nine test call sites change their receiver from the target to `GcSweeper(<that target>)` and nothing else. Every other gc and host-worktree test passes unchanged. |
+| R5 | One new test shows that a `GcSweeper` calls its own target's overrides. It saves a host-mode state record (`profile="host"`, `target="worktree"`) whose worktree is gone, so `_gc_stale_state` routes it to a docker-less owner whatever the sweeper wraps. Over a `HostWorktreeTarget` the sweep sends no `docker` command (its `_labelled_containers` and `_sweep_dangling_images` overrides are reached through the target) and retires the record (verdict `orphan`, action `reaped`). Over a `LocalWorktreeDevcontainerTarget` the same sweep sends `docker ps -a --filter label=devcontainer.local_folder …` (from `_labelled_containers`). The two cases differ only in the sweeper's target class. |
+| R6 | `fr.isolation.gc` is added to `ISOLATION_MODULES`, and `packages/fr/src/fr/isolation/gc.py` to `REMEDY_FILES` because it carries remedy text. The `isolation/local.py` budget in `tests/unit/test_tripwire_module_budget.py` is lowered to at most 50 lines above the module's new length, with a comment naming #1521. |
+| R7 | `fr.isolation.gc` does not import `fr.isolation.local` at module level, so the two modules form no import cycle. `local.py` imports `GcSweeper` at module level. A test imports `fr.isolation.gc` first in a fresh interpreter (a subprocess, `python -P -c "import fr.isolation.gc"`) and expects exit 0; a module-level cycle would make that import fail. |
+| R8 | A `patch` change fragment, `.changes/feat-batch-arch-isolation-gc.yaml`, records the move. The `reviewed` stamp of `docs/explainers/fr-isolation.md`, which covers `packages/fr/src/fr/isolation/**`, gets a note that this is a refactor with no reader-visible change. |
 
 ## Design shape
 

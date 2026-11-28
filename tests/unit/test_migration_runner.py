@@ -454,9 +454,14 @@ def test_the_shipped_runner_never_writes_to_a_closed_world_artifact(tmp_path: Pa
 
     assert report.failed == ()
     for name, p in paths.items():
-        if name in ("run", "matrix", "journal"):
+        if name in ("run", "matrix", "journal", "spec"):
             continue  # stamped on purpose — see the block comment above
         assert _unchanged(p, frozen[name]), f"the runner wrote to a {name} artifact"
+    # The spec moved 1 -> 2 (spec 2026-11-26-spec-requirements-table R4): a spec
+    # with no `## Requirements` section is only stamped, its body untouched.
+    assert (
+        paths["spec"].read_text() == "---\nfr_schema: 2\n---\n# A spec\n\n## Implementation Plans\n"
+    )
     # The journal moved 1 -> 2 (spec 2026-10-11-debt-engine §E) and 2 -> 3
     # (spec 2026-10-22-fr-ops §D) and 3 -> 4 (spec 2026-11-12-review-lenses §3.B):
     # a stamp line is prepended, and nothing else of the body moves.
@@ -475,10 +480,12 @@ def test_the_shipped_runner_never_writes_to_a_closed_world_artifact(tmp_path: Pa
 
 
 def test_the_shipped_registry_registers_nothing_for_the_version_one_kinds() -> None:
-    for name in (
-        "spec",
-    ):  # matrix moved off 1 (spec 2026-09-28-requirements-traceability-design.md §H);
-        # journal moved off 1 (spec 2026-10-11-debt-engine-design.md §E)
+    # matrix moved off 1 (spec 2026-09-28-requirements-traceability-design.md §H);
+    # journal moved off 1 (spec 2026-10-11-debt-engine-design.md §E); spec moved
+    # off 1 (spec 2026-11-26-spec-requirements-table R4).
+    for name, kind in ARTIFACT_KINDS.items():
+        if kind.current_version != 1:
+            continue
         assert MIGRATIONS.schema_migrations(name) == (), (
             f"{name} is at current_version=1; a schema migration for it would make the "
             f"runner stamp a live file whose model is extra='forbid'"
