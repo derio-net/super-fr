@@ -1,0 +1,60 @@
+# Step record. Fill it as you work and commit it with your work; then
+#   fr run resolve 2026-11-28-feat-batch-s2-alacarte-settings --step implement-phase --item phase/1 --record docs/superpowers/runs/2026-11-28-feat-batch-s2-alacarte-settings.records/implement-phase__phase-1.yaml
+# applies all of it in one commit (spec 2026-09-25 §5.C).
+schema_version: 12
+run: 2026-11-28-feat-batch-s2-alacarte-settings
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T2.S1, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T5.S1, P1.T5.S2, P1.T6.S1, P1.T6.S2, P1.T6.S3]
+refactor:
+  P1.T3: "discover_names was moved out of workflow_cmd.py as the green step itself; refuse_disabled is the one check every caller imports, nothing duplicated was left"
+  P1.T4: "required_sections is the one derivation render and deliver share; the render skips each off section in place, leaving nothing to fold"
+  P1.T5: "the forced git keys live in one STEALTH_GIT mapping beside QUIET_FORGE and the render reads it; the push reorder was the cleanup"
+  P1.T6: "skill prose, mirrors, docs and a scenario; no code to clean"
+journal:
+  - kind: decision
+    id: p1-schema-line-at-current
+    phase: 1
+    title: fr settings init renders the schema line at the current schema (3)
+    body: >-
+      `#schema: 1` uncommented with every other line would name `workflows` and
+      `forge.pr_sections` under schema 1, which R1 refuses. The init file's schema line now
+      shows SCHEMA_VERSION, so a file uncommented whole still parses; the model default
+      stays 1 (a file naming no schema-3 key may stay at 1).
+  - kind: decision
+    id: p1-push-checks-before-ask
+    phase: 1
+    title: fr push runs the stealth content scan and the subject check before the ask
+    body: >-
+      Under stealth every code push now asks. Asking the operator to approve a push fr then
+      refuses (an fr path in the range, a subject off the template) wastes the approval, so
+      `refuse_stealth_content` and `check_subjects` moved before `require_approval`; the squash
+      and the pusher still run after it, and the pusher scans again.
+  - kind: decision
+    id: p1-driven-triage-message
+    phase: 1
+    title: one push-ask-with-driven-triage rule, its message chosen by placement
+    body: >-
+      A settings-check rule's message may now be a callable of the settings
+      (`fr.settings.check.Message`), so the stealth wording (stealth forces git.push ask, remove
+      the driven .fr/triage.yaml keys) keeps the rule's single id. Under stealth a tracking
+      configuration space not created yet holds no triage file, so the rule reads nothing then
+      instead of refusing every stealth check.
+  - kind: discovery
+    id: p1-stealth-walks-need-approval
+    phase: 1
+    title: forcing git.push/git.pr ask under stealth broke the stealth placement walks
+    body: >-
+      tests/scenarios/placement-stealth.sh and _placement_walk.sh pushed code with `fr push`
+      and delivered a PR the record emitted. Both now refuse under stealth (R7, R9). A
+      scenario has no operator or harness, so `tests/scenarios/_ask_approve.sh` approves a
+      request the way a session does: the request's own `fr journal add` line plus an answer
+      in a Claude Code transcript built from the captured AskUserQuestion exchange
+      (FR_TRANSCRIPT_ROOT). The walk's local-path origin names no forge repository, so `fr pr
+      create` cannot reach the forge there; the walk asserts deliver's refusal and then records
+      the PR on the cursor exactly as `fr pr create` does after the forge answers. The stealth
+      content unit tests take the ask as approved (`approved_asks` in stealth_repo.py); the
+      approval itself stays pinned in test_git_policy_push.py and test_settings_stealth.py.
+resolves: []
+evidence: {}
