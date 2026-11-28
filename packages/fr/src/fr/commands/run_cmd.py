@@ -171,18 +171,16 @@ from fr.run.evidence.target import parse_evidence as _parse_evidence
 from fr.run.evidence.target import reviews_the_feature as _reviews_the_feature
 from fr.run.evidence.walk import verify_walk as _verify_walk
 from fr.run.evidence.walk import walk_obligation as _walk_obligation
-from fr.run.provenance import (
-    GATE_DECISIONS,
-    cleared_gates,
-    clears_gate,
-    flush_gate_decisions,
-    gate_degradation_notice,
-    gate_provenance,
-    gates,
-    queue_gate_decision,
-    refuse_gate_flags,
-    refuse_missing_emits,
-)
+from fr.run.provenance import GATE_DECISIONS as _GATE_DECISIONS
+from fr.run.provenance import cleared_gates as _cleared_gates
+from fr.run.provenance import clears_gate as _clears_gate
+from fr.run.provenance import flush_gate_decisions as _flush_gate_decisions
+from fr.run.provenance import gate_degradation_notice as _gate_degradation_notice
+from fr.run.provenance import gate_provenance as _gate_provenance
+from fr.run.provenance import gates as _gates
+from fr.run.provenance import queue_gate_decision as _queue_gate_decision
+from fr.run.provenance import refuse_gate_flags as _refuse_gate_flags
+from fr.run.provenance import refuse_missing_emits as _refuse_missing_emits
 from fr.run.reshape import ReshapeError, diff_ids, reshape
 from fr.run.steps import complete_step as _complete_step
 from fr.run.steps import derive_run_id
@@ -2259,7 +2257,7 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
         # rich's default folding would break a long token mid-string and
         # produce invalid JSON.
         try:
-            notice = gate_degradation_notice()
+            notice = _gate_degradation_notice()
         except HarnessError as e:
             err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
             raise typer.Exit(2) from e
@@ -2482,7 +2480,7 @@ def _resolve_member(
     # review this gate exists to make impossible.
     if state_value == "done":
         with _refusals():
-            refuse_missing_emits(key, member.emits or group.emits, emitted_map, grec.emitted)
+            _refuse_missing_emits(key, member.emits or group.emits, emitted_map, grec.emitted)
     if state_value == "done" and "plan:ticks" in (member.emits or group.emits):
         _refactor_gate(repo_root, state, key, _item_phase(item) if item is not None else None)
     verified = _verified_evidence(
@@ -2776,7 +2774,7 @@ def _queue_exit_baseline(repo_root: Path, state: RunState) -> None:
     except Exception:  # noqa: BLE001 — advisory: an unreadable exit leaves no baseline
         return
     with _refusals():
-        queue_gate_decision(
+        _queue_gate_decision(
             repo_root, spec_rel, BASELINE_ID, title="exit when spec-review resolved", body=body
         )
 
@@ -2820,7 +2818,7 @@ def _resolve_body(
 
     repo_root = resolve_repo_root()
     _UNOBSERVED.set(None)
-    GATE_DECISIONS.set(None)
+    _GATE_DECISIONS.set(None)
     try:
         state = _load_or_exit(repo_root, run_id)
         manifest = _resolve_manifest_for_state(repo_root, state)
@@ -2854,7 +2852,7 @@ def _resolve_body(
         # has no gate path: before this, the gate flags were dropped silently
         # here (review r1-7's refusal only covered top-level steps).
         with _refusals():
-            refuse_gate_flags(step_id)
+            _refuse_gate_flags(step_id)
     if parent is not None:
         _resolve_member(
             repo_root,
@@ -2923,14 +2921,14 @@ def _resolve_body(
         )
         raise typer.Exit(2)
     gate_flags = no_questions or reason is not None or questions is not None
-    if gate_flags and not clears_gate(step, record, state_value):
+    if gate_flags and not _clears_gate(step, record, state_value):
         # Review r1-7: silently ignored flags read as honoured ones.
         with _refusals():
-            refuse_gate_flags(step_id)
+            _refuse_gate_flags(step_id)
     gate_by: AnsweredBy | None = None
-    if clears_gate(step, record, state_value):
+    if _clears_gate(step, record, state_value):
         with _refusals():
-            gate_by = gate_provenance(
+            gate_by = _gate_provenance(
                 repo_root,
                 step_id,
                 record,
@@ -2980,7 +2978,7 @@ def _resolve_body(
                     "emitted": dict(emitted_map) if emitted_map else record.emitted,
                 }
             )
-            flush_gate_decisions(repo_root)
+            _flush_gate_decisions(repo_root)
             _save_run_state(repo_root, _with_step(state, step_id, new_record))
             console.print(
                 f"{step_id}: operator gate cleared — `fr run advance {run_id}` now executes it",
@@ -3089,7 +3087,7 @@ def _resolve_body(
         # `pr`-less resolve exists to fetch, and before the gate's queued
         # journal decision is written — the last refusal before any write.
         with _refusals():
-            refuse_missing_emits(step_id, step.emits, emitted_map, record.emitted)
+            _refuse_missing_emits(step_id, step.emits, emitted_map, record.emitted)
     if rebind is not None and state_value == "done":
         state, manifest = _rebound(state, rebind, step_id), rebind
         console.print(f"{step_id}: run rebound onto {state.workflow}", soft_wrap=True)
@@ -3108,7 +3106,7 @@ def _resolve_body(
         answered_by=gate_by,
     )
     deliver.deliver_local_stamp_write(repo_root, local_stamps)
-    flush_gate_decisions(repo_root)
+    _flush_gate_decisions(repo_root)
     _save_run_state(repo_root, new_state)
     console.print(f"{step_id}: {state_value}")
     if state_value == "done" and step_id in ("brainstorm", *_spec_review_ids(repo_root, new_state)):
@@ -3980,7 +3978,7 @@ def check_cmd(
     record = state.steps.get(state.cursor)
     step_state = record.state if record is not None else "unknown"
     console.print(f"{state.run}: cursor={state.cursor} ({step_state})")
-    for gate in cleared_gates(state):
+    for gate in _cleared_gates(state):
         # An observed operator answer is the gate working — nothing to report.
         # An agent clearance, or an operator answer fr only has the caller's
         # word for (R11, p3-r2), is reported in the sentence `gates` prints.
@@ -4066,7 +4064,7 @@ def gates_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
         err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
 
-    statuses = gates(state, manifest)
+    statuses = _gates(state, manifest)
     if not statuses:
         console.print(f"{state.run}: no `gate: operator` steps recorded as cleared")
         return

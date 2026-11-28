@@ -22,8 +22,8 @@ BUDGETS: dict[str, int] = {
     # run-verdict (#1519): slice 1 moved the derived verifiers to fr/run, slice 2 the lookup,
     # slice 3 the deliver gates (fr/run/deliver.py), slice 4 the briefs (fr/run/brief.py),
     # slice 5 the evidence verifiers (fr/run/evidence/), slice 6 (the last of #1519) the gate
-    # provenance (fr/run/provenance.py): 4093 lines, +20 headroom
-    f"{SRC}commands/run_cmd.py": 4115,
+    # provenance (fr/run/provenance.py): 4091 lines, +20 headroom
+    f"{SRC}commands/run_cmd.py": 4111,
     # +25 each: batch closeout-truth (gh#1494/#1496/#1497/#1569) changes the close-out steps
     # these modules hold; the split they need is #1516 (hand-back and close-out leaves).
     # triage_batch_cmd.py, 8300: main's landing-method `_landing_hold` (spec 2026-11-26 R2,
