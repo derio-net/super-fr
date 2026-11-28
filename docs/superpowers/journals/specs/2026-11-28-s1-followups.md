@@ -201,3 +201,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-28-s1-followups-p2 created=2026-11-28T08:22:19+00:00 -->
 ### phase-split-2026-11-28-s1-followups-p2 · decision · ask: the shell and TypeScript readers are operator decision q3's own ask (R7-R9), reviewed apart from the Python side
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-28-s1-followups-p3 created=2026-11-28T08:22:22+00:00 -->
+### phase-split-2026-11-28-s1-followups-p3 · decision · ask: #1699, configuration argv from the protected tip (R11-R13)
