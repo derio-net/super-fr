@@ -13288,6 +13288,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-28T13:47:53.601945Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-28T13:47:57.402282Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -14983,6 +14998,11 @@ batches:
     runner: herdr
     handle: w3X:pA
     branch: feat/batch-tester-gate-auto-pass
+  - kind: approval
+    at: '2026-11-28T13:46:58.202967Z'
+    pr: 1771
+    head: f296e85200e647ac8883484022485ae3c8a6931b
+    patch_id: 0d8b526b373579236e39a174ffd570c7d1464016
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
@@ -16622,6 +16642,16 @@ queues:
     main: 9aefd594f5428890eb36037d26e5caa92fb54ef3
     entries:
     - batch: silent-failures
+  - kind: queue_built
+    at: '2026-11-28T13:47:37.869955Z'
+    slot: 1
+    sha: 608d55585be96efd744e7b5168472832a6aebd7d
+    entry:
+      batch: ops-gate-truth
+    head: cbf44258cd8a81bdf99840a3d39c0352c21b3d62
+    patch_id: f2caee1439d68ecefd1cfdad303ce7b815fc6dcf
+    base: 9aefd594f5428890eb36037d26e5caa92fb54ef3
+    parent: 9aefd594f5428890eb36037d26e5caa92fb54ef3
 queue_requests:
 - kind: queue_add
   at: '2026-11-27T15:25:05.595235Z'
