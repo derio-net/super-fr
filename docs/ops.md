@@ -224,7 +224,8 @@ A run whose plan carries any op (or whose spec declares `gate: devops`) is held 
 brief for it. The stage record on the host can hold all 8 stages. Then, if the run's
 Definition of Done (`fr run dod <run-id>`) is discharged, the brief says that the stage is
 complete and names `fr isolation down --branch <branch>`. If not, it names each item still
-owed. The brief's one command is:
+owed. `fr run dod` runs on the host and writes no file itself; fr may first migrate stale
+files, as for every `fr run` command. The brief's one command is:
 
 ```bash
 fr ops gate --run <run-id>          # preview the 8 stages

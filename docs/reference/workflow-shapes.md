@@ -45,7 +45,8 @@ fr run reshape <run-id>               # move a drifted cursor onto the shape's c
 fr workflow check <shape>             # validate a shape; --all checks every one found
 ```
 
-`fr run dod` reads only. fr derives the Definition of Done from the run. It holds the items
+`fr run dod` writes no artifact itself (the CLI-entry gate may migrate first, as for every
+`fr run` verb). fr derives the Definition of Done from the run. It holds the items
 of each post-merge gate, the plan's `[manual]` phases and the open `owed` entries of the
 run's journals. The close-out brief and the DevOps brief that `fr pickup --run` prints end
 with it.

@@ -307,3 +307,18 @@ def test_an_unobservable_gate_records_unobserved_and_warns(
     assert "unobserved" in " ".join(result.stderr.split())
     deliver = units.evidence_of(load_run_state(repo, "r1").steps["deliver"], "step/deliver")
     assert deliver.get("unobserved") == "tests", deliver
+
+
+def test_fr_run_dod_is_refused_inside_a_devcontainer_workspace_like_every_fr_run_verb(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ops-gate-truth p3-r2: `fr run dod` runs host-side, like the rest of `fr run`."""
+    repo = _git_repo(tmp_path / "wt")
+    (repo / "packages" / "fr").mkdir(parents=True)
+    _marker(repo, "worktree", "devcontainer")
+    _in_container(monkeypatch)
+
+    result = runner.invoke(app, ["run", "dod", "r"], env={"FR_REPO_ROOT": str(repo)})
+
+    assert result.exit_code == 2, result.output
+    assert f"cd {repo.resolve()} && uv run fr run" in " ".join(result.output.split())

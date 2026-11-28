@@ -149,7 +149,8 @@ Run `fr run dod <run-id>`. It prints the run's **Definition of Done**: each item
 held gate owns (ops, Test Plan steps and rows), the plan's `[manual]` phases, and the open
 `owed` entries of the run's journals. Each item is either discharged or owed, with a reason.
 fr derives this list from what the spec, plan and journals already say, so you never write
-it. The command changes nothing and exits 1 while any item is owed. The close-out brief that
+it. The command writes no file itself, though fr may first migrate stale files, as for every
+`fr run` command. It runs on the host and exits 1 while any item is owed. The close-out brief that
 `fr pickup --run` prints ends with the same list.
 
 ## What about old work, and the DevOps stage?

@@ -213,8 +213,14 @@ it, and it says the same, after `every stage is already done; nothing ran`.
 `fr pickup --run` follows the same rule. Once all eight stages are on record, it does not
 print the DevOps brief again. It says the stage is complete only when the Definition of Done
 is discharged, and otherwise names what is still owed. Every brief ends with the Definition
-of Done. To read it at any time, run `fr run dod <run-id>` (add `--json` for a script). It
-changes nothing, and exits 0 when every item is discharged, 1 when one is owed.
+of Done. To read it at any time, run `fr run dod <run-id>` on the host (add `--json` for a
+script). It writes no file itself. Like every `fr run` command, fr may first migrate stale
+files. It exits 0 when every item is discharged, 1 when one is owed, and 2 when it cannot
+read the run, for example a plan the run recorded that is no longer there.
+
+Inside the stage, the pull request's own records prove nothing here either. A walk, an
+outcome, a resolved `owed` entry or a ticked manual phase that the PR head carries does not
+discharge an item. Tick the phase or resolve the entry on the ops branch instead.
 
 ## What does the stage never do?
 

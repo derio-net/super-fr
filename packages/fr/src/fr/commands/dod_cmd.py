@@ -22,8 +22,10 @@ def dod_cmd(
 ) -> None:
     """Print a run's Definition of Done, derived from its gates, plan and journals.
 
-    Read-only. Exit 0 when every item is discharged, 1 when one is owed, 2 when the run
-    or its inputs cannot be read.
+    It writes no artifact itself; like every `fr run` verb, the CLI-entry gate may migrate
+    stale artifacts first, and it runs host-side (refused in a devcontainer-mode workspace).
+    Exit 0 when every item is discharged, 1 when one is owed, 2 when the run or its inputs
+    cannot be read (a plan the run recorded but that is neither live nor archived included).
     """
     from fr.run.dod import DodError, definition_of_done, dod_lines
 
