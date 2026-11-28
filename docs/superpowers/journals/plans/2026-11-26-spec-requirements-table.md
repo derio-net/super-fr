@@ -348,3 +348,6 @@ A fence after the first requirement refuses (9b1fd954c); the pinning test became
 ### p1-r8-resolved · finding [fixed] · resolves p1-r8: numbered lists, plus bullets, quotes and nested bullets were flattened into running text (phase 1)
 
 Bullet pattern widened to -, *, + and N./N); a quote line starts its own <br>; nesting kept as &nbsp;&nbsp; per level, same in reader and cell (9b1fd954c; test_list_structure_is_kept_in_the_fold).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r9 created=2026-11-28T17:56:24+00:00 phase=1 state=open review_scope=in -->
+### p1-r9 · finding [open] (reviewer: in scope) · a trailing backslash hard break before a join rendered a literal <br> (phase 1)
