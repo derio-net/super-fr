@@ -251,8 +251,9 @@ def init_stealth(root: Path, text: str) -> str:
     """Write the target's settings (from `render_init("stealth")`): `<target-dir>/.fr/
     settings.yaml` on the tracking repo's `<branch>-config`, then, before fr 9.2 only, the
     same bytes as `<target-dir>/settings.yaml` on `<branch>` (R5, R6, R24; spec
-    2026-11-28-s1-followups R4), each pushed compare-and-swap. Refuses an unreachable tracking repo or a missing branch before
-    writing, and a file that is already at either path."""
+    2026-11-28-s1-followups R4), each pushed compare-and-swap. Refuses an unreachable
+    tracking repo or a missing branch before writing, and a file that is already at either
+    path."""
     from fr.config.space import stealth_config_space, write_settings
     from fr.git_policy.templates import fr_message
     from fr.placement import stealth
