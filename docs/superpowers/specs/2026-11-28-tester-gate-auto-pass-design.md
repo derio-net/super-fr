@@ -33,80 +33,105 @@ for a PR outside a batch, provided an fr run delivered it.
 
 ## Requirements
 
-R1. A wave-driver pass over the whole scope (no `--batch` selection) treats each merged PR in `facts.gated_prs` that no batch of the state file delivered the same way it treats a gated landed batch: it reads the rows the PR's held gates hold on the repo's default branch, keyed on the PR's head branch, and plans a `gate-pass` for each held gate whose rows all read `walked`.
-R2. The rules of the batch route hold unchanged for these PRs: a run-level gate that no row inherits is never passed by walked rows, a `devops` gate promoted by the plan's ops is never passed by walked rows, and a gate with no row passes only through `fr gate pass`.
-R3. The pass labels each open issue that those rows cite `fr:awaiting-live` when it lacks the label, at most once per issue per pass, across batches and these PRs together.
-R4. Executing such a `gate-pass` does what a batch's does: it swaps `gate:<g>` for `gate:<g>-passed` on the merged PR, comments why (when comments are on), and closes the PR's fr-owned owed trackers for that gate (gate-backfill R12), under the same forge-ledger settings.
-R5. A PR whose head branch no run cursor names on the default branch has no rows, and nothing is passed or labelled for it. A PR whose rows cannot be read is reported once per pass and nothing is planned for it. A failed forge write is reported, makes `--once` exit 1, and is planned again on the next pass.
-R6. A drive narrowed with `--batch` plans nothing for PRs outside a batch.
-R7. The board keeps listing these PRs as before; a card leaves its lane when the next collect reads the passed label.
+R1. A wave-driver pass over the whole scope (no `--batch` selection) treats each loose gated PR the same way it treats a gated landed batch. A loose gated PR is a merged PR in `facts.gated_prs` that is not the merged PR of a batch with no close-out event. The pass reads the rows that the PR's held gates hold on the repo's default branch, through the run cursor that delivered the PR, and plans a `gate-pass` for each held gate whose rows all read `walked`.
+R2. The rules of the batch route hold unchanged for these PRs. Walked rows never pass a run-level gate that no row inherits, and never pass a `devops` gate that the plan's ops promoted. A held gate with no row passes only through `fr gate pass`.
+R3. The pass labels each open issue that those rows cite `fr:awaiting-live` when it lacks the label. It does this at most once per issue per pass, across batches and loose PRs together.
+R4. Executing such a `gate-pass` does what a batch's does. It swaps `gate:<g>` for `gate:<g>-passed` on the merged PR, comments why (when comments are on), and closes the PR's fr-owned owed trackers for that gate (gate-backfill R12), under the same forge-ledger settings.
+R5. The cursor that delivered a loose PR is the one cursor, live or archived, on the default branch whose `branch` is the PR's head branch. When that cursor records a `pr`, it must name this PR's number. No cursor means no rows, and nothing is passed or labelled. A cursor whose `pr` names another PR also means no rows. More than one cursor naming the branch makes the rows unreadable.
+R6. When a loose PR's rows cannot be read, the driver reports it once, as it does for a batch, and plans nothing for that PR. A failed forge write is reported, makes `--once` exit 1, and is planned again on the next pass.
+R7. A drive narrowed with `--batch` plans nothing for loose PRs.
+R8. A batch with a close-out event whose merged PR still holds a gate is a loose PR under R1. The batch route skips every closed-out batch (`batch_drive.py:1484`, `_ledgers`), and the board already lists its PR outside its batch (`lanes.unlisted_gated_prs`).
+R9. The board keeps listing these PRs as before. A card leaves its lane when the next collect reads the passed label.
 
 ## Design shape
 
 ```
 packages/fr/src/fr/triage/
-  pr_gates.py          + NEW, pure: the gate actions of one ledger, batch or not
-                         gate_actions(owner, ledger, awaiting_unlabelled, labelled) -> [Action]
-                         loose_ledgers(facts, batches) -> [(repo, GateLedger)]   # R1, R6 input
-  batch_drive.py       ~ _gate_actions -> pr_gates.gate_actions(batch.id, ...)
-                       ~ drive_pass: after the batches, for each snap.loose_ledgers entry
-                         with rows read -> pr_gates.gate_actions(...)           # R1-R3
+  batch_drive_types.py ~ + GatedRow, GateLedger (moved from batch_drive, re-exported there)
+                       + LooseLedger(repo, number, head_ref, ledger: GateLedger)
+                       ~ Action: + repo: str = ""        # set when batch == "" (a loose PR)
+  pr_gates.py          + NEW, pure, imports only batch_drive_types and fr.labels:
+                         gate_actions(owner, repo, ledger, awaiting_unlabelled, labelled) -> [Action]
+                         loose_prs(facts, batches) -> [LooseLedger]   # R1, R8; rows None
+  batch_drive.py       ~ _gate_actions -> pr_gates.gate_actions(batch.id, "", ...)
                        ~ Snapshot: + loose_ledgers: tuple[LooseLedger, ...] = ()
-  batch_drive_types.py ~ Action: + repo: str = ""   # set when batch == "" (a loose PR)
+                       ~ drive_pass: after the batches loop, each loose ledger with rows read
+                         -> pr_gates.gate_actions("", repo, ...), sharing `labelled`   # R1-R3
+  ledger.py            ~ gated_rows_at(checkout, ref, branch, *, pr: int | None = None)
+                         _run_text: with pr, refuse >1 cursor on the branch, and no rows
+                         when the cursor's `pr` names another number                  # R5
 packages/fr/src/fr/commands/
-  triage_batch_cmd.py  ~ Snapshot(...): loose_ledgers=self._loose_ledgers(...) when no --batch
-                       ~ _act: a loose awaiting-live / gate-pass runs before the batch lookup,
-                         on action.repo                                         # R4, R5
-  triage_drive_loose.py + NEW (if the budget needs it): _loose_ledgers' reads through
-                         the existing _gated_rows cache
+  triage_batch_cmd.py  ~ _gated_rows(repo, branch, label, pr=None)   # was (repo, batch)
+                       ~ Snapshot(...): loose_ledgers=loose_ledgers(self, ...) when no --batch
+                       ~ _act: a loose awaiting-live / gate-pass runs before the batch lookup
+  triage_drive_loose.py + NEW: loose_ledgers(driver, facts, judgements, unread): fills rows
+                         through driver._gated_rows                                   # R6, R7
 ```
 
 ## Design
 
+### Types
+
+`GatedRow` and `GateLedger` move from `batch_drive.py` to `batch_drive_types.py`, beside
+`Action`. `batch_drive` re-exports both, so `ledger.py`, `lanes.py` and the tests keep
+their imports. `LooseLedger(repo, number, head_ref, ledger)` is new there. This keeps
+`pr_gates` free of `batch_drive`, which calls it, so the two never import each other.
+
 ### Planning (pure)
 
-`fr.triage.pr_gates` holds the body of today's `_gate_actions`, keyed on a ledger rather
-than a batch. Its owner argument is the action's `batch` (the batch id, or `""` for a PR
-outside a batch); for `""` it also sets `Action.repo`. `batch_drive._gate_actions` becomes
-a call to it, so the two routes share one rule (R2).
+`fr.triage.pr_gates.gate_actions(owner, repo, ledger, awaiting_unlabelled, labelled)` holds
+the body of today's `_gate_actions`. *owner* becomes the action's `batch`: the batch id, or
+`""` for a loose PR, in which case each action also carries `repo`. `batch_drive._gate_actions`
+calls it with the batch id, so both routes share one rule (R2).
 
-`loose_ledgers(facts, batches)` returns each PR of `facts.gated_prs` whose `(repo,
-number)` is not the merged PR of any batch in the state file (`batch_pr`), as a
-`LooseLedger(repo, head_ref, GateLedger(pr, labels))`. A batch's PR keeps going through
-its batch, even when the batch is closed out, because its ledger and close-out are the
-batch's.
+`pr_gates.loose_prs(facts, batches)` returns a `LooseLedger` for each PR of `facts.gated_prs`
+whose `(repo, number)` is not the merged PR (`batch_pr`) of a batch without a close-out
+event (R1, R8). Its `ledger` is `GateLedger(pr, frozenset(labels))` with `rows` None.
 
-`Snapshot` gains `loose_ledgers`, default empty. `drive_pass`, after the batches loop,
-calls `gate_actions` for each loose ledger whose `rows` were read, sharing the pass's
-`labelled` set (R3). Those with `rows is None` plan nothing.
+`Snapshot.loose_ledgers` defaults to empty. After the batches loop, `drive_pass` calls
+`gate_actions("", l.repo, l.ledger, ...)` for each loose ledger whose `rows` were read. It
+shares the pass's `labelled` set (R3). A ledger whose `rows` is None plans nothing.
 
 ### Reads (the command)
 
-The command fills `loose_ledgers` only when the drive is not narrowed by `--batch` (R6).
-For each loose PR in a repo it could read, it calls the same `_gated_rows` read and cache
-that batches use, keyed on `(repo, tip, head_ref)`, and copies `rows`, `run_gate`,
-`run_gate_inherited` and `ops_promoted` into the ledger. A `TriageError` is reported once
-with the PR's number and leaves `rows` None (R5). `gated_rows_at` returns `NO_RUN` (no
-rows) when no cursor names the branch, so such a PR plans nothing (R5).
+`Driver._gated_rows(repo, branch, label, pr=None)` replaces `(repo, batch)`. The batch
+caller passes `recorded_branch(batch)` and the batch id as *label*. The cache key becomes
+`(repo, tip, branch, pr)`, and the warning names *label*. The report stays
+`_report_once`, so it is printed once per drive process for each read and error (R6).
+
+`triage_drive_loose.loose_ledgers(driver, facts, judgements, unread)` is called only when
+the drive has no `--batch` selection (R7). For each `pr_gates.loose_prs` entry in a repo
+that is not unread, it calls `driver._gated_rows(repo, head_ref, f"PR #{n}", pr=n)` and
+copies `rows`, `run_gate`, `run_gate_inherited` and `ops_promoted` into the ledger.
+
+`ledger.gated_rows_at` gains `pr`. With `pr` set, `_run_text` collects every cursor naming
+the branch. More than one raises `TriageError` (unreadable, R6). One whose `pr` url does
+not end in `/<number>` returns `NO_RUN`. No cursor also returns `NO_RUN` (R5). A batch
+read passes no `pr` and behaves as today.
 
 ### Execution
 
 `_act` looks up the action's batch before it reaches `awaiting-live` and `gate-pass`. An
 action with `batch == ""` and `repo` set is dispatched before that lookup, to the existing
 `_label_awaiting` and `_pass_gate` with `action.repo`. Both already work from the action
-alone, so R4 needs no new writer. A loose action is never held by a claim (`_held_now`
-holds batch ids).
+alone, so R4 needs no new writer. A claim never holds a loose action, because
+`_held_now` holds only batch ids.
 
 `triage_batch_cmd.py` sits 4 lines under its line budget
-(`tests/unit/test_tripwire_module_budget.py`). The new reads go in a new module beside
-it, and the edits there stay net neutral or the budget moves in the same diff with its
-reason.
+(`tests/unit/test_tripwire_module_budget.py`). The `_gated_rows` signature change, the
+`Snapshot` argument and the `_act` branch go there, and the reads go in
+`triage_drive_loose.py`. The edits there must stay within the budget, or the budget
+moves in the same diff with its reason.
 
 ### What does not change
 
-The board (`lanes.py`, `kanban.py`, `views.py`) is untouched: it reads facts only, and the
-hint is now true for a PR whose branch a run cursor names. `fr gate pass` is untouched.
-No artifact shape changes: `Snapshot` and `Action` are in-memory values.
+The board (`lanes.py`, `kanban.py`, `views.py`) is untouched: it reads facts only. For
+a PR whose branch an fr run's cursor names, the hint "walk its gated rows" is now true.
+For a gated PR that no fr run delivered (a gate-backfill adoption or a hand-labelled PR),
+walking rows still cannot pass the gate, and the hint stays wrong. That case is left open
+and filed as a follow-up: a fix needs a facts-level signal of whether a cursor exists.
+`fr gate pass` is untouched. No artifact shape changes, because `Snapshot`, `Action` and
+the ledgers are in-memory values.
 
 ## Verification
 
@@ -117,7 +142,9 @@ settle.ci: report — batch tester-gate-auto-pass: the wave driver owns this PR'
 
 - loose-gated-pr-rows-walked-pass: none — unit tests drive `drive_pass` and the driver's executor with a fake forge and a fixture default branch
 - loose-gated-pr-awaiting-live: none — unit tests drive `drive_pass` over batches and loose PRs citing the same issue
-- loose-gated-pr-no-pass-without-evidence: none — unit tests cover a PR with no run cursor, unreadable rows, a narrowed drive and a failed write
+- loose-gated-pr-no-pass-without-evidence: none — unit tests cover a PR with no run cursor, a cursor naming another PR, two cursors on one branch, unreadable rows, a narrowed drive and a failed write
+- loose-gated-pr-batch-guards: none — unit tests drive `drive_pass` over loose PRs whose gate is a run gate no row inherits, an ops-promoted devops gate, or a held gate with no rows
+- closed-out-batch-gated-pr-pass: none — unit tests drive `drive_pass` over a closed-out batch whose merged PR holds a walked tester gate
 
 The run's `candidate` walk installs the branch into a throwaway prefix and smokes it. Each
 row is proven by the CI tests named on its line. None needs a released build, so there is
