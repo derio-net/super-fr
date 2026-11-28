@@ -228,10 +228,13 @@ def _commit_on(
 
 def pr_policy(product: Path) -> str:
     """`git.pr` of the product checkout's settings (`auto` | `ask`): the same setting `fr
-    pr create` honours, read where the run is (under stealth, the target's workspace)."""
+    pr create` honours, read where the run is (under stealth, the target's workspace).
+    Under stealth it is the tracking file's own value, never the forced `ask`: these PRs
+    are on the tracking repo, not the target (alacarte R8)."""
     from fr.settings import load_settings
 
-    return str(load_settings(product).settings.git.pr)
+    eff = load_settings(product)
+    return str(eff.config_pr if eff.config_pr is not None else eff.settings.git.pr)
 
 
 def _approve(product: Path, head: str, request_head: str) -> Path | None:

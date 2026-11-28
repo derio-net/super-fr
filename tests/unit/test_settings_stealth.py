@@ -340,3 +340,156 @@ def test_sync_refuses_a_malformed_config_branch_file_in_the_absent_state(
     ref = stealth.parse_ref(f"{track}@main")
     with pytest.raises(SettingsError):
         stealth.sync_plan_target(state.worktree, ref, "local--origin")
+
+
+# --- stealth confirms every code push (spec 2026-11-28-alacarte-settings R7-R9) -------
+
+
+def _push_config_files(track: Path, tmp_path: Path, files: dict[str, str]) -> None:
+    """`local--origin/.fr/<name>` for each file, on the tracking repo's `main-config`."""
+    clone = tmp_path / "push-config-files"
+    git(tmp_path, "clone", "-q", str(track), str(clone))
+    git(clone, "config", "user.name", "t")
+    git(clone, "config", "user.email", "t@example.invalid")
+    git(clone, "checkout", "-q", "--orphan", "main-config")
+    git(clone, "rm", "-rqf", ".")
+    (clone / "local--origin/.fr").mkdir(parents=True)
+    for name, text in files.items():
+        (clone / "local--origin/.fr" / name).write_text(text)
+    git(clone, "add", "-A")
+    git(clone, "commit", "-qm", "config")
+    git(clone, "push", "-q", "origin", "main-config")
+
+
+def test_stealth_forces_push_and_pr_to_ask(tmp_path: Path) -> None:
+    target, track = stealth_pair(tmp_path)
+    state = _up(target, track)
+    effective = load_settings(state.worktree)
+    assert (effective.settings.git.push, effective.settings.git.pr) == ("ask", "ask")
+    assert effective.sources["git.push"] == "stealth"
+    assert effective.sources["git.pr"] == "stealth"
+    assert effective.config_pr == "auto"
+
+
+def test_an_explicit_push_auto_in_the_tracking_file_is_refused(tmp_path: Path) -> None:
+    target, track = stealth_pair(tmp_path)
+    _push_target_settings(track, tmp_path, "git:\n  push: auto\n")
+    state = _up(target, track)
+    assert "git.push" in load_settings(state.worktree).contrary
+    problems = check_settings(state.worktree)
+    assert [p.id for p in problems] == ["stealth-forge-explicit"]
+    assert "git.push" in problems[0].message and "git.pr" not in problems[0].message.split(
+        " is set"
+    )[0]
+
+
+def test_config_change_prs_follow_the_tracking_files_own_git_pr(tmp_path: Path) -> None:
+    from fr.config.change import pr_policy
+
+    target, track = stealth_pair(tmp_path)
+    state = _up(target, track)
+    assert pr_policy(state.worktree) == "auto"
+
+
+def test_config_pr_keeps_an_ask_the_tracking_file_sets(tmp_path: Path) -> None:
+    from fr.config.change import pr_policy
+
+    target, track = stealth_pair(tmp_path)
+    _push_target_settings(track, tmp_path, "git:\n  pr: ask\n")
+    state = _up(target, track)
+    assert load_settings(state.worktree).config_pr == "ask"
+    assert pr_policy(state.worktree) == "ask"
+    assert check_settings(state.worktree) == []
+
+
+def test_driven_triage_under_stealth_names_the_triage_keys_as_the_fix(tmp_path: Path) -> None:
+    target, track = stealth_pair(tmp_path)
+    _push_config_files(
+        track,
+        tmp_path,
+        {"settings.yaml": "placement: stealth\n", "triage.yaml": "post_merge: [make]\n"},
+    )
+    state = _up(target, track)
+    problems = check_settings(state.worktree)
+    assert [p.id for p in problems] == ["push-ask-with-driven-triage"]
+    message = problems[0].message
+    assert "placement stealth forces git.push: ask" in message
+    assert "post_merge" in message and "remove" in message
+
+
+def _stealth_ws(tmp_path: Path) -> Path:
+    from tests.unit.test_push_ask_placement import SLUG
+
+    target, track = stealth_pair(tmp_path)
+    ws = _up(target, track, branch="fix/s").worktree
+    git(ws, "config", "user.name", "t")
+    git(ws, "config", "user.email", "t@example.invalid")
+    from fr.cli import app
+
+    result = CliRunner().invoke(
+        app,
+        ["journal", "add", "--scope", "debug", "--slug", SLUG, "--kind", "discovery",
+         "--title", "the root cause", "--body", "x"],
+        env={**os.environ, "FR_REPO_ROOT": str(ws)},
+    )  # fmt: skip
+    assert result.exit_code == 0, result.output
+    return ws
+
+
+def _fr_push(ws: Path):
+    from fr.cli import app
+
+    return CliRunner().invoke(app, ["push"], env={**os.environ, "FR_REPO_ROOT": str(ws)})
+
+
+def _requests(ws: Path) -> list[str]:
+    git_dir = Path(git(ws, "rev-parse", "--absolute-git-dir").strip())
+    found = git_dir / "fr" / "requests"
+    return sorted(p.name for p in found.iterdir()) if found.is_dir() else []
+
+
+def test_stealth_push_with_no_code_pending_asks_nothing(tmp_path: Path) -> None:
+    ws = _stealth_ws(tmp_path)
+    git(ws, "push", "-q", "origin", "fix/s")  # the remote branch is at HEAD
+
+    result = _fr_push(ws)
+
+    assert result.exit_code == 0, result.output
+    assert "nothing to push" in result.output
+    assert _requests(ws) == []
+
+
+def test_stealth_push_with_a_code_commit_asks(tmp_path: Path) -> None:
+    ws = _stealth_ws(tmp_path)
+    git(ws, "push", "-q", "origin", "fix/s")
+    (ws / "code.txt").write_text("x\n")
+    git(ws, "add", "code.txt")
+    git(ws, "commit", "-qm", "fix(x): code")
+
+    result = _fr_push(ws)
+
+    assert result.exit_code == 2, result.output
+    assert "git.push: ask" in " ".join(result.output.split())
+    assert _requests(ws) == ["push-fix-s.json"]
+
+
+def test_a_stealth_state_write_reads_no_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target, track = stealth_pair(tmp_path)
+    ref = stealth.parse_ref(f"{track}@main")
+    wt = stealth.ensure_worktree(target, ref)
+    git(wt, "config", "user.name", "t")
+    git(wt, "config", "user.email", "t@example.invalid")
+
+    def _boom(*_a: object, **_k: object) -> None:
+        raise AssertionError("a state write must not read settings")
+
+    monkeypatch.setattr("fr.settings.load_settings", _boom)
+    monkeypatch.setattr("fr.settings.load.load_settings", _boom)
+    (wt / "state.txt").write_text("s\n")
+    out = stealth.commit_and_push(
+        ref, wt, [wt / "state.txt"], "state", stealth.plain_commit, target_remote=None
+    )
+    assert out.committed
+    assert "state.txt" in tracked_files(track)

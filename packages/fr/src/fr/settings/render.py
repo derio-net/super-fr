@@ -97,8 +97,9 @@ def render_init(placement: str = "repo") -> str:
             "## read from that ref: an edit has no effect until it is pushed there. fr keeps",
             "## the same bytes as <target-dir>/settings.yaml on <branch> (S1 R6): edit both.",
             "## Stealth sets the forge keys itself (labels, comments and issues off, pr_body",
-            "## minimal): they are shown at those values, and an explicit contrary value is",
-            "## refused by `fr settings check` and `fr run start`.",
+            "## minimal) and git.push and git.pr to ask (code reaches the target only after",
+            "## the operator confirms): they are shown at those values, and an explicit",
+            "## contrary value is refused by `fr settings check` and `fr run start`.",
             "## Every other key is commented out at its default; to change one, drop the single",
             "## leading `#` of its line (lines starting `##` are prose).",
         ]
@@ -118,10 +119,11 @@ def render_init(placement: str = "repo") -> str:
 
 
 def _stealth_forge(line: str) -> str:
-    """A commented forge key at stealth's own value (R5)."""
+    """A commented forge or git key at stealth's own value (R5; alacarte R6, R7)."""
     from fr.placement.stealth import QUIET_FORGE
+    from fr.settings.load import STEALTH_GIT
 
-    for key, value in QUIET_FORGE.items():
+    for key, value in {**QUIET_FORGE, **STEALTH_GIT}.items():
         stripped = line.lstrip("#")
         if stripped.strip().startswith(f"{key}:") and line.startswith("#"):
             indent = stripped[: len(stripped) - len(stripped.lstrip())]

@@ -196,6 +196,11 @@ def push_cmd() -> None:
         remote = remote_of(repo_root)
         refuse_closed_pr(repo_root)
         issue = run_issue(repo_root)
+        rng = unpushed(repo_root, remote, branch)
+        if outside_repo(repo_root) == STEALTH and not _code_pending(rng):
+            # alacarte R9: stealth asks only for a push that adds code to the target.
+            console.print(f"nothing to push to {remote}", soft_wrap=True)
+            return
         if settings.git.push == "ask":
             require_approval(
                 repo_root,
@@ -206,7 +211,6 @@ def push_cmd() -> None:
                 git_dir=git_dir,
                 still_current=push_still_current(repo_root, git_dir, branch, head),
             )
-        rng = unpushed(repo_root, remote, branch)
         # Before the squash rewrites anything; the one pusher scans again (pr1431-r1).
         refuse_stealth_content(repo_root, remote, branch)
         # R14 and R13 are the product branch's: `fr` is never subject-checked or squashed.
