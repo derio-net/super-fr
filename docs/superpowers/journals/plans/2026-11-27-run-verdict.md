@@ -258,3 +258,33 @@ Reviewer checked every moved string literal and print's markup/soft_wrap/style, 
 ### p5-r1-resolved · finding [fixed] · resolves p5-r1: P5.T3.S1 ticked but no reviewed: stamp names slice 5 (docs/reference/cli.md, docs/reference/workflow-shapes.md cover run_cmd.py) (phase 5)
 
 Stamped docs/reference/cli.md and docs/reference/workflow-shapes.md naming slices 3-5 in 7bc1b6328; fr docs check current.
+
+<!-- fr:journal kind=decision scope=plan id=p6-provenance-api created=2026-11-28T02:15:49+00:00 phase=6 -->
+### p6-provenance-api · decision · the gate provenance cluster joined fr/run/provenance.py with public names; refusals raise RunRefusal and gate_provenance takes warn (phase 6) (phase 6)
+
+gate_degradation_notice, refuse_gate_flags, clears_gate, question_rounds_refusal (and ANNOUNCEMENTS), queue_gate_decision, flush_gate_decisions, GATE_DECISIONS (ContextVar name string fr_gate_decisions unchanged), observed_gate_rounds, GateAnswer, derive_gate_answer, gate_provenance, record_round_two, refuse_missing_emits. run_cmd wraps each refusing call in `with _refusals():` and passes warn=_say; record/apply.py imports clears_gate and derive_gate_answer from fr.run.provenance directly, dropping its run_cmd import in _run_context. The queue_exit_baseline caller in run_cmd also wraps queue_gate_decision in _refusals().
+
+<!-- fr:journal kind=discovery scope=plan id=p6-provenance-capture created=2026-11-28T02:15:49+00:00 phase=6 -->
+### p6-provenance-capture · discovery · the provenance capture drives one 46-case table through run_cmd's old functions once and now through fr.run.provenance (phase 6) (phase 6)
+
+tests/unit/test_run_verdict_provenance.py holds the cases; fixtures in tests/fixtures/run_verdict/provenance/ (stderr at width 80 with colour, exit code, returned value, queued gate decisions and noted unobserved gates as JSON) were taken by a throwaway driver (not committed) in commit 9ba4ff522, before the move. The unobserved note lands in take_unobserved (operator-gate). The test drives only fr.run.provenance and run_cmd's adapters.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-acceptance-check-baseline created=2026-11-28T02:15:49+00:00 phase=6 -->
+### p6-acceptance-check-baseline · discovery · fr acceptance check reports 49 errors on this checkout before and after this phase, none on this feature's rows (phase 6) (phase 6)
+
+They name rows of other features (e.g. queue-followups) whose specs or tests this branch does not hold; the count is the same with this phase's changes stashed. The harness-gate-degrades-loudly row was amended (status ci kept, note re-pointed), and run-verdict-refusals-preserved and run-cmd-clusters-in-fr-run moved to ci.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-docs-stamps created=2026-11-28T02:15:49+00:00 phase=6 -->
+### p6-docs-stamps · discovery · fr docs check reports every page current; cli.md and workflow-shapes.md carry a slice 6 reviewed stamp (phase 6) (phase 6)
+
+Both cover run_cmd.py and fr/run/**; AGENTS.md's fr/run paragraph now names verdict.py, unobserved.py, steps.py, deliver.py, brief.py, provenance.py, evidence/ and the no-typer/no-console rule. run_cmd.py is 4093 lines, budget 4115.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t1 created=2026-11-28T02:15:49+00:00 phase=6 -->
+### no-refactor-p6-t1 · discovery · no-refactor-because P6.T1 (phase 6)
+
+a capture task: fixtures and a test, nothing pre-existing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t2 created=2026-11-28T02:15:49+00:00 phase=6 -->
+### no-refactor-p6-t2 · discovery · no-refactor-because P6.T2 (phase 6)
+
+a move that must keep its bytes; the only cleanup (run_cmd imports left unused, the re-pointed tests, the stale prose names) was done in the green step
