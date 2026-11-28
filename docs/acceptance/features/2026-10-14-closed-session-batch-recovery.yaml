@@ -79,3 +79,12 @@ rows:
     issues:
     - derio-net/super-fr#1257
     - derio-net/super-fr#1364
+amendments:
+  - row: triage-closed-recovery
+    op: set-status
+    base: 0
+    status: ci
+    notes: Closed-session recovery records the model-pinned OpenCode session ID and
+      launches the attached root TUI with --auto; the durable fresh-session identity
+      contract is unit-pinned. No live recovery walk was performed.
+    why: record the post-merge candidate walk
