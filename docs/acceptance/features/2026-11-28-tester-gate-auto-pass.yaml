@@ -80,9 +80,10 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_triage_pr_gates.py#test_a_batch_pr_without_a_closeout_is_not_loose_but_a_closed_out_one_is
-      - super-fr:tests/unit/test_triage_pr_gates.py#test_a_closed_out_batchs_pr_given_as_a_loose_ledger_is_passed
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_r8_a_closed_out_batchs_gated_pr_is_passed_once_through_the_loose_route
     status: ci
-    notes: a closed-out batch's PR is loose and planned
+    notes: 'loose_prs selection plus a drive_pass over a real closed-out batch: one
+      gate-pass through the loose route, none through the batch route'
     verify: none
 amendments:
   - row: loose-gated-pr-no-pass-without-evidence
