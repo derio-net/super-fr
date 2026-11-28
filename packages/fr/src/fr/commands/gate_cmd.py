@@ -158,8 +158,10 @@ def _refuse_on_blockers(root: Path, state: RunState, gate: str) -> None:
             f"run {state.run}'s {gate} gate is still held by its recorded evidence "
             f"(nothing was probed):\n{lines}\nclose them {where}, then pass again"
         )
-    owns = "every op, devops step and devops row" if gate == "devops" else (
-        "every tester step and tester row"
+    owns = (
+        "every op, devops step and devops row"
+        if gate == "devops"
+        else ("every tester step and tester row")
     )
     typer.echo(f"run {state.run}: {owns} is recorded closed")
 

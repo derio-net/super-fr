@@ -25,6 +25,7 @@ from fr.spec import Step, StepGate
 
 if TYPE_CHECKING:
     from fr.run.model import RunState
+    from fr.verification.exit import Exit
 
 
 def _spec_file(repo_root: Path, spec_rel: str) -> Path | None:
@@ -47,7 +48,15 @@ def fold_step_outcomes(
     `test-plan-step-<n>-<k>` that `fr closeout outcome` writes over an owed one), and an
     owed entry a later record resolves `fixed` reads closed (`discovery`). Entries whose
     id is in *exclude* (those the PR head carries, inside the DevOps stage) are skipped."""
-    latest: dict[int, tuple[str, str]] = {}
+    return {n: kind for n, (kind, _) in _fold_outcomes(entries, exclude).items()}
+
+
+def _fold_outcomes(
+    entries: Iterable[JournalEntry], exclude: Set[str]
+) -> dict[int, tuple[str, str]]:
+    """`fold_step_outcomes`, each with what it says: `ran`, `na` or `owed` (an owed entry
+    resolved `fixed` was discharged with evidence, so it reads `ran`)."""
+    latest: dict[int, tuple[str, str, str]] = {}
     for e in entries:
         if e.id in exclude:
             continue
@@ -55,28 +64,51 @@ def fold_step_outcomes(
             m = _OUTCOME_ID.match(e.resolves)
             if m and e.state == "fixed":
                 n = int(m.group(1))
-                if latest.get(n, ("", ""))[0] == e.resolves:
-                    latest[n] = (e.resolves, "discovery")
+                if latest.get(n, ("", "", ""))[0] == e.resolves:
+                    latest[n] = (e.resolves, "discovery", "ran")
             continue
         m = _OUTCOME_ID.match(e.id)
         if m:
-            latest[int(m.group(1))] = (e.id, e.kind)
-    return {n: kind for n, (_, kind) in latest.items()}
+            said = "owed" if e.kind == "owed" else "na" if e.title.endswith(": n/a") else "ran"
+            latest[int(m.group(1))] = (e.id, e.kind, said)
+    return {n: (kind, said) for n, (_, kind, said) in latest.items()}
 
 
-def _step_outcomes(repo_root: Path, spec: Path, exclude: Set[str] = frozenset()) -> dict[int, str]:
-    """Step number -> the kind of its effective outcome (`fold_step_outcomes`)."""
+def _journal_entries(repo_root: Path, spec: Path) -> list[JournalEntry]:
     from fr.archive import spec_slug_of
     from fr.journal.model import JournalParseError, parse_journal, resolve_journal_read_path
 
     journal = resolve_journal_read_path(repo_root, "spec", spec_slug_of(spec))
     if not journal.is_file():
-        return {}
+        return []
     try:
-        entries = parse_journal(journal.read_text())
+        return parse_journal(journal.read_text())
     except JournalParseError, OSError:
-        return {}
-    return fold_step_outcomes(entries, exclude=exclude)
+        return []
+
+
+def ran_steps(
+    repo_root: Path, state: RunState, gate: StepGate, *, exclude: Set[str] = frozenset()
+) -> list[Step]:
+    """The run's Test Plan steps of effective gate *gate* whose effective outcome is
+    `ran` (not `n/a`, not `owed`); *exclude* as `gated_steps` (ops-gate-truth R13)."""
+    from fr.requirements import run_spec
+    from fr.spec import test_plan_steps
+    from fr.verification.exit import run_exit
+
+    spec_rel = run_spec(state)
+    spec = _spec_file(repo_root, spec_rel) if spec_rel else None
+    if spec is None:
+        return []
+    said = _fold_outcomes(_journal_entries(repo_root, spec), exclude)
+    steps = test_plan_steps(spec.read_text(), source=spec_rel)
+    gated = steps_gated(steps, run_exit(repo_root, state).gates, gate)
+    return [s for s in gated if said.get(s.n, ("", ""))[1] == "ran"]
+
+
+def _step_outcomes(repo_root: Path, spec: Path, exclude: Set[str] = frozenset()) -> dict[int, str]:
+    """Step number -> the kind of its effective outcome (`fold_step_outcomes`)."""
+    return fold_step_outcomes(_journal_entries(repo_root, spec), exclude=exclude)
 
 
 @dataclass(frozen=True)
@@ -125,7 +157,6 @@ def gate_items(
     `fr.ops.load.OpsLoadError` when the plan's ops cannot be read."""
     from fr.ops.evidence import JournalEvidence, recorded_close, recorded_state
     from fr.ops.load import load_ops
-    from fr.settings import disabled
     from fr.verification.exit import run_exit, run_plan_dir
 
     out: list[GateItem] = []
@@ -145,20 +176,27 @@ def gate_items(
         else:
             why = "recorded owed, which does not close it" if kind else "no recorded outcome"
         out.append(
-            GateItem(f"Test Plan step {step.n} ({gate})", kind == "discovery",
-                     f"{why} — {step.text}")  # fmt: skip
+            GateItem(
+                f"Test Plan step {step.n} ({gate})", kind == "discovery", f"{why} — {step.text}"
+            )  # fmt: skip
         )
-    if disabled(repo_root, "acceptance"):
-        return out
     excluded = exclude_walks or {}
-    for row in exit_.gated_rows:
-        if exit_.row_gates[row.id] != gate:
-            continue
+    for row, _ in gated_rows(repo_root, exit_, gate):
         skip = set(excluded.get(row.id, ()))
         walks = [w for w in row.walks if w not in skip]
         why = _row_reason(row, walks)
         out.append(GateItem(f"row {row.id} ({gate})", why == "walked", why))
     return out
+
+
+def gated_rows(repo_root: Path, exit_: Exit, gate: StepGate) -> list[tuple[Row, str]]:
+    """The rows of *exit_* whose effective gate is *gate*, each with its effective
+    strategy; none under `acceptance: off` (ops-gate-truth R8)."""
+    from fr.settings import disabled
+
+    if disabled(repo_root, "acceptance"):
+        return []
+    return [(r, exit_.row_kinds[r.id]) for r in exit_.gated_rows if exit_.row_gates[r.id] == gate]
 
 
 def gate_blockers(

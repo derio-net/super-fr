@@ -48,9 +48,12 @@ from fr.journal.model import (
 from fr.labels import QUEUE_POSTMERGE_DONE, QUEUE_RELEASE, LabelDef
 
 if TYPE_CHECKING:
+    from fr.acceptance.model import Row, Walk
+    from fr.ops.holds import GateItem
     from fr.ops.load import LoadedOp
     from fr.run.model import RunState
     from fr.spec import Step as TestPlanStep
+    from fr.verification.exit import Exit
 
 STAGE_PREFIX = "gate-stage-"
 PROFILES_FILES = (LEGACY_PROFILES, rel(PROFILES))
@@ -1116,13 +1119,25 @@ def _ask_outcome(gate: Gate, text: str, allowed: Sequence[str]) -> tuple[str, st
 
 
 def _record_outcome(
-    gate: Gate, tree: OpsTree, step: Any, kind: str | None, how: str, text: str
+    gate: Gate,
+    tree: OpsTree,
+    step: Any,
+    kind: str | None,
+    how: str,
+    text: str,
+    *,
+    walker: tuple[str, str] | None = None,
 ) -> None:
+    """Record *step*'s outcome with `fr closeout outcome`. *walker* `(harness, model)`
+    names who walked the rows a `ran` step names (ops-gate-truth R9: a passing probe is
+    `fr-ops-probe` / `op:<id>`, since nobody walked it); otherwise the operator did."""
     flag = {"ran": ("--ran", "--evidence"), "owed": ("--owed", "--why")}.get(
         how, ("--na", "--reason")
     )
     argv = ["closeout", "outcome", "--run", gate.target.run.run, "--step", str(step.n),
             flag[0], flag[1], text]  # fmt: skip
+    if walker is not None:
+        argv += ["--harness", walker[0], "--model", walker[1]]
     if kind is not None:  # an outcome the PR carries, or an owed one: record over it
         argv.append("--supersede")
     code, out = tree.fr(argv)
@@ -1170,7 +1185,8 @@ def _probe_step(gate: Gate, tree: OpsTree, step: Any, kind: str | None) -> None:
             gate.say(str(row["output"]))
         if state == "DONE" and how == "checked":
             evidence = row.get("evidence") or "no output"
-            _record_outcome(gate, tree, step, kind, "ran", f"{op_id}: check passed — {evidence}")
+            _record_outcome(gate, tree, step, kind, "ran", f"{op_id}: check passed — {evidence}",
+                            walker=("fr-ops-probe", f"op:{op_id}"))  # fmt: skip
             return
         head = f"Test Plan step {step.n} (devops): {step.text}\n"
         if state in ("OPEN", "UNVERIFIABLE", "CANNOT-VERIFY", "ESCALATE"):
@@ -1210,7 +1226,112 @@ def stage_5(gate: Gate) -> None:
             gate.trust(tree)
             probed = True
         _probe_step(gate, tree, step, kind)
-    gate.finish(tree, 5, "devops Test Plan steps recorded")
+    asked = _ask_rows(gate, tree, at_head)
+    body = "devops Test Plan steps recorded"
+    gate.finish(tree, 5, body + (f"; rows {', '.join(asked)} answered" if asked else ""))
+
+
+def _feature(run: RunState) -> str | None:
+    """The fragment slug of the run's spec: the feature its row amendments go to."""
+    from fr.acceptance.fragment import fragment_slug_for_spec
+    from fr.requirements import run_spec
+
+    spec = run_spec(run)
+    return fragment_slug_for_spec(spec) if spec else None
+
+
+def head_walks(tree: OpsTree, head: str, feature: str | None) -> dict[str, set[Walk]]:
+    """Row id -> the walks the PR head's own fragment of *feature* carries, on its rows
+    and in its amendments: PR-controlled, so none of them walks a row inside the stage
+    (ops-gate-truth R12). Unreadable is a refusal, never an empty exclusion."""
+    from fr.acceptance.fragment import FRAGMENTS_DIR, SetStatus, parse_fragment
+    from fr.acceptance.model import AcceptanceError
+
+    if feature is None:
+        return {}
+    rel = (FRAGMENTS_DIR / f"{feature}.yaml").as_posix()
+    text = tree.show(head, rel)
+    if not text:
+        return {}
+    try:
+        fragment = parse_fragment(text, source=rel)
+    except AcceptanceError as exc:
+        raise StageFailed(
+            f"the PR head's fragment {rel} cannot be read ({exc}); its walks cannot be told "
+            "apart from the ops branch's own",
+            code=2,
+        ) from exc
+    out: dict[str, set[Walk]] = {}
+    for r in fragment.rows:
+        out.setdefault(r.id, set()).update(r.walks)
+    for a in fragment.amendments:
+        if isinstance(a, SetStatus) and a.walk is not None:
+            out.setdefault(a.row, set()).add(a.walk)
+    return out
+
+
+def _gate_exit(tree: OpsTree, run: RunState) -> Exit:
+    from fr.acceptance.model import AcceptanceError
+    from fr.verification.exit import run_exit
+    from fr.verification.spec_section import SectionError
+
+    try:
+        return run_exit(tree.path, run)
+    except (AcceptanceError, SectionError, OSError) as exc:
+        raise StageFailed(f"the run's exit cannot be read: {exc}") from exc
+
+
+def _would_verify(row: Row, harness: str) -> bool:
+    """Whether one more passing walk on *harness* makes *row* walk-verified."""
+    passing = {w.harness for w in row.walks if w.outcome == "pass"} | {harness}
+    return all(h in passing for h in row.harnesses) if row.harnesses else True
+
+
+def row_walk_argv(run: RunState, row: Row, strategy: str, evidence: str) -> list[str]:
+    """`fr acceptance set-status --walk` recording an operator's walk of *row* in the
+    DevOps stage (ops-gate-truth R13): `walked` when it makes the row walk-verified,
+    else its current status."""
+    status = "walked" if _would_verify(row, "operator") else row.status
+    return ["acceptance", "set-status", "--id", row.id, "--status", status, "--walk", evidence,
+            "--harness", "operator", "--model", "human", "--strategy", strategy,
+            "--notes", f"walked in the DevOps stage of run {run.run}",
+            "--feature", _feature(run) or ""]  # fmt: skip
+
+
+def _ask_rows(gate: Gate, tree: OpsTree, at_head: set[str]) -> list[str]:
+    """R13: each devops row not walked (head walks excluded, R12) that no `ran` devops
+    step names is asked about: `ran <evidence>` walks it, `owed <why>` sets `walk-owed`.
+    Returns the rows asked about."""
+    from fr.acceptance.walks import row_walked
+    from fr.ops.holds import gated_rows, ran_steps
+
+    t = gate.target
+    rows = gated_rows(tree.path, _gate_exit(tree, t.run), "devops")
+    if not rows:
+        return []
+    head = head_walks(tree, gate.pinned_head(), _feature(t.run))
+    named = {rid for s in ran_steps(tree.path, t.run, "devops", exclude=at_head) for rid in s.rows}
+    asked: list[str] = []
+    for r, strategy in rows:
+        if r.id in named or row_walked(r, exclude=head.get(r.id, set())):
+            continue
+        how, text = _ask_outcome(
+            gate,
+            f"Acceptance row {r.id} (devops): {r.acceptance}\n"
+            "No devops step that ran walks it. Walk it, then answer `ran <evidence>` or "
+            "`owed <why>`:",
+            ("ran", "owed"),
+        )
+        if how == "ran":
+            argv = row_walk_argv(t.run, r, strategy, text)
+        else:
+            argv = ["acceptance", "set-status", "--id", r.id, "--status", "walk-owed",
+                    "--notes", text, "--feature", _feature(t.run) or ""]  # fmt: skip
+        code, out = tree.fr(argv)
+        if code != 0:
+            raise StageFailed(f"`fr acceptance set-status --id {r.id}` exited {code}: {out}")
+        asked.append(r.id)
+    return asked
 
 
 def _spec_slug(run: RunState) -> str | None:
@@ -1236,6 +1357,7 @@ def stage_6(gate: Gate) -> None:
     if _pass_labelled(gate.refreshed()):
         _existing_pass(gate, tree)
         return
+    _say_owed(gate, tree, "devops")
     notes = f"DevOps stage of run {t.run.run}: ops and devops steps recorded on {t.ops_branch}"
     owed = tester_steps(gate, tree)
     if owed:
@@ -1249,6 +1371,36 @@ def stage_6(gate: Gate) -> None:
             f"`fr gate pass --gate devops --run {t.run.run}` exited {code}" + _recovery(gate, tree)
         )
     gate.finish(tree, 6, "gate:devops passed")
+
+
+def _owed_items(gate: Gate, tree: OpsTree, gate_name: str) -> list[GateItem]:
+    """What *gate_name* still owes in the ops workspace (`gate_items`), the PR head's own
+    outcomes and walks excluded (R12)."""
+    from fr.ops.holds import gate_items
+    from fr.ops.load import OpsLoadError
+
+    t = gate.target
+    head = gate.pinned_head()
+    spec_slug = _spec_slug(t.run)
+    at_head = head_entry_ids(tree, head, "spec", spec_slug) if spec_slug else set()
+    try:
+        items = gate_items(tree.path, t.run, gate_name,  # type: ignore[arg-type]
+                           exclude_walks=head_walks(tree, head, _feature(t.run)),
+                           exclude_outcomes=at_head)  # fmt: skip
+    except OpsLoadError as exc:
+        raise StageFailed(f"the plan's ops cannot be read: {exc}") from exc
+    except OSError as exc:
+        raise StageFailed(f"the run's exit cannot be read: {exc}") from exc
+    return [i for i in items if not i.discharged]
+
+
+def _say_owed(gate: Gate, tree: OpsTree, gate_name: str) -> None:
+    """R14: before the pass, what the gate still owes by `gate_blockers`."""
+    owed = _owed_items(gate, tree, gate_name)
+    if owed:
+        gate.say(f"stage 6: the {gate_name} gate still owes:")
+        for item in owed:
+            gate.say(f"  {item.line}")
 
 
 def _existing_pass(gate: Gate, tree: OpsTree) -> None:
@@ -1274,45 +1426,31 @@ def _existing_pass(gate: Gate, tree: OpsTree) -> None:
 def _recovery(gate: Gate, tree: OpsTree) -> str:
     """p4-r3: for each devops step that is not closed, the command that records it in the
     ops workspace; a rerun then retries the gate pass."""
-    from fr.ops.holds import gated_steps
+    from fr.acceptance.walks import row_walked
+    from fr.ops.holds import gated_rows, gated_steps
 
     t = gate.target
     open_steps = [
         (s, kind) for s, kind in gated_steps(tree.path, t.run, "devops") if kind != "discovery"
     ]
-    if not open_steps:
+    rows = [(r, k) for r, k in gated_rows(tree.path, _gate_exit(tree, t.run), "devops")
+            if not row_walked(r)]  # fmt: skip
+    if not open_steps and not rows:
         return ""
+    exec_ = f"  fr isolation exec --repo {t.primary} --branch {t.ops_branch} -- fr "
     # A step already recorded (owed) is recorded over only with --supersede: an owed
     # outcome may already be filed as an fr:owed issue, so it is never overwritten silently.
     lines = [
-        f"  fr isolation exec --repo {t.primary} --branch {t.ops_branch} -- fr closeout "
-        f"outcome --run {t.run.run} --step {s.n} --ran --evidence '<what it showed>'"
-        + (" --supersede" if kind is not None else "")
+        f"{exec_}closeout outcome --run {t.run.run} --step {s.n} --ran --evidence "
+        "'<what it showed>'" + (" --supersede" if kind is not None else "")
         for s, kind in open_steps
     ]
+    # R14: each unwalked devops row, by the command stage 5 itself runs
+    lines += [exec_ + shlex.join(row_walk_argv(t.run, r, k, "<what it showed>")) for r, k in rows]
     return (
-        "; record each devops step that is not closed (or `--na --reason …`), then re-run "
-        "`fr ops gate`:\n" + "\n".join(lines)
+        "; record each devops step that is not closed (or `--na --reason …`) and walk each "
+        "devops row that is not walked, then re-run `fr ops gate`:\n" + "\n".join(lines)
     )
-
-
-def _tester_owns(tree: OpsTree, state: RunState) -> tuple[list[str], bool]:
-    """What else the Tester gate owns besides Test Plan steps: its unwalked rows (the rows
-    the driver's rows-walked pass waits on), and whether the spec declares `gate: tester`
-    for the run (a run gate passes only explicitly). An exit that cannot be read fails the
-    stage: unknown is never "nothing owed"."""
-    from fr.acceptance.model import AcceptanceError
-    from fr.verification.exit import run_exit
-    from fr.verification.spec_section import SectionError
-
-    try:
-        exit_ = run_exit(tree.path, state)
-    except (AcceptanceError, SectionError, OSError) as exc:
-        raise StageFailed(f"the run's exit cannot be read, so gate:tester stays: {exc}") from exc
-    rows = [
-        r.id for r in exit_.gated_rows if exit_.row_gates[r.id] == "tester" and r.status != "walked"
-    ]
-    return rows, exit_.run_gate == "tester"
 
 
 def stage_7(gate: Gate) -> None:
@@ -1325,20 +1463,17 @@ def stage_7(gate: Gate) -> None:
     _refresh(gate, 7)
     t = gate.target
     tree = gate.tree()
-    owed = tester_steps(gate, tree)
-    rows, declared = _tester_owns(tree, t.run)
-    if owed or rows or declared:
+    owed = _owed_items(gate, tree, "tester")
+    declared = _gate_exit(tree, t.run).run_gate == "tester"  # a run gate passes explicitly
+    if owed or declared:
         gate.say(f"gate:tester stays on PR #{t.pr}; the Tester gate owns:")
-        for s in owed:
-            gate.say(f"  step {s.n}: {s.text}")
-        for r in rows:
-            gate.say(f"  row {r}: not walked yet")
+        for item in owed:
+            gate.say(f"  {item.line}")
         if declared:
             gate.say("  the run itself: its spec declares `gate: tester`")
         body = "tester work handed off: " + ", ".join(
-            [*(f"step {s.n}" for s in owed), *(f"row {r}" for r in rows),
-             *(["the run"] if declared else [])]
-        )  # fmt: skip
+            [*(i.what for i in owed), *(["the run"] if declared else [])]
+        )
     elif "tester" in held_gates(
         str(n) for n in gate.forge.pr_view(t.repo, t.pr).get("labels") or []
     ):
@@ -1365,6 +1500,7 @@ def stage_8(gate: Gate) -> None:
 
     t = gate.target
     tree = gate.tree()
+    held: list[str] = []
     if (tree.path / t.plan_rel).is_dir():
         argv = ["archive", "--branch", t.feature, *archive_issue_args(tree.path, t.run)]
         code, out = tree.fr(argv)
@@ -1373,6 +1509,12 @@ def stage_8(gate: Gate) -> None:
         if code != 0:
             raise StageFailed(f"`fr {shlex.join(argv)}` exited {code}")
         tree.commit_paths(["docs"], f"chore(ops): archive {t.slug}")
+        if (tree.path / t.plan_rel).is_dir():  # R15: `fr archive` exits 0 on a hold
+            held = [ln.strip() for ln in out.splitlines() if ln.strip().startswith("held:")]
+            held = held or ["held: the plan directory is still in place"]
+            gate.say("stage 8: archive held")
+            for line in held:
+                gate.say(f"  {line}")
     try:
         gate.publish(tree)
         if gate.forge.open_pr_for_head(t.repo, t.ops_branch) is None:
@@ -1387,7 +1529,8 @@ def stage_8(gate: Gate) -> None:
             gate.say(f"housekeeping PR #{number} opened from {t.ops_branch}")
     except Exception as exc:  # noqa: BLE001 — git's or the forge's own words
         raise StageFailed(f"cannot publish {t.ops_branch}: {exc}") from exc
-    gate.finish(tree, 8, f"archived; housekeeping PR from {t.ops_branch}")
+    archived = "archive held (" + "; ".join(held) + ")" if held else "archived"
+    gate.finish(tree, 8, f"{archived}; housekeeping PR from {t.ops_branch}")
 
 
 # ------------------------------------------------------------------- the table

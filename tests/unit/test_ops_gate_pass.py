@@ -258,8 +258,10 @@ def test_the_tester_pass_refuses_naming_an_unrecorded_tester_step(repo: Path, fo
 
 
 def _tester_row(root: Path, **extra: object) -> None:
-    text = (root / SPEC).read_text().replace(
-        "gate: developer\n", "gate: developer\n- r1: live — the tester walks it\n"
+    text = (
+        (root / SPEC)
+        .read_text()
+        .replace("gate: developer\n", "gate: developer\n- r1: live — the tester walks it\n")
     )
     (root / SPEC).write_text(text)
     write_matrix(root, [{**row(SPEC, rid="r1", status="walk-owed"), **extra}])

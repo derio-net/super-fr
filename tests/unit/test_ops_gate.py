@@ -130,12 +130,13 @@ class FakeTree:
             while f"id={sid} " in taken:
                 k += 1
                 sid = f"test-plan-step-{n}-{k}"
+            said = "owed" if kind == "owed" else "n/a" if "--na" in args else "ran"
             entry = JournalEntry(
                 kind=kind,
                 scope="spec",
                 id=sid,
                 created="2026-10-22T10:00:00+00:00",
-                title=f"step {n}",
+                title=f"Test Plan step {n}: {said}",  # as `fr closeout outcome` titles it
                 body="x" if kind == "discovery" else "why: later\nhow: later",
             )
             append_journal_entry(journal_path(self.path, "spec", SPEC_SLUG), SPEC_SLUG, entry)
@@ -1771,3 +1772,173 @@ def test_an_ops_refresh_at_stage_6_or_7_goes_back_to_stage_4(ops_root: Path, at:
     assert result.ok, result.why
     assert result.ran == (4, 5, 6, 7, 8)
     assert _post_applies(host) == [["fr", "ops", "apply", "post", "--plan", PLAN, "--yes"]]
+
+
+# ------------------------- ops-gate-truth R9, R12–R15: the stage walks its own rows
+
+
+ROW_SPEC = (
+    "# S\n\n## Verification\n\nstrategy: none\ngate: developer\n"
+    "- rd: live — the devops stage walks it\ngate: rd=devops\n\n## Test Plan\n\n"
+    "{step}\n- [tester] click the page\n"
+)
+FRAGMENT = f"docs/acceptance/features/{SPEC_SLUG}.yaml"
+A_WALK = {"strategy": "live", "harness": "operator", "model": "human", "outcome": "pass",
+          "at": "2026-10-22T09:00:00Z", "evidence": "e"}  # fmt: skip
+
+
+def _row_spec(ops_root: Path, step: str = "- [devops] walk the stage", **rd: Any) -> None:
+    (ops_root / SPEC).write_text(ROW_SPEC.format(step=step))
+    write_matrix(ops_root, [{**row(SPEC, rid="rd", status="walk-owed"), **rd}])
+
+
+def _fr_calls(tree: FakeTree, *verb: str) -> list[list[str]]:
+    return [c[1][0] for c in tree.calls if c[0] == "fr" and c[1][0][: len(verb)] == list(verb)]
+
+
+def _stage5(ops_root: Path, answers: list[str]) -> tuple[FakeTree, FakePrompt, list[str]]:
+    _record_stages(ops_root, 1, 2, 3, 4)
+    gate, host, tree, forge, prompt, said = _gate(
+        ops_root, up=True, forge=FakeForge(state="MERGED"), prompt=FakePrompt(answers=answers)
+    )
+    gate_mod.stage_5(gate)
+    return tree, prompt, said
+
+
+def test_a_passing_probe_on_a_step_naming_rows_records_the_probe_identity(ops_root: Path) -> None:
+    _row_spec(ops_root, "- [devops] (op: post) (rows: rd) walk the stage")
+    _record_stages(ops_root, 1, 2, 3, 4)
+    gate, host, tree, *_ = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    host.by_id["post"] = [(0, [_row("post", "DONE", "checked", evidence="ok")])]
+
+    gate_mod.stage_5(gate)
+
+    (args,) = _outcome_args(tree)
+    assert args[args.index("--harness") + 1] == "fr-ops-probe"
+    assert args[args.index("--model") + 1] == "op:post"
+
+
+def test_stage_5_asks_about_an_unwalked_devops_row_no_ran_step_names(ops_root: Path) -> None:
+    _row_spec(ops_root)
+    tree, prompt, _ = _stage5(ops_root, ["ran walked the step", "ran walked the row"])
+
+    assert any("rd" in q for q in prompt.asked[1:])
+    (args,) = _fr_calls(tree, "acceptance", "set-status")
+    flags = dict(zip(args[2::2], args[3::2], strict=False))
+    assert flags["--id"] == "rd" and flags["--status"] == "walked"
+    assert flags["--walk"] == "walked the row"
+    assert (flags["--harness"], flags["--model"], flags["--strategy"]) == (
+        "operator", "human", "live"
+    )  # fmt: skip
+    assert flags["--feature"] == SPEC_SLUG and "run-1" in flags["--notes"]
+
+
+def test_an_owed_row_answer_sets_walk_owed_with_the_reason(ops_root: Path) -> None:
+    _row_spec(ops_root)
+    tree, *_ = _stage5(ops_root, ["ran walked the step", "owed needs the vendor"])
+
+    (args,) = _fr_calls(tree, "acceptance", "set-status")
+    flags = dict(zip(args[2::2], args[3::2], strict=False))
+    assert (flags["--status"], flags["--notes"]) == ("walk-owed", "needs the vendor")
+    assert "--walk" not in args and flags["--feature"] == SPEC_SLUG
+
+
+def test_a_row_whose_only_step_was_na_is_asked_about(ops_root: Path) -> None:
+    _row_spec(ops_root, "- [devops] (rows: rd) walk the stage")
+    tree, prompt, _ = _stage5(ops_root, ["na not this time", "owed later"])
+
+    assert len(_fr_calls(tree, "acceptance", "set-status")) == 1
+
+
+def test_a_row_a_ran_step_names_is_not_asked_about(ops_root: Path) -> None:
+    _row_spec(ops_root, "- [devops] (rows: rd) walk the stage")
+    tree, prompt, _ = _stage5(ops_root, ["ran walked it"])
+
+    assert _fr_calls(tree, "acceptance", "set-status") == []
+    assert len(prompt.asked) == 1
+
+
+def test_a_walk_the_pr_head_carries_does_not_count(ops_root: Path) -> None:
+    _row_spec(ops_root, status="walked", walks=[A_WALK])
+    _record_stages(ops_root, 1, 2, 3, 4)
+    gate, host, tree, forge, prompt, _ = _gate(
+        ops_root, up=True, forge=FakeForge(state="MERGED"),
+        prompt=FakePrompt(answers=["ran the step", "ran the row"]),
+    )  # fmt: skip
+    tree.head_files[FRAGMENT] = (ops_root / FRAGMENT).read_text()
+
+    gate_mod.stage_5(gate)
+
+    assert len(_fr_calls(tree, "acceptance", "set-status")) == 1
+
+
+def test_a_walk_the_ops_branch_recorded_closes_the_row(ops_root: Path) -> None:
+    _row_spec(ops_root, status="walked", walks=[A_WALK])
+    tree, prompt, _ = _stage5(ops_root, ["ran the step"])
+
+    assert _fr_calls(tree, "acceptance", "set-status") == []
+
+
+def test_stage_6_lists_what_the_devops_gate_owes_and_the_row_recovery(ops_root: Path) -> None:
+    _row_spec(ops_root)
+    _record_stages(ops_root, 1, 2, 3, 4, 5)
+    for op in ("pre", "mut", "post"):
+        record_op(ops_root, "p", op=op, result="done",
+                  phase="post-merge" if op == "post" else "pre-merge")  # fmt: skip
+    gate, host, tree, forge, prompt, said = _gate(
+        ops_root, up=True, forge=FakeForge(state="MERGED")
+    )
+    tree.gate_pass_code = 2
+
+    with pytest.raises(gate_mod.StageFailed) as failed:
+        gate_mod.stage_6(gate)
+
+    assert any("row rd (devops)" in line for line in said)
+    why = str(failed.value)
+    assert "acceptance set-status --id rd --status walked --walk" in why
+    assert f"--feature {SPEC_SLUG}" in why and "--strategy live" in why
+
+
+def test_stage_7_reports_the_tester_gates_rows_and_steps(ops_root: Path) -> None:
+    _row_spec(ops_root)
+    write_matrix(
+        ops_root,
+        [row(SPEC, rid="rd", status="walk-owed"), row(SPEC, rid="rt", status="walk-owed")],
+    )
+    (ops_root / SPEC).write_text(
+        (ops_root / SPEC)
+        .read_text()
+        .replace("gate: rd=devops\n", "gate: rd=devops\n- rt: live — the tester walks it\n")
+    )
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+
+    gate_mod.stage_7(gate)
+
+    assert any("row rt (tester)" in line for line in said)
+    assert any("Test Plan step 2 (tester)" in line for line in said)
+    assert not any("row rd" in line for line in said)
+
+
+def test_stage_8_reports_a_held_archive_and_still_publishes(ops_root: Path) -> None:
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    real = tree.fr
+
+    def held_archive(args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
+        if list(args)[:1] == ["archive"]:
+            tree.calls.append(("fr", (list(args), terminal)))
+            return 0, "  held: docs/superpowers/plans/p — phase 3 [manual] is unticked\n"
+        return real(args, terminal=terminal)
+
+    tree.fr = held_archive  # type: ignore[method-assign]
+    audits: list[tuple[int, str]] = []
+    real_finish = gate.finish
+    gate.finish = lambda t, n, body, **k: (audits.append((n, body)), real_finish(t, n, body, **k))  # type: ignore[method-assign]
+
+    gate_mod.stage_8(gate)
+
+    assert any("archive held" in line for line in said)
+    assert any("phase 3 [manual] is unticked" in line for line in said)
+    ((n, body),) = audits
+    assert n == 8 and "archive held" in body and "archived;" not in body
+    assert ("pr_create", {"head": "chore/ops-p", "base": "main"}) in forge.calls

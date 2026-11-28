@@ -300,9 +300,7 @@ def _row_walks(
             lines.append(f"{rid}: walk recorded on {harness}; still owed: {', '.join(owed)}")
         items.append(AcceptanceItem(id=rid, status=status, notes=notes, walk=walk))
         before.append(row)
-    return _RowWalks(
-        tuple(items), fragment_slug_for_spec(spec_rel), tuple(before), tuple(lines)
-    )
+    return _RowWalks(tuple(items), fragment_slug_for_spec(spec_rel), tuple(before), tuple(lines))
 
 
 def _shape_default(root: Path, run: str | None) -> str | None:
