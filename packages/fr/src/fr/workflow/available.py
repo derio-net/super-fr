@@ -23,6 +23,9 @@ _WHERE: dict[str, str] = {
 
 
 def _disabled_and_placement(repo_root: Path) -> tuple[list[str], str]:
+    """`workflows.disabled` as the effective settings say (the tracking space's under
+    stealth), and the placement it was read under. An unreadable settings file is a
+    `WorkflowError`: the check fails closed."""
     from fr.settings import SettingsError, load_settings
 
     try:
@@ -30,12 +33,6 @@ def _disabled_and_placement(repo_root: Path) -> tuple[list[str], str]:
     except SettingsError as e:
         raise WorkflowError(f"cannot read workflows.disabled: {e}") from e
     return list(settings.workflows.disabled), settings.placement
-
-
-def disabled_shapes(repo_root: Path) -> list[str]:
-    """`workflows.disabled` as the effective settings say (the tracking space's under
-    stealth). An unreadable settings file is a `WorkflowError`: the check fails closed."""
-    return _disabled_and_placement(repo_root)[0]
 
 
 def refuse_disabled(name: str, repo_root: Path) -> None:

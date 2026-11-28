@@ -9,7 +9,8 @@ packages/fr/src/fr/settings/
                  names the triage keys as the fix
   render.py    ~ init renders list defaults as YAML lists, #schema: 3, stealth push/pr ask
 packages/fr/src/fr/workflow/
-  available.py + disabled_shapes / refuse_disabled (fails closed on unreadable settings)
+  available.py + refuse_disabled (fails closed on unreadable settings; names the file
+                 the value lives in, the shapes left and `--workflow`)
   resolve.py   ~ discover_names moved here from workflow_cmd
 packages/fr/src/fr/commands/run_cmd.py, run/steps.py, run/adopt.py
                ~ refuse_disabled at start, `shape:` rebind and adopt (not advance,
