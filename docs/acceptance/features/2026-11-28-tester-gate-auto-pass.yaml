@@ -21,8 +21,13 @@ rows:
       unit:
       - super-fr:tests/unit/test_triage_drive_loose.py#test_a_whole_scope_drive_passes_a_loose_prs_walked_gate
       - super-fr:tests/unit/test_triage_pr_gates.py#test_walked_rows_of_a_loose_pr_plan_one_gate_pass_naming_its_repo
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_r4_a_loose_gate_pass_closes_the_prs_trackers
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_r4_labels_off_writes_no_gate_pass_for_a_loose_pr
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_a_landed_gated_batchs_pr_in_gated_prs_is_passed_once_by_its_batch
     status: ci
-    notes: driver passes a loose PR's walked gate end to end
+    notes: 'unit: plan and driver pass for a loose PR (label swap, comment, trackers
+      closed, labels-off refused), and a landed batch''s PR also in gated_prs is passed
+      once, by its batch'
     verify: none
   - id: loose-gated-pr-awaiting-live
     capability: Triage driver
