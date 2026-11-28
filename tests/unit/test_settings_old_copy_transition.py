@@ -314,3 +314,73 @@ def test_sync_is_listed_with_one_help_line_on_both_sides(
         seen.append(_sync_help_line(result.output))
     assert seen[0] == seen[1]
     assert "retired in fr 9.2" in seen[0]
+
+
+# --- review p1-r2: an old switch left behind is no stale artifact past the gate --------
+
+
+def _advance_fr_config(tmp_path: Path, root: Path, text: str) -> None:
+    clone = tmp_path / "advance-clone"
+    git(tmp_path, "clone", "-q", "-b", "fr-config", str(tmp_path / "origin.git"), str(clone))
+    git(clone, "config", "user.name", "t")
+    git(clone, "config", "user.email", "t@example.invalid")
+    (clone / ".fr/settings.yaml").write_text(text)
+    git(clone, "commit", "-qam", "a reviewed change")
+    git(clone, "push", "-q", "origin", "fr-config")
+    git(root, "fetch", "-q", "origin", "+refs/heads/fr-config:refs/remotes/origin/fr-config")
+
+
+@pytest.mark.usefixtures("ended")
+def test_an_old_switch_behind_fr_config_is_current_past_the_gate(
+    repo: Path, tmp_path: Path
+) -> None:
+    from fr.artifacts import is_stale
+    from fr.config.migrate import ensure_space, settings_stamp
+    from fr.placement import quiet
+
+    push_fr_branch(repo, QUIET)
+    git(repo, "fetch", "-q", "origin", "+refs/heads/fr:refs/remotes/origin/fr")
+    git(repo, "checkout", "-q", "-b", "feat/q")
+    assert ensure_space(repo)
+    _advance_fr_config(tmp_path, repo, QUIET + "git:\n  push: auto\n")
+    quiet._CACHE.clear()
+    old = quiet.ensure_worktree(repo) / "settings.yaml"
+    assert old.read_text() == QUIET  # the old copy stayed behind, never rewritten
+    assert settings_stamp(old) == 2
+    assert not is_stale(repo)
+    assert load_settings(repo).ref == "refs/remotes/origin/fr-config"
+
+
+@pytest.mark.usefixtures("open_")
+def test_before_the_gate_an_old_switch_behind_fr_config_is_stale(
+    repo: Path, tmp_path: Path
+) -> None:
+    from fr.config.migrate import ensure_space, settings_stamp
+    from fr.placement import quiet
+
+    push_fr_branch(repo, QUIET)
+    git(repo, "fetch", "-q", "origin", "+refs/heads/fr:refs/remotes/origin/fr")
+    git(repo, "checkout", "-q", "-b", "feat/q")
+    assert ensure_space(repo)
+    _advance_fr_config(tmp_path, repo, QUIET + "git:\n  push: auto\n")
+    quiet._CACHE.clear()
+    # ensure_worktree reads the switch, which differs from the old copy before the gate:
+    # build the worktree path the locator reads without it.
+    old = quiet.worktree_path(repo) / "settings.yaml"
+    if not old.parent.exists():
+        git(repo, "worktree", "add", "-q", "--detach", str(old.parent), "refs/remotes/origin/fr")
+    assert old.read_text() == QUIET
+    assert settings_stamp(old) == 1
+
+
+def test_what_promises_the_old_copy_says_before_fr_9_2() -> None:
+    """Review p1-r3: no description or docstring promises the old copy unconditionally."""
+    from fr.artifacts.runner import MIGRATIONS
+    from fr.commands import settings_cmd
+    from fr.config import space
+
+    steps = MIGRATIONS._schema["settings-location"]
+    assert steps and all("before fr 9.2" in m.description for m in steps)
+    for fn in (space.write_settings, settings_cmd.init_quiet, settings_cmd.init_stealth):
+        assert "before fr 9.2" in " ".join((fn.__doc__ or "").split()), fn.__name__
+    assert "before fr 9.2" in " ".join((settings_cmd.init_cmd.__doc__ or "").split())

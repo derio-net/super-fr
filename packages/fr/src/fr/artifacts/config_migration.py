@@ -229,6 +229,6 @@ MIGRATIONS.register(
         to_version=2,
         fn=_create_space,
         description="settings-location: create the configuration branch from the old "
-        "switch, which stays as the legacy copy (S1 R5, R6)",
+        "switch, which stays as the legacy copy before fr 9.2 (S1 R5, R6)",
     )
 )

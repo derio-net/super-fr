@@ -36,6 +36,7 @@ from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
 
+from fr.config.movers import mover
 from fr.config.space import ALLOWLIST, CONFIG_BRANCH
 from fr.config.space import SPACE_DIR as SPACE_DIR
 from fr.config.space import rel as rel
@@ -216,10 +217,16 @@ def _legacy_settings_dir(product: Path, placement: str) -> Path | None:
 def settings_stamp(path: Path) -> int | None:
     """`settings-location`'s stamp: `.fr/settings.yaml` is 2; the old switch is 2 once
     the configuration branch holds the same bytes (it is then R6's legacy copy, not a
-    second file for R12), else 1."""
+    second file for R12), else 1. Past the end of S1's transition (fr 9.2) the old copy is
+    no longer kept in step, so once the configuration branch holds a settings file the old
+    switch counts as current whatever its bytes (spec 2026-11-28-s1-followups R4)."""
+    from fr.config import transition
+
     if Path(path).full_match(f"**/{rel(SETTINGS)}"):
         return 2
     held = _config_settings_for_legacy(Path(path))
+    if held is not None and not transition.keeps_old_copy():
+        return 2
     try:
         return 2 if held is not None and held == path.read_text() else 1
     except OSError:
@@ -722,6 +729,7 @@ def profiles_body(product: Path, source: Path) -> str:
     return bom + with_stamp(v2, 3)
 
 
+@mover  # creates the space FROM the old switch (spec 2026-11-28-s1-followups R3)
 def ensure_space(
     product: Path,
     *,

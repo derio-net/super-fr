@@ -63,7 +63,8 @@ def init_cmd(
     """Write `.fr/settings.yaml` with every key commented out at its default.
 
     Writes only; commit it (and land it on the default branch) yourself. With
-    `--quiet`, create and push the `fr` branch instead (R3, R23).
+    `--quiet`, create and push the `fr-config` branch instead (R3, R23), and, before
+    fr 9.2 only, the `fr` branch holding the old copy.
     """
     from fr.settings.render import render_init
 
@@ -120,10 +121,11 @@ def init_cmd(
 
 def init_quiet(root: Path) -> str:
     """Create the quiet switch (`render_init("quiet")`): the orphan `fr-config` branch
-    holding `.fr/settings.yaml`, then the orphan `fr` branch holding the same bytes as its
-    root `settings.yaml` (spec 2026-11-19-event-driven-a-la-carte R5, R6), each made with
-    plumbing, so the checkout is never touched, and pushed with a plain push. Refuses with
-    no origin, or when origin or this clone already has either branch."""
+    holding `.fr/settings.yaml`, then, before fr 9.2 only, the orphan `fr` branch holding the
+    same bytes as its root `settings.yaml` (spec 2026-11-19-event-driven-a-la-carte R5, R6;
+    2026-11-28-s1-followups R4), each made with plumbing, so the checkout is never touched,
+    and pushed with a plain push. Refuses with no origin, or when origin or this clone
+    already has either branch."""
     from fr.config.space import quiet_config_space, write_settings
     from fr.git import GitUnavailableError, git_answer
     from fr.git_policy.templates import fr_message
@@ -247,9 +249,9 @@ def _create_from_old_switch(root: Path) -> str:
 
 def init_stealth(root: Path, text: str) -> str:
     """Write the target's settings (from `render_init("stealth")`): `<target-dir>/.fr/
-    settings.yaml` on the tracking repo's `<branch>-config`, then the same bytes as
-    `<target-dir>/settings.yaml` on `<branch>` (R5, R6, R24), each pushed
-    compare-and-swap. Refuses an unreachable tracking repo or a missing branch before
+    settings.yaml` on the tracking repo's `<branch>-config`, then, before fr 9.2 only, the
+    same bytes as `<target-dir>/settings.yaml` on `<branch>` (R5, R6, R24; spec
+    2026-11-28-s1-followups R4), each pushed compare-and-swap. Refuses an unreachable tracking repo or a missing branch before
     writing, and a file that is already at either path."""
     from fr.config.space import stealth_config_space, write_settings
     from fr.git_policy.templates import fr_message

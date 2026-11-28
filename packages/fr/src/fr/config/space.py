@@ -276,10 +276,12 @@ def write_settings(space: ConfigSpace, text: str, *, message: str) -> str | None
     Under `repo` it writes `.fr/settings.yaml` in the product working tree (committing is
     the operator's). Under `quiet` and `stealth` it commits and pushes the configuration
     branch's file first (`.fr/settings.yaml` on `fr-config`, `<target-dir>/.fr/settings.yaml`
-    on `<branch>-config`), then the same bytes at the old path (the root `settings.yaml`
-    on `fr`, `<target-dir>/settings.yaml` on `<branch>`), so an fr below S1 and older hooks
-    still read the placement. The legacy copy ends at the release R14's owed entry
-    `s1-refuse-old-paths` names.
+    on `<branch>-config`), then, before fr 9.2 only, the same bytes at the old path (the
+    root `settings.yaml` on `fr`, `<target-dir>/settings.yaml` on `<branch>`), so an fr
+    below S1 and older hooks still read the placement. Past the end of S1's transition
+    (`fr.config.transition.keeps_old_copy`) only the configuration branch's file is
+    written, and the old copy is never rewritten or deleted (spec 2026-11-28-s1-followups
+    R4).
 
     That is the creation (and a retry that only lands the legacy copy). A change to a
     configuration branch that already exists is reviewed (spec §B, plan decision
