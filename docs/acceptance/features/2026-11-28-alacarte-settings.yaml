@@ -37,13 +37,15 @@ rows:
     scenario: tests/scenarios/alacarte-settings.sh
   - id: s2-stealth-confirm
     capability: 'stealth: code reaches the target only on operator confirmation'
-    acceptance: Under stealth, `fr push` and `fr pr create` ask for a verified operator
-      approval whatever the tracking settings say, an explicit `auto` there is refused,
-      and fr's state still pushes to the tracking repo on every write without asking.
+    acceptance: Under stealth, fr push and fr pr create ask for a verified operator
+      approval whatever the tracking settings say (fr push asks nothing when no code
+      is pending), an explicit auto there is refused, and fr's state and configuration
+      PRs still reach the tracking repo without asking.
     origin:
     - spec:2026-11-28-alacarte-settings#R7
     - spec:2026-11-28-alacarte-settings#R8
     - spec:2026-11-28-alacarte-settings#R9
+    - spec:2026-11-28-alacarte-settings#R10
     levels: {}
     status: not-implemented
     notes: ''
