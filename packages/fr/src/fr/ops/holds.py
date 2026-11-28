@@ -1,5 +1,5 @@
-"""What still holds a run's `devops` gate, by recorded evidence only (spec
-2026-10-22-fr-ops R14).
+"""What still holds a run's post-merge gate, by recorded evidence only (spec
+2026-10-22-fr-ops R14; for both gates and their rows, spec 2026-11-27-ops-gate-truth R10).
 
 `fr gate pass --gate devops --run <id>` refuses while any of the run's plan ops is not
 DONE/N/A by the evidence recorded in this checkout, or any Test Plan step whose
@@ -11,10 +11,13 @@ fresh look at the live system.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Set
+from collections.abc import Collection, Iterable, Mapping, Set
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from fr.acceptance.model import Row, Walk
+from fr.acceptance.walks import row_walked
 from fr.artifacts.paths import emitted_path
 from fr.journal.model import JournalEntry
 from fr.ops.testplan import steps_gated
@@ -76,29 +79,108 @@ def _step_outcomes(repo_root: Path, spec: Path, exclude: Set[str] = frozenset())
     return fold_step_outcomes(entries, exclude=exclude)
 
 
-def devops_blockers(repo_root: Path, state: RunState) -> list[str]:
-    """One line per thing holding `state`'s devops gate; `[]` when nothing does.
-    Raises `fr.ops.load.OpsLoadError` when the plan's ops cannot be read."""
+@dataclass(frozen=True)
+class GateItem:
+    """One thing a post-merge gate owns (spec 2026-11-27-ops-gate-truth R10): what it is,
+    whether recorded evidence discharges it, and a one-line reason."""
+
+    what: str
+    discharged: bool
+    why: str
+
+    @property
+    def line(self) -> str:
+        return f"{self.what}: {self.why}"
+
+
+def _row_reason(row: Row, walks: list[Walk]) -> str:
+    """Why *row* is (or is not) walked, judged over *walks* (R10)."""
+    if row_walked(row, exclude=set(row.walks) - set(walks)):
+        return "walked"
+    if not walks:
+        return f"no walk (status {row.status})"
+    latest = max(walks, key=lambda w: w.at)
+    if latest.outcome != "pass":
+        return f"its latest walk failed ({latest.harness}, {latest.at})"
+    passing = {w.harness for w in walks if w.outcome == "pass"}
+    owed = [h for h in row.harnesses if h not in passing]
+    if owed:
+        return f"walk still owed on {', '.join(owed)} (status {row.status})"
+    return f"status {row.status}, not walked"
+
+
+def gate_items(
+    repo_root: Path,
+    state: RunState,
+    gate: StepGate,
+    *,
+    exclude_walks: Mapping[str, Collection[Walk]] | None = None,
+    exclude_outcomes: Set[str] = frozenset(),
+) -> list[GateItem]:
+    """Every thing `state`'s *gate* owns, discharged or not (R10): each plan op (devops
+    only), each Test Plan step whose effective gate is *gate*, and each row whose
+    effective gate is *gate* (none under `acceptance: off`). A walk in
+    `exclude_walks[row]` and an outcome entry id in *exclude_outcomes* do not count (the
+    DevOps stage passes the ones the pinned PR head carries, R12). Raises
+    `fr.ops.load.OpsLoadError` when the plan's ops cannot be read."""
     from fr.ops.evidence import JournalEvidence, recorded_close, recorded_state
     from fr.ops.load import load_ops
-    from fr.verification.exit import run_plan_dir
+    from fr.settings import disabled
+    from fr.verification.exit import run_exit, run_plan_dir
 
-    out: list[str] = []
-    plan_dir = run_plan_dir(repo_root, state)
+    out: list[GateItem] = []
+    plan_dir = run_plan_dir(repo_root, state) if gate == "devops" else None
     if plan_dir is not None:
         journal = JournalEvidence(repo_root, plan_dir.name)
         for lo in load_ops(plan_dir, repo_root).ops:
-            if lo.runbook:  # R2: never in the R14 set
+            if lo.runbook:  # fr-ops R2: never in the R14 set
                 continue
             ev = journal.latest(lo.op.id, runbook=False)
-            if recorded_close(lo, ev) is None:
-                out.append(f"op {lo.op.id} [{lo.op.phase}]: {recorded_state(lo, ev)}")
-    for step, kind in gated_steps(repo_root, state, "devops"):
-        if kind == "discovery":  # `ran` or `n/a` (R14); `owed` does not close it
+            closed = recorded_close(lo, ev) is not None
+            out.append(GateItem(f"op {lo.op.id} [{lo.op.phase}]", closed, recorded_state(lo, ev)))
+    exit_ = run_exit(repo_root, state)
+    for step, kind in _gated_steps(repo_root, state, gate, exit_.gates, exclude_outcomes):
+        if kind == "discovery":  # `ran` or `n/a` (fr-ops R14); `owed` does not close it
+            why = "recorded ran or n/a"
+        else:
+            why = "recorded owed, which does not close it" if kind else "no recorded outcome"
+        out.append(
+            GateItem(f"Test Plan step {step.n} ({gate})", kind == "discovery",
+                     f"{why} — {step.text}")  # fmt: skip
+        )
+    if disabled(repo_root, "acceptance"):
+        return out
+    excluded = exclude_walks or {}
+    for row in exit_.gated_rows:
+        if exit_.row_gates[row.id] != gate:
             continue
-        why = "recorded owed, which does not close it" if kind else "no recorded outcome"
-        out.append(f"Test Plan step {step.n} (devops): {why} — {step.text}")
+        skip = set(excluded.get(row.id, ()))
+        walks = [w for w in row.walks if w not in skip]
+        why = _row_reason(row, walks)
+        out.append(GateItem(f"row {row.id} ({gate})", why == "walked", why))
     return out
+
+
+def gate_blockers(
+    repo_root: Path,
+    state: RunState,
+    gate: StepGate,
+    *,
+    exclude_walks: Mapping[str, Collection[Walk]] | None = None,
+    exclude_outcomes: Set[str] = frozenset(),
+) -> list[str]:
+    """One line per item of `gate_items` still owed; `[]` when nothing holds the gate."""
+    items = gate_items(
+        repo_root, state, gate, exclude_walks=exclude_walks, exclude_outcomes=exclude_outcomes
+    )
+    return [i.line for i in items if not i.discharged]
+
+
+def devops_blockers(repo_root: Path, state: RunState) -> list[str]:
+    """One line per thing holding `state`'s devops gate; `[]` when nothing does
+    (`gate_blockers(..., "devops")`). Raises `fr.ops.load.OpsLoadError` when the plan's
+    ops cannot be read."""
+    return gate_blockers(repo_root, state, "devops")
 
 
 def gated_steps(
@@ -107,15 +189,21 @@ def gated_steps(
     """The run's Test Plan steps whose effective gate is `gate`, each with the kind of its
     effective outcome (`discovery` for ran and n/a, `owed`), or `None` when it has none.
     *exclude*: outcome entry ids not to count (the DevOps stage's PR-carried ones)."""
+    from fr.verification.exit import run_exit
+
+    return _gated_steps(repo_root, state, gate, run_exit(repo_root, state).gates, exclude)
+
+
+def _gated_steps(
+    repo_root: Path, state: RunState, gate: StepGate, gates: Set[str], exclude: Set[str]
+) -> list[tuple[Step, str | None]]:
     from fr.requirements import run_spec
     from fr.spec import test_plan_steps
-    from fr.verification.exit import run_exit
 
     spec_rel = run_spec(state)
     spec = _spec_file(repo_root, spec_rel) if spec_rel else None
     if spec is None:
         return []
-    gates = run_exit(repo_root, state).gates
     outcomes = _step_outcomes(repo_root, spec, exclude)
     return [
         (step, outcomes.get(step.n))
