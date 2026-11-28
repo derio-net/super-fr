@@ -36,9 +36,15 @@ rows:
     origin:
     - spec:2026-11-28-alacarte-settings#R4
     - spec:2026-11-28-alacarte-settings#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pr_body_sections.py
+      - super-fr:tests/unit/test_settings_model.py#test_an_unknown_pr_section_is_refused_naming_the_three
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_alacarte_settings
+    status: ci
+    notes: unit tests pin required_sections, the render and deliver's required set,
+      settle still checked; the candidate scenario walks it
     verify: candidate
     scenario: tests/scenarios/alacarte-settings.sh
   - id: s2-stealth-confirm
