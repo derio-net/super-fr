@@ -55,3 +55,12 @@ rows:
     status: not-implemented
     notes: ''
     verify: none
+amendments:
+  - row: harness-gate-degrades-loudly
+    op: set-status
+    base: 0
+    status: ci
+    notes: Spec 3.D.1. fr.run.provenance.gate_degradation_notice() reads the matrix
+      scope_note live (never hardcoded). Live verification on OpenCode/Hermes is Test
+      Plan items 1-2, post-merge.
+    why: run-verdict slice 6 moved the function
