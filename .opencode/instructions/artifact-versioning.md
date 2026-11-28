@@ -146,7 +146,7 @@ membership is the tuple's own docstring: the command never mutates a registered 
 `harness` meets it by only reading hook registrations; `triage` by never reading or
 writing an artifact at all (its state lives under `~/.cache/fr/triage/`); `usage` by only
 reading a run cursor and harness transcripts and writing under `~/.cache/fr/usage/`. `services`
-only reads `.devcontainer/fr-profiles.yaml` and the repo's CI files, and must work on an
+only reads the profile declarations (`.fr/profiles.yaml`) and the repo's CI files, and must work on an
 unmigrated repo. `cloud` writes nothing (`doctor` reads, `setup-script` prints) and must
 diagnose an environment not yet fit for fr. `debt` writes nothing (`issue` writes only to the
 forge, with `--yes`; `archive-pr` only through a nested `fr archive`, which the gate checks on its
@@ -259,7 +259,7 @@ patch the file by hand.
 - A **duplicate YAML key** in any of the three YAML-carried kinds fails
   `fr validate artifacts`. PyYAML keeps the last occurrence silently, which is
   how `docs/acceptance/matrix.yaml` lost a test ref that nothing reported
-  missing; `fr.artifacts.structure._StrictLoader` is the detector.
+  missing; `fr.yamlio.StrictLoader` is the detector.
 
 ## What this rule does not cover
 

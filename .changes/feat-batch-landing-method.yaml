@@ -1,0 +1,2 @@
+bump: patch
+summary: the wave merge queue uses the configured merge_method over the forge's viewer default and, under queue.land push, refuses squash and rebase, which GitHub closes unmerged; release gating counts a closed-unmerged first-parent landing

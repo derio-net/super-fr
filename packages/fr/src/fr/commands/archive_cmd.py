@@ -53,13 +53,13 @@ from fr.archive import (
 from fr.artifacts.paths import KIND_DIRS, artifact_root, kind_dir, space_for
 from fr.closeout import BranchArtifact, branch_artifacts, journal_scope_and_slug, owed_artifacts
 from fr.commands.common import build_plan_report, require_migrated_layout, resolve_repo_root
-from fr.isolation.local import (
+from fr.isolation.branchrefs import resolve_branch_refs
+from fr.isolation.landing import (
     branch_changed_paths,
     branch_changes_present,
     recorded_start,
-    resolve_branch_refs,
-    subprocess_runner,
 )
+from fr.isolation.runner import subprocess_runner
 from fr.isolation.types import IsolationError
 from fr.journal.model import JournalScope, archived_journal_path, journal_path
 from fr.parser import PlanSchemaError
@@ -382,12 +382,12 @@ def _refuse_cannot_tell(repo_root: Path, placement: str) -> None:
 
 def _unpushed(fr_root: Path, path: Path) -> bool:
     """The local `fr` holds a commit of *path* that `origin/fr` does not (review p5-r7)."""
-    from fr.artifacts.paths import SWITCH_REF
+    from fr.artifacts.paths import MEMORY_REF
     from fr.git import GitUnavailableError, git_answer
 
     rel = path.resolve().relative_to(fr_root.resolve()).as_posix()
     try:
-        done = git_answer(fr_root, "log", "--format=%H", f"{SWITCH_REF}..HEAD", "--", rel)
+        done = git_answer(fr_root, "log", "--format=%H", f"{MEMORY_REF}..HEAD", "--", rel)
     except GitUnavailableError:
         return True
     return done.returncode != 0 or bool(done.stdout.strip())

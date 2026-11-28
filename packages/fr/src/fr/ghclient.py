@@ -22,6 +22,13 @@ FORGE_PARITY_ISSUE = "gh#611"
 MERGE_METHODS = frozenset({"merge", "squash", "rebase"})
 
 
+def pr_label_names(raw: Sequence[Any] | None) -> list[str]:
+    """The label names of a forge payload's `labels` list (`[{name, ...}, ...]`), shared by
+    both GitHub clients' `pr_view`; a payload with no `labels` key is theirs to report as
+    None (unread), never passed here."""
+    return [str(lb.get("name") or "") for lb in raw or [] if isinstance(lb, dict)]
+
+
 @dataclass(frozen=True)
 class BaseRules:
     """What a base branch's rules require of a merge (2026-10-11-merge-train-safety §D,
@@ -304,8 +311,8 @@ class GhClient(Protocol):
         """`{state, draft, head_oid, head_ref, base_ref, mergeable, merge_state, merge_commit,
         title, body, labels}` of one PR, read fresh. `state` is OPEN | CLOSED | MERGED;
         `merge_commit` is the commit the merge made on the base ("" while unmerged); `labels`
-        the label names (the merge paths read `approved-fr` here, live — 2026-10-11-merge-
-        train-safety §A)."""
+        the label names, or None when the payload carried no `labels` key (unread: the merge
+        paths read `approved-fr` here, live — 2026-10-11-merge-train-safety §A)."""
         ...
 
     def pr_ready(self, repo: str, number: int) -> None:
@@ -346,6 +353,14 @@ class GhClient(Protocol):
         plus rulesets), sorted, whether or not any has reported on a commit: a
         required check not created yet is still named. Empty when none is
         required. Spec 2026-10-07-cloud-triage §I, gate checks (p2-r1)."""
+        ...
+
+    def branch_rules(self, repo: str, branch: str) -> Any:
+        """*branch*'s effective rules as the forge answers them (GitHub's
+        `GET rules/branches/{branch}`: a list of `{type, parameters, ...}`), raising the
+        forge's own error (the free-plan 403 included) for `fr.config.protection` to judge
+        (spec 2026-11-19-event-driven-a-la-carte R7). A forge that cannot read rules
+        raises `UnsupportedForgeOperation`."""
         ...
 
     def base_rules(self, repo: str, branch: str) -> BaseRules:
@@ -513,6 +528,12 @@ class GhClient(Protocol):
         inconclusive and refuses, naming the flag."""
         ...
 
+    def repo_default_branch(self, repo: str) -> str:
+        """*repo*'s default branch as the forge reports it (`fr triage queue add`'s base
+        check, spec 2026-11-24-wave-queue-gaps R11). Raises the backend's error when it
+        cannot be read, so a refusal never rests on an unread answer."""
+        ...
+
     def repo_visibility(self, repo: str) -> str:
         """*repo*'s visibility as the forge reports it, lowercased: `public`, `private`
         or `internal` (spec 2026-10-07-cloud-triage §B, §C). Raises the backend's error
@@ -585,6 +606,9 @@ class UnsupportedBatchOps:
 
     def required_check_names(self, repo: str, base: str) -> list[str]:
         raise self._unsupported("required_check_names")
+
+    def branch_rules(self, repo: str, branch: str) -> Any:
+        raise self._unsupported("branch_rules")
 
     def base_rules(self, repo: str, branch: str) -> BaseRules:
         return BaseRules()  # a forge without the concepts has neither: not an error (R12)
@@ -674,6 +698,9 @@ class UnsupportedBatchOps:
 
     def repo_visibility(self, repo: str) -> str:
         raise self._unsupported("repo_visibility")
+
+    def repo_default_branch(self, repo: str) -> str:
+        raise self._unsupported("repo_default_branch")
 
     def pages_visibility(self, repo: str) -> str:
         return "unknown"  # a backend with no route for it (Gitea): fail closed

@@ -33,24 +33,22 @@ from fr.triage.batch_drive import (
     ARCHIVE_PREFIXES,
     ARCHIVE_WAIT,
     AWAITING_LIVE_HOLD,
-    CONFLICTING,
-    Action,
     IdleSession,
-    LivePr,
     Pass,
     Snapshot,
     attributed,
     checks_verdict,
     closeout_event,
     closeout_item_id,
-    conflict_at,
     default_selection,
     drive_pass,
-    held_archive_conflict,
     idle_session,
+    queue_snapshot,
 )
+from fr.triage.batch_drive_types import CONFLICTING, Action, LivePr
 from fr.triage.claims import expired, from_issue_claim, held_line, held_map
 from fr.triage.components import stamp_text
+from fr.triage.handback_rules import conflict_at, held_archive_conflict
 from fr.triage.lanes import gated_pr_lane, lane_of, live_stops, unlisted_gated_prs
 from fr.triage.merge_stops import MergeStop, archive_stop_key, live_stop
 from fr.triage.mergeability import CONFLICT_HANDED_BACK_HINT, CONFLICT_HINT, conflicting
@@ -64,6 +62,7 @@ from fr.triage.model import (
     Launch,
     RedHandbackEvent,
 )
+from fr.triage.readiness import Readiness, Refused, other_readiness, snapshot_readiness
 from fr.triage.stage import Stage
 from fr.triage.views import drive_snapshot, queue_unconfigured
 from fr.triage.wave_queue import queue_line
@@ -116,8 +115,12 @@ _COLUMN_OF_STAGE: Mapping[BatchStage, Column] = {
     "pr-open": "pr-open",
     "cancelled": "done",
     "abandoned": "done",
+    # The batch's repo left the scope's facts (2026-11-27-closeout-state R6): finished.
+    "left-scope": "done",
 }
-PILL_STAGES: frozenset[BatchStage] = frozenset({"cancelled", "abandoned", "partial"})
+PILL_STAGES: frozenset[BatchStage] = frozenset({"cancelled", "abandoned", "partial", "left-scope"})
+# The pill's words where they differ from the stage name; the one place pill text lives.
+_PILL_TEXT: Mapping[BatchStage, str] = {"left-scope": "repo left this scope"}
 _DEAD: frozenset[DependencyState] = frozenset({"unsatisfiable", "unknown"})
 
 # R6: what the driver's action means for a card, by action kind.
@@ -172,11 +175,6 @@ HINT_ARCHIVE_PENDING = "archive PR pending"
 HINT_CLOSEOUT_NOT_RECORDED = "close-out not recorded"
 HINT_FINISHED = "finished"
 HINT_OBSOLETE = "obsolete: every member closed, retire it with batch cancel"
-# A green member without a valid `approved-fr` label, so no queue entry (merge-train-safety R5).
-HINT_AWAITING_APPROVAL = "awaiting approval"
-# A member the wave merge queue holds as an entry or a ready entry (wave-merge-queue R25).
-HINT_IN_MERGE_QUEUE = "in merge queue"
-HINT_MERGE_READY = "merge ready"
 # A ready PR of a repo whose `.fr/triage.yaml` has no `queue.ci`: the queue holds it.
 HINT_QUEUE_UNCONFIGURED = "queue held: add `queue: {ci: push}` to .fr/triage.yaml"
 
@@ -209,7 +207,7 @@ def _archive_prs(batch_repo_: str, facts: Facts, ci_none: Collection[str] = ()) 
             number=p.number, state=p.state, draft=p.is_draft, head=p.head_oid,
             checks=verdict, failing=failing, head_ref=p.head_ref, files=tuple(p.files),
             trusted=distrust(p.author, p.cross_repo, allowed) is None,
-            mergeable=p.mergeable or "",
+            mergeable=p.mergeable or "", url=p.url,
         )  # fmt: skip
     return list(out.values())
 
@@ -311,7 +309,9 @@ class HeldIssue:
     line: str  # `claims.held_line`: the same words the drive and the batch verbs use
 
 
-_TERMINAL_STAGES: frozenset[BatchStage] = frozenset({"merged", "cancelled", "abandoned"})
+_TERMINAL_STAGES: frozenset[BatchStage] = frozenset(
+    {"merged", "cancelled", "abandoned", "left-scope"}
+)
 
 
 @dataclass(frozen=True)
@@ -341,6 +341,10 @@ class Card:
     model: Setting
     events: tuple[EventRow, ...]
     claim_expiry: ClaimExpiry | None = None
+    # batch-merge-readiness R4-R8: the batch PR's verdict, and the verdicts of the
+    # close-out, archive and export PRs about it, from the one plan the board builds
+    readiness: Readiness | None = None
+    others: tuple[Readiness, ...] = ()
     overlaps: tuple[str, ...] = ()  # plan file overlap sentences (spec 2026-11-25)
 
     @property
@@ -414,6 +418,7 @@ class Board:
     # R25, R28: each queue repo's line, and the report of every wave its queue ran
     queue_lines: tuple[str, ...] = ()
     wave_reports: tuple[WaveReport, ...] = ()
+    others: tuple[Readiness, ...] = ()  # entries about no batch (export, housekeeping), R8
 
     def column(self, key: Column) -> ColumnView:
         return next(c for c in self.columns if c.key == key)
@@ -439,14 +444,16 @@ def column_of(
     """R2's table, from `derive_batch_stage`, `dependency_state` and `closeout_state`; a
     batch `lane_of` places is in that Needs-you lane instead (exit-gates R17). *stop* is
     the batch's live merge stop."""
-    if derive_batch_stage(batch, facts) == "obsolete":
+    stage = derive_batch_stage(batch, facts)
+    if stage == "obsolete":
         return "obsolete"
+    if stage == "left-scope":
+        return "done"
     if not batch.events:
         waiting = any(dependency_state(d, batches, facts) != "satisfied" for d in batch.after)
         return "waiting" if waiting else "proposed"
     if (lane := lane_of(batch, facts, stop)) is not None:
         return lane.lane
-    stage = derive_batch_stage(batch, facts)
     if stage in _COLUMN_OF_STAGE:
         return _COLUMN_OF_STAGE[stage]
     if closeout_state(batch) == "archived":
@@ -454,10 +461,17 @@ def column_of(
     return "partial" if stage == "partial" else "closing-out"
 
 
+def jumpable(status: str | None, stage: BatchStage) -> bool:
+    """Whether a card offers a Jump command: it has a session, and its batch is not
+    `left-scope` (no runner of the scope reaches a departed repo's session)."""
+    return status is not None and status != "absent" and stage != "left-scope"
+
+
 def pill_of(batch: Batch, facts: Facts) -> str | None:
-    """`cancelled`, `abandoned` or `partial`: the word a Done card carries; else None."""
+    """`cancelled`, `abandoned`, `partial` or `repo left this scope`: the words a Done card
+    carries; else None."""
     stage = derive_batch_stage(batch, facts)
-    return stage if stage in PILL_STAGES else None
+    return _PILL_TEXT.get(stage, stage) if stage in PILL_STAGES else None
 
 
 # -------------------------------------------------------------------- hints
@@ -474,6 +488,35 @@ def _default_plan(
     snapshot = drive_snapshot(facts, judgements, ci_none=ci_none, scope_args=scope_args)
     chosen = replace(snapshot, selected=default_selection(judgements.batches))
     return chosen, drive_pass(chosen)
+
+
+def _others_of(plan: Pass) -> dict[str, tuple[Readiness, ...]]:
+    """The plan's verdicts for non-batch entries (R8), by the batch each is about ("" for
+    one about no batch: an export or housekeeping PR)."""
+    grouped: dict[str, list[Readiness]] = {}
+    for q in plan.queues:
+        for r in q.readiness.values():
+            if r.entry is not None:
+                grouped.setdefault(r.entry.batch, []).append(r)
+    return {k: tuple(v) for k, v in grouped.items()}
+
+
+def _archive_view(
+    batch: Batch, repo: str, p: LivePr, snapshot: Snapshot, known: Collection[str]
+) -> Readiness | None:
+    """R8 for the batch's attributed open archive PR on a board that names no default branch
+    or PR base: the plan has no entry for it, so the verdict says what the facts cannot
+    judge (checks, a conflict, or that the driver reads the base live)."""
+    if f"archive#{p.number}" in known:
+        return None
+    if p.mergeable == CONFLICTING:
+        why = "conflicts with the default branch"
+    elif p.checks != "green":
+        why = f"checks {p.checks}"
+    else:
+        why = "its base branch is not in the collected facts: the driver reads it live"
+    refused = Refused("archive", repo, p, why, batch.id)
+    return other_readiness(refused.key, queue_snapshot(snapshot, repo, refused=[refused]))
 
 
 def _first_actions(plan: Pass) -> dict[str, Action]:
@@ -645,10 +688,14 @@ def _card(
     ready: frozenset[str] = frozenset(),
     queue_held: Mapping[str, tuple[str, str]] | None = None,
     ci_none: Collection[str] = (),
+    verdicts: Mapping[str, Readiness] | None = None,
+    others: Mapping[str, tuple[Readiness, ...]] | None = None,
+    snapshot: Snapshot | None = None,
 ) -> Card:
     stop = stops.get(batch.id)
     lane = lane_of(batch, facts, stop)
     column = column_of(batch, facts, batches, stop=stop)
+    stage = derive_batch_stage(batch, facts)
     deps = tuple(Dep(d, dependency_state(d, batches, facts)) for d in batch.after)
     repo = batch_repo(batch, facts)
     dispatch, closeout = last_dispatch(batch), closeout_event(batch)
@@ -665,6 +712,12 @@ def _card(
     archives = _archive_prs(repo, facts, ci_none) if repo else []
     idle = _idle_of(batch, facts, repo, status, closeout_status, now, archives)
     held_archive = _held_archive(batch, archives)
+    more = list((others or {}).get(batch.id, ()))
+    open_archive = _open_archive(batch, archives)
+    if open_archive is not None and snapshot is not None:
+        known = {r.entry.key for r in more if r.entry is not None}
+        if (view := _archive_view(batch, repo or "", open_archive, snapshot, known)) is not None:
+            more.append(view)
     first = actions.get(batch.id)
     red = (
         (_red_phrase(batch, first) or action_phrase(first))
@@ -713,12 +766,8 @@ def _card(
         hint = CONFLICT_HINT  # R19: the queue still plans it; the card never says ready
     elif (repo or "") in (queue_held or {}) and (batch.id in queued or batch.id in ready):
         hint = HINT_QUEUE_UNCONFIGURED  # the queue holds this repo: never "merge ready"
-    elif batch.id in queued:
-        hint = HINT_IN_MERGE_QUEUE
-    elif batch.id in ready:
-        hint = HINT_MERGE_READY
-    elif batch.id in awaiting:
-        hint = HINT_AWAITING_APPROVAL
+    elif batch.id in queued or batch.id in ready or batch.id in awaiting:
+        hint = ""  # the verdict leads the card and says it (batch-merge-readiness R7)
     else:
         hint = fallback_hint(batch, column, facts, batches, selected=batch.id in selected)
     pr = batch_pr(batch, facts)
@@ -727,15 +776,15 @@ def _card(
     return Card(
         batch=batch,
         column=column,
-        stage=derive_batch_stage(batch, facts),
+        stage=stage,
         pill=pill_of(batch, facts),
         blocked=column == "waiting" and any(d.state in _DEAD for d in deps),
         hint=hint,
         needs_you=needs_you,
         status=status,
         closeout_status=closeout_status,
-        show_jump=status is not None and status != "absent",
-        show_closeout_jump=closeout_status is not None and closeout_status != "absent",
+        show_jump=jumpable(status, stage),
+        show_closeout_jump=jumpable(closeout_status, stage),
         hand_closeout=closeout is not None and closeout.runner == "hand",
         members=_members(batch, facts),
         pr=None
@@ -752,6 +801,8 @@ def _card(
         model=_setting(launch.model, default.model),
         events=tuple(sorted((_event_row(e) for e in batch.events), key=lambda e: e.at)),
         claim_expiry=claim_expiry,
+        readiness=(verdicts or {}).get(batch.id),
+        others=tuple(more),
     )
 
 
@@ -834,6 +885,11 @@ def build_board(
     actions, awaiting = _first_actions(plan), _awaiting(snapshot, plan)
     queued = _in_merge_queue(plan)
     queue_held = queue_unconfigured(snapshot, facts)
+    verdicts = {k: r for q in plan.queues for k, r in q.readiness.items() if r.entry is None}
+    for b in batches:  # a repo with no queue block has no queue plan: ask the function itself
+        if b.id not in verdicts and (pr := snapshot.live.get(b.id)) and pr.state == "OPEN":
+            verdicts[b.id] = snapshot_readiness(snapshot, b)
+    others = _others_of(plan)
     selected = default_selection(batches)
     live = _board_stops(batches, facts, stops or {}, ci_none)
     cards = [
@@ -853,6 +909,9 @@ def build_board(
             ready=plan.ready,
             queue_held=queue_held,
             ci_none=ci_none,
+            verdicts=verdicts,
+            others=others,
+            snapshot=snapshot,
         )
         for b in batches
     ]
@@ -879,5 +938,5 @@ def build_board(
     return Board(
         scope=facts.scope, collected_at=facts.collected_at, columns=columns, held=held,
         queue_lines=tuple(queue_line(q) for q in plan.queues),
-        wave_reports=wave_report(mine, batches),
+        wave_reports=wave_report(mine, batches), others=others.get("", ()),
     )  # fmt: skip

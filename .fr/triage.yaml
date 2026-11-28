@@ -17,10 +17,13 @@ post_merge: ["./scripts/install.sh", "--version", "main"]
 # runner once (driver-sessions spec R6), so they load the plugins, hooks and fr it installed.
 # The driver's own pane is never restarted. `none` turns it off.
 post_merge_restart: idle
-# The driver's merge method. This repo allows several, and under `forge.api: rest` (a
-# cloud driver) fr cannot read the default from the forge, so it refuses to merge until
-# one is named here (fr-triage skill, "The driver"). Squash is this repo's convention.
-merge_method: squash
+# The driver's merge method. A configured method wins over the forge's default, which is only
+# the viewer's (#1702). It must be `merge` here: under `queue.land: push` only a merge commit
+# makes GitHub mark a pushed PR merged (a squash or rebase push closes it unmerged, #1705), and
+# this repo's release attributes PRs by first-parent `Merge pull request #N`, which a rebase
+# breaks (#1603). Under `forge.api: rest` fr cannot read a default at all (fr-triage skill,
+# "The driver").
+merge_method: merge
 # No `version:` block, deliberately (spec 2026-09-26-version-bump-churn §3.F):
 # super-fr PRs never edit a version, so a batch reserves no number. The worker
 # adds a `.changes/` fragment per AGENTS.md and release.yml assigns the number.
@@ -50,7 +53,7 @@ mirrors:
   - [uv, run, --frozen, python, scripts/sync-opencode.py]
   - [uv, run, --frozen, python, scripts/sync-hermes.py]
   - [uv, run, --frozen, python, scripts/sync-agents-data.py]
-  - [uv, run, --frozen, python, scripts/sync-lenses-data.py]
+  - [uv, run, --frozen, python, scripts/sync-defaults-data.py]
 generated:
   - ".opencode/skills/*"         # sync-opencode.py: skill mirrors and their .source notes
   - ".opencode/instructions/*"   # sync-opencode.py: rule mirrors
@@ -59,4 +62,4 @@ generated:
   - ".hermes/skills/fr/*"        # sync-hermes.py: skill mirrors and their .source notes
   - ".hermes/SOUL.d/super-fr-rules.md"           # sync-hermes.py: the rules block
   - "packages/fr/src/fr/agents/*.md"             # sync-agents-data.py: the wheel's agents
-  - "packages/fr/src/fr/lens_manifests/*.yaml"   # sync-lenses-data.py: the wheel's lenses
+  - "packages/fr/src/fr/defaults/*.yaml"        # sync-defaults-data.py: the wheel's shipped defaults

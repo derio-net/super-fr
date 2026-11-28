@@ -13,16 +13,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fr.isolation.gc import GcSweeper
 from fr.isolation.hostworktree import HostWorktreeTarget
-from fr.isolation.local import (
-    LocalWorktreeDevcontainerTarget,
-    ReapHazard,
-    ReapRefused,
-    branch_changed_paths,
-    branch_changes_present,
-    devcontainer_id,
-    subprocess_runner,
-)
+from fr.isolation.landing import branch_changed_paths, branch_changes_present
+from fr.isolation.local import LocalWorktreeDevcontainerTarget
+from fr.isolation.reap import ReapHazard, ReapRefused
+from fr.isolation.runner import devcontainer_id, subprocess_runner
 from fr.isolation.types import (
     IsolationError,
     IsolationState,
@@ -1730,7 +1726,7 @@ def test_gc_discovers_label_and_worktree_union(
     wt = up("feat/a")
     gone = tmp_path / "home" / ".cache" / "fr" / "worktrees" / "other" / "gone"
     runner.docker_labels = [("cA", str(wt)), ("cOrph", str(gone))]
-    recs = {r.worktree: r for r in target._discover_workspaces()}
+    recs = {r.worktree: r for r in GcSweeper(target)._discover_workspaces()}
     assert set(recs) == {wt, gone}
     assert recs[wt].container_id == "cA"
     assert recs[wt].state is not None and recs[wt].state.branch == "feat/a"
@@ -1778,7 +1774,7 @@ def test_gc_discovers_workspace_at_custom_path(
     custom = tmp_path / "elsewhere" / "wt"
     target.up(None, "feat/custom", path=custom)
 
-    recs = {r.worktree: r for r in target._discover_workspaces()}
+    recs = {r.worktree: r for r in GcSweeper(target)._discover_workspaces()}
     assert custom in recs
     assert recs[custom].state is not None and recs[custom].state.branch == "feat/custom"
 
@@ -1962,7 +1958,7 @@ def test_gc_dry_run_resolves_the_workspace_repos_default_branch(
     assert target_a._resolve_default_branch() == "trunk"
     assert target_b._resolve_default_branch() == "main"
 
-    action = target_a._reap_or_classify(str(st_b.worktree), st_b, "merged", dry_run=True)
+    action = GcSweeper(target_a)._reap_or_classify(str(st_b.worktree), st_b, "merged", dry_run=True)
 
     # Before the fix this fetched `origin/trunk` inside repo B's worktree,
     # failed, and previewed "would-skip" for a workspace the live sweep reaps.
@@ -2127,7 +2123,7 @@ def test_gc_corrupt_state_does_not_abort_discovery(
     repo, runner, target, up = _gc_env(tmp_path, monkeypatch)
     wt = up("feat/a")
     state_path(repo, "feat/a").write_text("{ not valid json")  # corrupt
-    recs = target._discover_workspaces()  # must not raise
+    recs = GcSweeper(target)._discover_workspaces()  # must not raise
     rec = next(r for r in recs if r.worktree == wt)
     assert rec.state is None  # degrades to no-state (warned, never blindly reaped)
 
@@ -2356,7 +2352,7 @@ def test_spawn_failure_does_not_break_flow(tmp_path: Path, monkeypatch: pytest.M
 def test_default_target_does_not_spawn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # The library default spawner is a no-op — a directly-constructed Target
     # (as in tests, and gc's own sibling teardowns) never forks a real sweep.
-    from fr.isolation.local import _noop_gc_spawn
+    from fr.isolation.runner import _noop_gc_spawn
 
     target = LocalWorktreeDevcontainerTarget(make_repo(tmp_path, ["dev"], default="dev"))
     assert target._gc_spawner is _noop_gc_spawn
@@ -2369,7 +2365,7 @@ def test_gc_second_concurrent_sweep_noops(tmp_path: Path, monkeypatch: pytest.Mo
         pr_by_branch={"feat/merged": '{"state": "MERGED", "url": "u"}'},
     )
     up("feat/merged")
-    held = target._acquire_gc_lock()  # simulate a concurrent sweep holding the lock
+    held = GcSweeper(target)._acquire_gc_lock()  # simulate a concurrent sweep holding the lock
     try:
         assert target.gc() == [], "a second concurrent sweep short-circuits"
         assert not any(c[0:2] == ["docker", "rm"] for c in runner.argv_for("docker"))
@@ -3341,7 +3337,7 @@ def test_branch_blob_was_on_base_cost_is_constant_per_commit_count(tmp_path: Pat
     path — not one `git rev-parse` per commit in `merge_base..base_ref`. A
     generated report/matrix file is touched by nearly every later PR, so an
     O(N) scan multiplies across every workspace in a gc sweep."""
-    from fr.isolation.local import _branch_blob_was_on_base
+    from fr.isolation.landing import _branch_blob_was_on_base
 
     def _build(parent: Path, n_rewrites: int) -> Path:
         parent.mkdir()
@@ -4303,7 +4299,7 @@ def test_merged_by_content_does_not_classify_unlanded_content_as_merged(
 
     st = load_state(repo, "feat/wip")
     assert st is not None
-    assert target._merged_by_content(st) is False
+    assert GcSweeper(target)._merged_by_content(st) is False
 
 
 def test_branch_changes_present_three_way_revert_of_a_pure_deletion_is_missing(
@@ -4344,3 +4340,169 @@ def test_branch_changes_present_second_landing_does_not_hide_a_reverted_first(
     res = branch_changes_present(subprocess_runner, repo, "feature", "main")
     assert not res.changes_present
     assert res.missing == ["a.txt"]
+
+
+# ---------- gc keeps a workspace whose run is still running (R9) ----------
+
+
+def _commit_cursor(wt: Path, branch: str, states: dict[str, str]) -> None:
+    import yaml
+
+    doc = {
+        "schema_version": 5,
+        "run": "r9",
+        "workflow": "fr-goal@1",
+        "branch": branch,
+        "started": "2026-09-23T00:00:00+00:00",
+        "cursor": next(iter(states)),
+        "steps": {k: {"state": v} for k, v in states.items()},
+    }
+    runs = wt / "docs" / "superpowers" / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    _commit_in_worktree(wt, "docs/superpowers/runs/r9.yaml", yaml.safe_dump(doc, sort_keys=False))
+    # Pushed, so the hazard guard (changes not on origin) has nothing to refuse.
+    subprocess.run(["git", "-C", str(wt), "push", "-q", "origin", "HEAD:main"], check=True)
+
+
+_MERGED = '{"state": "MERGED", "url": "u"}'
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_gc_keeps_merged_workspace_with_a_running_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dry_run: bool
+) -> None:
+    repo, _runner, target, up = _gc_env(tmp_path, monkeypatch, pr_by_branch={"feat/run": _MERGED})
+    wt = up("feat/run")
+    _commit_cursor(wt, "feat/run", {"deliver": "running"})
+
+    (action,) = [a for a in target.gc(dry_run=dry_run) if a.branch == "feat/run"]
+    assert action.verdict == "merged" and action.action == "skipped"
+    assert action.detail == "kept: run r9 step deliver is running"
+    assert wt.is_dir() and load_state(repo, "feat/run") is not None
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_gc_keeps_merged_by_content_workspace_with_a_running_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dry_run: bool
+) -> None:
+    repo, _origin, _runner, target, up = _gc_env_origin(tmp_path, monkeypatch)
+    wt = up("feat/work")
+    _commit_cursor(wt, "feat/work", {"deliver": "running"})
+    # _commit_cursor pushed the cursor commit itself to origin/main: its content is
+    # landed, with no PR for gc to find.
+
+    (action,) = [a for a in target.gc(dry_run=dry_run) if a.branch == "feat/work"]
+    assert action.verdict == "merged-by-content" and action.action == "skipped"
+    assert action.detail == "kept: run r9 step deliver is running"
+    assert wt.is_dir()
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+@pytest.mark.parametrize(
+    "body",
+    ["run: [unclosed\n  : : :\n", "run: bad\nbranch: feat/bad\nsteps: [deliver]\n"],
+    ids=["broken-yaml", "steps-not-a-mapping"],
+)
+def test_gc_keeps_merged_workspace_with_an_unreadable_cursor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dry_run: bool, body: str
+) -> None:
+    repo, _runner, target, up = _gc_env(tmp_path, monkeypatch, pr_by_branch={"feat/bad": _MERGED})
+    wt = up("feat/bad")
+    runs = wt / "docs" / "superpowers" / "runs"
+    runs.mkdir(parents=True)
+    _commit_in_worktree(wt, "docs/superpowers/runs/bad.yaml", body)
+    # Pushed, so only the R9 guard (not the unpushed-changes hazard) can keep it.
+    subprocess.run(["git", "-C", str(wt), "push", "-q", "origin", "HEAD:main"], check=True)
+
+    (action,) = [a for a in target.gc(dry_run=dry_run) if a.branch == "feat/bad"]
+    assert action.action == "skipped"
+    assert action.detail.startswith("kept: run bad is unreadable")
+    assert wt.is_dir() and load_state(repo, "feat/bad") is not None
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_gc_keeps_merged_workspace_with_a_running_unit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dry_run: bool
+) -> None:
+    import yaml
+
+    repo, _runner, target, up = _gc_env(tmp_path, monkeypatch, pr_by_branch={"feat/unit": _MERGED})
+    wt = up("feat/unit")
+    doc = {
+        "schema_version": 5,
+        "run": "r9u",
+        "workflow": "fr-goal@1",
+        "branch": "feat/unit",
+        "started": "2026-09-23T00:00:00+00:00",
+        "cursor": "implement",
+        "steps": {
+            "implement": {
+                "state": "pending",
+                "units": {"phase/2/implement-phase": {"state": "running"}},
+            }
+        },
+    }
+    (wt / "docs" / "superpowers" / "runs").mkdir(parents=True)
+    _commit_in_worktree(wt, "docs/superpowers/runs/r9u.yaml", yaml.safe_dump(doc, sort_keys=False))
+    subprocess.run(["git", "-C", str(wt), "push", "-q", "origin", "HEAD:main"], check=True)
+
+    (action,) = [a for a in target.gc(dry_run=dry_run) if a.branch == "feat/unit"]
+    assert action.action == "skipped"
+    assert action.detail == "kept: run r9u step implement is running"
+    assert wt.is_dir() and load_state(repo, "feat/unit") is not None
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_gc_keeps_a_workspace_whose_run_cursor_location_is_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dry_run: bool
+) -> None:
+    """l-security-r1: under quiet or stealth the cursor is the placement's, not the
+    worktree's; a placement gc cannot resolve keeps the workspace, merged or not."""
+    from fr.artifacts import paths
+    from fr.settings import SettingsError
+
+    repo, _runner, target, up = _gc_env(tmp_path, monkeypatch, pr_by_branch={"feat/q": _MERGED})
+    wt = up("feat/q")
+
+    def lost(root: Path, create: bool = True) -> paths.ArtifactSpace:
+        raise SettingsError("placement quiet: no marker")
+
+    monkeypatch.setattr(paths, "space_for", lost)
+    (action,) = [a for a in target.gc(dry_run=dry_run) if a.branch == "feat/q"]
+    assert action.action == "skipped"
+    assert action.detail == "kept: run cursor location unknown (placement quiet: no marker)"
+    assert wt.is_dir() and load_state(repo, "feat/q") is not None
+
+
+def test_gc_still_reaps_merged_workspace_with_no_cursor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _repo, _runner, target, up = _gc_env(tmp_path, monkeypatch, pr_by_branch={"feat/none": _MERGED})
+    up("feat/none")
+
+    (action,) = [a for a in target.gc(dry_run=True) if a.branch == "feat/none"]
+    assert action.action == "would-reap"
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_gc_still_reaps_merged_workspace_with_no_running_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dry_run: bool
+) -> None:
+    repo, _runner, target, up = _gc_env(tmp_path, monkeypatch, pr_by_branch={"feat/idle": _MERGED})
+    wt = up("feat/idle")
+    _commit_cursor(wt, "feat/idle", {"a": "done", "b": "pending", "c": "blocked"})
+
+    (action,) = [a for a in target.gc(dry_run=dry_run) if a.branch == "feat/idle"]
+    assert action.action == ("would-reap" if dry_run else "reaped")
+
+
+def test_down_still_tears_down_a_merged_workspace_with_a_running_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, _runner, target, up = _gc_env(tmp_path, monkeypatch, pr_by_branch={"feat/down": _MERGED})
+    wt = up("feat/down")
+    _commit_cursor(wt, "feat/down", {"deliver": "running"})
+    state = load_state(repo, "feat/down")
+    assert state is not None
+    target.down(state, force=False)
+    assert not wt.exists()

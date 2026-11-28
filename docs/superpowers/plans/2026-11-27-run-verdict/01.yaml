@@ -1,0 +1,118 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Verdict types, the unobserved channel, the adapter, the layering guard and
+    the two derived verifiers
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - run-engine-cli-free
+  - run-verdict-refusals-preserved
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/run/verdict.py
+  - packages/fr/src/fr/run/unobserved.py
+  - packages/fr/src/fr/run/steps.py
+  - packages/fr/src/fr/run/evidence/*.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - tests/unit/*.py
+  - tests/fixtures/run_verdict/**
+  - .changes/feat-batch-arch-run-verdict.yaml
+  - docs/reference/workflow-shapes.md
+  - docs/reference/cli.md
+  - docs/acceptance/features/2026-11-27-run-verdict.yaml
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: Smoke and the types (R1)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED (smoke): add tests/unit/test_run_verdict.py with one trivial test that imports `fr.run.verdict` and builds `Say("x")`, asserting its defaults are markup=True, soft_wrap=False, style=None (rich.Console.print's own). Run it with `uv run pytest tests/unit/test_run_verdict.py -q --no-cov`: it fails, the module does not exist.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/run/verdict.py (docstring cites spec 2026-11-27-run-verdict R1 and audit design 6.1) with the frozen `Say(text, markup=True, soft_wrap=False, style=None)`, the frozen PEP 695 generic `Verdict[T](witness: T | None, refusal: tuple[Say, ...] = (), exit_code: int = 2, warnings: tuple[Say, ...] = ())`, `RunRefusal(Exception)` storing `lines: tuple[Say, ...]` and `exit_code: int = 2`, and `Warn = Callable[[Say], None]`. Stdlib imports only. Add tests: Verdict and Say are frozen; RunRefusal keeps lines and exit code and an explicit `raise RunRefusal(...) from e` keeps `__cause__`. Green.
+- number: 2
+  title: The layering guard over every fr/run module (R10)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: widen tests/unit/test_run_writes_layering.py. Keep `forbidden_imports` and BOTH existing test names (`test_the_real_write_ledger_imports_no_cli_layer`, `test_the_helper_reports_planted_cli_imports_and_accepts_clean_ones`; they are level refs of the merged row run-write-ledger-cli-free). The ban becomes: `typer` and `typer.*`; `rich` and `rich.*` except `rich.markup`, in both spellings (`from rich.markup import escape`, `from rich import markup`; the joined-name check must treat `rich.markup` as allowed); `fr.commands` and `fr.commands.*`. Add a test that walks every `*.py` under packages/fr/src/fr/run/ recursively, derives each file's own package from its path (fr.run, fr.run.evidence, …), passes it to `forbidden_imports`, and allows exactly one pair: `fr/run/workspace.py` importing `fr.commands.isolation_cmd`. It fails today on `fr/run/adopt.py`'s `from fr.commands.run_cmd import derive_run_id` (moves in phase 2): name that single pair as a second allowance with a comment `# leaves in phase 2 (spec 2026-11-27-run-verdict R4)`. Planted cases add `from rich import markup` and `from rich.markup import escape` (accepted), `from rich import console` (reported) and a relative `from ...commands import common` judged with package `fr.run.evidence` (reported). Run it: the planted cases fail until the helper changes, then pass; the whole-package test is green with the two allowances.
+- number: 3
+  title: The unobserved channel and the adapter (R2, R3)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: in tests/unit/test_run_verdict.py add adapter tests against run_cmd with `err_console` patched to `Console(file=StringIO(), width=80, force_terminal=True, color_system="standard", highlight=False)`: `_settle` prints warnings, then refusal lines, with each Say's markup, soft_wrap and style (a `style="red"` line carries the ANSI red code), raises `typer.Exit(exit_code)` with a refusal and returns the witness without one; `_refusals()` turns a RunRefusal into the same prints plus `typer.Exit(code)` whose `__cause__` is the RunRefusal's cause; `fr.run.unobserved.note_unobserved` writes into the same ContextVar run_cmd's `_take_unobserved` reads. Fails: the names do not exist.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/run/unobserved.py and move verbatim from run_cmd.py (:182-240): `_UNOBSERVED` (ContextVar name string unchanged), `_note_unobserved`, `_why_unobservable`, `TESTS_PROVENANCE_SURFACE`, `_why_tests_unobservable`, `_take_unobserved`, made public without the leading underscore. run_cmd.py imports each under its old `_` spelling. In run_cmd.py add `_say(line)`, `_settle(verdict)` and the `_refusals()` context manager exactly as the spec's Design section shows. Tests green; `uv run mypy packages/fr/src` clean.
+- number: 4
+  title: Capture, then move the two derived verifiers (R7, R9)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: before moving anything, write a throwaway script in $TMPDIR that drives each refusal path of `_proportionality_witness` (no plan recorded; plan does not parse; no merge-base), `_docs_witness` (DocsEnvError; findings) and `_witness_base` (target_ref TargetError; no base at all; the fallback announce warning followed by a later refusal) through the CURRENT run_cmd with the recording console above, and writes each stderr to tests/fixtures/run_verdict/derived/<function>-<case>.txt plus its exit code. Commit the fixtures. Add tests/unit/test_run_verdict_derived.py: for each case, build the same inputs, call the `fr.run.evidence.derived` function and settle it through `run_cmd._settle` (or `_refusals()` for a raising helper) with the recording console, and compare bytes and exit code with the fixture. Fails: fr.run.evidence does not exist.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/run/evidence/__init__.py (docstring: the evidence verifiers, spec R7) and evidence/derived.py. Move `_proportionality_witness` -> `proportionality_witness(...) -> Verdict[str]`, `_docs_witness` -> `docs_witness(...) -> Verdict[str]` (the `announce` warning goes into `warnings`), `_witness_base` -> `witness_base(..., warn)` raising RunRefusal, `_proportionality_base` -> `proportionality_base`, and `_derived_refusal` -> `derived_refusal_lines(key, lines) -> tuple[Say, ...]` (first line after the key, the rest indented by two spaces, markup=False, soft_wrap=True). Each Say copies the old print's markup, soft_wrap and style exactly. `_emitted_plan` and `emitted_path` are imported without importing fr.commands (if `_emitted_plan` is only in run_cmd, move it now to packages/fr/src/fr/run/steps.py, the module phase 2 fills). In run_cmd: `derive` calls `_settle(proportionality_witness(...))` and `_settle(docs_witness(...))` inside its existing `try`; the other callers of `_derived_refusal` (`_verify_historical_bound`, `_visual_witness`, the lens checks) keep a local `_derived_refusal(key, lines)` that prints `derived_refusal_lines(...)` with `_say` and raises `typer.Exit(2)`. Fixture tests green.
+  - id: P1.T4.S3
+    text: |-
+      GREEN: migrate tests that patch the moved names. tests/unit/test_run_settle_witness.py:241-257 patches `run_cmd._proportionality_witness` with a print-and-exit fake: patch the name `derive` now reads with a fake returning a refusing `Verdict` that yields the same stderr. Grep tests for `_proportionality_witness`, `_docs_witness`, `_witness_base`, `_proportionality_base`, `_derived_refusal`, `_note_unobserved`, `_take_unobserved`, `_UNOBSERVED`, `_why_unobservable`, `_why_tests_unobservable` (attribute, import, setattr and patch-string forms) and re-point each. Run `uv run pytest tests/unit/test_run_settle_witness.py tests/unit/test_run_evidence*.py tests/unit/test_deliver*.py tests/unit/test_run_verdict*.py tests/unit/test_run_writes_layering.py -q --no-cov -n 2`: green.
+- number: 5
+  title: Budget, fragment, docs, rows, quality gate (R12, R13)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      GREEN: lower the run_cmd.py budget in tests/unit/test_tripwire_module_budget.py to `wc -l` of run_cmd.py plus at most 20, comment `# run-verdict (#1519) slice 1: verdict types and the derived verifiers moved to fr/run`. Add .changes/feat-batch-arch-run-verdict.yaml: `bump: patch`, `summary: run_cmd.py refuses through a typed verdict and its lookup, deliver, brief, evidence and provenance code moved into fr/run; no behaviour change.` Run `uv run fr docs check`; for each page it names, prepend `2026-11-27 still true; run-verdict slice 1 moved code into fr/run, no behaviour change (#1519); ` to the front-matter `reviewed:` (edit the text instead if the page names a moved function's location). Re-run: exit 0.
+  - id: P1.T5.S2
+    text: |-
+      REFACTOR + quality gate: `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, mypy over packages/fr/src. Move run-engine-cli-free to ci: `uv run fr acceptance set-status --id run-engine-cli-free --status ci --level unit=super-fr:tests/unit/test_run_writes_layering.py#<whole-package test name> --level unit=super-fr:tests/unit/test_run_writes_layering.py#test_the_helper_reports_planted_cli_imports_and_accepts_clean_ones --notes "every fr/run module checked by its syntax tree; slice 1"`. Commit, then run the fast tier the brief names last.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-27T17:06:34+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-11-27T17:06:34+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-27T17:06:34+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-27T17:06:34+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-27T17:06:34+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-27T17:06:34+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-27T17:06:34+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-11-27T17:06:34+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-27T17:06:34+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-27T17:06:34+00:00'
+      note: null
+  completion:
+    at: '2026-11-27T17:06:34+00:00'
+    note: null
+    observed_prs: []

@@ -64,18 +64,22 @@ def is_version_two(config: dict[str, Any]) -> bool:
 
 def _read_config(repo_root: Path, *, lenient: bool) -> dict[str, Any] | None:
     """The raw file as a mapping, or None when there is no file."""
-    if not (repo_root / ".devcontainer" / "fr-profiles.yaml").is_file():
+    from fr.isolation.types import profiles_path
+
+    if not profiles_path(repo_root).is_file():
         return None
     try:
-        config = profiles_config(repo_root)
+        # Read-only: under quiet and stealth an unreadable protection answer takes the
+        # degraded view ("protection unknown"), never refuses (review p4-r3).
+        config = profiles_config(repo_root, unknown_ok=True)
     except Exception as exc:  # noqa: BLE001 — lenient never raises; strict refuses by name
         if lenient:
             return None
-        raise ServicesError(f"cannot read .devcontainer/fr-profiles.yaml: {exc}") from exc
+        raise ServicesError(f"cannot read .fr/profiles.yaml: {exc}") from exc
     if not isinstance(config, dict):
         if lenient:
             return None
-        raise ServicesError(".devcontainer/fr-profiles.yaml is not a mapping")
+        raise ServicesError(".fr/profiles.yaml is not a mapping")
     return config
 
 
@@ -85,7 +89,7 @@ def _refusal(exc: ValidationError, where: str) -> ServicesError:
         + str(err["msg"]).removeprefix("Value error, ")
         for err in exc.errors()
     )
-    return ServicesError(f".devcontainer/fr-profiles.yaml {where}: {reasons}")
+    return ServicesError(f".fr/profiles.yaml {where}: {reasons}")
 
 
 def _declared(config: dict[str, Any], key: str, model: type[Any], *, lenient: bool) -> Any | None:

@@ -79,6 +79,8 @@ GATED: dict[str, str] = {
         "file_failures: the target's RepoPolicy.block(issues), allows(labels) first",
     "fr/src/fr/triage/driver_failures.py::file_failures.comment":
         "file_failures: the target's RepoPolicy.block(issues), allows(comments) first",
+    "fr/src/fr/triage/operator_entries.py::_preapprove":
+        "_labels_off and _comments_off: client_policy(labels, comments) first (dry run: none)",
     "fr/src/fr/triage/approval.py::settle_approvals":
         "_labels_off: client_policy(labels) (a dry run writes nothing)",
     "fr/src/fr/triage/approval.py::settle_entry_approval":
@@ -86,6 +88,8 @@ GATED: dict[str, str] = {
     "fr/src/fr/triage/approval.py::settle_release":
         "_labels_off: client_policy(labels) (a dry run writes nothing)",
     "fr/src/fr/triage/approval.py::ensure_approval_label": "_labels_off: client_policy(labels)",
+    "fr/src/fr/triage/approval.py::void_comment":
+        "_comments_off: client_policy(comments) first; unreadable posts nothing",
     "fr/src/fr/ops/gate.py::_write_marker":
         "ledger_block(primary, comments): forge.comments off refuses with the marker to post",
     "fr/src/fr/ops/gate.py::add_queue_label":
@@ -139,6 +143,10 @@ GATED: dict[str, str] = {
     # -- PR creation: git.pr (R11, R12) -----------------------------------------------------
     "fr/src/fr/commands/pr_cmd.py::create_cmd":
         "fr pr create: require_approval under git.pr: ask; always a draft",
+    "fr/src/fr/config/change.py::_forge_open_pr":
+        "a change to an existing configuration branch (spec 2026-11-19 §B): the reviewed "
+        "path itself, a PR into fr-config / <branch>-config (stealth: on the tracking repo, "
+        "where the forge guard admits create_pr alone); never an issue, label or comment",
     "fr/src/fr/commands/triage_batch_cmd.py::_Driver._export":
         "the triage driver's state export: R12's internal pusher, refused under push: ask by R5",
     "fr/src/fr/commands/triage_batch_cmd.py::adopt_batch._create":

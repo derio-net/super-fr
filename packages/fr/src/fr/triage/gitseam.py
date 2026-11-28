@@ -27,7 +27,7 @@ import signal
 import stat
 import subprocess
 import tempfile
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal
@@ -219,6 +219,83 @@ def ensure_excluded(root: Path, entry: str) -> bool:
     with exclude.open("a", encoding="utf-8") as fh:
         fh.write(f"{sep}{entry}\n")
     return True
+
+
+def remove_excluded(root: Path, entry: str) -> bool:
+    """Drop every line that says exactly *entry* from `<common dir>/info/exclude`; whether
+    it wrote. The file is rewritten atomically, so a crash leaves the old or the new one."""
+    exclude = common_dir(root) / "info" / "exclude"
+    try:
+        text = exclude.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return False
+    lines = text.splitlines(keepends=True)
+    kept = [line for line in lines if line.rstrip("\r\n") != entry]
+    if len(kept) == len(lines):
+        return False
+    tmp = exclude.with_name(f".{exclude.name}.{os.getpid()}.tmp")
+    tmp.write_text("".join(kept), encoding="utf-8")
+    os.replace(tmp, exclude)
+    return True
+
+
+STATE_REPO_EXCLUDE = "*\n"
+"""The cache repository's whole `info/exclude` (spec 2026-11-19 R17): it ignores every file,
+because the repository exists only to hold the state ref's objects."""
+
+
+def init_state_repo(path: Path) -> None:
+    """Make *path* a git repository of its own whose `info/exclude` ignores everything (spec
+    2026-11-19 R17, §G); nothing when it already is one. No template is copied, so no hook a
+    user's `init.templateDir` names ever runs in it."""
+    if (path / ".git").is_dir():
+        return
+    path.mkdir(parents=True, exist_ok=True)
+    _run(["git", "init", "--quiet", "--template=", str(path)], path, timeout=GIT_TIMEOUT_SECONDS)
+    info = path / ".git" / "info"
+    info.mkdir(parents=True, exist_ok=True)
+    (info / "exclude").write_text(STATE_REPO_EXCLUDE, encoding="utf-8")
+
+
+def worktree_paths(root: Path) -> list[Path]:
+    """Every worktree registered in the repository of the clone at *root*, the main one
+    first (`git worktree list --porcelain`), as git names them."""
+    out = git(["worktree", "list", "--porcelain"], root)
+    return [
+        Path(line[len("worktree ") :]) for line in out.splitlines() if line.startswith("worktree ")
+    ]
+
+
+def worktree_unsafe(path: Path) -> str | None:
+    """Why the worktree at *path* may not be removed without losing work, or None: local
+    changes (tracked or untracked), or commits at its HEAD that no branch, tag or
+    remote-tracking ref holds (unpushed work a removal would leave to the reflog). A git
+    that cannot say is a reason too: unknown is never clean."""
+    try:
+        if git(["status", "--porcelain", "--untracked-files=all"], path).strip():
+            return "it has local changes"
+        if git(["rev-parse", "--verify", "--quiet", "HEAD"], path).strip():
+            ahead = git(
+                ["rev-list", "--count", "HEAD", "--not", "--branches", "--tags", "--remotes"],
+                path,
+            ).strip()
+            if ahead not in ("", "0"):
+                return f"it has {ahead} commit(s) no branch, tag or remote holds"
+    except GitError as exc:
+        return f"git cannot say whether it is clean ({exc})"
+    return None
+
+
+def remove_clean_worktree(path: Path, root: Path) -> None:
+    """`git worktree remove` *path* (never forced: a worktree git will not remove plainly is
+    kept, consistent with `Checkout.add_worktree`, review r3-f6), run in the clone at
+    *root*. Raises `GitError` when git refuses."""
+    git(["worktree", "remove", str(path)], root)
+
+
+def prune_worktrees(root: Path) -> None:
+    """`git worktree prune` in the clone at *root*: forget worktrees whose directory is gone."""
+    git_ok(["worktree", "prune"], root)
 
 
 # ------------------------------------------------- the state ref (a branch, CAS-pushed)
@@ -801,6 +878,28 @@ class Checkout:
     def is_ancestor(self, ancestor: str, descendant: str) -> bool:
         return git_ok(["merge-base", "--is-ancestor", ancestor, descendant], self.path)
 
+    def leads(self, onto: str, target: str) -> bool:
+        """Whether *onto* is an ancestor of (or is) *target* (spec 2026-11-24-wave-queue-gaps
+        R2). Unlike `is_ancestor`, a missing object raises `GitError` (R5), never False."""
+        return not git(["rev-list", "-n", "1", onto, f"^{target}"], self.path).strip()
+
+    def carried(self, head: str, target: str, built: Iterable[str]) -> tuple[str, ...]:
+        """The shas of *built* that *head* reaches and *target* does not (R4), newest first,
+        less any that was rebuilt fresh into *target*'s history (a commit there with its
+        tree and parents, R13 of 2026-11-19-wave-merge-queue). A missing object raises."""
+        wanted = set(built)
+        out: list[str] = []
+        for sha in git(["rev-list", head, f"^{target}"], self.path).split():
+            if sha not in wanted:
+                continue
+            line = git(["log", "-1", "--format=%T %P", sha], self.path).strip()
+            parents = line.split()[1:]
+            since = [target, f"^{parents[0]}"] if parents else [target]
+            twins = git(["log", "--format=%H %T %P", *since], self.path).splitlines()
+            if not any(t.split(" ", 1)[1] == line for t in twins if t.split()[0] != sha):
+                out.append(sha)
+        return tuple(out)
+
     def changed_paths(self, ref: str, head: str) -> frozenset[str]:
         """The paths *head* changed since it forked from *ref* (`ref...head`)."""
         out = git(["diff", "--name-only", "--no-renames", "-z", f"{ref}...{head}"], self.path)
@@ -947,15 +1046,23 @@ class Checkout:
     def reach_commit(self, sha: str, branch: str) -> bool:
         """Whether this clone has commit *sha*, fetching origin's *branch* once when it
         does not (a PR head the clone never saw). A failed fetch is no commit."""
+        return not self.reach_failure(sha, branch)
+
+    def reach_failure(self, sha: str, branch: str) -> str:
+        """Why `reach_commit` would be False ("" when the clone has *sha*): no head, the
+        fetch of *branch* failing (its error), origin having no such branch, or the fetched
+        branch not holding *sha* (batch-merge-readiness R1: a cause is never dropped)."""
         if not sha:
-            return False
+            return "the PR has no head sha"
         if has_commit(self.path, sha):
-            return True
+            return ""
         try:
-            fetch_ref(self.path, "origin", f"refs/heads/{branch}")
-        except GitError:
-            return False
-        return has_commit(self.path, sha)
+            fetched = fetch_ref(self.path, "origin", f"refs/heads/{branch}")
+        except GitError as exc:
+            return f"fetch of {branch} failed: {exc}"
+        if fetched is None:
+            return f"origin has no branch {branch}"
+        return "" if has_commit(self.path, sha) else f"{sha[:12]} is not on origin's {branch}"
 
     def list_dir(self, ref: str, directory: str) -> list[str]:
         """The names of the entries directly under *directory* at *ref*; empty when it
@@ -1425,12 +1532,9 @@ class Worktree:
         (the archive then holds the batch on its own); a read that fails raises `GitError`
         carrying the cause (l-errors-r11)."""
         from fr.closeout import branch_artifacts
-        from fr.isolation.local import (
-            branch_changed_paths,
-            recorded_start,
-            resolve_branch_refs,
-            subprocess_runner,
-        )
+        from fr.isolation.branchrefs import resolve_branch_refs
+        from fr.isolation.landing import branch_changed_paths, recorded_start
+        from fr.isolation.runner import subprocess_runner
         from fr.isolation.types import IsolationError
 
         remote = default_ref.split("/", 1)[0]

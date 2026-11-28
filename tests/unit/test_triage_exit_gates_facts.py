@@ -16,10 +16,11 @@ from typing import Any
 
 import pytest
 from fr.triage.collect import collect_facts
-from fr.triage.cursor import cursor_position, read_cursor
+from fr.triage.cursor import UnreadableCursorError, cursor_position, read_cursor
 from fr.triage.gitseam import Checkout
 from fr.triage.model import (
     FACTS_SCHEMA,
+    CursorAnswer,
     CursorPosition,
     PullRequest,
     Scope,
@@ -148,19 +149,23 @@ def test_the_cursor_position_names_a_gate_a_done_deliver_or_a_manual_unit(
     assert cursor_position(doc, BRANCH) == CursorPosition(run="r1", step=step, kind=kind, unit=unit)
 
 
-def test_a_cursor_for_another_branch_or_unreadable_is_no_position() -> None:
+def test_a_cursor_for_another_branch_is_no_position_and_an_unusable_one_raises() -> None:
+    """batch-merge-readiness R1 (l-errors-r1): only another branch's cursor is no position;
+    one that is no run, or names this branch with no usable run, is unreadable."""
     assert cursor_position(_cursor(deliver={"state": "done"}), "feat/other") is None
-    assert cursor_position({"branch": BRANCH}, BRANCH) is None
-    assert cursor_position(["not", "a", "mapping"], BRANCH) is None
+    with pytest.raises(UnreadableCursorError, match="names no run"):
+        cursor_position({"branch": BRANCH}, BRANCH)
+    with pytest.raises(UnreadableCursorError, match="is not a mapping"):
+        cursor_position(["not", "a", "mapping"], BRANCH)
 
 
 def test_collect_puts_the_cursor_position_on_an_open_batch_pr() -> None:
     forge = _forge([_pr(41, state="OPEN")])
     seen: list[tuple[str, str]] = []
 
-    def at(pr: PullRequest) -> CursorPosition | None:
+    def at(pr: PullRequest) -> CursorAnswer:
         seen.append((pr.head_ref, pr.head_oid))
-        return CursorPosition(run="r1", step="deliver", kind="deliver-done")
+        return CursorAnswer(CursorPosition(run="r1", step="deliver", kind="deliver-done"), "read")
 
     facts = collect_facts(
         forge, SCOPE, now=NOW, batch_branches=[("alpha", BRANCH, AT)],
@@ -199,11 +204,15 @@ def test_read_cursor_reads_the_cursor_at_the_pr_head_through_gitseam(tmp_path: P
     pr = PullRequest(repo=REPO, number=41, title="t", state="OPEN", is_draft=False, url="u",
                      head_ref=BRANCH, head_oid=head)  # fmt: skip
 
-    assert read_cursor(Checkout(repo), pr) == CursorPosition(
-        run="r1", step="brainstorm", kind="gate"
+    assert read_cursor(Checkout(repo), pr) == (
+        CursorPosition(run="r1", step="brainstorm", kind="gate"),
+        "read",
+        "",
     )
     unknown = pr.model_copy(update={"head_oid": "0" * 40})
-    assert read_cursor(Checkout(repo), unknown) is None  # a head the clone cannot reach
+    got = read_cursor(Checkout(repo), unknown)  # a head it cannot reach, and why
+    assert (got.position, got.read) == (None, "unread")
+    assert got.detail.startswith(f"head {'0' * 12} not reached: fetch of {BRANCH} failed: ")
 
 
 def test_p4_r7_a_merged_pr_known_ungated_or_passed_is_not_read_again() -> None:

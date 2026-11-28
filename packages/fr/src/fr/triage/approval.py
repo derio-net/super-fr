@@ -28,6 +28,14 @@ included, a moved hunk, a hand-edited merge resolution, a rewrite of the branch.
 patch-id or succession that git cannot read is `Held`, never `Void` (l-errors-r4): the
 label stays, nothing is recorded, and the entry waits for a pass that can read.
 
+The label's lifecycle (spec 2026-11-27-queue-followups R1-R3). A label removed while an
+approval is live ends it: fr records the end (`voided_at` the live head) and writes nothing
+to the forge. A label on a batch PR with no live approval, whose live head the forge reads
+conflicting and a `conflict` event names (a conflict the queue cannot resolve), is
+`Waiting`: nothing is recorded until a pass reads either condition false, which records it
+at that head (`First`). Every label fr removes is explained by one marked PR comment per
+voided head (`void_comment`).
+
 `judge_approval` is the one reading every call site makes: it reads the live patch-id
 only for a labelled PR, and reads it once more against a refetched default branch before
 a mismatch voids (a merge base newer than the clone's copy of the default branch moves
@@ -37,7 +45,7 @@ the id; the re-read tells that from a real change).
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
@@ -47,6 +55,7 @@ from fr.triage.model import (
     ApprovalEvent,
     Batch,
     BatchEvent,
+    ConflictEvent,
     Facts,
     PullRequest,
     QueueApprovalEvent,
@@ -94,7 +103,19 @@ class Held:
     why: str
 
 
-ApprovalVerdict = Approved | Unlabelled | First | Void | Held
+@dataclass(frozen=True)
+class Waiting:
+    """The label is on and no approval is live, but *head* has a conflict the queue cannot
+    resolve (R2): nothing is recorded, and the PR is no queue member, until a head without
+    one. A non-batch entry never waits."""
+
+    head: str
+    why: str
+
+
+ApprovalVerdict = Approved | Unlabelled | First | Void | Held | Waiting
+
+WAITS_WHY = "waits for a conflict-free head"
 
 
 def approval_verdict(
@@ -105,16 +126,18 @@ def approval_verdict(
     *,
     patch_id: str | None = None,
     clean_since: Callable[[str], bool | None] | None = None,
+    waits: bool = False,
 ) -> ApprovalVerdict:
     """Whether PR #*pr* at *head*, whose live patch-id is *patch_id* (None when unread),
     carries a valid approval: the rule in this module's docstring. *clean_since* answers,
     for an approved head, whether the live head follows it by diff-neutral moves only
-    (None when git cannot say); without it a patch-id match stands alone."""
+    (None when git cannot say); without it a patch-id match stands alone. *waits* (R2,
+    `conflict_waits`) turns a first label into `Waiting`; a live approval ignores it."""
     if labels is None or APPROVED_FR.name not in labels:
         return Unlabelled()
     live = _live_index(events, pr)
     if live is None:
-        return First(head)
+        return Waiting(head, WAITS_WHY) if waits else First(head)
     approved = events[live]
     assert isinstance(approved, ApprovalEvent)
     if reaches(events[live + 1 :], pr, approved.head, head):
@@ -126,6 +149,24 @@ def approval_verdict(
         if clean is None:
             return Held(approved.head, f"could not read how {head[:12]} follows the approved head")
     return Void(approved.head)
+
+
+def conflict_waits(
+    events: Sequence[BatchEvent], head: str, mergeable: str | None, merge_state: str | None
+) -> bool:
+    """R2: whether a first label at *head* waits: the forge reads the head conflicting and a
+    `conflict` event (the probe's: a conflict the queue cannot resolve) names it."""
+    from fr.triage.mergeability import conflicting
+
+    return conflicting(mergeable, merge_state) and any(
+        isinstance(e, ConflictEvent) and e.head == head for e in events
+    )
+
+
+def view_waits(events: Sequence[BatchEvent], view: Mapping[str, Any]) -> bool:
+    """`conflict_waits` for a live `pr_view`."""
+    head = str(view.get("head_oid") or "")
+    return conflict_waits(events, head, view.get("mergeable"), view.get("merge_state"))
 
 
 def approved_patch_ids(events: Sequence[BatchEvent], pr: int) -> frozenset[str]:
@@ -200,12 +241,15 @@ def judge_approval(
     head: str,
     labels: Sequence[str] | None,
     patch_id_of: PatchIdOf | None,
+    *,
+    waits: bool = False,
 ) -> tuple[ApprovalVerdict, str | None]:
     """The verdict for PR *pr* at *head*, and the live patch-id it read (None when unread):
     read only for a labelled PR, and read again against a refetched default branch before
-    a patch-id mismatch voids (p1-r3: a stale `origin/<default>` moves the merge base)."""
+    a patch-id mismatch voids (p1-r3: a stale `origin/<default>` moves the merge base).
+    *waits* is `approval_verdict`'s (R2)."""
     if patch_id_of is None or labels is None or APPROVED_FR.name not in labels:
-        return approval_verdict(events, pr, head, labels), None
+        return approval_verdict(events, pr, head, labels, waits=waits), None
     since = getattr(patch_id_of, "clean_since", None)
 
     def verdict_of(patch_id: str | None) -> ApprovalVerdict:
@@ -214,7 +258,7 @@ def judge_approval(
 
         verdict = approval_verdict(
             events, pr, head, labels, patch_id=patch_id,
-            clean_since=None if since is None else clean,
+            clean_since=None if since is None else clean, waits=waits,
         )  # fmt: skip
         if isinstance(verdict, Void) and patch_id is None:
             # l-errors-r4: an unreadable patch-id is no change; never void on it
@@ -240,6 +284,8 @@ def settle_approvals(
     dry_run: bool = False,
     patch_id_of: PatchIdOf | None = None,
     landed: Collection[str] = frozenset(),
+    removed: set[int] | None = None,
+    said: set[tuple[str, int, str]] | None = None,
 ) -> dict[str, ApprovalVerdict]:
     """Record a `First` approval at the PR's live head, whatever its checks; void a
     `Void` one (remove the label, then record the void, so a failure between the two
@@ -250,8 +296,15 @@ def settle_approvals(
     reads the live head's patch-id, which a `First` approval records and the verdict
     compares (wave-merge-queue R12); without it, approvals are judged by `reaches`.
     A batch in *landed* (the merge queue landed it) is skipped: its PR is merged, and its
-    approval is never read again, even while the forge still reads it open (R12, R35)."""
+    approval is never read again, even while the forge still reads it open (R12, R35).
+
+    A live approval whose label is gone is ended (queue-followups R1); a first label on a
+    head with a real conflict waits (R2), said once per head per *said* (default: a fresh
+    set, so once per call; the driver passes one it keeps across passes); a void's label
+    removal is explained on the PR (R3) and its PR number added to *removed*: an ended
+    approval is no label fr removed, so it is never in it."""
     out: dict[str, ApprovalVerdict] = {}
+    said = set() if said is None else said
     for batch, number in batches:
         if batch.id in landed:
             continue
@@ -259,10 +312,22 @@ def settle_approvals(
         if view.get("state") != "OPEN":
             continue
         head = str(view.get("head_oid") or "")
+        if (live := _ended(batch.events, number, view)) is not None:
+
+            def end(ev: ApprovalEvent, bid: str = batch.id) -> None:
+                writer(bid, ev)
+
+            out[batch.id] = _end(end, number, live, head, say, now=now, dry_run=dry_run)
+            continue
         verdict, patch_id = judge_approval(
-            batch.events, number, head, view.get("labels"), patch_id_of
-        )
-        if isinstance(verdict, Approved) and _unpinned(batch.events, number, patch_id):
+            batch.events, number, head, view.get("labels"), patch_id_of,
+            waits=view_waits(batch.events, view),
+        )  # fmt: skip
+        if isinstance(verdict, Waiting):
+            if (repo, number, head) not in said:
+                said.add((repo, number, head))
+                say(f"approval of PR #{number} at {head[:12]} not recorded: {verdict.why}")
+        elif isinstance(verdict, Approved) and _unpinned(batch.events, number, patch_id):
             # p1-r8: an approval recorded with no patch-id gains the one its head reads now,
             # so R12 applies from here on rather than `reaches` for the approval's life.
             assert patch_id is not None
@@ -310,9 +375,48 @@ def settle_approvals(
                     ),
                 )  # fmt: skip
                 say(f"approval of PR #{number} at {was[:12]} voided: {why}")
+                if removed is not None:
+                    removed.add(number)
+                void_comment(client, repo, number, head, why, say)
                 verdict = Unlabelled()
         out[batch.id] = verdict
     return out
+
+
+def _ended(events: Sequence[BatchEvent], pr: int, view: Mapping[str, Any]) -> ApprovalEvent | None:
+    """PR *pr*'s live approval when its labels were read and `approved-fr` is not among
+    them (R1); None otherwise, and always for unread labels."""
+    labels = view.get("labels")
+    if labels is None or APPROVED_FR.name in labels:
+        return None
+    return _live_approval(events, pr)
+
+
+def _end(
+    write: Callable[[ApprovalEvent], None], number: int, live: ApprovalEvent, head: str,
+    say: Callable[[str], None], *, now: datetime, dry_run: bool,
+) -> Unlabelled:  # fmt: skip
+    """End *live*, PR #*number*'s approval, at the live *head* (R1): one void-shaped event,
+    no forge write, no comment."""
+    if dry_run:
+        say(f"would end approval of PR #{number} at {live.head[:12]}: label removed")
+        return Unlabelled()
+    write(ApprovalEvent(kind="approval", at=now, pr=number, head=live.head, voided_at=head,
+                        patch_id=live.patch_id))  # fmt: skip
+    say(f"approval of PR #{number} at {live.head[:12]} ended: label removed")
+    return Unlabelled()
+
+
+def ended_by_label(events: Sequence[BatchEvent], pr: int) -> bool:
+    """Whether PR *pr*'s last approval event is an end of it by a removed label (R1): voided
+    at the approved head itself. The end stores the live head as `voided_at`, so it reads
+    as ended only when the head had not moved; a label removed after a push reads as that
+    push's void, which is also true. A push-void always moved the head."""
+    last = None
+    for event in events:
+        if isinstance(event, ApprovalEvent) and event.pr == pr:
+            last = event
+    return last is not None and last.voided_at == last.head
 
 
 def settle_entry_approval(
@@ -343,6 +447,13 @@ def settle_entry_approval(
         if e.entry.pr == number and e.entry.kind == entry.kind
     ]  # fmt: skip
     head = str(view.get("head_oid") or "")
+    if (ended := _ended(as_batch, number, view)) is not None:
+
+        def end(ev: ApprovalEvent) -> None:
+            record(QueueApprovalEvent(kind="approval", at=ev.at, entry=entry, head=ev.head,
+                                      voided_at=ev.voided_at, patch_id=ev.patch_id))  # fmt: skip
+
+        return _end(end, number, ended, head, say, now=now, dry_run=dry_run), None
     verdict, patch_id = judge_approval(as_batch, number, head, view.get("labels"), patch_id_of)
     if isinstance(verdict, First):
         if dry_run:
@@ -371,6 +482,7 @@ def settle_entry_approval(
                 kind="approval", at=now, entry=entry, head=was, voided_at=head,
                 patch_id=recorded.patch_id if recorded is not None else None))  # fmt: skip
             say(f"approval of {entry.kind} PR #{number} at {was[:12]} voided: {why}")
+            void_comment(client, repo, number, head, why, say)
             verdict = Unlabelled()
     live = _live_approval(as_batch, number) if is_approved(verdict) else None
     return verdict, live.at if live is not None else None
@@ -380,6 +492,8 @@ RELEASE_MARKER_PREFIX = "<!-- fr-queue:release"
 _RELEASE_MARKER = re.compile(
     r"<!-- fr-queue:release head=(?P<head>[0-9a-f]+) patch-id=(?P<patch>[0-9a-f]*) -->"
 )
+VOID_MARKER_PREFIX = "<!-- fr-queue:approval-voided"
+_VOID_MARKER = re.compile(r"<!-- fr-queue:approval-voided head=(?P<head>\S+) -->")
 POSTMERGE_MARKER_PREFIX = "<!-- fr-queue:postmerge-done"
 _POSTMERGE_MARKER = re.compile(r"<!-- fr-queue:postmerge-done head=(?P<head>[0-9a-f]*) -->")
 
@@ -413,6 +527,28 @@ def _trusted_markers(
         if m is not None:
             found.append(m)
     return found
+
+
+def void_comment(
+    client: Any, repo: str, number: int, head: str, why: str, say: Callable[[str], None]
+) -> None:
+    """Say on PR #*number* why fr removed its `approved-fr` at *head* (R3): one comment per
+    voided head, opening with its marker. A trusted marker for *head* already on the PR
+    posts nothing; a repo whose comments are off, or a policy fr cannot read, posts nothing
+    and says why; any failure is a warning and never undoes the void."""
+    try:
+        off = _comments_off(client, repo)
+        if off is not None:
+            say(f"approval of PR #{number} voided without a comment: {off}")
+            return
+        found = _trusted_markers(client.list_issue_comments(repo, number), _VOID_MARKER)
+        if any(m["head"] == head for m in found):
+            return
+        client.comment_pr(repo, number, (
+            f"{VOID_MARKER_PREFIX} head={head} -->\n**Merge queue:** approval voided: {why}. "
+            f"Review the new head and label it {APPROVED_FR.name} again."))  # fmt: skip
+    except Exception as exc:  # R3: a comment never fails the void
+        say(f"warning: could not say on PR #{number} why its approval was voided: {exc}")
 
 
 def read_release_marker(comments: Sequence[dict[str, Any]]) -> tuple[str, str] | None:
@@ -602,6 +738,17 @@ def _labels_off(client: Any, repo: str) -> str | None:
 
     try:
         return client_policy(client, repo).block("labels")
+    except SettingsError as exc:
+        return str(exc)
+
+
+def _comments_off(client: Any, repo: str) -> str | None:
+    """Why fr writes no comment on *repo* (R9), or why that policy is unknown; None when it may."""
+    from fr.settings import SettingsError
+    from fr.settings.remote import client_policy
+
+    try:
+        return client_policy(client, repo).block("comments")
     except SettingsError as exc:
         return str(exc)
 

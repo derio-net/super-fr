@@ -1,0 +1,1 @@
+[31mphase/1/implement-phase: --evidence tests=suite.log: its bytes were not written by the holder's command that names it since this unit opened at 2026-01-01T00:00:00+00:00. Name the log the phase's own full-suite run wrote, or leave `tests` out of the record.[0m

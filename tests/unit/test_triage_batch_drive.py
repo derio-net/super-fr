@@ -38,7 +38,7 @@ from fr.triage.batch_drive import (
     unfinished_waves,
     wave_group,
 )
-from fr.triage.model import Batch, Export, PullRequest
+from fr.triage.model import Batch, CursorPosition, Export, PullRequest
 from fr.triage.wave_queue import QueueConfig
 
 pytestmark = pytest.mark.own_artifacts
@@ -79,6 +79,9 @@ def _pr(bid: str, n: int, head: str = "", **kw: Any) -> PullRequest:
     )
 
 
+DELIVERED = CursorPosition(run="r", step="deliver", kind="deliver-done")
+
+
 def _live(n: int, head: str, **kw: Any) -> LivePr:
     return LivePr(number=n, state=kw.pop("state", "OPEN"), draft=kw.pop("draft", False),
                   head=head, checks=kw.pop("checks", "green"), **kw)  # fmt: skip
@@ -105,6 +108,7 @@ def _snap(
     # Every queued PR carries the operator's label unless a test says otherwise
     # (merge-train-safety §A): the walk's approval gate has its own tests.
     kw.setdefault("approvals", {e.batch.id: First(e.pr.head_oid) for e in queue})
+    kw.setdefault("cursors", {bid: (p.head, DELIVERED, "read") for bid, p in live.items()})
     return Snapshot(
         batches=tuple(batches),
         stages=stages,  # type: ignore[arg-type]
@@ -715,15 +719,18 @@ def test_the_pass_module_reaches_no_runner_git_process_or_clock() -> None:
 
     from tests.unit.triage_fixtures import forbidden_imports
 
-    path = Path(__file__).resolve().parents[2] / "packages/fr/src/fr/triage/batch_drive.py"
+    triage = Path(__file__).resolve().parents[2] / "packages/fr/src/fr/triage"
+    paths = sorted(triage.glob("batch_drive*.py")) + [triage / "handback_rules.py"]
+    assert len(paths) >= 4  # the pass and its leaves (triage-leaves-split R8)
     banned = ("fr_dispatch", "subprocess", "fr.triage.gitseam", "os", "time", "shutil")
-    assert forbidden_imports(path, "fr.triage", banned) == []
-    calls = {
-        n.func.attr
-        for n in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
-    }
-    assert not calls & {"now", "utcnow", "today"}
+    for path in paths:
+        assert forbidden_imports(path, "fr.triage", banned) == [], path.name
+        calls = {
+            n.func.attr
+            for n in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+        }
+        assert not calls & {"now", "utcnow", "today"}, path.name
 
 
 # ------------------------------------------- review fixes (phase 2 review rg-*)
@@ -1918,3 +1925,153 @@ def test_checks_verdict_reads_a_cancelled_required_check_as_pending() -> None:
     assert checks_verdict(required, {}, ci_none=False) == ("pending", ("test",))
     failing = [{"name": "test", "bucket": "cancel"}, {"name": "lint", "bucket": "fail"}]
     assert checks_verdict(failing, {}, ci_none=False) == ("failing", ("lint",))
+
+
+# ------------------------------------- queue follow-ups (spec 2026-11-27-queue-followups)
+
+_POST_MERGE = {"kind": "post_merge", "at": "2026-10-02T11:50:00Z"}
+
+
+def _landed_by_queue(*bids: str) -> Any:
+    from fr.triage.model import QueueRecord
+
+    return QueueRecord.model_validate({
+        "repo": REPO, "wave": 1, "scope": SID, "base": "base-sha",
+        "events": [{"kind": "queue_land", "at": "2026-10-02T11:59:00Z", "main": "main-sha",
+                    "entries": [{"batch": b} for b in bids]}],
+    })  # fmt: skip
+
+
+def test_closeout_due_queued_is_due_at_once() -> None:
+    """R5: a queue landing waits for no release and no fallback."""
+    from fr.triage.batch_drive import closeout_due
+
+    assert closeout_due(released=False, merged_at=NOW, now=NOW, queued=True)
+    assert not closeout_due(released=False, merged_at=NOW, now=NOW, queued=False)
+
+
+def test_drive_pass_queue_landed_batch_closes_out_without_fallback() -> None:
+    """R5: a batch a `queue_land` record of its repo names closes out a minute after."""
+    b = _merged("x", 1, events=[_POST_MERGE])
+    minute = {"x": NOW - timedelta(minutes=1)}
+    snap = _snap([b], {"x": "merged"}, merged_at=minute, queue_records=(_landed_by_queue("x"),),
+                 post_merge_repos=frozenset({REPO}))  # fmt: skip
+    assert ("closeout", "x") in _kinds(drive_pass(snap).actions)
+    plain = _snap([b], {"x": "merged"}, merged_at=minute, post_merge_repos=frozenset({REPO}))
+    assert ("closeout", "x") not in _kinds(drive_pass(plain).actions)
+
+
+def _two_landed(**kw: Any) -> Snapshot:
+    """R6: a wave of two landed, ungated batches with post_merge recorded, neither landed
+    by the queue: x merged 11 minutes ago, y 2 minutes ago."""
+    x = _merged("x", 1, events=[_POST_MERGE])
+    y = _merged("y", 2, events=[_POST_MERGE])
+    merged_at = {"x": NOW - timedelta(minutes=11), "y": NOW - timedelta(minutes=2)}
+    return _snap([x, y], {"x": "merged", "y": "merged"}, merged_at=merged_at,
+                 post_merge_repos=frozenset({REPO}), **kw)  # fmt: skip
+
+
+def test_wave_closeout_waits_for_every_member_due() -> None:
+    """R6: no collected close-out while a member is not due; one `held` names it."""
+    got = drive_pass(_two_landed())
+    assert not any(a.kind == "closeout" for a in got.actions)
+    (held,) = [a for a in got.actions if a.kind == "held"]
+    assert held.batch == "y" and "y (not due)" in held.detail
+    later = drive_pass(_two_landed(now=NOW + timedelta(minutes=9)))
+    (start,) = [a for a in later.actions if a.kind == "closeout"]
+    assert start.items == ("x", "y")
+    assert not any(a.kind == "held" for a in later.actions)
+
+
+def test_wave_closeout_held_for_unverified_member() -> None:
+    """R6: an unverified member holds its wave's close-out; one not selected does not."""
+    snap = _two_landed(now=NOW + timedelta(minutes=9), unverified=frozenset({"y"}))
+    got = drive_pass(snap)
+    assert not any(a.kind == "closeout" for a in got.actions)
+    (held,) = [a for a in got.actions if a.kind == "held"]
+    assert held.batch == "y" and "y (unverified)" in held.detail
+    unselected = drive_pass(_two_landed(selected=frozenset({"x"})))
+    (start,) = [a for a in unselected.actions if a.kind == "closeout"]
+    assert start.items == ("x",)
+
+
+def _y_snap(reason: str, exempt: str | None) -> Snapshot:
+    """R6 (review p1-r5): x due; y blocks for *reason* unless *exempt* says it cannot hold
+    the wave: held by the verb, gated, a hand-opened close-out PR, or a live per-batch tab."""
+    from fr.triage.batch_drive import GateLedger
+
+    hold = {"kind": "closeout_hold", "at": "2026-10-02T11:55:00Z", "item": "c", "reason": "r"}
+    events: list[dict[str, Any]] = [_POST_MERGE, *([hold] if exempt == "hold" else [])]
+    x = _merged("x", 1, events=[_POST_MERGE])
+    y = _merged("y", 2, events=events)
+    kw: dict[str, Any] = {"now": NOW if reason == "not due" else NOW + timedelta(minutes=9)}
+    if reason == "unverified":
+        kw["unverified"] = frozenset({"y"})
+    if reason == "ledger unread":
+        kw["ledger_unknown"] = frozenset({"y"})
+    if exempt == "gated":
+        kw["ledgers"] = {"y": GateLedger(pr=7, labels=frozenset({"gate:tester"}))}
+    if exempt == "hand":
+        kw["adopted"] = {"y": _live(895, "h895", head_ref="chore/closeout-feat-batch-y")}
+    if exempt == "live":
+        kw["existing"] = frozenset({closeout_item_id(REPO, "y")})
+    merged_at = {"x": NOW - timedelta(minutes=11), "y": NOW - timedelta(minutes=2)}
+    return _snap([x, y], {"x": "merged", "y": "merged"}, merged_at=merged_at,
+                 post_merge_repos=frozenset({REPO}), **kw)  # fmt: skip
+
+
+def _wave_start(snap: Snapshot) -> tuple[str, ...] | None:
+    got = [a.items for a in drive_pass(snap).actions if a.kind == "closeout" and a.items]
+    return got[0] if got else None
+
+
+@pytest.mark.parametrize("reason", ["not due", "unverified", "ledger unread"])
+def test_a_blocking_member_holds_its_wave(reason: str) -> None:
+    """R6: a not-due, unverified or ledger-unread member holds the wave's close-out."""
+    snap = _y_snap(reason, None)
+    assert _wave_start(snap) is None
+    (held,) = [a for a in drive_pass(snap).actions if a.kind == "held"]
+    assert held.batch == "y" and f"y ({reason})" in held.detail
+
+
+@pytest.mark.parametrize(
+    ("reason", "exempt"),
+    [
+        (r, e)
+        for r in ("not due", "unverified", "ledger unread")
+        for e in ("hold", "gated", "hand", "live")
+        if not (r == "ledger unread" and e == "gated")  # unread labels: gated is unknown
+    ],
+)
+def test_a_member_that_cannot_hold_the_wave_does_not(reason: str, exempt: str) -> None:
+    """R6 (review p1-r5): a member held by the verb, gated, or with a close-out of its own
+    (hand-opened PR, live per-batch tab) does not hold its wave, whatever else it is."""
+    snap = _y_snap(reason, exempt)
+    assert _wave_start(snap) == ("x",)
+    assert not any(a.kind == "held" and "waits for" in a.detail for a in drive_pass(snap).actions)
+
+
+def test_a_waveless_batch_not_due_holds_no_other_waveless_batch() -> None:
+    """R6 (review p1-r2): a batch with no wave stands alone (`wave_landings_done`)."""
+    x = _merged("x", 1, events=[_POST_MERGE], wave=None)
+    y = _merged("y", 2, events=[_POST_MERGE], wave=None)
+    merged_at = {"x": NOW - timedelta(minutes=11), "y": NOW - timedelta(minutes=2)}
+    snap = _snap([x, y], {"x": "merged", "y": "merged"}, merged_at=merged_at,
+                 post_merge_repos=frozenset({REPO}))  # fmt: skip
+    assert _wave_start(snap) == ("x",)
+    assert not any(a.kind == "held" for a in drive_pass(snap).actions)
+
+
+def test_queue_landed_by_repo_scopes_each_landing_to_its_repo() -> None:
+    """R5: the batches a `queue_land` of a repo names are that repo's alone."""
+    from fr.triage.batch_drive import queue_landed_by_repo
+    from fr.triage.model import QueueRecord
+
+    other = QueueRecord.model_validate({
+        "repo": "derio-net/other", "wave": 1, "scope": SID, "base": "b",
+        "events": [{"kind": "queue_land", "at": "2026-10-02T11:59:00Z", "main": "m",
+                    "entries": [{"batch": "z"}]}],
+    })  # fmt: skip
+    got = queue_landed_by_repo([_landed_by_queue("x", "y"), other])
+    assert got == {REPO: frozenset({"x", "y"}), "derio-net/other": frozenset({"z"})}
+    assert queue_landed_by_repo([]) == {}

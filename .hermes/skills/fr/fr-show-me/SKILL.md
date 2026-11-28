@@ -37,7 +37,7 @@ exactly as the third-party privacy rule says: keep the shape, drop the identity.
 2. **Call tree** — who calls whom, indented, for one path through the code.
    ```text
    fr run resolve --step deliver
-     _deliver_pr_gate
+     deliver_pr_gate
        deliver_shape_refusal   # fr/shape.py
        render_pr_body          # fr/record/pr_body.py
    ```

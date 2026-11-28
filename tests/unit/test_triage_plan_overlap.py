@@ -259,6 +259,13 @@ def test_batches_of_different_repos_are_never_paired() -> None:
     assert found == []
 
 
+def test_overlaps_compares_repo_names_case_insensitively() -> None:
+    """R8 of spec 2026-11-27-queue-followups: two spellings of one repo overlap."""
+    a = entry("a", ["x.py"], repo="derio-net/super-fr")
+    b = entry("b", ["x.py"], repo="Derio-Net/Super-FR")
+    assert len(overlaps([a, b], ignore=())) == 1
+
+
 def test_the_pair_is_reported_with_both_waves_and_the_repo() -> None:
     found = overlaps([entry("a", ["x.py"], wave=1), entry("b", ["x.py"], wave=3)], ignore=())
     assert found == [Overlap("a", "b", REPO, 1, 3, ("x.py",))]
@@ -329,10 +336,17 @@ def test_only_dispatched_and_pr_open_batches_are_read() -> None:
 
 
 def test_a_batch_of_an_unknown_repo_is_not_compared() -> None:
+    """Under a truncated repo list the batch is still open, its repo merely unseen; a repo
+    absent from a complete list is `left-scope`, closed out and so never compared."""
+    from fr.triage.model import Truncation
+
     f, jd = two_overlapping()
-    foreign = f.model_copy(update={"repos": ["o/elsewhere"]})
+    cut = Truncation(source="repos", target="o", limit=100)
+    foreign = f.model_copy(update={"repos": ["o/elsewhere"], "warnings": [cut]})
     report = plan_overlap_report(jd, foreign, clones({}))
     assert report.unread == (("b1", "repo of batch unknown"), ("b2", "repo of batch unknown"))
+    gone = f.model_copy(update={"repos": ["o/elsewhere"]})
+    assert plan_overlap_report(jd, gone, clones({})).unread == ()
 
 
 def test_a_str_from_the_source_factory_is_the_reason() -> None:
@@ -370,6 +384,22 @@ def test_generated_and_version_files_from_the_repo_config_are_ignored() -> None:
     src = both_plans([*common, "r.py"], [*common, "r.py"])
     report = plan_overlap_report(jd, f, clones({REPO: src}))
     assert report.overlaps[0].paths == ("r.py",)
+
+
+def test_the_report_pairs_two_spellings_of_one_repo(monkeypatch: Any) -> None:
+    """R8 of spec 2026-11-27-queue-followups, review p1-r3: the report groups by the
+    lower-cased repo, so `overlaps`' case-insensitive compare is reached, and the repo's
+    generated globs still apply."""
+    import fr.triage.plan_overlap as po
+
+    upper = REPO.upper()
+    monkeypatch.setattr(po, "batch_repo", lambda b, f: REPO if b.id == "b1" else upper)
+    b1 = batch("b1", [1], wave=1, events=[dispatch("b1")])
+    b2 = batch("b2", [2], wave=2, events=[dispatch("b2")])
+    f, jd = state([b1, b2], config={REPO: {"generated": ["gen/*"]}})
+    src = both_plans(["gen/a", "x.py"], ["gen/a", "x.py"])
+    report = plan_overlap_report(jd, f, lambda repo: src)
+    assert [(o.a, o.b, o.paths) for o in report.overlaps] == [("b1", "b2", ("x.py",))]
 
 
 def test_an_after_chain_through_a_merged_batch_suppresses_the_pair() -> None:

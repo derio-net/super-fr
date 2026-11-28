@@ -1,0 +1,15 @@
+[33mstep/lens-review: could not read what reviewer rev-2 returned — its return is not readable yet; the record is taken as claimed (evidence: unobserved=reviewer-return).[0m
+step/lens-review: refused — the review record does not match what the lens reviewers returned:
+  - reviewer rev-1 was named for lens security, and its review-lens block names lens tests
+      lens security: security title
+        in the set because: path rule src/** (matches src/a.py)
+        look at security
+        Review the feature's whole diff through the security lens only. End your return with a fenced review-lens block naming your lens and the files the feature changed that you examined, then a fenced review-findings block, one line per finding, `<id> | in|out | <one-line summary>`, ids l-security-r<k> (k from 1), or the single line `none` when you raised nothing. `in` = this change is wrong, incomplete or worse than it needs to be; `out` = true, but not caused by this change. fr refuses the lens-review resolve while your block names another lens, names no file the feature changed or a file it did not change, or a returned id is missing from the plan journal or carries another scope there. When the brief names a `shape` file, read it: any way it contradicts the diff is a finding of your lens; do not list the shape file under `examined` (the feature diff leaves it out):
+        ```review-lens
+        lens: security
+        examined: <changed file>, <changed file>
+        ```
+        ```review-findings
+        l-security-r1 | in | <one-line summary>
+        ```
+  Journal every returned finding under its id with the reviewer's tag, or re-dispatch a lens reviewer whose return is malformed; never edit a return.

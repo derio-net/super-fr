@@ -19,7 +19,7 @@ through the `GhClient` adapter, both passed in, so this module starts no process
 from __future__ import annotations
 
 import tempfile
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -431,7 +431,11 @@ def build(
     try:
         for entry, slot in zip(entries, slots, strict=False):
             wt.reset_hard(prev)
-            tree, tip = _combine(checkout, wt, prev, entry, method, version, regen or Regen())
+            try:
+                tree, tip = _combine(checkout, wt, prev, entry, method, version, regen or Regen())
+            except MergeConflictError as exc:
+                exc.onto = prev  # wave-queue-gaps §A: what it was built on
+                raise
             ref = slot_ref(scope, slot)
             # R13: never the sha the slot holds on the remote either. A rebuild in the
             # same second as a build the leases do not name would otherwise be that very
@@ -614,13 +618,31 @@ def land_push(
 ) -> LandResult:
     """R10: ONE `git push --atomic` that moves *default* by fast-forward to the last
     entry's commit, leased on *base*, and every landed PR's head ref, leased on the head
-    its combination was built from: under `squash` and `rebase` to the PR's own commit in
-    the combination, under `merge` unchanged (so a session push since the build still
-    fails the lease). Nothing moves unless everything does. *record* gets the
+    its combination was built from, pushed unchanged (so a session push since the build
+    still fails the lease). Only a merge commit lands (R2, gh#1705): any other *method*, or
+    a commit that is not a merge of the PR's head, is held with no push. Nothing moves
+    unless everything does. *record* gets the
     `queue_land` after a successful landing."""
     if not landings:
         return LandResult("stopped", detail="nothing to land")
     tip = landings[-1].commit
+    if method != "merge":
+        # R2, gh#1705: a squash or rebase commit leaves the pushed PR closed unmerged.
+        return LandResult(
+            "held",
+            detail=landing_refusal("push", method, source="the landing's method", allowed={"merge"})
+            or "",
+        )
+    prev = landings[0].parent or base
+    for x in landings:
+        if checkout.parents(x.commit) != (prev, x.head):
+            return LandResult(
+                "held",
+                detail=f"{x.key}'s combination commit {x.commit[:12]} is not a merge commit "
+                f"whose second parent is PR #{x.pr}'s head, so GitHub would close the PR "
+                "unmerged; the queue never lands it by push",
+            )
+        prev = x.commit
     if (landings[0].parent and landings[0].parent != base) or not checkout.is_ancestor(base, tip):
         # p3-r7: a lease on *base* checks the remote, not the tip, and a leased push may
         # move a ref by any amount: only a tip built on *base* is a fast-forward of it.
@@ -634,7 +656,7 @@ def land_push(
     leases: dict[str, str | None] = {main_ref: base}
     for x in landings:
         ref = f"refs/heads/{x.head_ref}"
-        refspecs.append((x.head if method == "merge" else x.commit, ref))
+        refspecs.append((x.head, ref))
         leases[ref] = x.head
     try:
         checkout.push_leased(refspecs, leases, atomic=True)
@@ -779,6 +801,43 @@ def queue_refusal(block: QueueBlock, *, ci_none: bool, versioned: bool = False) 
     return None
 
 
+REBASE_WARNING = (
+    "a rebase landing puts the branch's commit subjects on the default branch's first-parent "
+    "line, so a release that attributes PRs by first-parent `(#N)` or `Merge pull request #N` "
+    "cannot see them: use `merge` or `squash`"
+)
+
+
+def merge_read_hold(exc: Exception, *, transient: bool) -> str:
+    """The hold text when `merge_ctx` raised: a transient read is read again next pass, any
+    other failure (main's `.fr/triage.yaml` moved under the pass) promises no retry."""
+    if transient:
+        return f"the merge methods could not be read: {exc}; read again next pass"
+    return f"the merge context could not be built: {exc}"
+
+
+def landing_refusal(land: str, method: str, *, source: str, allowed: Collection[str]) -> str | None:
+    """Why *method* cannot land by push, None when it may (spec 2026-11-26-landing-method
+    R2, gh#1705): only a merge commit, whose second parent is the PR's head, makes GitHub
+    mark a PR merged by a push; a squash or rebase commit leaves it closed unmerged.
+    *source* says where the method came from; *allowed* is what the repo allows."""
+    if land != "push" or method == "merge":
+        return None
+    head = (
+        f"`queue.land: push` cannot land with the {method} method ({source}): GitHub closes "
+        f"a PR landed that way unmerged, and only a merge commit reads as merged. "
+    )
+    if "merge" in allowed:
+        return head + (
+            "Set `merge_method: merge` in .fr/triage.yaml (or give `--method merge`), or set "
+            "`queue.land: merge` to land through the forge's merge API"
+        )
+    return head + (
+        "This repo does not allow merge commits: allow them in the repository's settings, "
+        "or set `queue.land: merge` to land through the forge's merge API"
+    )
+
+
 def held_plan(plan: QueuePlan, reason: str) -> QueuePlan:
     """*plan* replaced by one `queue-held` that says *reason* (R7, R22, R34, R35)."""
     action = QueueAction("queue-held", plan.repo, f"{plan.repo}'s merge queue is held: {reason}")
@@ -889,8 +948,31 @@ class ChecksForge(Protocol):
 
 def required_names(client: ChecksForge, checkout: Checkout, repo: str, default: str) -> list[str]:
     """The checks that gate *default* (R7): `.fr/ci.yaml`'s `gate_checks` at
-    `origin/<default>`, else the base's `required_check_names`."""
-    declared = gate_checks_of(checkout.show(f"origin/{default}", ".fr/ci.yaml"))
+    `origin/<default>`, else the base's `required_check_names`. Under quiet and stealth
+    `ci.yaml` is the configuration branch's (`fr.config.space.at_default`); a space that
+    cannot be read raises `TriageError`, never falls back to the base's checks."""
+    from fr.config.protection import read_checked
+    from fr.config.space import config_space, rel
+    from fr.settings import SettingsError
+    from fr.triage.errors import TriageError
+
+    try:
+        space = config_space(checkout.path)
+        if space.ref is None:
+            text = checkout.show(f"origin/{default}", rel("ci"))
+        else:  # R7: gate_checks decide merges, so the configuration branch must be protected
+            # and read at its freshly fetched tip (review p3-r2)
+            space.at_default("ci")  # a missing configuration space refuses first
+            what = f"gate the merge queue on {rel('ci')}'s gate_checks"
+            # protected, and its freshly fetched tip (review p3-r2)
+            text = read_checked(space, client, "ci", what, guarded=lambda t: True)
+            if text is None:  # absent at the tip: still only a protected branch says so
+                from fr.config.protection import require_protected
+
+                require_protected(space, client, what)
+    except SettingsError as exc:
+        raise TriageError(f"{repo}: its {rel('ci')} cannot be read: {exc}") from exc
+    declared = gate_checks_of(text)
     return declared if declared is not None else list(client.required_check_names(repo, default))
 
 
@@ -1402,6 +1484,9 @@ class QueueExecutor:
                 lines.append(f"{line}: {said}")
             elif action.kind == "queue-eject" and record is not None:
                 lines.append(f"{line}: {self._eject(action, record)}")
+            elif action.kind in ("queue-reissue", "queue-carry"):  # wave-queue-gaps R2, R4
+                said = self.ports.hand_back(action) if self.ports.hand_back else "no hand-back"
+                lines.append(f"{line}: {said}")
             elif action.kind == "queue-drain":
                 again = record is not None and any(
                     isinstance(e, QueueDrainEvent) for e in record.events)  # fmt: skip
@@ -1433,7 +1518,8 @@ class QueueExecutor:
         except MergeConflictError as exc:
             dropped = "rebase would drop" in str(exc) or isinstance(exc, MirrorFailedError)
             self.conflicts[exc.batch] = BuildConflict(exc.head, exc.paths,
-                                                      str(exc) if dropped else "")  # fmt: skip
+                                                      str(exc) if dropped else "",
+                                                      exc.onto)  # fmt: skip
             if dropped:
                 return f"{exc}: it leaves the queue"
             return f"{exc.batch} conflicts in {', '.join(exc.paths)}: it leaves the queue"
@@ -1504,10 +1590,11 @@ class QueueExecutor:
         key = action.entries[0]
         ref = _refs(record).get(key) or QueueEntryRef(batch=key)
         reason: Literal["conflict", "red", "operator"] = (
-            "conflict" if action.reason == "conflict" else "red")  # fmt: skip
+            "conflict" if action.reason == "conflict"
+            else "operator" if action.reason == "operator" else "red")  # fmt: skip
         p.record(QueueEjectEvent(kind="queue_eject", at=p.now(), entry=ref, reason=reason,
                                  detail=action.detail, head=action.head or None))  # fmt: skip
         self.conflicts.pop(key, None)
-        if p.hand_back is None:
+        if p.hand_back is None or reason == "operator":  # wave-queue-gaps R12: no hand-back
             return "ejected"
         return f"ejected; {p.hand_back(action)}"

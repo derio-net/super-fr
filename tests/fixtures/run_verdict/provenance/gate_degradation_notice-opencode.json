@@ -1,0 +1,5 @@
+{
+  "queued": [],
+  "returned": "gate: your harness (opencode) is verified by reading the session, but your harness (opencode) exported no session id to fr, so its questions cannot be read (OPENCODE_SESSION_ID is unset: fr is not running inside an OpenCode 2.x shell \u2014 super-fr supports 2.0 only) \u2014 so this gate is advisory now.\n      Put the questions to the operator (with your harness's question tool where it has one) and STOP until they answer.\n      fr cannot verify who answered this gate, so its resolve must say: `answered_by: operator` (the operator answered) or `answered_by: agent` (cleared without asking) \u2014 `--answered-by` on the flag form, an `answered_by` evidence key in a record. There is no default.",
+  "unobserved": {}
+}

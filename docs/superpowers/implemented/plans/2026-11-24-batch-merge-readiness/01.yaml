@@ -1,0 +1,120 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Delivered from the cursor, and one readiness function the queue merges by
+    (R1-R5, R12)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - batch-merge-needs-deliver
+  - batch-readiness-no-cursor-hold
+  - batch-merge-live-drive
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/triage/readiness.py
+  - packages/fr/src/fr/triage/cursor.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/triage/lanes.py
+  - packages/fr/src/fr/triage/wave_queue.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/views.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - tests/**
+  - .changes/feat-batch-merge-readiness.yaml
+  - .test_durations
+  - docs/**/*.md
+  - docs/acceptance/features/2026-11-24-batch-merge-readiness.yaml
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: Smoke
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      Smoke: create `packages/fr/src/fr/triage/readiness.py` with a module docstring naming spec 2026-11-24-batch-merge-readiness (R1-R6) and `tests/unit/test_triage_readiness.py` with one test that imports `fr.triage.readiness` and asserts its docstring names the spec. Add the change fragment `.changes/feat-batch-merge-readiness.yaml` (`bump: minor`, summary: "The wave driver merges a batch PR only once its run delivered, and the Batches page leads each PR card with one readiness verdict"). Run `uv run pytest tests/unit/test_triage_readiness.py -q --no-cov`: green.
+- number: 2
+  title: The cursor's read status in facts (spec §A, R1)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in the cursor tests (extend `tests/unit/test_triage_cursor*.py` if present) assert that `read_cursor` over a fake `Checkout` returns, as a pair (folded position, read status): `read` with the deliver-done position when every cursor naming the branch has `deliver` done; `read` with a not-delivered position (run, cursor step) when ONE of two cursors naming the branch is still at `deliver: running` (R1 fail-closed, s-r10); `read` with None when no cursor names the branch; `unread` when the head cannot be reached or a read raises `TriageError`. In the collect tests assert an open batch PR gets `cursor_read` `read`/`unread`, `no-clone` when the reader reports no clone, and that facts write `schema: 17` and still read 3-16.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: `fr.triage.model`: add `CursorRead = Literal["read", "unread", "no-clone"]`, `PullRequest.cursor_read: CursorRead | None = None`, `FACTS_SCHEMA = 17`. `fr.triage.cursor`: `read_cursor` reads every `runs/*.yaml` naming the branch and folds them (delivered only when all are; otherwise the first not-done one), returning the read status beside it; `CursorReader` returns the pair. `collect._ledger_reads` stores both. The command's `cursor_at` (`triage_batch_cmd.py`) returns `no-clone` with no clone path and caches the pair per (repo, head). Update every `CursorReader` caller (`lanes.py` keeps reading `pr.cursor`). Tests green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: the fold lives in `cursor.py` alone; the module docstring states the fail-closed rule. ruff and mypy green on the touched files.
+- number: 3
+  title: batch_readiness — the pure verdict (spec §B, R1-R6, R12)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: in `tests/unit/test_triage_readiness.py`, table-driven over hand-built `QueueSnapshot`s, one fixture per verdict kind in R5's order (first match wins): queue held; approved + not delivered gives `Approved, not delivered`; unapproved + not delivered gives `Not ready: not delivered: <reason>` for each R1 reason (cursor at another step names run and step; no cursor; unread; no-clone; cursor read at a head other than the live one); CI red naming failing checks; CI running; pre-merge gate held; based on another branch; approval voided naming the sha (after settlement `ApprovalEvent.voided_at` from `batch.events`; before settlement `Void` reports the live head; NOT `approval.voided_at()`); conflicting unapproved gives `Not ready: conflicting: <paths>`; approved + conflicting stays admitted (merge state never changes `admits`); `Ready for approval`; approved + delivered + green gives `admits` true. Assert the R6 facts: delivered, ci, merge, approval, whose_move (session working or idle N minutes from `qs.sessions` and `head_changed`; driver; operator), next_action with link (PR url, the PR checks tab `<url>/checks`, or the pane focus command). R12: a no-cursor PR's next action is the R12 wording (asserted against a module constant, so this step does not quote it).
+  - id: P1.T3.S2
+    text: |-
+      GREEN: implement `Delivered`, `Readiness` (frozen dataclasses: `kind`, `reason`, facts, `admits`) and `batch_readiness(batch, qs) -> Readiness` in `fr/triage/readiness.py`, pure. `QueueSnapshot` gains `cursors: Mapping[str, tuple[str, CursorPosition | None, CursorRead | None]]` (batch id to head read at, position, status). `admits` is today's `_ready` conditions AND delivered. Tests green.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: R5's order is stated once (the module docstring and one ordered list in code); no condition is evaluated in two places. ruff and mypy green.
+- number: 4
+  title: The queue and the driver merge by it (spec §B, R2, R4)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in the wave-queue and batch-drive tests: `plan_queue` over a snapshot with an approved, green, draft batch PR whose cursor reads `deliver: running` admits no entry and plans no ready or merge for it; the same PR at deliver done is admitted. `_member_reports` reports it awaiting with "approved, not delivered", never ready. `QueuePlan.readiness` holds a verdict for every batch of the repo, and `Approved, merges next` / `Approved, queued behind <entry>` follow the plan's entry order. A test asserts `wave_queue._ready(b, qs) == batch_readiness(b, qs).admits` for every fixture of P1.T3. `views.drive_snapshot` and the command's Snapshot builder both fill `Snapshot.cursors` from facts.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: `wave_queue._ready` returns `batch_readiness(batch, qs).admits`; `plan_queue` fills `QueuePlan.readiness` (queue position from the entries it planned). `batch_drive.Snapshot` gains `cursors`; `queue_snapshot` copies it; `_member_reports` calls `batch_readiness` on `queue_snapshot(snap, repo, ...)`. Both Snapshot builders fill `cursors` from each batch PR's facts (`head_oid`, `cursor`, `cursor_read`). Confirm the only `pr_ready` calls (`triage_batch_cmd._queue_entry`) and the only `pr_merge` (`queue_exec`) are reached only through admission. Tests green.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: remove any readiness condition now duplicated outside `readiness.py` in `batch_drive.py`; keep the module line budgets (`tests/unit/test_tripwire_module_budget.py`) green. ruff, mypy and the fast tier green.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-25T00:48:18+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-25T00:48:18+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-25T00:48:18+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-25T00:48:18+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-25T00:48:18+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-25T00:48:18+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-11-25T00:48:18+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-25T00:48:18+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-25T00:48:18+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-11-25T00:48:18+00:00'
+      note: null
+  completion:
+    at: '2026-11-25T00:48:18+00:00'
+    note: null
+    observed_prs: []

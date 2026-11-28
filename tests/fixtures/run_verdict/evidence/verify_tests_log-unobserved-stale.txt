@@ -1,0 +1,2 @@
+[33mstep/deliver: could not verify who ran suite.log — tests= provenance is unsupported on hermes (parity row deliver-tests-provenance); recorded as a fresh log, unverified (evidence: unobserved=tests).[0m
+[31mstep/deliver: --evidence tests=suite.log is stale — src/changed.py changed after the log was written, so the suite did not run the code being delivered. Run the full suite again and name the new log.[0m

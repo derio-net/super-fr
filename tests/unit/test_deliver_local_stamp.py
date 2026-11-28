@@ -13,7 +13,9 @@ from pathlib import Path
 
 import pytest
 import yaml
+from fr.run import deliver
 from fr.run.model import load_run_state
+from fr.run.writes import RUN_WRITES, RunWrites
 
 from tests.unit.record_support import (
     RUN,
@@ -324,7 +326,7 @@ def test_a_pending_set_status_amendment_is_stamped_in_place(
 
 
 def test_only_a_local_suite_log_or_a_reuse_can_stamp(tmp_path: Path) -> None:
-    from fr.commands.run_cmd import _local_stamp_witness
+    from fr.run.evidence.suite import local_stamp_witness
 
     root = tmp_path
     git_init = ["init", "-q", str(root)]
@@ -332,12 +334,12 @@ def test_only_a_local_suite_log_or_a_reuse_can_stamp(tmp_path: Path) -> None:
 
     subprocess.run(["git", *git_init], check=True)
     for refused in (None, "ci", "ci:abc+def;tree=0123", "unobserved"):
-        assert isinstance(_local_stamp_witness(root, refused), str), refused
-    assert _local_stamp_witness(root, "reused:phase/1/x:p.log@0123456789ab;tree=feed") == (
+        assert isinstance(local_stamp_witness(root, refused), str), refused
+    assert local_stamp_witness(root, "reused:phase/1/x:p.log@0123456789ab;tree=feed") == (
         "reused:phase/1/x:p.log@0123456789ab",
         "feed",
     )
-    assert isinstance(_local_stamp_witness(root, "reused:phase/1/x:p.log@0123456789ab"), str)
+    assert isinstance(local_stamp_witness(root, "reused:phase/1/x:p.log@0123456789ab"), str)
 
 
 # --- quiet placement --------------------------------------------------------------------
@@ -353,7 +355,7 @@ def test_under_quiet_the_fragment_is_written_in_the_artifact_root(
     monkeypatch.setenv("HOME", str(home))
     from fr.acceptance.fold import clear_fold_cache
     from fr.artifacts.paths import KIND_DIRS, artifact_root
-    from fr.commands import run_cmd
+    from fr.run.evidence.suite import local_stamp_witness
 
     from tests.unit.test_placement_quiet import quiet_repo
 
@@ -388,17 +390,23 @@ def test_under_quiet_the_fragment_is_written_in_the_artifact_root(
     )
     clear_fold_cache()
 
-    plan = run_cmd._local_stamp_plan(root, "spec", "suite.log@0123456789ab", today="2026-11-14")
+    plan = deliver.local_stamp_plan(
+        root,
+        "spec",
+        "suite.log@0123456789ab",
+        today="2026-11-14",
+        witness=local_stamp_witness,
+    )
 
     assert plan is not None and [p for p, _ in plan.files] == [frag] and plan.rows == ("q-1",)
     assert not (root / KIND_DIRS["acceptance-fragment"]).exists()
-    writes = run_cmd._RunWrites(verb="resolve")
-    token = run_cmd._RUN_WRITES.set(writes)
+    writes = RunWrites(verb="resolve")
+    token = RUN_WRITES.set(writes)
     try:
-        run_cmd._deliver_local_stamp_write(root, plan)
+        deliver.deliver_local_stamp_write(root, plan)
         outcome = writes.commit()
     finally:
-        run_cmd._RUN_WRITES.reset(token)
+        RUN_WRITES.reset(token)
     assert outcome is not None and outcome.committed, outcome
     assert git(froot, "status", "--porcelain", "--", ".").strip() == ""
     assert frag.name in git(froot, "show", "--name-only", "--format=", "HEAD")
@@ -418,7 +426,7 @@ def test_a_fragment_with_no_local_row_never_folds(
     """Review p2-r1: deliver with no `local` row behaves exactly as before; the plan
     returns before the fold, so no fold failure can refuse it in the stamp's name."""
     from fr.acceptance import fold as fold_mod
-    from fr.commands import run_cmd
+    from fr.run.evidence.suite import local_stamp_witness
 
     root = _at_deliver(tmp_path)
     out = fr(
@@ -437,7 +445,16 @@ def test_a_fragment_with_no_local_row_never_folds(
         raise AssertionError("the stamp plan folded a fragment with no local row")
 
     monkeypatch.setattr(fold_mod, "effective", boom)
-    assert run_cmd._local_stamp_plan(root, "spec", "suite.log", today="2026-11-14") is None
+    assert (
+        deliver.local_stamp_plan(
+            root,
+            "spec",
+            "suite.log",
+            today="2026-11-14",
+            witness=local_stamp_witness,
+        )
+        is None
+    )
 
 
 # --- tests-lens gaps (l-tests-r1, l-tests-r4) ------------------------------------------
@@ -466,7 +483,7 @@ def test_the_last_refusal_missing_emits_writes_no_stamp(
     tmp_path: Path, live: dict[str, str], deliver
 ) -> None:  # type: ignore[no-untyped-def]
     """l-tests-r1: the PR gate passes (the live body carries every section) and the
-    exit guard and label sync pass too; `_refuse_missing_emits`, the resolve's last
+    exit guard and label sync pass too; `refuse_missing_emits`, the resolve's last
     refusal, refuses a `done` naming no `pr`. The stamp, planned before every one of
     them, is never written."""
     root = _at_deliver(tmp_path)
@@ -488,7 +505,7 @@ def test_the_last_refusal_missing_emits_writes_no_stamp(
 def test_the_exit_guard_refusal_writes_no_stamp(
     tmp_path: Path, live: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """l-tests-r1: a refusal by `_deliver_exit_guard`, after the PR gate passes."""
+    """l-tests-r1: a refusal by `fr.run.deliver.deliver_exit_guard`, after the PR gate passes."""
     import fr.verification.baseline as baseline
 
     root = _at_deliver(tmp_path)

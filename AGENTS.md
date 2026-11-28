@@ -106,20 +106,31 @@ uv workspace monorepo, version lockstepped across every manifest (see
     out of the cursor — the v5/v6 shape is frozen as
     `fr.run.legacy.RunStateV6`); `deliver`'s derived
     `proportionality` evidence runs `fr plan proportionality`
-    (`fr/proportionality.py`). `plugins/super-fr/workflows/` ships
+    (`fr/proportionality.py`). `plugins/super-fr/defaults/workflows/` ships
     the manifests this resolves (`fr-goal.yaml`, the pipeline `/fr-goal`
     itself now narrates); a repo may override one wholesale under
-    `docs/superpowers/workflows/<name>.yaml`. Shipped manifests are NOT
+    `.fr/workflows/<name>.yaml`. Shipped manifests are NOT
     mirrored to OpenCode/Hermes like skills/rules are — `fr run` is a CLI
     surface every harness drives the same way, not a per-harness prompt.
-    Both shipped shapes run `lens-review` between `journal-check` and
-    `deliver` (spec `2026-11-12-review-lenses` §3.C): `_evidence_target` has a
-    third, FEATURE-level target (a flat step emitting `journal:plan`: the plan
+    `fr-goal` and `fr-goal-light` run `lens-review` between `journal-check` and
+    `deliver` (spec `2026-11-12-review-lenses` §3.C):
+    `fr.run.evidence.target.evidence_target` has a third, FEATURE-level target (a flat step emitting `journal:plan`: the plan
     journal, no phase, `feature=True`), which reads `reviewer` as a
     `<lens>=<dispatch-id>` map over `lens_set` recomputed at resolve, gates
     only `l-<lens>-r<k>` findings, and derives `lenses` (per lens, files
     examined and findings raised; `none` for an empty set, which owes no
-    `review`/`reviewer`). Adoption never infers the lens review done.
+    `review`/`reviewer`). Adoption never infers the lens review done. The
+    `fr-debugging` shape has no `lens-review` step.
+    **What `fr/run` decides and `commands/run_cmd.py` prints** (spec
+    `2026-11-27-run-verdict`, #1519): a check returns a `Verdict` or raises a
+    `RunRefusal`, each line a `Say` (`verdict.py`) that carries the options its
+    old print passed; `run_cmd`'s `_say`, `_settle` and `_refusals()` print it. The
+    unobserved-gate channel is `unobserved.py`; the rest of the engine is `steps.py`
+    (lookup, run ids, completion), `deliver.py` (the deliver gates), `brief.py` (the
+    dispatch briefs and records), `provenance.py` (the operator gate's provenance,
+    with `GATE_DECISIONS`) and `evidence/` (the evidence verifiers). `fr/run`
+    imports no `typer`, no console and no `fr.commands` (`rich.markup` alone is
+    allowed), held over the whole package by `tests/unit/test_run_writes_layering.py`.
     `fr/run/liveness.py` (2026-09-20 unit-record-unification §4.G, gh#518) is
     the ONE definition of "idle" — a run that is advanceable with nobody
     working on it: `is_idle` (pure) behind `fr run check --idle` (exit **3**),
@@ -155,11 +166,15 @@ uv workspace monorepo, version lockstepped across every manifest (see
     discipline. The split is forced: the OpenCode/Hermes mirrors copy only
     `SKILL.md`, so a script bundled beside a skill never reaches them — only
     the `fr` wheel reaches every harness. State lives in the scope's state
-    directory, the workspace's `.fr/triage-state/<scope>/` or
-    `$HOME/.cache/fr/triage/<scope>/` outside a clone (`owner--repo` or `owner`,
-    lowercased; `--dir` overrides; a scope with a state repo is synced with
-    `refs/heads/fr-triage/<scope-id>` by `triage_cmd.resolve_state_dir`, 2026-10-07
-    cloud-triage spec): `facts.json` (collect), `judgements.yaml` (the
+    directory, `$HOME/.cache/fr/triage/<scope>/` (`owner--repo` or `owner`,
+    lowercased; `--dir` overrides), which is its own git repository, so it syncs
+    `refs/heads/fr-triage/<scope-id>` with no product clone (`triage_cmd.resolve_state_dir`,
+    2026-10-07 cloud-triage spec; 2026-11-19 S1 R17). `fr/triage/state_home.py` moves an
+    older clone's `.fr/triage-state/<scope>/` there on first use (R18: refused while a live
+    `drive.lock` names a driver, an older cache set aside as `<scope>.pre-s1`, a tombstone
+    file left for an fr below S1 to fail on; restart the driver after upgrading), and a
+    one-repo scope may name its state repo as `triage.state_repo` in `.fr/settings.yaml`
+    (`schema: 2`, R20): `facts.json` (collect), `judgements.yaml` (the
     agent's, shape in spec §3.D), the pages (`fr triage backlog` writes Backlog
     and Issues, `batches` the Batches page; one name each, read from
     `components.PAGES`, spec 2026-11-18-triage-pages-ux). It is never
@@ -185,7 +200,7 @@ uv workspace monorepo, version lockstepped across every manifest (see
     {list,create,edit,cancel,suggest,dispatch,merge,drive}`
     (`commands/triage_batch_cmd.py`) turn a group of judged issues into one
     fr-goal run with one PR. `judgements.yaml` carries `batches:` with
-     engine-appended `events` (fr reads schemas 1–13 and writes 13, see
+     engine-appended `events` (fr reads schemas 1–14 and writes 14, see
     the waves paragraph below) and `facts.json` schema 8
     (open-PR join with `files`/`head_oid`, `batch_prs`, per-repo `config` from
     the target repo's `.fr/triage.yaml`). The engine is `fr/triage/batch.py`
@@ -218,9 +233,14 @@ uv workspace monorepo, version lockstepped across every manifest (see
     taken member's claim owed (gh#1120); 9 the merge-train events; 10 the collected close-out
     (`closeouts:`, `closeout_handback`, `closeout_hold`, exit-gates R15/R27); 11 added
      `archive_conflict` (merge-truth R12); 12 recovery ownership/session audit metadata;
-     current writers stamp 13 (read 1–13), adding the wave merge queue's `queues:` list,
-     the batch `deferred`/`requeued` events and the `patch_id` of an approval and an update
-     (wave-merge-queue R12, R24).
+     13 the wave merge queue's `queues:` list, the batch `deferred`/`requeued` events and
+     the `patch_id` of an approval and an update (wave-merge-queue R12, R24); current
+     writers stamp 14 (read 1–14), adding the `conflict` event's `onto` and `reissue`
+     and the operator's `queue_requests:` (`queue_add`/`queue_remove`, folded by
+     `fr.triage.queue_requests`; wave-queue-gaps R11, R16). The driver's queue readers
+     read every collected repo a request names, batch or not (`reader_repos`), and a
+     pending operator entry counts as `pending` work (`wave_queue.operator_work`), so the
+     loop never reads `done` over an undrained queue.
     `fr triage batch replace` owns scope then pane locks, checkpoints and cross-store
     repair, never replaying uncertain submission; `drive` runs waves to completion.
     `batch_drive.py` is the pure pass (a `Snapshot` in, ordered `closeout`,
@@ -323,6 +343,24 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`{kind: lens, lens: <id>, title: <why>}`; `apply.py` checks the lens is
     effective, assigns the id and stamps `step`/`phase`), migration
     `fr.artifacts.record_lens`, stamp only.
+  - **`fr/config`** (2026-11-19 spec, `event-driven-a-la-carte` S1) — where repo
+    configuration lives. `space.py`'s `config_space` is the ONE resolver of the
+    configuration space (`.fr/` in the product under `repo`, the orphan `fr-config` branch
+    under quiet, `<target-dir>/.fr/` on the tracking repo's `<branch>-config` under
+    stealth): a working directory, a ref for reads at a commit, and `located` (R13's
+    old-path fallback, decided under quiet/stealth by the configuration branch's fetched
+    tip); `tests/unit/test_tripwire_config_space.py` fails any other `.fr` path
+    construction. `protection.py` answers whether the forge enforces a pull-request rule
+    (one approving review that a later push cannot keep, no force-push, no deletion) on the
+    configuration branch, read
+    from `rules/branches/<b>`, cached per command; it cannot see bypass actors. `tip.py`
+    exports the fetched, reviewed tip to a private directory for a guarded program to run;
+    `degraded.py` is what an unprotected branch's workflows, strategies and `profiles.yaml`
+    degrade to; `change.py` opens the pull request for every change after creation
+    (`fr-config-change/<kind>-<hash>`); `migrate.py` is the moved-kinds table and the
+    cross-space move (configuration branch first, then the product). The old settings copy
+    is brought in step only by `fr settings sync` (preview, `--yes --expect <tip>`).
+    Operator-facing: `docs/explainers/fr-isolation.md`.
   - **`fr/docs`** (2026-11-11 spec, `docs-currency`) — pages must keep up with the code
     they cover. `.fr/docs.yaml` names the page globs (`pages:`, incl. `docs/explainers/*.md`,
     `docs/*.md`, `docs/reference/*.md`) and `must_cover:` (every skill needs a page);
@@ -340,9 +378,9 @@ uv workspace monorepo, version lockstepped across every manifest (see
     (`shipped_lens_dir`, `effective_lenses`: shipped not disabled, replacements applied, plus the
     repo's own from `.fr/lenses.yaml`; `review_lenses`: what a feature is reviewed under, where a
     lens of the default branch keeps the default branch's text) and `check.py` (`check_config`). Shipped manifests are
-    `plugins/super-fr/lenses/*.yaml` (NOT mirrored to OpenCode/Hermes, like verifications), with a
-    wheel copy in `packages/fr/src/fr/lens_manifests/` generated by `scripts/sync-lenses-data.py`
-    (`--check` verifies; `test_tripwire_shipped_lenses.py`). `rules.py` (path rules in force:
+    `plugins/super-fr/defaults/lenses/*.yaml` (NOT mirrored to OpenCode/Hermes, like verifications;
+    the one defaults tree, see "Shipped defaults" below). A repo has no lens directory:
+    `.fr/lenses.yaml` is its only lens override. `rules.py` (path rules in force:
     the default branch's `require:` together with the branch's, read like `.fr/ci.yaml`) and
     `accumulate.py` (`lens_set`, the ONE definition of a feature's lens set: `lens` entries in
     the run's spec and plan journals plus rule-required lenses for the files
@@ -625,20 +663,25 @@ tripwire will catch drift anyway:
 - `scripts/install.sh` must copy every canonical skill/rule to consumer
   machines; `test_install_copies_rules.py` / `test_install_copies_opencode_skills.py`
   fail if a shipped file isn't wired in.
-- **Shipped workflow manifests are a separate, NOT-mirrored category.**
-  `plugins/super-fr/workflows/*.yaml` (spec §4.A) has no OpenCode/Hermes
-  copy — `fr run` is a CLI surface every harness drives identically, so
-  there is nothing harness-specific to generate. It rides install.sh's
-  existing wholesale marketplace rsync (no per-file `cp`, unlike
-  skills/rules — see the comment above that rsync in `install.sh`);
-  `test_install_copies_workflows.py` / `test_install_sh.py::TestInstallWorkflows`
-  are its drift guards, and `test_tripwire_shipped_workflows.py` guards
-  every shipped manifest passing `fr workflow check`.
-- **Shipped verification strategies are the same NOT-mirrored category.**
-  `plugins/super-fr/verifications/*.yaml` has no OpenCode/Hermes copy (`fr
-  verification` is a CLI surface). The canonical set is the plugin directory; a
-  generated copy rides in the `fr` wheel and `test_tripwire_shipped_verifications.py`
-  guards both the copy and that every manifest passes `fr verification check`.
+- **Shipped defaults are a separate, NOT-mirrored category, with one home**
+  (spec `2026-11-19-event-driven-a-la-carte` R15, R16). `plugins/super-fr/defaults/`
+  holds `workflows/`, `verifications/` and `lenses/`; none has an OpenCode/Hermes
+  copy (`fr run`, `fr verification` and `fr lenses` are CLI surfaces every harness
+  drives identically). The wheel copy is `packages/fr/src/fr/defaults/<kind>/`,
+  written by `scripts/sync-defaults-data.py` (no flag writes and deletes stale
+  copies; `--check` exits 1 on drift) — never hand-edit it.
+  `tests/unit/test_tripwire_shipped_defaults.py` is the one guard: the tree holds
+  exactly the three kinds, the copy is byte-equal and importlib-reachable, every
+  workflow passes `check_workflow`, the four strategies keep their `when`/`driver`,
+  the four lenses exist. `fr._shipped` is the one resolver order for every kind:
+  repo `.fr/<kind>/<name>.yaml` (workflows and verifications only; under quiet/stealth
+  read through `fr.config.degraded`, which falls back to the shipped file),
+  `$FR_SHIPPED_DEFAULTS_DIR/<kind>/`, the per-kind `$FR_SHIPPED_{WORKFLOWS,VERIFICATIONS,LENSES}_DIR`
+  (kept until R14's release, with one notice per process), the wheel, the marketplace
+  clone's `plugins/super-fr/defaults/<kind>/`. The tree rides install.sh's
+  wholesale marketplace rsync (no per-file `cp`, unlike skills/rules — see the
+  comment above that rsync in `install.sh`); `test_install_copies_{workflows,verifications,lenses}.py`
+  and `test_install_sh.py::TestInstallWorkflows` are its drift guards.
 
 ## This repo dogfoods fr-isolation on itself
 
@@ -650,7 +693,7 @@ the OpenCode 2 plugin (`.opencode/plugins/fr-isolation-required.ts`, thin
 re-export of `packages/fr-opencode-plugin`) block file-writing tools
 outside a valid `.fr-isolation` workspace — editing this repo's own source is
 not exempt. Escapes, in preference order: enter isolation (`fr isolation up`),
-add an operator-managed path to `.fr-isolation-allow`, or set `FR_BASE_OK=1`
+add an operator-managed path to `.fr/isolation-allow`, or set `FR_BASE_OK=1`
 for one deliberate base-clone edit. Two docker-less modes now exist alongside
 the default devcontainer mode: **host-worktree** (`FR_ISOLATION_TARGET=worktree`
 — fr worktree in the host env, no profile) and **external** (a preparer-written
@@ -777,7 +820,7 @@ names (`(#N)` or `Merge pull request #N`, the release bot's own commits skipped)
 must be in it. First parent only: a commit inside a merge-committed branch is no
 landing, and its `(#N)` is usually an issue ref (gh#1333). A rebase merge puts
 the branch's own subjects on that line, so an issue ref there still reads as a
-missed PR: land PRs by merge commit or squash. A failed read, a read at its 1000 cap, a PR the read misses, or a
+missed PR: land PRs by merge commit or squash. A PR the first-parent log names that the forge reports closed unmerged (a push landing GitHub did not mark merged, gh#1705) counts as landed, dated by its commit: `release.py` reads it with `gh pr view` (spec `2026-11-26-landing-method` R7). A failed read, a read at its 1000 cap, a PR the read misses, or a
 failed `fr` decision makes the gate state **unknown**, which cuts an RC, never a
 final and never a refusal over the gate state (nothing when nothing installable changed,
 the same no-op as above; a failing `git diff` there still refuses). So a
@@ -904,8 +947,8 @@ exists and how it's checked, not a restatement:
 - **import direction** (`tests/unit/test_import_direction.py`) — the package-boundary guard
   reads imports from the syntax tree (`ast`), so a comma list, an alias or a nested import is
   seen; dynamic imports and entry-point loading are not judged. An unparseable file fails it.
-- **module line budget** (2026-11-16, `tests/unit/test_tripwire_module_budget.py`) — the five
-  largest modules (`run_cmd.py`, `triage_batch_cmd.py`, `isolation/local.py`, `plan_ops.py`,
+- **module line budget** (2026-11-16, `tests/unit/test_tripwire_module_budget.py`) — five held
+  modules, the largest when it was added (`run_cmd.py`, `triage_batch_cmd.py`, `isolation/local.py`, `plan_ops.py`,
   `triage/batch_drive.py`) may not grow past their budget, and a budget may not sit more than 400
   lines above its module. When it fails, move the new code into the module the architecture report
   (`docs/superpowers/audits/2026-11-16-architecture-review.md`) names, or change the budget in the

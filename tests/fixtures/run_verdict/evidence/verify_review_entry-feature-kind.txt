@@ -1,0 +1,1 @@
+[31mstep/lens-review: --evidence review=d1 is a 'discovery' entry — the lens review's evidence is a global `kind=review` plan-journal entry (no phase)[0m

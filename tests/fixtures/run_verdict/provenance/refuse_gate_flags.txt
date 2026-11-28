@@ -1,0 +1,1 @@
+[31mbrainstorm: --no-questions/--reason and question rounds only apply to a resolve that clears an operator gate, and this one clears none.[0m

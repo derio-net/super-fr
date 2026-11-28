@@ -77,6 +77,7 @@ from fr.triage.kanban import BoardStatus, build_board
 from fr.triage.kanban_render import render_board
 from fr.triage.merge_stops import load_stops
 from fr.triage.model import Facts, Judgements, Scope
+from fr.triage.orphan import focus_refusal
 from fr.triage.plan_overlap import card_lines, plan_overlap_report, source_for_clones
 from fr.triage.quota import budget_from_json
 from fr.triage.render import plural
@@ -198,6 +199,8 @@ def batch_focus_command(
     batch = next((b for b in judgements.batches if b.id == wanted), None)
     if batch is None:
         _fail(f"no batch {batch_id!r} in judgements.yaml")
+    if (why := focus_refusal(batch, facts)) is not None:
+        _fail(why)
     owner_repo = batch_repo(batch, facts)
     if owner_repo is None:
         _fail(f"batch {batch.id!r}: its repo {batch.repo_name!r} is not in this scope's facts")

@@ -1,0 +1,1 @@
+[31mphase/1/review-phase: --evidence reviewer=impl-1 is the agent that IMPLEMENTED phase 1 — a review must come from a separate context, not the one whose work it judges. Dispatch a reviewer subagent and name its id.[0m

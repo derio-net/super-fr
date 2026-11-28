@@ -40,6 +40,7 @@ from fr.ghclient import (
     CommandRunner,
     HostRefusedError,
     filter_issues_by_body,
+    pr_label_names,
     run_cli,
 )
 from fr.labels import LabelDef
@@ -780,7 +781,9 @@ class RealGhRestClient:
             "merge_commit": (pull.get("merge_commit_sha") or "") if pull.get("merged_at") else "",
             "title": pull.get("title") or "",
             "body": pull.get("body") or "",
-            "labels": [lb.get("name") or "" for lb in pull.get("labels") or []],
+            # a payload with no `labels` key is an unread label set, never "no labels"
+            # (queue-followups R1: unread labels end no approval)
+            "labels": pr_label_names(pull.get("labels")) if "labels" in pull else None,
         }
 
     def pr_ready(self, repo: str, number: int) -> None:
@@ -832,7 +835,7 @@ class RealGhRestClient:
         required = set(required_cfg.get("contexts") or [])
         required |= {c.get("context") for c in required_cfg.get("checks") or []}
         try:
-            rules = self._api(f"repos/{repo}/rules/branches/{b}") or []
+            rules = self.branch_rules(repo, base) or []
         except GhError as exc:
             if not _plan_lacks_rulesets(exc):
                 raise
@@ -842,6 +845,13 @@ class RealGhRestClient:
                 params = rule.get("parameters") or {}
                 required |= {c.get("context") for c in params.get("required_status_checks") or []}
         return sorted(str(n) for n in required if n)
+
+    def branch_rules(self, repo: str, branch: str) -> Any:
+        """`GET rules/branches/{branch}`: the effective rules, as GitHub answers them (spec
+        2026-11-19-event-driven-a-la-carte R7). The forge's error propagates, the free-plan
+        403 included; `required_check_names`, `base_rules` and `fr.config.protection` each
+        decide what it means. `RealGhClient.branch_rules` is this method."""
+        return self._api(f"repos/{repo}/rules/branches/{_q(branch)}")
 
     def base_rules(self, repo: str, branch: str) -> BaseRules:
         """`GET rules/branches/{branch}` for a `merge_queue` rule and a strict
@@ -856,7 +866,7 @@ class RealGhRestClient:
         b = _q(branch)
         queue = strict = False
         try:
-            rules = self._api(f"repos/{repo}/rules/branches/{b}") or []
+            rules = self.branch_rules(repo, branch) or []
         except GhError as exc:
             if not _plan_lacks_rulesets(exc):
                 raise
@@ -1009,6 +1019,13 @@ class RealGhRestClient:
         """`visibility` of `GET repos/{repo}`, else `private` read as public/private; a
         conditional read sharing `fr.gh`'s module-level ETag map (quota-pacing R12)."""
         return _gh.repo_visibility(self._gh, self._host, repo)
+
+    def repo_default_branch(self, repo: str) -> str:
+        """`default_branch` of `GET repos/{repo}`; raises when the answer holds none."""
+        name = self._api(f"repos/{repo}").get("default_branch")
+        if not isinstance(name, str) or not name:
+            raise GhError(f"GET repos/{repo}: no default_branch in the answer")
+        return name
 
     def pages_visibility(self, repo: str) -> str:
         """`public` of `GET repos/{repo}/pages`; `unknown` on a 404 (no site) or any failure."""

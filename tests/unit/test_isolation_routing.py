@@ -14,8 +14,9 @@ import pytest
 from fr.isolation import external as external_mod
 from fr.isolation.external import ExternalTarget
 from fr.isolation.hostworktree import HostWorktreeTarget
-from fr.isolation.local import LocalWorktreeDevcontainerTarget, subprocess_runner
+from fr.isolation.local import LocalWorktreeDevcontainerTarget
 from fr.isolation.routing import target_for_state
+from fr.isolation.runner import subprocess_runner
 from fr.isolation.types import IsolationError, IsolationState
 
 from tests.unit.test_isolation import FakeRunner, make_repo, make_repo_with_origin

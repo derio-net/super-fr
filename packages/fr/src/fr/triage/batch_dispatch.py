@@ -9,13 +9,13 @@ runs a process or calls a forge.
 
 from __future__ import annotations
 
-import shlex
 import unicodedata
 from collections.abc import Iterable, Sequence
 
 import yaml
 from pydantic import ValidationError
 
+from fr.config.space import rel
 from fr.settle.managed import MANAGED_SENTENCE
 from fr.triage.batch import (
     batch_branch,
@@ -34,6 +34,8 @@ from fr.triage.model import (
     batch_marker,
     parse_triage_config,
 )
+from fr.triage.queue_handback import conflict_brief as conflict_brief  # wave-queue-gaps §A
+from fr.triage.wave_overlap import overlap_brief_lines
 
 # Stages whose reservation still stands: the run was briefed with it and has
 # not merged or been given up (§3.D "every live reservation").
@@ -50,7 +52,7 @@ def obsolete_refusal(batch_id: str, verb: str) -> str:
     )
 
 
-TRIAGE_CONFIG_PATH = ".fr/triage.yaml"
+TRIAGE_CONFIG_PATH = rel("triage")
 
 CLOUD_PREFLIGHT_RUNNERS = frozenset({"claude-cloud"})
 """Runners whose sessions do not load the plugin's agents before their first turn (a
@@ -276,6 +278,7 @@ def render_brief(
             "this triage only, and the merge renumbers it if another batch lands "
             "that number first)."
         )
+    lines += overlap_brief_lines(batch, judgements.batches, judgements, facts)
     lines += [
         "- Do not name any member issue as a phase `tracking_issue` in the plan: the "
         "bridge would then own that issue's `fr:` labels.",
@@ -320,50 +323,6 @@ def red_brief(batch: Batch, *, pr_url: str, head: str, checks: Sequence[str]) ->
             ]
         )
         + "\n"
-    )
-
-
-def conflict_brief(
-    batch: Batch,
-    *,
-    pr: int | None,
-    head: str,
-    paths: Sequence[str],
-    branch: str,
-    base: str,
-    mirrors: Sequence[Sequence[str]],
-) -> str:
-    """The conflict hand-back brief (spec 2026-10-06-verification-strategies §G, R20):
-    the batch, its PR, the head and the paths merge refused, then the six steps. The
-    repo's `.fr/triage.yaml` `mirrors:` commands, when declared, are step 4's."""
-    where = f"PR #{pr}" if pr is not None else "its PR"
-    regenerate = "4. Regenerate generated mirrors instead of hand-resolving them"
-    if mirrors:
-        commands = "; ".join(f"`{shlex.join(argv)}`" for argv in mirrors)
-        regenerate += f": run {commands}, then stage what they wrote."
-    else:
-        regenerate += " (rerun whatever generates them), then stage what they wrote."
-    return "\n".join(
-        [
-            f"Merge conflict on batch {batch.id}: {where} on {branch}, at "
-            f"head {head}, conflicts with {base} in a change the wave driver will not "
-            f"resolve: {', '.join(paths)}.",
-            *title_block(batch),
-            f"Resolve it on {branch} itself, in these six steps:",
-            f"1. Enter the batch's workspace first: `fr isolation up --branch {branch}`. "
-            f"{branch} is checked out there, not in the clone you may have started in; "
-            "on an existing workspace the command resumes it, and a session already in "
-            "that workspace has nothing to do. Every later step runs in the workspace.",
-            f"2. `git fetch origin && git merge {base}` into {branch}. Do not rebase and "
-            "do not force-push: the PR's history stays as it is.",
-            f"3. Resolve the conflicted paths: {', '.join(paths)}.",
-            regenerate,
-            "5. Run the test suite, and fix what the merge broke.",
-            f"6. Commit the merge and `git push origin {branch}`. The driver merges the PR "
-            "once its checks are green.",
-            MANAGED_SENTENCE,
-            NO_APPROVAL_LINE,
-        ]
     )
 
 
@@ -413,7 +372,9 @@ def dispatched_already(comments: Iterable[dict[str, object]], item_id: str) -> b
     return latest_marker(comments, item_id) == "dispatch"
 
 
-def check_config_fresh(collected: TriageConfig | None, on_origin: str | None) -> tuple[str, ...]:
+def check_config_fresh(
+    collected: TriageConfig | None, on_origin: str | None, strip_guarded: bool = False
+) -> tuple[str, ...]:
     """Refuse a collected `.fr/triage.yaml` that is not the one on
     `origin/<default>` now (§3.I).
 
@@ -426,12 +387,13 @@ def check_config_fresh(collected: TriageConfig | None, on_origin: str | None) ->
     comparison, as collect dropped it (R4); the keys it dropped on the origin side are
     returned so the caller can say so.
     """
+    from fr.config.protection import without_guarded
+
     try:
-        current, ignored = (
-            parse_triage_config(yaml.safe_load(on_origin) or {})
-            if on_origin is not None
-            else (None, ())
-        )
+        data = (yaml.safe_load(on_origin) or {}) if on_origin is not None else None
+        if data is not None and strip_guarded:  # *strip_guarded*: as collect dropped them (R7)
+            data = without_guarded(data)
+        current, ignored = parse_triage_config(data) if data is not None else (None, ())
     except (yaml.YAMLError, ValidationError) as exc:
         raise TriageError(
             f"{TRIAGE_CONFIG_PATH} on the default branch is not valid triage config: {exc}"

@@ -1,5 +1,5 @@
 {
-  "schema": 18,
+  "schema": 20,
   "scope": "example-org--widgets",
   "kind": "repo",
   "collected_at": "2026-10-12T00:00:00Z",
@@ -105,5 +105,6 @@
   "config_ignored": {},
   "gated_prs": [],
   "gated_unread": [],
-  "ignored_claims": []
+  "ignored_claims": [],
+  "state_repo_declared": {}
 }

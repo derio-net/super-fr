@@ -1,4 +1,4 @@
-"""Line budget for the five largest modules (spec 2026-11-16 architecture-review-sweep, R12).
+"""Line budget for five held modules (spec 2026-11-16 architecture-review-sweep, R12).
 
 A budget is a review trigger, not a ceiling for the codebase. The module may not grow
 past its budget, and the budget may not sit more than `MAX_HEADROOM` lines above the
@@ -18,13 +18,26 @@ SRC = "packages/fr/src/fr/"
 MAX_HEADROOM = 400
 
 BUDGETS: dict[str, int] = {
-    f"{SRC}commands/run_cmd.py": 9120,  # show-me-visuals: three call sites of fr.shape
+    # run-write-ledger (#1515): the write ledger moved to fr/run/writes.py
+    # run-verdict (#1519): slice 1 moved the derived verifiers to fr/run, slice 2 the lookup,
+    # slice 3 the deliver gates (fr/run/deliver.py), slice 4 the briefs (fr/run/brief.py),
+    # slice 5 the evidence verifiers (fr/run/evidence/), slice 6 (the last of #1519) the gate
+    # provenance (fr/run/provenance.py): 4091 lines, +20 headroom
+    f"{SRC}commands/run_cmd.py": 4111,
     # +25 each: batch closeout-truth (gh#1494/#1496/#1497/#1569) changes the close-out steps
     # these modules hold; the split they need is #1516 (hand-back and close-out leaves).
-    f"{SRC}commands/triage_batch_cmd.py": 8225,
-    f"{SRC}isolation/local.py": 3200,
-    f"{SRC}plan_ops.py": 2600,
-    f"{SRC}triage/batch_drive.py": 2275,
+    # triage_batch_cmd.py, 8300: main's landing-method `_landing_hold` (spec 2026-11-26 R2,
+    # +25 to 8250) merged with S1's (event-driven-a-la-carte) guarded-key and state-home
+    # reads; the merged module is 8292 lines.
+    # 8320: closeout-state lens fixes (take-back dedupe, a returned repo with no clone is held).
+    f"{SRC}commands/triage_batch_cmd.py": 8320,
+    # isolation/local.py: 3200 -> 2125 after runner, reap, branchrefs and landing left it (#1517);
+    # 2125 -> 1735 after gc moved to GcSweeper in isolation/gc.py (#1521).
+    f"{SRC}isolation/local.py": 1735,
+    # #1518 split self-review, the spec table, rework and the refactor-gate read out.
+    f"{SRC}plan_ops.py": 700,
+    # #1516 split the value types, the wave-export leaf and the hand-back decisions out.
+    f"{SRC}triage/batch_drive.py": 1900,
 }
 
 HELD: frozenset[str] = frozenset(

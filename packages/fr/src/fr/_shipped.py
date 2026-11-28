@@ -1,15 +1,24 @@
-"""The shipped-resource directory walk, shared by every "repo > shipped" lookup.
+"""The shipped-defaults directory walk, shared by every "repo > shipped" lookup.
 
-`fr.workflow.resolve` (shape manifests) and `fr.verification.resolve`
-(verification strategies) search the same four places in the same order; the
-walk lives here once so the two cannot drift. The per-kind docstrings own the
-*why* of the order (a wheel copy before the marketplace clone, an explicit env
-override first); this module owns only the mechanics.
+super-fr's shipped defaults have one home (spec 2026-11-19-event-driven-a-la-carte
+R15): `plugins/super-fr/defaults/<kind>/` for `workflows`, `verifications` and
+`lenses`, with one wheel copy at `fr/defaults/<kind>/` (written by
+`scripts/sync-defaults-data.py`, guarded by
+`tests/unit/test_tripwire_shipped_defaults.py`). `fr.workflow.resolve`,
+`fr.verification.resolve` and `fr.lenses.resolve` all search, for a kind:
 
-1. the repo's own directory (the caller prepends it — it is repo-relative);
-2. `$<ENV_VAR>` when set;
-3. the copy inside the `fr` wheel (`fr/<dirname>/`);
-4. the Claude Code marketplace clone (`~/<MARKETPLACE_ROOT>/<plugin_rel>`).
+1. the repo's own directory, `.fr/<kind>/` (workflows and verifications only; the
+   caller prepends it, and under quiet/stealth reads it through
+   `fr.config.degraded`, whose fallback is this shipped walk);
+2. `$FR_SHIPPED_DEFAULTS_DIR/<kind>/` when set (R16);
+3. the per-kind `$FR_SHIPPED_<KIND>_DIR` when set, kept until the release
+   R14 names, with one notice per process naming `FR_SHIPPED_DEFAULTS_DIR`;
+4. the copy inside the `fr` wheel (`fr/defaults/<kind>/`);
+5. the Claude Code marketplace clone
+   (`~/<MARKETPLACE_ROOT>/plugins/super-fr/defaults/<kind>/`).
+
+The per-kind docstrings own the *why* of the order (a wheel copy before the
+marketplace clone, an explicit env override first); this module owns the mechanics.
 """
 
 from __future__ import annotations
@@ -17,6 +26,7 @@ from __future__ import annotations
 import atexit
 import contextlib
 import os
+import sys
 from importlib import resources
 from pathlib import Path
 
@@ -62,7 +72,7 @@ def packaged_dir(dirname: str) -> Path | None:
 
     resolved: Path | None = None
     try:
-        root = resources.files("fr") / dirname
+        root = resources.files("fr").joinpath(*dirname.split("/"))
         if root.is_dir():
             resolved = Path(_RESOURCE_STACK.enter_context(resources.as_file(root)))
     except ModuleNotFoundError, FileNotFoundError, TypeError, OSError:
@@ -71,30 +81,96 @@ def packaged_dir(dirname: str) -> Path | None:
     return _PACKAGED_CACHE[dirname]
 
 
+DEFAULTS_ENV_VAR = "FR_SHIPPED_DEFAULTS_DIR"
+"""One variable pointing the resolver at another defaults tree, holding `<kind>/` (R16)."""
+
+LEGACY_ENV_VARS: dict[str, str] = {
+    "workflows": "FR_SHIPPED_WORKFLOWS_DIR",
+    "verifications": "FR_SHIPPED_VERIFICATIONS_DIR",
+    "lenses": "FR_SHIPPED_LENSES_DIR",
+}
+"""The per-kind variables S1 replaces. Each names a flat directory of that kind's
+manifests and keeps working until the release R14 names (`s1-refuse-old-paths`)."""
+
+KINDS: tuple[str, ...] = tuple(LEGACY_ENV_VARS)
+
+PLUGIN_DEFAULTS_REL = Path("plugins") / "super-fr" / "defaults"
+"""The canonical tree, relative to a super-fr checkout or the marketplace clone."""
+
+PACKAGED_DEFAULTS_DIRNAME = "defaults"
+"""The wheel copy, `fr/defaults/`, addressed as data under the `fr` package."""
+
+_LEGACY_NOTICED: set[str] = set()
+"""Legacy variables this process has already named (one notice per command)."""
+
+
+def _kind(kind: str) -> str:
+    if kind not in LEGACY_ENV_VARS:
+        raise ValueError(f"unknown shipped-defaults kind {kind!r}: one of {', '.join(KINDS)}")
+    return kind
+
+
+def plugin_rel(kind: str) -> Path:
+    """`plugins/super-fr/defaults/<kind>`."""
+    return PLUGIN_DEFAULTS_REL / _kind(kind)
+
+
+def marketplace_dir(kind: str) -> Path:
+    """The marketplace clone's `<kind>` directory, under the current home."""
+    return Path.home() / MARKETPLACE_ROOT / plugin_rel(kind)
+
+
+def packaged_kind_dir(kind: str) -> Path | None:
+    """`fr/defaults/<kind>/` inside the wheel, or `None` (see `packaged_dir`)."""
+    return packaged_dir(f"{PACKAGED_DEFAULTS_DIRNAME}/{_kind(kind)}")
+
+
+def _legacy_dir(kind: str) -> Path | None:
+    var = LEGACY_ENV_VARS[kind]
+    value = os.environ.get(var)
+    if not value:
+        return None
+    if var not in _LEGACY_NOTICED:
+        _LEGACY_NOTICED.add(var)
+        print(
+            f"fr: ${var} is deprecated; set ${DEFAULTS_ENV_VAR} to a tree holding "
+            f"{kind}/ instead (the per-kind variables stop working in the release that "
+            "refuses old configuration paths)",
+            file=sys.stderr,
+        )
+    return Path(value)
+
+
+def env_dirs(kind: str) -> list[Path]:
+    """The variable-named sources for *kind*, in order (steps 2-3 of the module docstring)."""
+    dirs: list[Path] = []
+    root = os.environ.get(DEFAULTS_ENV_VAR)
+    if root:
+        dirs.append(Path(root) / _kind(kind))
+    legacy = _legacy_dir(_kind(kind))
+    if legacy is not None:
+        dirs.append(legacy)
+    return dirs
+
+
 def shipped_dirs(
+    kind: str,
     *,
-    env_var: str,
-    plugin_rel: Path,
     packaged: Path | None,
     shipped_root: Path | None = None,
 ) -> list[Path]:
-    """The shipped sources, in lookup order (steps 2-4 of the module docstring).
+    """The shipped sources for *kind*, in lookup order (steps 2-5 of the module docstring).
 
-    An explicit `shipped_root` (or `$env_var`) wins outright: it is what a test
-    or a non-Claude-Code harness set on purpose. Otherwise the wheel's own copy
-    comes first and the marketplace clone last, so an `fr` upgrade cannot be
-    shadowed by a clone nobody re-installed.
+    An explicit `shipped_root` (a flat directory of manifests) replaces both variables:
+    it is what a test set on purpose. Otherwise the variables come first, then the
+    wheel's own copy, and the marketplace clone last, so an `fr` upgrade cannot be
+    shadowed by a clone nobody re-installed. *packaged* is the caller's wheel directory
+    (normally `packaged_kind_dir(kind)`), passed in so a test can replace it.
     """
-    dirs: list[Path] = []
-    if shipped_root is not None:
-        dirs.append(shipped_root)
-    else:
-        override = os.environ.get(env_var)
-        if override:
-            dirs.append(Path(override))
+    dirs: list[Path] = [shipped_root] if shipped_root is not None else env_dirs(kind)
     if packaged is not None:
         dirs.append(packaged)
-    marketplace = Path.home() / MARKETPLACE_ROOT / plugin_rel
+    marketplace = marketplace_dir(kind)
     if marketplace not in dirs:
         dirs.append(marketplace)
     return dirs

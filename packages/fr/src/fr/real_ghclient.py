@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Concatenate, Literal, cast
 
 from fr import gh as _gh
-from fr.ghclient import MERGE_METHODS, BaseRules, CommandRunner, run_cli
+from fr.ghclient import MERGE_METHODS, BaseRules, CommandRunner, pr_label_names, run_cli
 from fr.labels import LabelDef
 
 # Re-exported for `fr.triage.collect`, which reads the forge only through the
@@ -434,7 +434,9 @@ class RealGhClient:
             "merge_commit": (raw.get("mergeCommit") or {}).get("oid", ""),
             "title": raw.get("title", ""),
             "body": raw.get("body", ""),
-            "labels": [lb.get("name") or "" for lb in raw.get("labels") or []],
+            # a payload with no `labels` key is an unread label set, never "no labels"
+            # (queue-followups R1: unread labels end no approval)
+            "labels": pr_label_names(raw.get("labels")) if "labels" in raw else None,
         }
 
     @_hosted
@@ -474,6 +476,12 @@ class RealGhClient:
     @_hosted
     def authenticated_login(self) -> str:
         return _gh.viewer_login()
+
+    def branch_rules(self, repo: str, branch: str) -> Any:
+        """Spec 2026-11-19-event-driven-a-la-carte R7: the `github-rest` backend's route."""
+        from fr.real_ghrestclient import RealGhRestClient
+
+        return RealGhRestClient(host=self._host).branch_rules(repo, branch)
 
     def base_rules(self, repo: str, branch: str) -> BaseRules:
         """Merge-train-safety §D: the `github-rest` backend's REST routes, on this host."""
@@ -575,6 +583,19 @@ class RealGhClient:
         # A conditional REST read (quota-pacing R12): GraphQL budget is not spent, and a
         # new client per push still shares the module-level ETag map.
         return _gh.repo_visibility(_gh._run_gh, self._host, repo)
+
+    @_hosted
+    def repo_default_branch(self, repo: str) -> str:
+        """`default_branch` of `GET repos/{repo}`; raises `GhError` when the answer holds none
+        or is not JSON (l-errors-r6: a decode failure is a forge failure, never a traceback)."""
+        try:
+            raw = json.loads(_gh._run_gh(["api", f"repos/{repo}"]))
+        except ValueError as exc:
+            raise _gh.GhError(f"GET repos/{repo}: the answer is not JSON ({exc})") from exc
+        name = raw.get("default_branch") if isinstance(raw, dict) else None
+        if not isinstance(name, str) or not name:
+            raise _gh.GhError(f"GET repos/{repo}: no default_branch in the answer")
+        return name
 
     @_hosted
     def pages_visibility(self, repo: str) -> str:

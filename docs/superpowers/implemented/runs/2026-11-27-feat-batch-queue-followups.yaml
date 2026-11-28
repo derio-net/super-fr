@@ -1,0 +1,166 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-queue-followups
+workflow: fr-goal@1
+branch: feat/batch-queue-followups
+started: '2026-11-27T13:41:19+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-11-27T14:26:17+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-27-queue-followups-design.md
+  spec-review:
+    state: done
+    at: '2026-11-27T14:35:54+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-27T14:26:20+00:00'
+          agent: a2699c9077ce82679
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-opus-5-5
+          tier: hard
+          bound: claude-opus-5-5
+          session: 5d651a76-adb8-4003-93fb-c7fbc93b4d88
+          returned: '2026-11-27T14:35:53+00:00'
+          outcome: done
+        evidence:
+          review: spec-review-1
+          reviewer: a2699c9077ce82679
+          findings: sr-1,sr-2,sr-3,sr-4,sr-5,sr-6,sr-7,sr-8,sr-9,sr-10,sr-11,sr-12
+  plan:
+    state: done
+    at: '2026-11-27T14:38:41+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-11-27-queue-followups
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-11-27T14:36:01+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 5d651a76-adb8-4003-93fb-c7fbc93b4d88
+          returned: '2026-11-27T14:38:41+00:00'
+          outcome: done
+  plan-review:
+    state: done
+    at: '2026-11-27T14:38:45+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-11-27T15:46:20+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-27T14:38:45+00:00'
+          agent: aa488c51822b9694a
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          tier: standard
+          bound: claude-sonnet-5
+          session: 5d651a76-adb8-4003-93fb-c7fbc93b4d88
+          returned: '2026-11-27T15:06:50+00:00'
+          outcome: done
+        evidence:
+          visual: none
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-27T15:06:50+00:00'
+          agent: ac9ce265ce15fb8b0
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 5d651a76-adb8-4003-93fb-c7fbc93b4d88
+          returned: '2026-11-27T15:20:52+00:00'
+          outcome: done
+        evidence:
+          review: review-p1
+          reviewer: ac9ce265ce15fb8b0
+          visual: none
+          findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6
+      phase/2/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-27T15:20:53+00:00'
+          agent: ae21494fb64225c5a
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          tier: hard
+          bound: claude-opus-5-5
+          session: 5d651a76-adb8-4003-93fb-c7fbc93b4d88
+          returned: '2026-11-27T15:35:39+00:00'
+          outcome: done
+        evidence:
+          visual: none
+      phase/2/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-27T15:35:40+00:00'
+          agent: ae933cffba59262c2
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 5d651a76-adb8-4003-93fb-c7fbc93b4d88
+          returned: '2026-11-27T15:46:20+00:00'
+          outcome: done
+        evidence:
+          review: review-p2
+          reviewer: ae933cffba59262c2
+          visual: none
+          findings: p2-r1,p2-r2,p2-r3
+  journal-check:
+    state: done
+    at: '2026-11-27T15:46:23+00:00'
+    exit: 0
+    stdout: |
+      1 out-of-scope finding(s): p1-r6
+  lens-review:
+    state: done
+    at: '2026-11-27T16:07:42+00:00'
+    units:
+      step/lens-review:
+        attempts:
+        - dispatched: '2026-11-27T15:46:24+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 5d651a76-adb8-4003-93fb-c7fbc93b4d88
+          returned: '2026-11-27T16:07:42+00:00'
+          outcome: done
+        evidence:
+          review: lens-review-1
+          reviewer: docs-accuracy=a24afa1542d396e78,errors=ad2f08e0c56ab67cf,security=aad89841d0b2f8127,tests=ad6201fe480463eeb
+          findings: l-docs-accuracy-r1,l-errors-r1,l-errors-r2,l-errors-r3
+          lenses: docs-accuracy=9:l-docs-accuracy-r1;errors=7:l-errors-r1,l-errors-r2,l-errors-r3;security=11:none;tests=12:none
+  deliver:
+    state: done
+    at: '2026-11-27T16:23:34+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1735
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-27T16:07:43+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 5d651a76-adb8-4003-93fb-c7fbc93b4d88
+          returned: '2026-11-27T16:23:02+00:00'
+          outcome: done
+        evidence:
+          tests: ci:6745722c04954cbdb83c52d6515a0e856f4133b9+unknown;tree=e30005889dd72c60caa1b1d6958ce17b02c9354a4ba4c8057cda2b878836038a
+          walk: none
+          proportionality: 00101f661f7bd41d2d6789ed2b8376f076f3f96f:39c58f7c62c43c51544c269aeb1d49c039df365b74aef058c3ab66db13d8c520
+          docs: 00101f661f7bd41d2d6789ed2b8376f076f3f96f:dd57bc1263f77b0b147c918b9ce010f68a38b9d39c0bc8576ceee46f3f8c77f7
+          visual: none
+          settle: managed
+fr_version: 9.1.0rc6
+pr: https://github.com/derio-net/super-fr/pull/1735

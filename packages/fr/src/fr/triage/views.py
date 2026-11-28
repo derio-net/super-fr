@@ -23,7 +23,16 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from fr.labels import APPROVED_FR
-from fr.triage.approval import ApprovalVerdict, Void, approval_verdict, is_approved, voided_at
+from fr.triage.approval import (
+    ApprovalVerdict,
+    Void,
+    Waiting,
+    approval_verdict,
+    conflict_waits,
+    ended_by_label,
+    is_approved,
+    voided_at,
+)
 from fr.triage.batch import (
     QueueEntry,
     batch_item_id,
@@ -42,26 +51,23 @@ from fr.triage.batch_drive import (
     DEFAULT_MAX_INFLIGHT,
     IN_FLIGHT,
     LANDED,
-    QUEUE_REPORT_KEY,
-    LivePr,
     Snapshot,
     checks_verdict,
     closeout_event,
     closeout_item_id,
-    conflict_at,
     drive_pass,
     fact_ledger_unknown,
     fact_ledgers,
-    held_archive_conflict,
-    held_conflict,
 )
 from fr.triage.batch_drive import _dispatch_key as dispatch_key
 from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
+from fr.triage.batch_drive_types import LivePr
 from fr.triage.check import batch_awaits_live, classify, stale_dispatches
 from fr.triage.driver_record import DriverRecord, stopped, stopped_line
 from fr.triage.errors import TriageError
+from fr.triage.handback_rules import conflict_at, held_archive_conflict, held_conflict
 from fr.triage.intake import rejected_by_batch
 from fr.triage.lanes import gated_pr_lane, lane_of, live_stops, unlisted_gated_prs
 from fr.triage.merge_stops import MergeStop
@@ -77,6 +83,14 @@ from fr.triage.model import (
     Severity,
 )
 from fr.triage.queue_exec import queue_config
+from fr.triage.queue_reports import QUEUE_REPORT_KEY
+from fr.triage.readiness import (
+    NO_CURSOR_ACTION,
+    cursor_remedy,
+    fact_cursor_details,
+    fact_cursors,
+    snapshot_readiness,
+)
 from fr.triage.scope_config import scope_id
 from fr.triage.sets import is_set_apart
 from fr.triage.timestamps import parse_aware
@@ -161,6 +175,9 @@ def drive_snapshot(
             head_ref=entry.pr.head_ref,
             trusted=True,  # the queue holds `batch_pr`s only (gh#936)
             labels=tuple(entry.pr.labels) if entry.pr.labels is not None else None,
+            url=entry.pr.url,
+            mergeable=entry.pr.mergeable or "",  # batch-merge-readiness R4, R6: the merge fact
+            merge_state=entry.pr.merge_state or "",
         )
     merged_at: dict[str, datetime] = {}
     for b in batches:
@@ -197,6 +214,8 @@ def drive_snapshot(
         awaiting=frozenset(b.id for b in batches if batch_awaits_live(b, facts)),
         rejected=rejected_by_batch(batches, facts),
         approvals=fact_approvals(queue),
+        cursors=fact_cursors(queue),
+        cursor_details=fact_cursor_details(queue),
         ledgers=fact_ledgers(batches, facts, stages),  # labels only: no clone (R13)
         ledger_unknown=fact_ledger_unknown(batches, facts, stages),
         post_merge_repos=frozenset(
@@ -209,9 +228,16 @@ def drive_snapshot(
 def fact_approvals(queue: Iterable[QueueEntry]) -> dict[str, ApprovalVerdict]:
     """Each queued batch's approval verdict from the collected labels and its events
     (merge-train-safety §A "The walk"): the board and `drive --plan` read no forge. A
-    PR whose labels were never read (facts before schema 9) is unlabelled."""
+    PR whose labels were never read (facts before schema 9) is unlabelled. A first label on
+    a head with a real conflict waits (queue-followups R2)."""
     return {
-        e.batch.id: approval_verdict(e.batch.events, e.pr.number, e.pr.head_oid, e.pr.labels)
+        e.batch.id: approval_verdict(
+            e.batch.events,
+            e.pr.number,
+            e.pr.head_oid,
+            e.pr.labels,
+            waits=conflict_waits(e.batch.events, e.pr.head_oid, e.pr.mergeable, e.pr.merge_state),
+        )  # fmt: skip
         for e in queue
     }
 
@@ -233,6 +259,9 @@ class Need:
     # | archive-conflict | driver-stopped (a looping driver stopped on a refusal, R8)
     # | queue-unconfigured (a repo with open batch PRs and no `queue.ci`: nothing merges)
     # | queue-need (the wave merge queue's own: a halt, a hold, a stall, a barrier, R28)
+    # | cursor-unread (a batch PR's run cursor: no clone, or a read failed with a cause)
+    # | export-drift (the driver's state export refused a file changed in the repo, R4 of
+    #   spec 2026-11-27-export-drift)
     kind: str
     ref: str  # the batch id, `<owner/repo>#<n>` (a gated PR), or issue key the row names
     text: str
@@ -242,6 +271,7 @@ class Need:
 NEED_LABELS = {
     "queue-need": "Merge queue needs you",
     "approve-pr": "Label a green PR approved-fr",
+    "cursor-unread": "Run cursor unreadable",
     "queue-unconfigured": "Repo has no merge queue config",
     "red-pr": "Red PR its session cannot fix",
     "failing-ci": "Failing CI",
@@ -252,6 +282,7 @@ NEED_LABELS = {
     "unplaced": "Unplaced issue",
     "merge-conflict": "Merge conflict",
     "archive-conflict": "Archive PR conflict",
+    "export-drift": "Triage export drifted from the repo",
     "driver-stopped": "Driver stopped",
     "session-blocked": "Session blocked",
     "ledger-unread": "Gate labels unread",
@@ -325,20 +356,33 @@ def needs_you(
         pr = entry.pr
         if pr.state != "OPEN" or (pr.repo, pr.number) in foreign:
             continue  # a foreign PR is never one to approve (gh#936)
+        delivered = snapshot_readiness(snap, entry.batch).delivered
+        if remedy := cursor_remedy(delivered, pr.repo):  # l-errors-r3: the operator's, approved
+            out.append(Need("cursor-unread", entry.batch.id, f"PR #{pr.number}: {remedy}", pr.url))
+            continue  # or not: no clone, or a read that failed with a known cause
         live = snap.live.get(entry.batch.id)  # its checks as the driver judges them (R4)
         verdict = live.checks if live is not None else "pending"
         approval = snap.approvals.get(entry.batch.id)
         if verdict != "green" or (approval is not None and is_approved(approval)):
             continue
+        if isinstance(approval, Waiting):
+            continue  # queue-followups R2: labelled; its conflict Need speaks for it
         if conflict_at(entry.batch, live.head if live is not None else pr.head_oid) is not None:
             continue  # R18: conflicting at its head: handed back, or the merge-conflict need
+        if not delivered.ok:  # readiness R3, R4: never ask for an approval deliver would void
+            if delivered.state == "no-cursor":  # R12: the operator's, by hand or through a run
+                why = f"PR #{pr.number}: {delivered.reason}: {NO_CURSOR_ACTION}"
+                out.append(Need("approve-pr", entry.batch.id, why, pr.url))
+            continue
         was = (
             approval.approved_head
             if isinstance(approval, Void)
             else voided_at(entry.batch.events, pr.number)
         )
         text = (
-            f"PR #{pr.number} changed since you approved it at {was[:12]}: re-label to merge"
+            f"PR #{pr.number}: approval ended (label removed): label it {APPROVED_FR.name} to merge"
+            if was is not None and ended_by_label(entry.batch.events, pr.number)
+            else f"PR #{pr.number} changed since you approved it at {was[:12]}: re-label to merge"
             if was is not None
             else f"PR #{pr.number} is green: label it {APPROVED_FR.name} to merge"
         )
@@ -445,6 +489,7 @@ def needs_you(
         )  # fmt: skip
 
     out.extend(archive_conflict_needs(facts, judgements, snap.repos, stops or {}))
+    out.extend(export_drift_needs(stops or {}))
 
     # The four Needs-you lanes (exit-gates R17): one Need per card the board puts in one,
     # from the same `lane_of`, so "Needs you now" and the columns agree.
@@ -498,6 +543,18 @@ def needs_you(
                          f"#batch-{b.id}")
                 )  # fmt: skip
     return out
+
+
+def export_drift_needs(stops: Mapping[str, MergeStop]) -> list[Need]:
+    """One `export-drift` Need per repo whose state export the driver refused because the
+    repo changed a file since the last export (spec 2026-11-27-export-drift R4); the stop's
+    reason is the whole operator text. It holds until a clean export clears it."""
+    prefix = "export-drift:"
+    return [
+        Need("export-drift", key.removeprefix(prefix), stop.reason, None)
+        for key, stop in sorted(stops.items())
+        if key.startswith(prefix)
+    ]
 
 
 def archive_conflict_needs(
@@ -728,7 +785,8 @@ def preselected_wave(
     live = [
         n
         for n, stage, b in waved
-        if stage not in {"merged", "cancelled", "obsolete"} and not batch_awaits_live(b, facts)
+        if stage not in {"merged", "cancelled", "obsolete", "left-scope"}
+        and not batch_awaits_live(b, facts)
     ]
     return max(live) if live else max(n for n, _, _ in waved)
 

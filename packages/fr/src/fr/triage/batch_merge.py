@@ -22,7 +22,8 @@ from typing import Any, Protocol
 from fr.checkstate import bucket_verdict
 from fr.ghclient import MERGE_METHODS, GhClient
 from fr.triage.batch_dispatch import TRIAGE_CONFIG_PATH
-from fr.triage.batch_drive import ChecksVerdict, checks_verdict
+from fr.triage.batch_drive import checks_verdict
+from fr.triage.batch_drive_types import ChecksVerdict
 from fr.triage.batch_version import (
     all_version_files,
     is_lockfile,
@@ -32,6 +33,7 @@ from fr.triage.batch_version import (
 from fr.triage.errors import ConfigError, TriageError
 from fr.triage.gitseam import GitError
 from fr.triage.model import VersionBlock
+from fr.triage.regen import classify_conflicts
 
 
 class MergeStopError(TriageError):
@@ -41,11 +43,17 @@ class MergeStopError(TriageError):
 class MergeConflictError(MergeStopError):
     """A real conflict: merge refused to resolve *paths* bringing *batch*'s PR at *head*
     up to date (spec 2026-10-06-verification-strategies §G; R19). Not a moved head, so a
-    driver steps over it; it hands the conflict back to the batch's session."""
+    driver steps over it; it hands the conflict back to the batch's session. *onto* is the
+    commit the queue was building it on, or, handed back, the stack target its brief names
+    from *onto_ref*; *reissue* marks a free re-issue (wave-queue-gaps §A, R1-R3)."""
 
-    def __init__(self, message: str, *, batch: str, head: str, paths: Sequence[str]) -> None:
+    def __init__(
+        self, message: str, *, batch: str, head: str, paths: Sequence[str], onto: str = "",
+        onto_ref: str = "", reissue: bool = False,
+    ) -> None:  # fmt: skip
         super().__init__(message)
-        self.batch, self.head, self.paths = batch, head, tuple(paths)
+        self.batch, self.head, self.paths, self.onto = batch, head, tuple(paths), onto
+        self.onto_ref, self.reissue = onto_ref, reissue
 
 
 class WorktreeSeam(Protocol):
@@ -57,6 +65,8 @@ class WorktreeSeam(Protocol):
     def merge_base(self, ref: str) -> str: ...
     def show(self, ref: str, file: str) -> str | None: ...
     def abort_merge(self) -> None: ...
+    def unmerged_stages(self) -> dict[str, dict[int, str]]: ...
+    def read(self, file: str) -> str | None: ...
 
 
 class CheckoutSeam(Protocol):
@@ -89,12 +99,20 @@ class MergeContext:
         return f"origin/{self.checkout.default_branch()}"
 
 
-def choose_method(
+SOURCE_EXPLICIT = "--method"
+SOURCE_CONFIGURED = f"merge_method in {TRIAGE_CONFIG_PATH}"
+SOURCE_DEFAULT = "the forge's default"
+SOURCE_ONLY = "the one allowed method"
+
+
+def choose_method_source(
     explicit: str | None, methods: dict[str, Any], *, configured: str | None = None
-) -> str:
-    """The merge method (spec §3.F step 2): *explicit*, else the repo's default,
-    else *configured* (`.fr/triage.yaml`'s `merge_method`, cloud-triage §A: REST
-    names no default), else the one method the repo allows.
+) -> tuple[str, str]:
+    """The merge method and where it came from (spec §3.F step 2, amended by
+    2026-11-26-landing-method R1, gh#1702): *explicit*, else *configured*
+    (`.fr/triage.yaml`'s `merge_method`: the repo's own decision), else the
+    forge's default (the viewer's, only a fallback), else the one method the
+    repo allows.
 
     *methods* is `GhClient.repo_merge_methods`: `{default, allowed}`. An
     explicit or configured method the repo disallows is refused here, before
@@ -108,23 +126,30 @@ def choose_method(
             raise ConfigError(
                 f"--method {explicit}: the repo does not allow it (allowed: {', '.join(allowed)})"
             )
-        return explicit
-    default = methods.get("default")
-    if default in allowed:
-        return str(default)
+        return explicit, SOURCE_EXPLICIT
     if configured is not None:
         if configured not in allowed:
             raise ConfigError(
                 f"merge_method: {configured} in {TRIAGE_CONFIG_PATH}: the repo does not allow it "
                 f"(allowed: {', '.join(allowed)}); change it, or give --method"
             )
-        return configured
+        return configured, SOURCE_CONFIGURED
+    default = methods.get("default")
+    if default in allowed:
+        return str(default), SOURCE_DEFAULT
     if len(allowed) == 1:
-        return allowed[0]
+        return allowed[0], SOURCE_ONLY
     raise ConfigError(
         "the repo names no default merge method you may use; set `merge_method` in "
         f"{TRIAGE_CONFIG_PATH} or give --method ({', '.join(allowed)})"
     )
+
+
+def choose_method(
+    explicit: str | None, methods: dict[str, Any], *, configured: str | None = None
+) -> str:
+    """The merge method alone; see `choose_method_source` for the order."""
+    return choose_method_source(explicit, methods, configured=configured)[0]
 
 
 def pr_checks_verdict(
@@ -233,6 +258,30 @@ def _clear_scratch(checkout: CheckoutSeam, where: Path, *, added: bool = False) 
     return failed if where.exists() else None
 
 
+def _queue_refuses(
+    wt: WorktreeSeam, refused: list[str], generated: Sequence[str], mirrors: bool
+) -> list[str]:
+    """Which of *refused* the queue's build would still refuse (R4), in their order. The
+    probe merges main INTO the PR head, so its stages 2 and 3 are swapped against the
+    queue's, whose combination side (stage 2) is main's."""
+    held = wt.unmerged_stages()
+
+    def read(path: str) -> str | None:
+        try:
+            return wt.read(path)
+        except OSError, UnicodeDecodeError:
+            return None  # no text there: a real conflict
+
+    def stages(path: str) -> dict[int, str]:
+        mine = held.get(path, {})
+        swap = {2: 3, 3: 2}
+        return {swap.get(n, n): mode for n, mode in mine.items()}
+
+    kinds = classify_conflicts(refused, generated, read, stages)
+    keep = {*kinds.real, *([] if mirrors else [*kinds.whole, *kinds.regenerate])}
+    return [p for p in refused if p in keep]
+
+
 def trial_conflicts(
     checkout: CheckoutSeam,
     main: str,
@@ -241,12 +290,20 @@ def trial_conflicts(
     *,
     scratch_root: Path | None = None,
     warn: Callable[[str], None] | None = None,
+    generated: Sequence[str] = (),
+    mirrors: bool = False,
 ) -> list[str]:
     """R17: the paths on which PR head *head* really conflicts with *main* (what the queue's build
     would refuse), by a trial merge in a scratch worktree that is always aborted and
     removed. A version file whose PR change is the version alone, and a lockfile when the
     repo relocks, are resolved, not conflicts. Writes nothing the repo keeps. A scratch
-    worktree the cleanup could not clear is said to *warn*; it never masks the verdict."""
+    worktree the cleanup could not clear is said to *warn*; it never masks the verdict.
+
+    R4 of spec 2026-11-27-queue-followups: the rest is sorted as the queue's build sorts it
+    (`regen.classify_conflicts` over the repo's *generated* globs): `reviewed:` stamp and
+    generated-block hunks are resolved, and whole generated paths too when the repo
+    declares *mirrors*. Not modelled: a rebase replay, a merge onto an earlier entry, a
+    mirrors run that fails."""
     own = scratch_root is None
     root = Path(tempfile.mkdtemp(prefix="fr-conflict-probe-")) if scratch_root is None else (
         scratch_root
@@ -257,8 +314,12 @@ def trial_conflicts(
         _clear_scratch(checkout, where)  # a probe's leftover: `worktree add` says if it stays
         wt = checkout.add_worktree(where, head)
         conflicted, refused = merge_main(wt, main, version)
-        if conflicted:
-            wt.abort_merge()
+        try:  # the classification reads the merge's conflicted state, so it runs first
+            if refused:
+                refused = _queue_refuses(wt, refused, generated, mirrors)
+        finally:  # and a failing read never skips the abort (l-errors-r3)
+            if conflicted:
+                wt.abort_merge()
         return refused
     finally:
         try:  # cleanup never masks what is in flight, and never skips the temp root

@@ -691,7 +691,7 @@ def find_run_for_plan(repo_root: Path, plan_rel: Path) -> str | None:
 
     Matches by DATA — the `plan` step's `emitted` artifact every run file
     already carries (spec §4.B) — never by a name/slug convention. A run id
-    is `<date>-<flattened-branch>` (`fr.commands.run_cmd.derive_run_id`)
+    is `<date>-<flattened-branch>` (`fr.run.steps.derive_run_id`)
     and a plan slug is authored independently by whatever agent step
     creates it; the two share no naming relationship in real use (Phase 7
     review finding: a name-keyed lookup silently never matched). A

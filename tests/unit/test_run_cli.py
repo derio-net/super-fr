@@ -826,8 +826,10 @@ steps:
 
 def _brief_of(output: str) -> dict:
     """The JSON brief `advance` prints, wherever in the output it sits (a
-    gated agent step prints the gate line first)."""
-    return json.loads(output[output.index("{") :])
+    gated agent step prints the gate line first, and a notice may follow it, such
+    as the old-location notice for a repo workflow directory, S1 R13)."""
+    brief, _ = json.JSONDecoder().raw_decode(output, output.index("{"))
+    return brief
 
 
 # --- r2-f1: a `gate: operator` step must be clearable, not a dead end -------
@@ -1656,8 +1658,8 @@ def test_derive_run_id_always_produces_a_valid_id(branch: str, expect_tail: str 
     `fr run start` impossible on that branch."""
     import datetime as _dt
 
-    from fr.commands.run_cmd import derive_run_id
     from fr.run.model import validate_run_id
+    from fr.run.steps import derive_run_id
 
     derived = derive_run_id(branch, today=_dt.date(2026, 8, 31))
 
@@ -1671,8 +1673,8 @@ def test_derive_run_id_always_produces_a_valid_id(branch: str, expect_tail: str 
 def test_derive_run_id_stays_within_the_length_limit() -> None:
     import datetime as _dt
 
-    from fr.commands.run_cmd import derive_run_id
     from fr.run.model import RUN_ID_MAX_LENGTH, validate_run_id
+    from fr.run.steps import derive_run_id
 
     derived = derive_run_id("feat/" + "x" * 500, today=_dt.date(2026, 8, 31))
 
@@ -2459,10 +2461,11 @@ def test_member_brief_on_an_unrecognised_harness_still_warns(tmp_path: Path) -> 
 def test_build_brief_the_group_step_itself_carries_no_resolved_tier() -> None:
     """A group spans every phase, so there is no single tier to resolve —
     only an item-scoped member brief can answer the question (D5).
-    `_build_brief` is the group/flat builder (untouched by D5); called
+    `build_brief` is the group/flat builder (untouched by D5); called
     directly on a `for_each` step with nested members, the same one
     `_advance_group`'s gated branch prints for a blocked group."""
-    from fr.commands.run_cmd import _build_brief
+    from fr.commands.common import resolve_repo_root
+    from fr.run.brief import build_brief
     from fr.run.model import RunState
     from fr.workflow.model import Step
 
@@ -2481,7 +2484,7 @@ def test_build_brief_the_group_step_itself_carries_no_resolved_tier() -> None:
         steps={},
     )
 
-    brief = _build_brief(group, state)
+    brief = build_brief(group, state, repo_root=resolve_repo_root())
 
     assert "resolved_tier" not in brief
 
@@ -3779,7 +3782,7 @@ def test_advance_records_the_harness_it_detected_to_resolve_the_model(
 ) -> None:
     """The record must name the harness its `model` binding came from.
 
-    `_resolved_model` already calls `detect_harness` — a tier resolves to a
+    `resolved_model` already calls `detect_harness` — a tier resolves to a
     model only *for a harness* — and then discarded it, so a record could
     carry `model: claude-opus-5` with `harness: null` while fr knew perfectly
     well which harness picked that model at that moment (finding f8). An
@@ -4516,7 +4519,7 @@ def test_the_refusal_prints_all_three_ways_forward(tmp_path: Path) -> None:
 
 
 def test_advance_does_not_refuse_when_the_last_record_is_closed(tmp_path: Path) -> None:
-    """Case (e): the refusal keys off `_dispatch_needs_open` — the ONE notion
+    """Case (e): the refusal keys off `dispatch_needs_open` — the ONE notion
     of "currently held" phase 3 already wrote — so a unit whose last attempt
     is CLOSED is not held and briefs normally. Here the close is
     `claim --abandoned`; the failed-and-retried route is covered once
@@ -5388,7 +5391,12 @@ def test_check_reports_an_orchestrator_open_dispatch_without_counting_it_unclaim
 
 
 _SHIPPED_FR_GOAL = (
-    Path(__file__).resolve().parents[2] / "plugins" / "super-fr" / "workflows" / "fr-goal.yaml"
+    Path(__file__).resolve().parents[2]
+    / "plugins"
+    / "super-fr"
+    / "defaults"
+    / "workflows"
+    / "fr-goal.yaml"
 )
 
 

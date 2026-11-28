@@ -1,0 +1,1 @@
+[31mphase/1/implement-phase: --evidence tests=suite.log is stale — src/changed.py changed after the log was written, so the suite did not run the code being recorded. Run the full suite again and name the new log.[0m

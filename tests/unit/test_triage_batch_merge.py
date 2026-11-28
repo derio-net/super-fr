@@ -142,6 +142,20 @@ def test_a_named_batch_without_the_approval_label_is_refused(
     assert world.queue_plans == []
 
 
+def test_a_named_approved_batch_whose_run_has_not_delivered_is_held_for_that_reason(
+    tmp_path: Path, world: World, clone: DriveCheckout
+) -> None:
+    """p1-r1: an approved PR whose run has not delivered is not "not approved": `batch merge`
+    names the readiness reason (batch-merge-readiness R1, R2) and opens no queue."""
+    _ready(world, tmp_path, 1)
+    world.prs[101]["delivered"] = False
+    code, out = _merge(tmp_path, "b1", "--yes")
+    assert code == 2, out
+    assert "not approved" not in out
+    assert "b1: approved, not delivered: no run cursor names feat/batch-b1" in out
+    assert world.queue_plans == []
+
+
 def test_a_named_batch_that_is_not_pr_open_is_refused(
     tmp_path: Path, world: World, clone: DriveCheckout
 ) -> None:
@@ -185,8 +199,9 @@ def test_batch_merge_uses_the_method_it_is_given_or_the_repos_default(
 ) -> None:
     _ready(world, tmp_path, 1)
     code, out = _merge(tmp_path, "b1", "--yes", "--method", "rebase")
-    assert code == 2
-    assert "rebase" in out and "squash" in out  # the repo allows squash only
+    # R2: a method that cannot be chosen holds the queue with the error's text (no raise)
+    assert code == 1
+    assert "queue is held" in out and "rebase" in out and "allowed: merge" in out
     assert world.queue_plans == []
 
 
@@ -343,13 +358,13 @@ def test_the_config_takes_an_optional_merge_method() -> None:
     [
         ({"default": None, "allowed": ["merge", "squash"]}, "squash", "squash"),
         ({"default": None, "allowed": ["merge", "rebase", "squash"]}, "rebase", "rebase"),
-        # The forge's own default still wins where it names one.
-        ({"default": "merge", "allowed": ["merge", "squash"]}, "squash", "merge"),
+        # The configured method is the repo's decision: it beats the forge's default (gh#1702).
+        ({"default": "merge", "allowed": ["merge", "squash"]}, "squash", "squash"),
         # One allowed method needs no setting.
         ({"default": None, "allowed": ["squash"]}, None, "squash"),
     ],
 )
-def test_choose_method_uses_the_configured_method_when_the_forge_names_none(
+def test_choose_method_lets_the_configured_method_win_over_the_forge_default(
     methods: dict[str, Any], configured: str | None, want: str
 ) -> None:
     from fr.triage.batch_merge import choose_method
@@ -391,3 +406,37 @@ def test_the_merges_check_counts_read_a_cancelled_check_as_pending() -> None:
     verdict, _ = pr_checks_verdict(Forge(), "derio-net/super-fr", 7, ci_none=False)  # type: ignore[arg-type]
     assert verdict == "pending"
     assert FAILING_BUCKETS == {"fail"}
+
+
+_ALL = {"default": "squash", "allowed": ["merge", "rebase", "squash"]}
+
+
+@pytest.mark.parametrize(
+    ("explicit", "methods", "configured", "want", "source"),
+    [
+        (None, _ALL, "merge", "merge", "merge_method in .fr/triage.yaml"),
+        ("rebase", _ALL, "merge", "rebase", "--method"),
+        (None, _ALL, None, "squash", "the forge's default"),
+        (None, {"default": None, "allowed": ["squash"]}, None, "squash", "the one allowed method"),
+    ],
+)
+def test_choose_method_source_names_where_the_method_came_from(
+    explicit: str | None,
+    methods: dict[str, Any],
+    configured: str | None,
+    want: str,
+    source: str,
+) -> None:
+    from fr.triage.batch_merge import choose_method_source
+
+    assert choose_method_source(explicit, methods, configured=configured) == (want, source)
+
+
+def test_choose_method_source_refuses_when_nothing_chooses() -> None:
+    from fr.triage.batch_merge import choose_method_source
+    from fr.triage.errors import ConfigError
+
+    with pytest.raises(ConfigError, match=r"merge_method.*--method"):
+        choose_method_source(None, {"default": None, "allowed": ["merge", "squash"]})
+    with pytest.raises(ConfigError, match="does not allow"):
+        choose_method_source("rebase", {"default": None, "allowed": ["merge"]})

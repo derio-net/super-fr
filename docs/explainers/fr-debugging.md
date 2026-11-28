@@ -13,7 +13,7 @@ covers:
   - plugins/super-fr/skills/fr-debugging/SKILL.md
   - packages/fr/src/fr/journal/**
   - packages/fr/src/fr/commands/journal_cmd.py
-reviewed: 2026-11-23 fr pr settle warns on a branch with two debug journals and applies the repo setting (lens review); 2026-11-23 the last step waits for the PR to settle, with three fix rounds at most (pr-readiness-wait R10); 2026-11-15 owed-archive-side-effects phase 1, owed issues are closed by reading the one issue; the page is still true
+reviewed: 2026-11-27 still true; shared-helper refactor (batch arch-shared-helpers), no behaviour change; 2026-11-25 a reused workspace starts a run only when its branch has none, fr run stays on the host, the review entry goes through the step record; 2026-11-25 the skill starts the shipped fr-debugging run (debug, review, deliver) and resolves each step with a record (batch-merge-readiness R10, R11); 2026-11-23 fr pr settle warns on a branch with two debug journals and applies the repo setting (lens review); 2026-11-23 the last step waits for the PR to settle, with three fix rounds at most (pr-readiness-wait R10); 2026-11-15 owed-archive-side-effects phase 1, owed issues are closed by reading the one issue; the page is still true
 ---
 
 ## Why is "just try something" the expensive path?
@@ -39,19 +39,27 @@ A test fails now and then, and you do not know why. Start in isolation, with a b
 named for the bug:
 
 ```bash
-fr isolation up --branch fix/flaky-limiter-test
+fr run start fr-debugging --branch fix/flaky-limiter-test
 ```
 
-fr cuts a cold-start `fix/<slug>` from the freshly fetched default branch. So the fix is
-clean of whatever your checkout holds. Pass `--base HEAD` to debug on your current
-branch on purpose.
+The run brings the workspace up for you. It also gives the debug a run cursor with three
+steps: `debug`, `review` and `deliver`. So the fix's pull request carries a cursor that
+a batch driver can read. fr cuts a cold-start `fix/<slug>` from the freshly fetched
+default branch. So the fix is clean of whatever your checkout holds. To pick a profile,
+or to debug on your current branch on purpose, run
+`fr isolation up --branch fix/<slug> [--profile <name>] [--base HEAD]` first and start the run
+on it.
 
 If you are already inside an active workspace (for example, for a bug found mid-feature),
 **reuse it**. Then the failing test and the fix join that feature's branch and PR, and
 the skill does not open a second, competing PR. `fr isolation status` confirms where you
-are.
+are. Then the skill checks whether that branch already has a run cursor. If it has one, the
+skill starts none and the existing run carries the work. If it has none, the skill
+starts the `fr-debugging` run on that branch.
 
-From here every command runs through `fr isolation exec -- ...`. The agent reproduces the
+From here every command runs through `fr isolation exec -- ...`, except `fr run` and
+`fr usage`. In devcontainer mode those run on the harness host, and `fr isolation exec`
+refuses them and prints the host-side command. The agent reproduces the
 failure, and records it the moment it has:
 
 ```bash
@@ -79,7 +87,7 @@ keeps the run record but destroys the workspace and the fix inside it. See
 
 When you ask for `mode=stealth <tracking-repo>@<branch>` (or, from the tracking
 repository, `mode=stealth target=<path>`), the skill adds `--stealth` (or `--target`) to
-that `fr isolation up`. The debug journal and every other fr record then live in the tracking
+that `fr run start`. The debug journal and every other fr record then live in the tracking
 repository. The target receives only the fix and one draft pull request with a plain
 summary.
 
@@ -136,13 +144,15 @@ searchable. `fr journal render --scope debug --slug <slug>` prints it as Markdow
    debug journal, and runs the command again. `fr push` also checks commit subjects
    against the repo's templates, and the skill writes the body from the rendered debug
    journal: root cause, fix, and the failing-test-first story.
-4. **Record the review.** Add a `review` entry. There is no run cursor here to enforce
-   it, so nothing fails if you skip it. That is exactly why the skill writes it down
-   rather than assume it.
+4. **Record the review.** One reviewer reads the fix. Its `review` entry goes in the
+   debug journal through the `review` step record, and only that way. Its findings are
+   numbered `d-r1`, `d-r2` and so on. The run cursor
+   enforces it: the `review` step is refused without a reviewer's entry, and while a
+   finding is still open.
 5. **Push on the host**, and confirm that `git rev-list --count @{u}..HEAD` prints `0`.
    Every journal entry is a local commit that nothing pushes. Left unpushed, the PR merges
    without its review record.
-6. **Wait for the PR to settle.** The last step is `fr pr settle --wait <s>`. It waits
+6. **Wait for the PR to settle.** Next is `fr pr settle --wait <s>`. It waits
    until the PR merges cleanly into its base and its CI has finished. If it exits 4, the
    agent fixes the PR. A conflict is fixed by merging `origin/<base>` into the branch,
    never by rebase or force-push. A red check is fixed by an ordinary commit. The agent
@@ -152,7 +162,11 @@ searchable. `fr journal render --scope debug --slug <slug>` prints it as Markdow
    Then push it with `fr push`, because a journal entry is a local commit.
    Keep one debug journal on the branch: with two, the command cannot tell which one holds
    the override, so it warns and the repo setting applies.
-7. **Hand off.** The skill ends by relaying the close-out command,
+7. **Resolve `deliver`.** The last step of the run records the PR's address and the log of
+   the full test suite. fr checks the docs and the PR's settle state itself, and renders
+   the PR body from the debug journal. A debug run has no plan, so it owes no
+   proportionality report.
+8. **Hand off.** The skill ends by relaying the close-out command,
    `fr pickup --branch <branch>`, as the last line of its message. After the merge, a new
    session runs it from the base clone.
 

@@ -30,7 +30,12 @@ pytestmark = pytest.mark.own_artifacts
 
 _SRC = Path(__file__).resolve().parents[2] / "packages" / "fr" / "src" / "fr"
 # Every module that stamps a journal entry's `created`.
-_WRITER_MODULES = ("commands/journal_cmd.py", "record/apply.py", "commands/run_cmd.py")
+_WRITER_MODULES = (
+    "commands/journal_cmd.py",
+    "record/apply.py",
+    "commands/run_cmd.py",
+    "run/provenance.py",
+)
 
 
 def _journal_cmd_stamp() -> str:

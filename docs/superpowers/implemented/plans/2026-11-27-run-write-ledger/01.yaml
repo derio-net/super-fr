@@ -1,0 +1,82 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Move the run write ledger into fr/run/writes.py
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - run-write-ledger-cli-free
+  - run-cursor-conflict-refusal-kept
+  tier: standard
+  files:
+  - packages/fr/src/fr/run/writes.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/apply.py
+  - tests/unit/*.py
+  - .changes/feat-batch-arch-run-ledger.yaml
+  - docs/acceptance/features/2026-11-27-run-write-ledger.yaml
+  - docs/reference/workflow-shapes.md
+  - docs/reference/cli.md
+  estimate_lines: 800
+tasks:
+- number: 1
+  title: Guard test for the new module's layering (R2)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add tests/unit/test_run_writes_layering.py. It parses packages/fr/src/fr/run/writes.py with `ast`, walks every Import/ImportFrom node at any nesting level, and fails on a module name that is `typer`, starts with `typer.`, is `rich` or starts with `rich.`, or is `fr.commands` or starts with `fr.commands.`. For an ImportFrom it judges both the module and `module + "." + name` for each alias, and it first resolves a relative import (level > 0) against the package `fr.run`. Factor the check into a pure helper `forbidden_imports(source: str, package: str = "fr.run") -> list[str]` and add a planted-source test proving it reports `import typer`, `from rich.console import Console`, a nested `from fr.commands import common` inside a function, an aliased `import rich as r`, `from fr import commands` and a relative `from ..commands import common`, while accepting `from fr import run` and `from fr.run.model import save_run_state`. Run `uv run pytest tests/unit/test_run_writes_layering.py -q --no-cov`: the real-module test fails because writes.py does not exist.
+- number: 2
+  title: Create fr/run/writes.py with the ledger (R1, R3)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      GREEN: create packages/fr/src/fr/run/writes.py with a module docstring citing spec 2026-11-27-run-write-ledger and gh#610 §3.C (move the comment block at run_cmd.py:164-171 into it). Move verbatim from run_cmd.py, renamed public: `ResolveGuard`, `_RunWrites` -> `RunWrites`, `_RUN_WRITES` -> `RUN_WRITES` (keep the ContextVar name string "fr_run_writes"), `_note_record_write` -> `note_record_write`, `_remember` -> `remember`, `_note_subject` -> `note_subject`, `_commit_run_writes_now` -> `commit_run_writes_now`, `_note_loaded` -> `note_loaded`, `_commits_run_writes` -> `commits_run_writes` (with its `_Cmd` TypeVar), `_now` -> `now`, `_fr_version` -> `fr_version`, `_capture_usage` -> `capture_usage`. Add `save_run_state_noted(repo_root, state)`: `remember(run_path(...))`, `save_run_state(...)` letting RunStateConflictError propagate, then `note_record_write(repo_root, path, state)`. Imports: stdlib, `fr.artifacts.commit.CommitOutcome`, `fr.records_commit.commit_records`, `fr.run.model` (RunState, run_path, save_run_state). No typer, rich or fr.commands. Run the layering test: green.
+- number: 3
+  title: Point run_cmd.py at the new module (R3, R4, R5, R6)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      GREEN: in run_cmd.py delete the moved definitions and import the moved names under their old `_` spellings (`from fr.run.writes import RUN_WRITES as _RUN_WRITES`, one per name the body still uses, the fr.run.liveness alias pattern at run_cmd.py:98-100). Rewrite `_save_run_state` as the thin wrapper: `try: return save_run_state_noted(repo_root, state)` / `except RunStateConflictError as e:` print the same red line to err_console with soft_wrap=True and `raise typer.Exit(2) from e`. Keep in run_cmd: `_capture_on_new_host` (now calling the imported `_capture_usage`), `_closeout_handoff_lines`, `_RECORD_ROWS`, the unobserved-gate cluster (`_UNOBSERVED`, `_note_unobserved`, `_why_unobservable`, `TESTS_PROVENANCE_SURFACE`, `_why_tests_unobservable`, `_take_unobserved`), `_GATE_DECISIONS`, `_note_supersede_writes`. Drop only the imports ruff reports unused. Run `uv run ruff check packages/fr/src/fr/commands/run_cmd.py packages/fr/src/fr/run/writes.py` and `uv run mypy packages/fr/src`: clean.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: migrate callers. packages/fr/src/fr/record/apply.py: `run_cmd.ResolveGuard()` -> `ResolveGuard()` imported from fr.run.writes (keep the lazy `from fr.commands import run_cmd` where other run_cmd names are still used). tests/unit/test_deliver_local_stamp.py: `RunWrites`/`RUN_WRITES` from fr.run.writes. tests/unit/test_record_review_fixes.py:123: patch `fr.run.writes.commit_records`. tests/unit/test_run_cost_cmd.py:345: import `capture_usage` from fr.run.writes. (tests/unit/test_placement_emitted_paths.py:150 imports `_save_run_state`, which stays in run_cmd: leave it.) Grep `packages tests` for every old name (`_RunWrites`, `_RUN_WRITES`, `ResolveGuard`, `_save_run_state`, `_note_record_write`, `_remember`, `_note_subject`, `_commit_run_writes_now`, `_note_loaded`, `_commits_run_writes`, `_now`, `_fr_version`, `_capture_usage`, `commit_records`, `save_run_state`) reached through `run_cmd.`, a `from fr.commands.run_cmd import <name>` (single or multi-line), a `setattr(run_cmd, ...)` or a `"fr.commands.run_cmd.<name>"` patch string, and move each to where the lookup now happens. Run `uv run pytest tests/unit/test_run_durability.py tests/unit/test_record_review_fixes.py tests/unit/test_deliver_local_stamp.py tests/unit/test_deliver_leftovers.py -q --no-cov -n 2`: green.
+- number: 4
+  title: Lower the budget, fragment, rows, quality gate (R7)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      GREEN: in tests/unit/test_tripwire_module_budget.py lower the run_cmd.py budget to `wc -l` of the new run_cmd.py plus at most 20, with a comment `# run-write-ledger (#1515): the write ledger moved to fr/run/writes.py`. Add `.changes/feat-batch-arch-run-ledger.yaml` with `bump: patch` and `summary: The run write ledger moved from commands/run_cmd.py into fr/run/writes.py; no behaviour change.` Run the budget tripwire: green. Run `uv run fr docs check`: it reports docs/reference/workflow-shapes.md and docs/reference/cli.md. Neither page describes where the write ledger lives (check), so bump each page's front-matter `reviewed:` line to `2026-11-27 write ledger moved to fr/run/writes.py; page still true` (edit the page instead if it does name the ledger's location). Re-run `uv run fr docs check`: exit 0.
+  - id: P1.T4.S2
+    text: |-
+      REFACTOR + quality gate: re-read writes.py for a docstring or comment that still names a run_cmd-local spelling and fix it; `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, mypy over packages/fr/src. Move the rows with `uv run fr acceptance set-status`: run-write-ledger-cli-free -> ci with `--level unit=super-fr:tests/unit/test_run_writes_layering.py#<real-module test>` plus the planted test; run-cursor-conflict-refusal-kept -> ci with `--level unit=super-fr:tests/unit/test_run_durability.py#test_the_cli_refuses_a_lost_update_with_exit_2_and_keeps_the_other_write`, each with `--notes`. Commit, then run the fast tier the brief names last.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-27T09:26:27+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-27T09:26:27+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-27T09:26:27+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-27T09:26:27+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-27T09:26:27+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-27T09:26:27+00:00'
+      note: null
+  completion:
+    at: '2026-11-27T09:26:27+00:00'
+    note: null
+    observed_prs: []

@@ -14,12 +14,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import shutil
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Annotated, Any, Final, Literal
+from typing import Annotated, Any, Final, Literal, NamedTuple
 
 import yaml
 from pydantic import (
@@ -33,6 +32,7 @@ from pydantic import (
     model_validator,
 )
 
+from fr.config.space import PRODUCT_TRIAGE_STATE
 from fr.gates import Gate
 from fr.isolation.types import _home
 from fr.triage.errors import TriageError
@@ -94,9 +94,18 @@ from fr.triage.stage import Stage, derive_stage
 # files the repo's `mirrors:` write in whole: `to_json` dumps it, `[]` included, which a
 # closed-world schema-17 reader rejects; a file below 18 reads it as `[]`, so no conflicted
 # path is taken as generated until the next collect.
-FACTS_SCHEMA: Final[int] = 18
+# 19 adds (2026-11-24-batch-merge-readiness §A, R1) `PullRequest.cursor_read`, whether the run
+# cursor at an open batch PR's head was read (`read`, `unread`, `no-clone`): `to_json` dumps
+# it, `null` included, which a closed-world schema-18 reader rejects; a file below 19 reads it
+# as None (never asked), so no batch PR reads as delivered until the next collect.
+# `PullRequest.cursor_detail` (the cause of an `unread` read) rides in the same unreleased 19.
+# 20 adds (2026-11-19-event-driven-a-la-carte R20) `state_repo_declared`, the state repo a
+# one-repo scope's settings name: `to_json` dumps it, which a closed-world schema-19 reader
+# rejects; a file below 20 reads it as empty, so no mismatch is reported until collect.
+FACTS_SCHEMA: Final[int] = 20
 FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
-# The version this fr WRITES: every engine write stamps 13 (the wave merge queue's
+# The version this fr WRITES: every engine write stamps 14 (the `conflict` event's `onto`
+# and `reissue`, 2026-11-24-wave-queue-gaps R16; 13 was the wave merge queue's
 # `queues:` list and its events, a batch's `deferred` and `requeued` events and an
 # approval's `patch_id`, 2026-11-19-wave-merge-queue R24; 12 was recovery ownership/session
 # metadata; 11 added the `archive_conflict` event,
@@ -110,8 +119,8 @@ FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
 # 2026-10-05-triage-pages-goal §G: `exports:`; 3 was 2026-10-02-wave-driver §A: `wave`,
 # `after`; 2 was 2026-09-25-triage-batches §3.A); the loader reads every version in
 # JUDGEMENTS_READS.
-JUDGEMENTS_SCHEMA: Literal[13] = 13
-JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
+JUDGEMENTS_SCHEMA: Literal[14] = 14
+JUDGEMENTS_READS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14)
 
 ScopeKind = Literal["repo", "org", "group"]
 SCOPE_NAME_LIMIT = 80
@@ -217,14 +226,16 @@ class Scope:
         return self.target.split("/", 1)[0]
 
 
-STATE_EXCLUDE = ".fr/triage-state/"
-"""The `info/exclude` line that keeps every scope's workspace state out of git (R4)."""
+STATE_EXCLUDE = f"{PRODUCT_TRIAGE_STATE}/"
+"""The `info/exclude` line an fr below S1 wrote into a clone to keep its state out of git;
+the move removes it (spec 2026-11-19 R18 rule 4, `fr.triage.state_home`)."""
 
 
 def legacy_state_dir(scope: Scope) -> Path:
-    """`$HOME/.cache/fr/triage/<scope>/`: where state lived before it moved into the
-    workspace (spec 2026-10-07-cloud-triage R4). Resolved through `_home()` like every
-    other fr cache path; `XDG_CACHE_HOME` is deliberately not read (spec-review r1)."""
+    """`$HOME/.cache/fr/triage/<scope>/`: the scope's state directory, a git repository of
+    its own (spec 2026-11-19 R17), and where `drive.lock` always lived. Resolved through
+    `_home()` like every other fr cache path; `XDG_CACHE_HOME` is deliberately not read
+    (spec-review r1). The name predates S1, when the state lived in the workspace."""
     return _home() / ".cache" / "fr" / "triage" / scope.name
 
 
@@ -235,76 +246,48 @@ def state_dir(
     workspace: Path | None = None,
     prepare: bool = True,
 ) -> Path:
-    """`--dir` if given, else `<workspace>/.fr/triage-state/<scope>/` (spec
-    2026-10-07-cloud-triage R4, §B).
+    """`--dir` if given, else `~/.cache/fr/triage/<scope>/` (spec 2026-11-19 R17, §G), from
+    any working directory.
 
-    The workspace is *workspace* (`--workspace`), else the clone holding the working
-    directory, each taken at its git toplevel. A `--workspace` that is no clone is
-    refused (`TriageError` naming it); with no `--workspace` and a working directory in
-    no clone, the state directory is `legacy_state_dir`, exactly as before (p3-r3: a host
-    command typed from `$HOME` keeps working, for every scope kind). The workspace
-    directory is kept out of git by one `info/exclude` line under the git common dir, so a
-    linked worktree is covered and no tracked file changes. The first time it is asked
-    for and does not exist, an existing `legacy_state_dir`'s durable files are copied in
-    (`import_legacy`) and the legacy directory is left where it is; once it exists,
-    nothing is copied again.
-    With `prepare=False`, only resolve the path: neither exclusion nor legacy import
-    occurs. Replacement previews use this without changing other commands' defaults.
+    The clone of *workspace* (`--workspace`), else of the working directory, is only where an
+    fr below S1 may have left the scope's state (`<clone>/.fr/triage-state/<scope>/`): the
+    first use moves it into the cache (R18, `fr.triage.state_home.settle`), and refuses
+    (`TriageError`) when it may not. A `--workspace` that is no clone is refused, naming it.
+    The cache's first use makes it a git repository whose `info/exclude` ignores everything,
+    so the state ref is built and pushed there with no product clone; a cache an fr below S1
+    wrote is refused instead (`state_home.refuse_older`): only the move makes it one. The
+    scope's move lock is then held shared for the rest of the process, so no move runs
+    while this command writes (`state_home.hold_shared`).
+    With `prepare=False`, only resolve the path: nothing is moved or created. Replacement
+    previews use this without changing other commands' defaults.
     """
-    from fr.triage import gitseam
+    from fr.triage import gitseam, state_home
 
     if override is not None:
         return override
     start = workspace if workspace is not None else Path.cwd()
     root = gitseam.toplevel(start) if start.is_dir() else None
-    if root is None:
-        if workspace is None:
-            return legacy_state_dir(scope)
+    if root is None and workspace is not None:
         raise TriageError(
-            f"{workspace} is in no git clone, and --workspace names the clone that holds the "
-            "state: pass a clone, or --dir to name a directory outright"
+            f"{workspace} is in no git clone, and --workspace names the clone whose old "
+            "triage state is moved: pass a clone, or --dir to name a directory outright"
         )
-    target = root / ".fr" / "triage-state" / scope.name
+    target = legacy_state_dir(scope)
     if not prepare:
-        return target  # pure resolution: no exclude update or legacy import
-    gitseam.ensure_excluded(root, STATE_EXCLUDE)
-    legacy = legacy_state_dir(scope)
-    if not target.exists() and legacy.is_dir():
-        import_legacy(legacy, target)
+        return target  # pure resolution: nothing moved, nothing created
+    if root is not None and not _same_dir(root, target):
+        state_home.settle(scope.name, root, target)
+    state_home.hold_shared(target)  # no move runs while this command writes (p6-r7)
+    state_home.refuse_older(target, root)
+    state_home.ensure_repo(target)
     return target
 
 
-LEGACY_IMPORTED = ("facts.json", "scope.yaml")
-"""What a workspace takes from a legacy `~/.cache` state directory beside the
-`REF_FILES` entries (p3-r2): facts (rebuilt by the next collect anyway, but the board
-reads them now) and the host's own settings."""
-
-
-def import_legacy(legacy: Path, target: Path) -> None:
-    """Copy *legacy*'s durable files into the not-yet-existing *target* (p3-r2): every
-    `REF_FILES` entry that exists as a regular file, plus `LEGACY_IMPORTED`. Never the
-    `merge/` scratch worktrees, a `drive.lock` or a rendered page. Built beside *target*
-    and renamed into place, so a crash never leaves a half import that counts as done.
-    Nothing durable, nothing created."""
-    import os
-    import uuid
-
-    from fr.triage.state_ref import ref_entries
-
-    rels = [*ref_entries(legacy)]
-    rels += [n for n in LEGACY_IMPORTED if (legacy / n).is_file() and not (legacy / n).is_symlink()]
-    if not rels:
-        return
-    target.parent.mkdir(parents=True, exist_ok=True)
-    staging = target.parent / f".{target.name}.import-{uuid.uuid4().hex}"
+def _same_dir(a: Path, b: Path) -> bool:
     try:
-        for rel in rels:
-            (staging / rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(legacy / rel, staging / rel)
-        os.rename(staging, target)
-    except BaseException:
-        shutil.rmtree(staging, ignore_errors=True)
-        raise
+        return a.resolve() == b.resolve()
+    except OSError:
+        return False
 
 
 def issue_key(repo: str, number: int) -> str:
@@ -333,10 +316,27 @@ class CursorPosition(_Strict):
     unit: str | None = None
 
 
-CursorReader = Callable[["PullRequest"], CursorPosition | None]
-"""The run cursor's position at an open batch PR's head (exit-gates R18): built by the
-command layer over a `gitseam.Checkout` (`fr.triage.cursor.read_cursor`), so `collect`
-itself starts no process."""
+CursorRead = Literal["read", "unread", "no-clone"]
+"""Whether the run cursor at a PR's head was read (2026-11-24-batch-merge-readiness R1):
+`read` (a position, or none naming the branch), `unread` (the head or a cursor could not be
+read) or `no-clone` (the driver has no clone of the repo)."""
+
+
+class CursorAnswer(NamedTuple):
+    """One read of the run cursor at a PR's head (batch-merge-readiness R1): the folded
+    *position*, the *read* status and, for an `unread` read, its cause (*detail*: which read
+    failed and why), so a failure never reaches the page or the driver without its reason."""
+
+    position: CursorPosition | None
+    read: CursorRead
+    detail: str = ""
+
+
+CursorReader = Callable[["PullRequest"], CursorAnswer]
+"""The run cursor's folded position at an open batch PR's head (exit-gates R18), its read
+status and cause (batch-merge-readiness R1): built by the command layer over a
+`gitseam.Checkout` (`fr.triage.cursor.read_cursor`), so `collect` itself starts no
+process."""
 
 
 class PullRequest(_Strict):
@@ -371,6 +371,12 @@ class PullRequest(_Strict):
     # The run cursor's position at this PR's head (exit-gates R18, facts schema 12): an
     # open batch PR only; None when never read or no cursor names the PR's branch.
     cursor: CursorPosition | None = None
+    # Whether that cursor was read (batch-merge-readiness R1, facts schema 19); None when
+    # never asked. The head it was read at is `head_oid`.
+    cursor_read: CursorRead | None = None
+    # Why an `unread` read failed (the read that failed and its error), None otherwise: it
+    # rides in schema 19 with `cursor_read`, so the page and the driver name the cause.
+    cursor_detail: str | None = None
     anchor: AnchorKind = "unanchored"
     anchor_path: str | None = None
     anchor_body: str = ""
@@ -746,6 +752,10 @@ class Facts(_Strict):
     gated_unread: list[GatedUnread] = []
     # Claim markers ignored as untrusted, per issue (2026-11-22-triage-hardening R7, schema 17).
     ignored_claims: list[IgnoredClaims] = []
+    # OWNER/REPO -> the state repo that repo's `.fr/settings.yaml` names as
+    # `triage.state_repo` (spec 2026-11-19 R20, schema 19): read for a one-repo scope by an
+    # explicit collect, carried by the loops; `fr triage check` compares it with the record.
+    state_repo_declared: dict[str, str] = {}
 
     @field_validator("schema_")
     @classmethod
@@ -916,6 +926,10 @@ class ConflictEvent(_Strict):
     paths: list[str] = Field(min_length=1)  # the paths merge refused to resolve
     delivered: ConflictDelivery
     handle: str | None = None
+    # schema 14 (2026-11-24-wave-queue-gaps R2, R3): the commit the brief named, and a brief
+    # re-issued at the same head because that commit stopped leading to `main` (no budget)
+    onto: str | None = None
+    reissue: bool = False
 
 
 class ClaimsReleasedEvent(_Strict):
@@ -1143,7 +1157,7 @@ class RequeuedEvent(_Strict):
     wave: int | None = None
 
 
-QueueEntryKind = Literal["closeout", "export", "archive", "housekeeping"]
+QueueEntryKind = Literal["closeout", "export", "archive", "housekeeping", "operator"]
 
 
 class QueueEntryRef(_Strict):
@@ -1329,6 +1343,35 @@ QueueEvent = Annotated[
     | QueueApprovalEvent,
     Field(discriminator="kind"),
 ]
+
+
+class QueueAddEvent(_Strict):
+    """`fr triage queue add --pr <pr>` by forge login *by*: *repo*'s PR *pr* joins *scope*'s
+    queue as an operator entry, or, for a batch PR of the scope, is only *preapproved*
+    (spec 2026-11-24-wave-queue-gaps R11, R13, R16). Needs judgements schema 14."""
+
+    kind: Literal["queue_add"]
+    at: AwareDatetime
+    repo: str = Field(min_length=1)
+    scope: str = Field(min_length=1)
+    pr: int = Field(ge=1)
+    by: str = Field(min_length=1)
+    preapproved: bool = False
+
+
+class QueueRemoveEvent(_Strict):
+    """`fr triage queue remove --pr <pr>` by forge login *by*: the add of *pr* ends (spec
+    2026-11-24-wave-queue-gaps R11, R16). Needs judgements schema 14."""
+
+    kind: Literal["queue_remove"]
+    at: AwareDatetime
+    repo: str = Field(min_length=1)
+    scope: str = Field(min_length=1)
+    pr: int = Field(ge=1)
+    by: str = Field(min_length=1)
+
+
+QueueRequest = Annotated[QueueAddEvent | QueueRemoveEvent, Field(discriminator="kind")]
 
 
 def _time_ordered(events: list[Any], what: str) -> list[Any]:
@@ -1528,7 +1571,7 @@ class Export(_Strict):
 class Judgements(_Strict):
     """`judgements.yaml`. Schema 1 files load as zero batches (spec §3.A)."""
 
-    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] = Field(1, alias="schema")
+    schema_: Literal[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] = Field(1, alias="schema")
     ranked_at: date | None = None
     tiers: list[Tier] = []
     issues: dict[str, Judgement] = {}
@@ -1538,6 +1581,7 @@ class Judgements(_Strict):
     exports: list[Export] = []  # the driver's per-wave state exports; schema 4
     closeouts: list[CollectedCloseout] = []  # collected close-out start markers; schema 10
     queues: list[QueueRecord] = []  # the wave merge queues (wave-merge-queue R24); schema 13
+    queue_requests: list[QueueRequest] = []  # operator entries (wave-queue-gaps R11); 14
 
     @field_validator("issues", mode="before")
     @classmethod
@@ -1632,6 +1676,11 @@ class Judgements(_Strict):
             raise ValueError(
                 f"`exports:` needs schema 4, but this file is stamped schema {self.schema_}"
             )
+        if self.queue_requests and self.schema_ < 14:
+            raise ValueError(
+                f"`queue_requests:` needs schema 14, but this file is stamped schema {self.schema_}"
+            )
+        _time_ordered(list(self.queue_requests), "queue_requests")
         if self.queues and self.schema_ < 13:
             raise ValueError(
                 f"`queues:` needs schema 13, but this file is stamped schema {self.schema_}"
@@ -1648,6 +1697,12 @@ class Judgements(_Strict):
             for e in b.events
         ):
             raise ValueError("an update's `patch_id` needs schema 13")
+        if self.schema_ < 14 and any(
+            isinstance(e, ConflictEvent) and (e.onto is not None or e.reissue)
+            for b in self.batches
+            for e in b.events
+        ):
+            raise ValueError("a conflict's `onto` and `reissue` need schema 14")
         carried: set[str] = {e.kind for b in self.batches for e in b.events}
         carried |= {e.kind for q in self.queues for e in q.events}
         if self.schema_ < 12 and any(

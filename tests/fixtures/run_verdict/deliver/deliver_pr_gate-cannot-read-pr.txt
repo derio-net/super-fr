@@ -1,0 +1,1 @@
+refused: cannot read the PR 'https://example.com/o/r/pull/3' (HTTP 404). fr rendered its body to recs/pr-body.md: open the PR with `fr pr create --title <title> --body-file recs/pr-body.md`, record its url (`emitted: {pr: <url>}` in the record, or `--emitted pr=<url>`), and resolve again

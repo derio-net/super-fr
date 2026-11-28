@@ -196,11 +196,6 @@ def test_counted_acceptance_report_star_star_filter_only_counts_push_on_main() -
     assert ci_budget.counted(on_value, {"event": "schedule", "head_branch": "main"}) is False
 
 
-def test_counted_pr_spec_status_counts_every_event() -> None:
-    on_value = _on("_pr_spec_status.yml")
-    assert ci_budget.counted(on_value, {"event": "pull_request", "head_branch": "feat/x"}) is True
-
-
 def test_counted_pinned_clis_counts_every_event() -> None:
     on_value = _on("pinned-clis.yml")
     assert ci_budget.counted(on_value, {"event": "schedule", "head_branch": "main"}) is True

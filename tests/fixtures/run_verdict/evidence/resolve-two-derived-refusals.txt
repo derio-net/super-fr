@@ -1,0 +1,4 @@
+step/deliver: could not verify who ran suite.log — no readable transcript for this session; recorded as a fresh log, unverified (evidence: unobserved=tests).
+step/deliver: cannot derive proportionality evidence — no base: no base for this test. Fetch the remote so its default branch resolves, or create the local default branch.
+step/deliver: cannot derive docs evidence — no base: no base for this test. Fetch the remote so its default branch resolves, or create the local default branch.
+step/deliver: refused — 2 derived witnesses failed: proportionality, docs

@@ -10,8 +10,12 @@ writes to, the home the suite started with.
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
+import pytest
 from fr import forgeapi
 from fr.triage.model import Scope, legacy_state_dir
 from fr.triage.scope_config import host_id_path
@@ -71,3 +75,30 @@ def test_a_global_git_config_write_never_reaches_the_operators_file() -> None:
             ["git", "config", "--global", "--get", key], capture_output=True, text=True
         )
         assert got.stdout.strip() == value
+
+
+def test_undoing_a_tests_patches_never_restores_the_operators_home(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The session sandbox (review p6-r10): `HOME` under the per-test one is a sandbox too,
+    so `monkeypatch.undo()` and an `fr` child started outside a test's patch never see the
+    operator's home."""
+    from tests.conftest import _real_home
+
+    monkeypatch.undo()
+    home = Path(os.environ["HOME"])
+    assert home != OPERATOR_HOME and home != _real_home()
+    assert not home.is_relative_to(_real_home() / ".cache")
+    child = subprocess.run(
+        [sys.executable, "-c", "import os; print(os.environ['HOME'])"],
+        capture_output=True, text=True, check=True,
+    )  # fmt: skip
+    assert Path(child.stdout.strip()) == home
+
+
+def test_the_session_check_names_what_the_suite_added_to_the_real_triage_cache() -> None:
+    from tests.conftest import REAL_TRIAGE_CACHE, _real_home, new_cache_entries
+
+    assert REAL_TRIAGE_CACHE == _real_home() / ".cache" / "fr" / "triage"
+    assert new_cache_entries(frozenset({"a"}), frozenset({"a", "o--r", ".x"})) == [".x", "o--r"]
+    assert new_cache_entries(frozenset({"a", "b"}), frozenset({"a"})) == []

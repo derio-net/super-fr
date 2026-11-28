@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/spec_cmd.py
   - packages/fr/src/fr/commands/archive_cmd.py
   - packages/fr/src/fr/commands/repair_cmd.py
-reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-18 still true; the owed-followups batch only makes fr archive refuse unknown states (a symlinked live root, an unreadable default ref, an unreadable open-issue listing), which the page does not detail. 2026-11-16 owed-archive-side-effects phase 3, the page now describes `fr archive --dry-run` and its two refusals. 2026-11-15 phase 1, a refused archive writes nothing (page now says so); fr status's open count now includes local rows that are debt, which the page does not detail (spec 2026-11-14-acceptance-local-status)
+reviewed: 2026-11-27 ci-hygiene retired the spec-status workflow; the sentence naming it is gone; 2026-11-27 still true, isolation/local.py split into modules (#1517), no reader-visible change; 2026-11-25 still true; `fr archive` and `fr repair` read the memory ref and the plan format through the configuration space (S1 R9), with no change a reader sees; 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-18 still true; the owed-followups batch only makes fr archive refuse unknown states (a symlinked live root, an unreadable default ref, an unreadable open-issue listing), which the page does not detail. 2026-11-16 owed-archive-side-effects phase 3, the page now describes `fr archive --dry-run` and its two refusals. 2026-11-15 phase 1, a refused archive writes nothing (page now says so); fr status's open count now includes local rows that are debt, which the page does not detail (spec 2026-11-14-acceptance-local-status)
 ---
 
 ## Why is there nothing to sync?
@@ -75,8 +75,7 @@ a fetch.
 `fr spec status` prints Markdown: per-plan state (Not Started, In Progress, Complete,
 Missing or Unreachable), step and phase counts and a total. Plans in another repo resolve
 through the GitHub contents API; `--no-gh` keeps it local, and those rows then read
-`Unreachable`. The repo's `fr-spec-status.yml` workflow posts the same output as a
-comment when a pull request touching plans merges.
+`Unreachable`.
 
 `fr apply` is where drift shows. Without `--yes` it only previews what it would change on
 GitHub; with `--yes` it applies; `--all` walks every plan and `--format json` is the

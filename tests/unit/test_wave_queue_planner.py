@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 from fr.triage.approval import Approved, First, Void
 from fr.triage.batch_drive import LivePr
-from fr.triage.model import Batch, QueueRecord
+from fr.triage.model import Batch, CursorPosition, QueueRecord
 from fr.triage.wave_queue import (
     Hold,
     QueueAction,
@@ -37,6 +37,7 @@ OTHER = "s-22222222"
 NOW = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
 AT = "2026-11-20T10:00:00Z"
 MAIN = "m0" * 20
+DELIVERED = CursorPosition(run="r", step="deliver", kind="deliver-done")
 
 
 def _batch(bid: str, n: int, *, wave: int | None = 1, events: Sequence[dict[str, Any]] = (),
@@ -103,6 +104,8 @@ def _qs(
         }  # fmt: skip
     kw.setdefault("approvals", {bid: First(pr.head) for bid, pr in live.items()})
     kw.setdefault("base", MAIN)
+    # Every open PR's run delivered unless a test says otherwise (batch-merge-readiness R1).
+    kw.setdefault("cursors", {bid: (pr.head, DELIVERED, "read") for bid, pr in live.items()})
     return QueueSnapshot(
         repo=REPO,
         scope=ME,
@@ -372,8 +375,9 @@ def test_a_later_waves_ready_entry_never_joins_the_open_queue() -> None:
     stages = {**snap.stages, "w2": "pr-open"}
     from dataclasses import replace
 
+    cursors = {**snap.cursors, "w2": ("head-109", DELIVERED, "read")}
     plan = plan_queue(replace(snap, batches=(*snap.batches, later), live=live,
-                              approvals=approvals, stages=stages))  # fmt: skip
+                              approvals=approvals, stages=stages, cursors=cursors))  # fmt: skip
     assert plan.entries == ("a", "b", "c") and plan.waiting == ("w2",)
 
 
@@ -756,7 +760,7 @@ def test_a_halt_lifts_when_the_default_branch_moves_and_the_queue_rebuilds() -> 
 
 
 def test_a_halt_is_a_blocked_action_of_the_pass_so_needs_you_lists_it() -> None:
-    from fr.triage.batch_drive import _queue_reports
+    from fr.triage.queue_reports import queue_reports as _queue_reports
 
     plan = plan_queue(_abc(_built(1, "s1", "a"), _halt("held"), slots=_green("s1")))
     (action,) = _queue_reports(plan)

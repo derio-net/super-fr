@@ -67,15 +67,31 @@ pipeline skill ran this session.
    artifacts outside the workspace). Recognised by structure, never by name:
    - the repo's quiet `fr` worktree — a linked worktree at exactly
      `~/.cache/fr/worktrees/<main checkout>/fr`, HEAD on `refs/heads/fr`, the
-     `origin/fr` switch reading `placement: quiet`;
+     quiet switch reading `placement: quiet`;
+   - its quiet `fr-config` worktree (the repo's configuration, `.fr/` on the
+     orphan `fr-config` branch) — the sibling `.../fr-config`, HEAD on
+     `refs/heads/fr-config`, the same switch, and a tree that holds only `.fr/`;
    - a stealth tracking clone — a clone named `stealth--*` beside a workspace
      whose marker is valid, records `placement: stealth`, and names this clone's
-     origin and branch as its tracking ref.
-   An `fr` worktree of another repo, one anywhere else, and a primary checkout
-   are not targets. Ask `fr settings paths --shell` for the directories
+     origin and branch as its tracking ref;
+   - that workspace's stealth configuration clone — `stealth--*-config`, on the
+     tracking branch plus `-config`, its tree only `<target-dir>/.fr/`.
+   An `fr` or `fr-config` worktree of another repo, one anywhere else, and a
+   primary checkout are not targets. fr's own changes written there reach the
+   configuration branch as a pull request that fr opens; only the forge's rule on
+   that branch stops a direct push, so under quiet and stealth fr runs the
+   branch's executable configuration only while the forge enforces a
+   pull-request rule on it. Ask `fr settings paths --shell` for the directories
    (`FR_SPECS_DIR`, `FR_PLANS_DIR`, …).
-5. Path matches a glob in `.fr-isolation-allow` (below) → allow.
-6. Otherwise → **deny** with a message naming the three ways forward.
+5. Path matches a glob in `.fr/isolation-allow` (`.fr-isolation-allow` while it is
+   absent; below) → allow. Neither allowlist file nor the `.fr-isolation` marker is
+   ever exempted by one, whatever name (case, link, non-ASCII spelling) reaches it.
+6. Otherwise → **deny** with a message naming the three ways forward. When the
+   repo's two quiet switches (`origin/fr-config:.fr/settings.yaml` and the older
+   `origin/fr:settings.yaml`) differ, it also says so and names `fr settings sync`
+   (a preview of the move, first) and `fr settings sync --yes --expect <tip>`, which
+   writes the old copy from the previewed tip only:
+   neither the hooks nor any fr reader write it on their own.
 
 One dependency failure is fail-**open**, and it is the only one: when `git`
 itself cannot be resolved (nothing on `PATH`, nothing in
@@ -164,9 +180,13 @@ that the workspace is a genuine isolation, per the checks above.
 - **Enter isolation** — `fr isolation up --branch <branch>` (or run fr-goal /
   fr-brainstorming / fr-debugging), then edit in the worktree. The right answer
   almost always.
-- **`.fr-isolation-allow`** — a globlist at the repo root for operator-managed
-  paths that legitimately live in the base clone (data, caches, memory).
-  Matched against the file's repo-relative path; `*` spans `/`. Example:
+- **`.fr/isolation-allow`** (the older `.fr-isolation-allow` at the repo root is read
+  only while it is absent) — a globlist in the working tree, never read from a ref,
+  for operator-managed paths that legitimately live in the base clone (data, caches,
+  memory). Matched against the file's repo-relative path; `*` spans `/`. No line
+  exempts either allowlist file or the `.fr-isolation` marker (by name, by file
+  identity through a link, or by a non-ASCII spelling beside them), so an edit tool cannot widen it: edit it by
+  hand or with `FR_BASE_OK=1`. Example:
   ```
   # operator-managed, base-clone edits allowed
   projects/**

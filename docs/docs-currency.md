@@ -15,7 +15,7 @@ covers:
   - scripts/site/**
   - .fr/docs.yaml
   - .github/workflows/pages.yml
-reviewed: 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-15 owed-archive-side-effects phase 1, the default-branch helper moved to fr.git and docs.load wraps it; page unchanged. 2026-11-13 writing-standards-docs phase 1, explainers-currency now names each page group's writing standard; this page still defers authoring detail to that rule
+reviewed: 2026-11-27 ci-hygiene added UV_PYTHON to pages.yml; page still true; 2026-11-25 `.fr/docs.yaml` is read from the configuration space (S1 R1, R2); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-15 owed-archive-side-effects phase 1, the default-branch helper moved to fr.git and docs.load wraps it; page unchanged. 2026-11-13 writing-standards-docs phase 1, explainers-currency now names each page group's writing standard; this page still defers authoring detail to that rule
 ---
 
 # Docs currency: keep pages true to the code
@@ -43,7 +43,9 @@ A repo with no `.fr/docs.yaml` owes nothing, and `fr docs check` says so and exi
 
 ## The config
 
-`.fr/docs.yaml` takes two keys, both lists of path globs relative to the repo root:
+`.fr/docs.yaml` sits in the repo's configuration space. That is the repo itself, or the
+`fr-config` branch under the quiet placement, or the tracking repo's `<branch>-config`
+branch under stealth. It takes two keys, both lists of path globs relative to the repo root:
 
 ```yaml
 pages:

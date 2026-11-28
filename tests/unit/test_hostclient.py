@@ -33,17 +33,17 @@ def test_client_for_dispatches_by_detected_backend(
 
 def _repo(tmp_path: Path, name: str, *, remote: str | None = None, **keys: str) -> Path:
     """A real git repo so `_hosts` can read its origin, plus an optional
-    `.devcontainer/fr-profiles.yaml` built from `keys`."""
+    `.fr/profiles.yaml` built from `keys`."""
     repo = tmp_path / name
     repo.mkdir(parents=True)
     subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
     if remote:
         subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", remote], check=True)
     if keys:
-        d = repo / ".devcontainer"
+        d = repo / ".fr"
         d.mkdir()
         body = "".join(f"{k}: {v}\n" for k, v in keys.items())
-        (d / "fr-profiles.yaml").write_text(body + "profiles:\n  dev:\n    purpose: x\n")
+        (d / "profiles.yaml").write_text(body + "profiles:\n  dev:\n    purpose: x\n")
     return repo
 
 
@@ -117,10 +117,10 @@ def _repo_with_remote(root: Path, remote: str) -> Path:
 def _repo_with_profiles(root: Path, keys: dict[str, str]) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "init", "-q", "-b", "main", str(root)], check=True)
-    d = root / ".devcontainer"
+    d = root / ".fr"
     d.mkdir(parents=True, exist_ok=True)
     body = "".join(f"{k}: {v}\n" for k, v in keys.items())
-    (d / "fr-profiles.yaml").write_text(body + "profiles:\n  dev:\n    purpose: x\n")
+    (d / "profiles.yaml").write_text(body + "profiles:\n  dev:\n    purpose: x\n")
     return root
 
 

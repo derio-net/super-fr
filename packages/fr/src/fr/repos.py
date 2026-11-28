@@ -1,7 +1,8 @@
 """Repo-collection helpers backing `fr repos sync`.
 
 `fr repos sync` instruments **already-checked-out** repos by writing a
-`docs/superpowers/plan-config.yaml` in place — it never clones. This module
+`.fr/plan-config.yaml` in place (proposed on the configuration branch under quiet and
+stealth) — it never clones. This module
 holds the pieces with no CLI/typer coupling so they're unit-testable:
 
 - `RepoEntry` / `load_manifest` — the `~/.config/fr/repos.yaml` model.

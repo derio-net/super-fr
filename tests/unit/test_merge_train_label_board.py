@@ -15,12 +15,13 @@ from fr.ghclient import UnsupportedForgeOperation
 from fr.labels import APPROVED_FR
 from fr.triage.approval import ensure_approval_label
 from fr.triage.batch_dispatch import NO_APPROVAL_LINE, conflict_brief, render_brief
-from fr.triage.kanban import HINT_AWAITING_APPROVAL, build_board
+from fr.triage.kanban import build_board
 from fr.triage.model import Batch, Facts, Judgements
 from fr.triage.views import NEED_LABELS, needs_you
 from typer.testing import CliRunner
 
 from tests.unit.triage_board_fixtures import (
+    DELIVERED,
     REPO,
     URL,
     batch,
@@ -49,6 +50,16 @@ class Labels:
         if path not in self.files:
             raise GhError("gh: Not Found (HTTP 404)", stderr="gh: Not Found (HTTP 404)")
         return self.files[path]
+
+    def read_file_at_ref(self, repo: str, path: str, ref: str) -> str:
+        """The contents API at *ref* (`GhClient.read_file_at_ref`): `files` at the default
+        branch (`HEAD`); any other ref, `fr-config` included, holds nothing, as a repo with
+        no configuration branch answers."""
+        if ref != "HEAD":
+            from fr.gh import GhError
+
+            raise GhError("gh: Not Found (HTTP 404)", stderr="gh: Not Found (HTTP 404)")
+        return self.read_file(repo, path)
 
     def label_exists(self, repo: str, name: str) -> bool:
         self.calls.append(f"exists {repo} {name}")
@@ -251,8 +262,11 @@ def test_init_scaffold_targets_only_a_github_origin(
 
 def _one(*, labels: list[str] | None, events: list[dict[str, Any]] | None = None,
          **kw: Any) -> tuple[Facts, Judgements]:  # fmt: skip
-    the_pr = pr(20, "feat/batch-x", labels=labels, **kw)
-    f = facts([issue(1, prs=[the_pr])], prs=[the_pr], schema=10)
+    # Its run delivered (batch-merge-readiness R1) unless a test says otherwise.
+    the_pr = pr(20, "feat/batch-x", labels=labels, **{**DELIVERED, **kw})
+    f = facts(
+        [issue(1, prs=[the_pr])], prs=[the_pr], schema=10, config={REPO: {"queue": {"ci": "push"}}}
+    )  # a repo with no queue block holds all
     jd = judgements(
         {"widgets#1": j(1)},
         [batch("x", [1], wave=1, events=[dispatch("x"), *(events or [])])],
@@ -300,10 +314,12 @@ def test_need_labels_name_the_new_kinds_and_drop_ready_pr() -> None:
 
 
 def test_the_kanban_card_of_an_unapproved_green_member_awaits_approval() -> None:
-    f, jd = _one(labels=[])
+    # Not delivered: a delivered one is the Reviewer lane's (batch-merge-readiness R4).
+    f, jd = _one(labels=[], cursor=None, cursor_read=None)
     board = build_board(f, jd, {})
     (card,) = [c for col in board.columns for c in col.cards if c.batch.id == "x"]
-    assert card.hint == HINT_AWAITING_APPROVAL == "awaiting approval"
+    assert card.readiness is not None and card.readiness.kind == "not-delivered"  # R7
+    assert card.hint == ""
 
 
 # ------------------------------------------------------------------ the briefs (R6)
@@ -346,9 +362,12 @@ def test_a_ci_none_repo_asks_for_the_label_with_no_check_at_all() -> None:
     assert not [n for n in needs_you(f, jd) if n.kind == "approve-pr"]  # CI repo: pending
     (need,) = [n for n in needs_you(f, jd, ci_none={REPO}) if n.kind == "approve-pr"]
     assert need.ref == "x"
+    # The card's hint is a not-delivered PR's (a delivered one is the Reviewer lane's).
+    f, jd = _one(labels=[], checks={"pass": 0, "fail": 0, "pending": 0}, cursor=None,
+                 cursor_read=None)  # fmt: skip
     board = build_board(f, jd, {}, ci_none={REPO})
     (card,) = [c for col in board.columns for c in col.cards if c.batch.id == "x"]
-    assert card.hint == HINT_AWAITING_APPROVAL
+    assert card.readiness is not None and card.readiness.kind == "not-delivered"
 
 
 def test_the_page_threads_ci_none_to_needs_you() -> None:
@@ -381,3 +400,55 @@ def test_a_board_render_builds_one_snapshot_and_one_pass(
     f, jd = _one(labels=[])
     build_board(f, jd, {})
     assert counts == {"snapshot": 1, "pass": 1}
+
+
+def test_a_green_pr_whose_run_has_not_delivered_is_never_asked_for_the_label() -> None:
+    """p1-r7, batch-merge-readiness R3, R4: while the run has not delivered, the board does not
+    invite an approval `deliver` would void; it says what it waits for instead. A PR with no
+    run cursor at all (R12) is the operator's: the Need names its next action."""
+    from fr.triage.readiness import NO_CURSOR_ACTION
+
+    running = {"run": "r1", "step": "deliver", "kind": "none", "unit": None}
+    f, jd = _one(labels=[], cursor=running, cursor_read="read")
+    assert not [n for n in needs_you(f, jd) if n.kind == "approve-pr"]
+    f, jd = _one(labels=[], cursor=None, cursor_read="read")
+    (need,) = [n for n in needs_you(f, jd) if n.kind == "approve-pr"]
+    assert need.text == f"PR #20: no run cursor names feat/batch-x: {NO_CURSOR_ACTION}"
+    assert "label it" not in need.text
+
+
+@pytest.mark.parametrize("labels", [[], [APPROVED_FR.name]], ids=["unapproved", "approved"])
+def test_a_cursor_the_driver_cannot_read_is_a_need_naming_its_remedy(labels: list[str]) -> None:
+    """l-errors-r3: no clone, or a read that failed with a known cause, is the operator's
+    (`readiness._mover`), approved or not; the Need says what to do, as the card does."""
+    f, jd = _one(labels=labels, cursor=None, cursor_read="no-clone")
+    (need,) = [n for n in needs_you(f, jd) if n.kind == "cursor-unread"]
+    assert need.ref == "x" and need.href == f"{URL}/pull/20"
+    assert need.text == f"PR #20: clone {REPO} on the driver host"
+    why = "fetch of feat/batch-x failed: network down"
+    f, jd = _one(labels=labels, cursor=None, cursor_read="unread", cursor_detail=why)
+    (need,) = [n for n in needs_you(f, jd) if n.kind == "cursor-unread"]
+    assert need.text == f"PR #20: fix what stops the run cursor being read: {why}"
+    assert not [n for n in needs_you(f, jd) if n.kind == "approve-pr"]
+    assert "cursor-unread" in NEED_LABELS
+
+
+def test_an_unread_cursor_with_no_cause_is_no_need_the_driver_reads_it_again() -> None:
+    f, jd = _one(labels=[], cursor=None, cursor_read="unread")
+    assert not [n for n in needs_you(f, jd) if n.kind == "cursor-unread"]
+
+
+def test_a_green_pr_waiting_on_a_real_conflict_is_not_asked_for_approval() -> None:
+    """queue-followups R2: its conflict Need speaks for it."""
+    conflict = {"kind": "conflict", "at": "2026-10-01T12:00:00Z", "head": "sha-20",
+                "paths": ["a.py"], "delivered": "session"}  # fmt: skip
+    f, jd = _one(labels=[APPROVED_FR.name], events=[conflict], mergeable="CONFLICTING")
+    assert not [n for n in needs_you(f, jd) if n.kind == "approve-pr"]
+
+
+def test_an_ended_approval_asks_for_the_label_without_naming_a_push() -> None:
+    """queue-followups R1: the label was removed at the approved head; no push voided it."""
+    ended = {**_APPROVED, "at": "2026-10-01T13:00:00Z", "voided_at": "sha-old"}
+    f, jd = _one(labels=[], events=[_APPROVED, ended], head_oid="sha-old")
+    (need,) = [n for n in needs_you(f, jd) if n.kind == "approve-pr"]
+    assert need.text == "PR #20: approval ended (label removed): label it approved-fr to merge"

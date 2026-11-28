@@ -37,7 +37,8 @@ def _invoke(repo: Path, monkeypatch: pytest.MonkeyPatch, *args: str) -> tuple[in
     monkeypatch.setenv("FR_REPO_ROOT", str(repo))
     monkeypatch.chdir(repo)
     result = CliRunner().invoke(app, ["services", *args])
-    return result.exit_code, result.output
+    # stdout only: the R13 old-path notice goes to stderr and is no part of the JSON
+    return result.exit_code, result.stdout if result.exit_code == 0 else result.output
 
 
 def test_services_json_reports_the_forge_of_a_flat_v1_file(

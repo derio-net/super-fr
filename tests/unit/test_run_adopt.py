@@ -74,7 +74,7 @@ def _repo(tmp_path: Path, repo_root: Path) -> tuple[Path, Path]:
     shipped = tmp_path / "_shipped"
     shipped.mkdir()
     shutil.copy(
-        repo_root / "plugins" / "super-fr" / "workflows" / "fr-goal.yaml",
+        repo_root / "plugins" / "super-fr" / "defaults" / "workflows" / "fr-goal.yaml",
         shipped / "fr-goal.yaml",
     )
     return tmp_path, shipped
@@ -1263,7 +1263,7 @@ def test_a_plan_adopted_with_no_run_id_is_named_after_its_folder(
 
 def test_a_spec_only_adoption_keeps_the_branch_derived_id(tmp_path: Path, repo_root: Path) -> None:
     """A spec stem would be the id its plan's later adoption needs (R9)."""
-    from fr.commands.run_cmd import derive_run_id
+    from fr.run.steps import derive_run_id
 
     repo, shipped = _repo(tmp_path, repo_root)
     spec_rel = _write_spec(repo)

@@ -37,6 +37,7 @@ class Pacer:
         if problem:
             self._once(problem)
         self.budget: Budget | None = None
+        self._planning_at: datetime | None = None  # the last `plan`'s clock (R7)
 
     def _once(self, why: str) -> None:
         """R5: a cause is reported once, however many passes meet it."""
@@ -136,7 +137,12 @@ class Pacer:
             probes=sum(len(p) for p in probes.values()),
             full=full,
             closing=probe.closing_repos(facts, judgements),
+            # the board starts no close-out and stamps no `planned_at` (review p1-r1)
+            deadline=set()
+            if board
+            else probe.deadline_repos(facts, judgements, self.state.planned_at, now),
         )
+        self._planning_at = now
         if facts is None:  # nothing to carry from: the collect reads every repo (p2-r5)
             plan = replace(plan, only=None, carried=frozenset())
         return plan
@@ -164,9 +170,10 @@ class Pacer:
         back above the floor after a held one is never quiet (p2-r3)."""
         self._save(
             replace(
-                self.state, summary=dict(summary), judgements_digest=digest, held_for_quota=held
+                self.state, summary=dict(summary), judgements_digest=digest, held_for_quota=held,
+                planned_at=self._planning_at or self._now(),
             )
-        )
+        )  # fmt: skip
 
     def record_digest(self, digest: str) -> None:
         """The board watch's collect (R17): the judgements it collected on, and no summary, so

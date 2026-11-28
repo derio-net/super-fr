@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import typer
 from fr.ghclient import UnsupportedForgeOperation
 from fr.run.model import load_run_state
 
@@ -242,11 +241,12 @@ def test_another_derived_refusal_is_reported_before_the_settle_hold(
     at_deliver: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from fr.commands import run_cmd
+    from fr.run.verdict import Say, Verdict
 
-    def refuse(*_a: object, **_k: object) -> str:
-        run_cmd.err_console.print("proportionality: refused for the test")
-        raise typer.Exit(2)
+    def refuse(*_a: object, **_k: object) -> Verdict[str]:
+        return Verdict(None, refusal=(Say("proportionality: refused for the test"),))
 
+    # The name `derive` reads (fr.run.evidence.derived.proportionality_witness, imported).
     monkeypatch.setattr(run_cmd, "_proportionality_witness", refuse)
     _use(monkeypatch, Forge(checks=[{"name": "ci-ok", "bucket": "pending"}]))
 
@@ -355,13 +355,13 @@ def test_a_pr_body_refusal_is_reported_before_the_settle_hold(
 def test_the_exit_guard_refuses_before_the_settle_hold(
     at_deliver: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from fr.commands import run_cmd
+    from fr.run import deliver
+    from fr.run.verdict import RunRefusal, Say
 
     def refuse(*_a: object) -> None:
-        run_cmd.err_console.print("exit guard: refused for the test")
-        raise typer.Exit(2)
+        raise RunRefusal((Say("exit guard: refused for the test"),), 2)
 
-    monkeypatch.setattr(run_cmd, "_deliver_exit_guard", refuse)
+    monkeypatch.setattr(deliver, "deliver_exit_guard", refuse)
     _use(monkeypatch, Forge(checks=[{"name": "ci-ok", "bucket": "pending"}]))
 
     out = _deliver(at_deliver)
@@ -374,18 +374,18 @@ def test_the_exit_guard_refuses_before_the_settle_hold(
 def test_a_pending_pr_holds_before_the_label_sync_writes_the_forge(
     at_deliver: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from fr.commands import run_cmd
+    from fr.run import deliver
 
     synced: list[object] = []
     rendered: list[object] = []
-    real_render = run_cmd._deliver_pr_gate
+    real_render = deliver.deliver_pr_gate
 
     def gate(*a: object) -> None:
         rendered.append(a)
         real_render(*a)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(run_cmd, "_deliver_pr_gate", gate)
-    monkeypatch.setattr(run_cmd, "_deliver_label_sync", lambda *a: synced.append(a))
+    monkeypatch.setattr(deliver, "deliver_pr_gate", gate)
+    monkeypatch.setattr(deliver, "deliver_label_sync", lambda *a: synced.append(a))
     _use(monkeypatch, Forge(checks=[{"name": "ci-ok", "bucket": "pending"}]))
 
     out = _deliver(at_deliver)
@@ -398,10 +398,10 @@ def test_a_pending_pr_holds_before_the_label_sync_writes_the_forge(
 def test_a_settled_pr_syncs_labels_after_the_witness(
     at_deliver: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from fr.commands import run_cmd
+    from fr.run import deliver
 
     synced: list[object] = []
-    monkeypatch.setattr(run_cmd, "_deliver_label_sync", lambda *a: synced.append(a))
+    monkeypatch.setattr(deliver, "deliver_label_sync", lambda *a: synced.append(a))
     _use(monkeypatch, Forge())
 
     out = _deliver(at_deliver)

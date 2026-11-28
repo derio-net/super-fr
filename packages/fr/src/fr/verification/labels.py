@@ -148,7 +148,7 @@ def sync_exit_labels(
     want = desired_labels(exit_.kinds, exit_.gates)
     try:
         # Probe the PR first: a forge that cannot label one creates no labels.
-        have = {str(n) for n in gh.pr_view(repo, number).get("labels", [])}
+        have = {str(n) for n in gh.pr_view(repo, number).get("labels") or []}
         names = {d.name for d in want}
         add = frozenset(names - have)
         remove = frozenset(n for n in have if _is_managed(n) and n not in names)

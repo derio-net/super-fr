@@ -1,0 +1,1 @@
+refused: could not sync the PR's verification/gate labels: cannot read. Fix that, then resolve again (`fr run resolve r1 --step deliver --state done`, with your --record if you resolve through one)

@@ -17,7 +17,7 @@ Three things this module deliberately does NOT do:
 1. **It does not fork a second way to write a run file.** It builds a
    `RunState` out of the same `fr.run.model` types `fr run start` uses and
    saves it through the same `save_run_state`. It sets an *initial* state; it
-   never reimplements a transition. `_complete_step` in `fr.commands.run_cmd`
+   never reimplements a transition. `complete_step` in `fr.run.steps`
    remains the only implementation of the done/failed cursor asymmetry, and an
    adopted run moves from here on exactly like a started one.
 2. **It does not decide anything the plan already decides.** "Is this phase
@@ -844,10 +844,10 @@ def _adopted_run_id(run_id: str | None, plan_rel: str | None, branch: str) -> st
         return validate_run_id(run_id)
     if plan_rel is not None:
         return validate_run_id(Path(plan_rel).name)
-    # Imported here, not at module scope: `fr.commands.run_cmd` imports this
-    # module for the `fr run adopt` command, so a top-level import is a cycle.
-    # The derivation must stay identical to `fr run start`'s.
-    from fr.commands.run_cmd import derive_run_id
+    # Imported here, not at module scope: `fr.run.steps` imports this module
+    # (`plan_phase_tags`), so a top-level import is a cycle. The derivation
+    # must stay identical to `fr run start`'s.
+    from fr.run.steps import derive_run_id
 
     return derive_run_id(branch)
 

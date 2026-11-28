@@ -1,0 +1,4 @@
+{
+  "returned": "raised RunStateError: cannot verify evidence \u2014 the plan journal <ROOT>/docs/superpowers/journals/plans/p.md does not exist. Record the review first: fr journal add --scope plan --slug p --kind review --phase <n> ...",
+  "unobserved": {}
+}

@@ -219,7 +219,7 @@ def test_a_batch_row_links_to_its_card() -> None:
 
 
 def test_needs_you_now_lists_each_kind_and_the_unplaced_issues() -> None:
-    page = render_backlog(*busy())
+    page = render_backlog(*busy(delivered=True))
     got = set(_needs(page))
     assert got == {
         ("approve-pr", "b-draft"),
@@ -234,7 +234,7 @@ def test_needs_you_now_lists_each_kind_and_the_unplaced_issues() -> None:
 
 
 def test_every_need_row_names_and_links_its_pr_issue_or_batch() -> None:
-    page = render_backlog(*busy())
+    page = render_backlog(*busy(delivered=True))
     rows = re.findall(r'<li class="need".*?</li>', _section(page, "needs-you-now"), flags=re.S)
     assert len(rows) == 8
     for row in rows:

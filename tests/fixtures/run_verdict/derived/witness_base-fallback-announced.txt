@@ -1,0 +1,1 @@
+deliver: proportionality: no remote default branch; using base main (local default branch)

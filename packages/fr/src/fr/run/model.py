@@ -256,7 +256,7 @@ class StepRecord(BaseModel):
     lifecycle position, and the two are independent — a `cli` step whose gate
     was cleared goes back to `pending` so `advance` still executes it and its
     exit code is still the verdict. Sticky for the life of the run (carried
-    across `_complete_step`), so a retry after a failure does not silently
+    across `fr.run.steps.complete_step`), so a retry after a failure does not silently
     re-block on a question already answered. Absent (`None`) on every step of
     every pre-existing run file, which is exactly "not answered"."""
 
@@ -271,7 +271,7 @@ class StepRecord(BaseModel):
 
     It is the only durable trace of the failure this field was added for
     (spec §1): a `gate: operator` step self-resolving on a harness with no
-    operator-question tool. Carried across `_complete_step` like `gate`, or
+    operator-question tool. Carried across `fr.run.steps.complete_step` like `gate`, or
     the record would go quiet the moment a cleared `cli` gate's step actually
     ran — and `fr run check` reads it, so quiet means unreported."""
 

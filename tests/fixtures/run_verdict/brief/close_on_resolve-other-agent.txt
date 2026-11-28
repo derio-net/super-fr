@@ -1,0 +1,1 @@
+[31mphase/1/implement: already claimed by 'a1' — refusing to attribute it to 'a2' as well. The worktree has exactly one writer; close the first claim (`fr run resolve ... --state done|failed`, or `fr run claim ... --abandoned`) before naming a second.[0m

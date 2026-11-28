@@ -1,0 +1,1 @@
+[31mstep/deliver: --evidence walk=none — a pre-merge walk is owed (agent-walk); run `fr verification walk` and name its log.[0m

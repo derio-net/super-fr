@@ -48,26 +48,33 @@ def _home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _switch_to(root: Path, settings_text: str) -> None:
-    """Point origin's `fr` at *settings_text* (a new commit, never forced) and fetch it."""
-    probe = subprocess.run(
-        ["git", "ls-remote", "--exit-code", "origin", "refs/heads/fr"], cwd=root, check=False,
-        capture_output=True,
-    )  # fmt: skip
-    scratch = root.parent / "fr-scratch"
-    if probe.returncode == 0:
-        url = git(root, "remote", "get-url", "origin").strip()
-        git(root.parent, "clone", "-q", "-b", "fr", url, str(scratch))
-    else:
-        git(root.parent, "init", "-q", "-b", "fr", str(scratch))
-        git(scratch, "remote", "add", "origin", git(root, "remote", "get-url", "origin").strip())
-    git(scratch, "config", "user.name", "t")
-    git(scratch, "config", "user.email", "t@example.invalid")
-    (scratch / "settings.yaml").write_text(settings_text)
-    git(scratch, "add", "-A")
-    git(scratch, "commit", "-qm", "chore(fr): switch")
-    git(scratch, "push", "-q", "origin", "fr")
-    subprocess.run(["rm", "-rf", str(scratch)], check=True)
-    git(root, "fetch", "-q", "origin", quiet.FETCH_REFSPEC)
+    """Point origin's `fr` at *settings_text* (a new commit, never forced) and fetch it;
+    and `fr-config`'s `.fr/settings.yaml` too when origin has that branch, as fr's own
+    writer keeps the two in step (S1 R6: two that differ refuse)."""
+    url = git(root, "remote", "get-url", "origin").strip()
+    for branch, rel in (("fr-config", ".fr/settings.yaml"), ("fr", "settings.yaml")):
+        probe = subprocess.run(
+            ["git", "ls-remote", "--exit-code", "origin", f"refs/heads/{branch}"], cwd=root,
+            check=False, capture_output=True,
+        )  # fmt: skip
+        if branch == "fr-config" and probe.returncode != 0:
+            continue
+        scratch = root.parent / f"{branch}-scratch"
+        if probe.returncode == 0:
+            git(root.parent, "clone", "-q", "-b", branch, url, str(scratch))
+        else:
+            git(root.parent, "init", "-q", "-b", branch, str(scratch))
+            git(scratch, "remote", "add", "origin", url)
+        git(scratch, "config", "user.name", "t")
+        git(scratch, "config", "user.email", "t@example.invalid")
+        (scratch / rel).parent.mkdir(parents=True, exist_ok=True)
+        (scratch / rel).write_text(settings_text)
+        git(scratch, "add", "-A")
+        git(scratch, "commit", "-qm", "chore(fr): switch")
+        git(scratch, "push", "-q", "origin", branch)
+        subprocess.run(["rm", "-rf", str(scratch)], check=True)
+        spec = quiet.CONFIG_FETCH_REFSPEC if branch == "fr-config" else quiet.FETCH_REFSPEC
+        git(root, "fetch", "-q", "origin", spec)
     quiet._CACHE.clear()
 
 
@@ -81,6 +88,9 @@ def drifted(tmp_path: Path) -> tuple[Path, Path]:
     git(ws, "add", "--", FRAG)
     git(ws, "commit", "-qm", "chore(fr): acceptance row")
     _switch_to(root, QUIET)
+    # A current quiet repo: `fr-config` holds the switch too (S1 R5; an old-switch-only
+    # repo is stale until `fr migrate artifacts --yes` creates it).
+    quiet.ensure_config_branch(root)
     return root, ws
 
 
@@ -154,11 +164,12 @@ def test_fr_push_refuses_a_drifted_branch(
 
 
 def test_deliver_refuses_a_drifted_branch(tmp_path: Path) -> None:
-    from fr.commands.run_cmd import _deliver_placement_gate
+    from fr.run.deliver import deliver_placement_gate
+    from fr.run.verdict import RunRefusal
 
     _, ws = drifted(tmp_path)
-    with pytest.raises(typer.Exit) as e:
-        _deliver_placement_gate(ws)
+    with pytest.raises(RunRefusal) as e:
+        deliver_placement_gate(ws)
     assert e.value.exit_code == 2
 
 

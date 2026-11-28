@@ -14,6 +14,7 @@ import pytest
 from fr.triage.model import Batch, QueueRecord, TriageConfig, parse_triage_config
 from fr.triage.queue_exec import (
     gate_checks_of,
+    landing_refusal,
     pause_landings,
     post_merge_owed,
     queue_config,
@@ -259,3 +260,30 @@ def test_the_need_for_a_cancelled_check_says_it_was_cancelled() -> None:
     assert "cancelled" in cancelled and "fr-queue/**" not in cancelled
     missing = next(n for n in needs if "docs" in n)
     assert "did not report" in missing and "fr-queue/**" in missing
+
+
+# ------------------------------------------------------------------ landing method (R2)
+
+
+@pytest.mark.parametrize("method", ["squash", "rebase"])
+def test_a_push_landing_refuses_a_method_github_closes_unmerged(method: str) -> None:
+    text = landing_refusal(
+        "push", method, source="the forge's default", allowed={"merge", "squash", "rebase"}
+    )
+    assert text is not None
+    assert method in text and "the forge's default" in text and "unmerged" in text
+    assert "merge_method: merge" in text and "queue.land: merge" in text
+
+
+def test_a_squash_only_repo_is_told_to_allow_merge_commits() -> None:
+    text = landing_refusal("push", "squash", source="the one allowed method", allowed={"squash"})
+    assert text is not None
+    assert "merge commits" in text and "queue.land: merge" in text
+    assert "merge_method: merge" not in text
+
+
+@pytest.mark.parametrize(
+    ("land", "method"), [("push", "merge"), ("merge", "squash"), ("merge", "rebase")]
+)
+def test_every_other_landing_and_method_is_allowed(land: str, method: str) -> None:
+    assert landing_refusal(land, method, source="--method", allowed={"merge", "squash"}) is None

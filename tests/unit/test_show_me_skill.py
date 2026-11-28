@@ -139,7 +139,7 @@ def test_the_inline_none_example_is_a_shape_block() -> None:
 
 
 def test_the_call_tree_example_names_functions_that_exist() -> None:
-    tree = next(b for b in _example_blocks() if "_deliver_pr_gate" in b)
+    tree = next(b for b in _example_blocks() if "deliver_pr_gate" in b)
     names = re.findall(r"^\s+([A-Za-z_]\w+)\b(?!\s+--)", tree, re.MULTILINE)
     assert names, tree
     source = "\n".join(p.read_text() for p in (REPO / "packages" / "fr" / "src").rglob("*.py"))

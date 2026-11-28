@@ -39,6 +39,7 @@ from fr.triage.kanban import (
     PrView,
     cutoff_hidden_waves,
 )
+from fr.triage.readiness import Readiness
 from fr.triage.render import FONTS, _safe_url, esc, noun
 from fr.triage.wave_report import span
 
@@ -101,10 +102,19 @@ code, .mono { font-family: var(--mono); font-size: .85em; }
 .status-working { color: var(--accent); border-color: var(--accent); }
 .status-blocked { color: var(--sev-1); border-color: var(--sev-1); font-weight: 600; }
 .status-done { color: var(--live); border-color: var(--live); }
-.stage-cancelled, .stage-abandoned, .stage-partial {
+.stage-cancelled, .stage-abandoned, .stage-partial, .stage-left-scope {
   color: var(--sev-2); border-color: var(--sev-2); }
 .flag { color: var(--sev-1); }
 .hint { display: block; margin-top: 2px; }
+.verdict { display: block; font-weight: 600; margin-bottom: 2px; }
+.verdict.tone-ok { color: var(--accent); }
+.verdict.tone-wait { color: var(--muted); }
+.verdict.tone-move { color: var(--sev-2); }
+.verdict.tone-bad { color: var(--sev-1); }
+.readiness { margin-top: 8px; padding-top: 4px; }
+.readiness p.meta { margin: 4px 0 0; }
+.other-pr { margin: 4px 0; }
+section.queue ul.others { margin: 4px 0 0; padding-left: 18px; }
 .needs-you .hint { color: var(--sev-1); font-weight: 600; }
 button.jump { font: inherit; font-size: .78rem; color: var(--accent); background: transparent;
   border: 1px solid var(--accent); border-radius: 4px; padding: 0 8px; cursor: pointer; }
@@ -331,6 +341,56 @@ def _checks(checks: dict[str, int] | None) -> str:
     return " · ".join(f"{n} {esc(name)}" for name, n in ranked)
 
 
+_BAD = frozenset(
+    {"ci-red", "conflicting", "approval-voided", "refused", "other-base", "queue-held"}
+)
+_MOVE = frozenset({"ready-for-approval", "gate-held"})
+_OK = frozenset({"merges-next", "queued-behind"})
+
+
+def _tone(r: Readiness) -> str:
+    """The colour token class of a verdict: the queue merges it, it waits on the operator,
+    something is wrong, or it only waits (R5)."""
+    if r.kind in _OK:
+        return "tone-ok"
+    if r.kind in _BAD:
+        return "tone-bad"
+    return "tone-move" if r.kind in _MOVE else "tone-wait"
+
+
+def _verdict(r: Readiness) -> str:
+    return f'<span class="verdict {_tone(r)}">{esc(r.verdict)}</span>'
+
+
+def _readiness(r: Readiness, collected_at: str = "") -> str:
+    """R6: the facts the verdict came from; a non-batch entry's trust rule takes the place
+    of Delivered (R8). *collected_at* is when the facts were read: where they may lag the
+    driver's live reads (R4), the page says so."""
+    f = r.facts
+    rows = [
+        ("Trust rule" if r.entry is not None else "Delivered", esc(f.delivered)),
+        ("CI", esc(f.ci)),
+        ("Merge", esc(f.merge)),
+        ("Approval", esc(f.approval)),
+        ("Whose move", esc(f.whose_move)),
+        ("Next action", _link(f.next_action, f.link or None)),
+    ]
+    if f.command:
+        rows.append(("Command", f'<code class="mono">{esc(f.command)}</code>'))
+    lag = (
+        f'<p class="meta">as of facts collected {_stamp(collected_at)}</p>' if collected_at else ""
+    )
+    return f'<div class="readiness">{_dl(rows)}{lag}</div>'
+
+
+def _other_pr(r: Readiness, collected_at: str) -> str:
+    key = r.entry.key if r.entry is not None else ""
+    return (
+        f'<li class="other-pr"><span class="mono">{esc(key)}</span>: {esc(r.verdict)}'
+        f"{_readiness(r, collected_at)}</li>"
+    )
+
+
 def _pr(pr: PrView) -> str:
     word = "draft" if pr.draft else "ready"
     rows = [
@@ -380,14 +440,26 @@ def _timeline(card: Card) -> str:
     return f"<h4>Timeline</h4><ol>{items}</ol>"
 
 
-def _body(card: Card, scope_args: Sequence[str]) -> str:
+def _pill_class(card: Card) -> str:
+    """`stage-<stage>`; the stage's own words are the pill's, bar `left-scope`'s longer ones,
+    which also carry the stage pill class of the other pages."""
+    if card.stage == "left-scope":
+        return "stage-left-scope bstage-left-scope"
+    return f"stage-{esc(card.pill or '')}"
+
+
+def _body(card: Card, scope_args: Sequence[str], collected_at: str = "") -> str:
     bid = card.batch.id
-    parts = [
-        "<h4>Issues</h4><ul>" + "".join(_member(m) for m in card.members) + "</ul>",
-    ]
+    parts = []
+    if card.readiness is not None:
+        parts.append(_readiness(card.readiness, collected_at))
+    parts.append("<h4>Issues</h4><ul>" + "".join(_member(m) for m in card.members) + "</ul>")
     closed = [m.key for m in card.members if m.stage == "closed"]
     if closed and card.column in ("proposed", "waiting"):
         parts.append(f'<p class="meta">already closed: {esc(", ".join(closed))}</p>')
+    if card.others:
+        items = "".join(_other_pr(r, collected_at) for r in card.others)
+        parts.append(f"<h4>Related PRs</h4><ul>{items}</ul>")
     if card.pr is not None:
         parts.append(_pr(card.pr))
     if card.overlaps:
@@ -413,7 +485,9 @@ def _body(card: Card, scope_args: Sequence[str]) -> str:
     return f'<div class="body">{"".join(parts)}</div>'
 
 
-def _card(card: Card, scope_args: Sequence[str], *, hidden: bool = False) -> str:
+def _card(
+    card: Card, scope_args: Sequence[str], *, hidden: bool = False, collected_at: str = ""
+) -> str:
     bid = card.batch.id
     classes = "card needs-you" if card.needs_you else "card"
     count = len(card.members)
@@ -429,13 +503,14 @@ def _card(card: Card, scope_args: Sequence[str], *, hidden: bool = False) -> str
     if front_status is not None:
         pills += " " + _status(front_status)
     if card.pill:
-        pills += f' <span class="pill stage-{esc(card.pill)}">{esc(card.pill)}</span>'
+        pills += f' <span class="pill {_pill_class(card)}">{esc(card.pill)}</span>'
     if card.blocked:
         pills += ' <span class="pill flag">blocked</span>'
     show = card.show_closeout_jump if front_closeout else card.show_jump
     jump = " " + _jump(bid, scope_args, closeout=front_closeout) if show else ""
+    lead = _verdict(card.readiness) if card.readiness is not None else ""
     summary = (
-        f'<summary><span class="mono">{esc(bid)}</span>'
+        f'<summary>{lead}<span class="mono">{esc(bid)}</span>'
         f'<span class="title">{esc(card.batch.title)}</span>'
         f'<span class="meta">{esc(" · ".join(meta))}</span>{pills}{jump}'
         f'<span class="hint">{esc(card.hint)}</span></summary>'
@@ -444,7 +519,7 @@ def _card(card: Card, scope_args: Sequence[str], *, hidden: bool = False) -> str
         f'<details class="{classes}" id="card-{esc(bid)}" data-batch="{esc(bid)}" '
         f'data-wave="{"" if card.wave is None else card.wave}"'
         f"{' data-cutoff-hidden' if hidden else ''}>"
-        f"{summary}{_body(card, scope_args)}</details>"
+        f"{summary}{_body(card, scope_args, collected_at)}</details>"
     )
 
 
@@ -474,7 +549,7 @@ def _held(held: Sequence[HeldIssue]) -> str:
 
 def _queue_section(board: Board) -> str:
     """The merge queue's line per repo (R25) and the report of each wave it ran (R28)."""
-    if not board.queue_lines and not board.wave_reports:
+    if not board.queue_lines and not board.wave_reports and not board.others:
         return ""
     lines = "".join(f'<li class="queue-line mono">{esc(line)}</li>' for line in board.queue_lines)
     reports = ""
@@ -492,9 +567,11 @@ def _queue_section(board: Board) -> str:
             f"<th>approvals</th><th>detail</th></tr></thead><tbody>{rows}</tbody></table>"
             f'<p class="meta">Release: {esc(report.release or "none asked yet")}</p></div>'
         )
+    others = "".join(_other_pr(r, board.collected_at) for r in board.others)
     return (
         '<section class="queue"><h2>Merge queue</h2>'
-        f"{'<ul>' + lines + '</ul>' if lines else ''}{reports}</section>"
+        f"{'<ul>' + lines + '</ul>' if lines else ''}"
+        f"{'<ul class=others>' + others + '</ul>' if others else ''}{reports}</section>"
     )
 
 
@@ -509,12 +586,16 @@ def _gated_card(g: GatedCard) -> str:
 
 
 def _column(
-    column: ColumnView, scope_args: Sequence[str], hidden_waves: frozenset[str] = frozenset()
+    column: ColumnView,
+    scope_args: Sequence[str],
+    hidden_waves: frozenset[str] = frozenset(),
+    collected_at: str = "",
 ) -> str:
     cards = "".join(
-        _card(c, scope_args, hidden=c.wave is not None and str(c.wave) in hidden_waves)
+        _card(c, scope_args, hidden=c.wave is not None and str(c.wave) in hidden_waves,
+              collected_at=collected_at)
         for c in column.cards
-    )
+    )  # fmt: skip
     cards += "".join(_gated_card(g) for g in column.gated)
     count = len(column.cards) + len(column.gated)
     collapsed = count == 0
@@ -565,7 +646,9 @@ def render_board(
             "last 30 days</button>"
             "</div>"
             '<div class="board">'
-            + "".join(_column(c, scope_args, hidden_waves) for c in board.columns)
+            + "".join(
+                _column(c, scope_args, hidden_waves, board.collected_at) for c in board.columns
+            )
             + "</div>"
         )
     else:

@@ -1,0 +1,385 @@
+<!-- fr:journal-schema=4 -->
+# Journal: 2026-11-27-run-verdict
+
+<!-- fr:journal kind=decision scope=plan id=p1-emitted-plan-to-steps created=2026-11-27T17:06:34+00:00 phase=1 -->
+### p1-emitted-plan-to-steps · decision · _emitted_plan moved to fr/run/steps.py now, and record/apply.py imports it from there (phase 1)
+
+derived.py needs emitted_plan without importing fr.commands, so it moved to fr/run/steps.py (the module phase 2 fills). run_cmd keeps it as `_emitted_plan` (its body uses it); record/apply.py's one call now reads `fr.run.steps.emitted_plan` (R11).
+
+<!-- fr:journal kind=decision scope=plan id=p1-derive-patch-point created=2026-11-27T17:06:34+00:00 phase=1 -->
+### p1-derive-patch-point · decision · tests that fake a derived witness patch run_cmd's imported alias, the name derive reads (phase 1)
+
+derive calls `_settle(_proportionality_witness(...))`, where `_proportionality_witness` is run_cmd's alias of fr.run.evidence.derived.proportionality_witness, so test_run_settle_witness patches that alias with a fake returning a refusing Verdict (patching the derived module would not reach derive). Tests of the unobserved channel now import fr.run.unobserved directly.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-derived-fixture-capture created=2026-11-27T17:06:34+00:00 phase=1 -->
+### p1-derived-fixture-capture · discovery · the derived refusal capture fakes inputs at their source modules, so the same setup drives old and new code (phase 1)
+
+tests/unit/test_run_verdict_derived.py fakes fr.parser.parse, fr.proportionality.run_report, fr.run.target.target_ref, fr.git.remote_default_ref/git_answer, fr.isolation.types.load_state and fr.docs.* (all imported inside the functions at call time), so one case table drove the pre-move run_cmd functions (captured once into tests/fixtures/run_verdict/derived/ by a throwaway script) and now drives the moved ones. 12 cases, incl. the fallback announce warning followed by a later refusal, for both witnesses.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t1 created=2026-11-27T17:06:34+00:00 phase=1 -->
+### no-refactor-p1-t1 · discovery · no-refactor-because P1.T1 (phase 1)
+
+verdict.py is four new stdlib definitions written as the spec's Design states them; nothing pre-existing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t3 created=2026-11-27T17:06:34+00:00 phase=1 -->
+### no-refactor-p1-t3 · discovery · no-refactor-because P1.T3 (phase 1)
+
+unobserved.py is a verbatim move and the adapter is the spec's three functions; the only cleanup, dropping the now-unused TESTS_PROVENANCE_SURFACE import from run_cmd, was done in the green step
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p1-t4 created=2026-11-27T17:06:34+00:00 phase=1 -->
+### no-refactor-p1-t4 · discovery · no-refactor-because P1.T4 (phase 1)
+
+a move that must keep its bytes; the one structural change (derive accepting str | None and asserting the settled witness) was needed for mypy in the green step, and record/apply.py now imports emitted_plan from fr.run.steps instead of run_cmd
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-27T17:15:24+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · test_run_verdict_derived.py keeps a never-called Case.old/_old capture driver naming run_cmd._witness_base (gone) and the now-Verdict-returning aliases (phase 1)
+
+tests/unit/test_run_verdict_derived.py:128-169 and every _old(...) in _cases(); dead and misleading. Fix - drop the field and helper, name the capture commit in the docstring.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-27T17:15:24+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · row run-engine-cli-free moved to ci while its acceptance says one allowance and the layering test still permits the temporary adopt.py one (phase 1)
+
+docs/acceptance/features/2026-11-27-run-verdict.yaml; tests/unit/test_run_writes_layering.py:96-99 allows adopt.py until phase 2. Fix - name the temporary allowance in the row's notes.
+
+<!-- fr:journal kind=review scope=plan id=review-p1-1 created=2026-11-27T17:15:24+00:00 phase=1 -->
+### review-p1-1 · review · phase 1 reviewed by an independent reviewer; 2 findings, both in scope, both fixed (phase 1)
+
+Reviewer checked byte identity of every moved Say against the pre-move prints, derive's gh#768 accumulation, _refusals' cause, unobserved.py, the layering test (per-file package, rich.markup both spellings, both old test names kept), the re-pointed patches, fixtures captured before the move (b39ef3751 before f53d3542f), budget, fragment and stamps. Findings p1-r1 (dead pre-move driver in the capture test) and p1-r2 (row note did not name the temporary adopt.py allowance), both fixed.
+
+<!-- fr:journal kind=lens scope=plan id=lens-tests-1 created=2026-11-27T17:15:24+00:00 phase=1 lens=tests step=review-phase -->
+### lens-tests-1 · lens · each later slice's fixtures must be captured before its move, with no capture driver left behind as dead code (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-27T17:15:24+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: test_run_verdict_derived.py keeps a never-called Case.old/_old capture driver naming run_cmd._witness_base (gone) and the now-Verdict-returning aliases (phase 1)
+
+Removed Case.old and _old; the docstring names capture commit b39ef3751 (test commit after the review). 13 tests pass.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-27T17:15:24+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: row run-engine-cli-free moved to ci while its acceptance says one allowance and the layering test still permits the temporary adopt.py one (phase 1)
+
+set-status --notes on run-engine-cli-free names the temporary adopt.py allowance that slice 2 removes.
+
+<!-- fr:journal kind=decision scope=plan id=p2-adapters-in-run-cmd created=2026-11-27T18:29:45+00:00 phase=2 -->
+### p2-adapters-in-run-cmd · decision · unit_key and resolve_manifest_for_read are reached through two adapter functions in run_cmd, not wrapped at every call site (phase 2) (phase 2)
+
+`_unit_key` runs `fr.run.steps.unit_key` inside `_refusals()` and `_resolve_manifest_for_read` passes `_say` as the warn; the two names keep their one definition each so the 12 call sites see typer.Exit and the printed warning exactly as before. Other moved names are imported under their old underscore spellings because run_cmd's body uses them; tests, record/apply.py, verification/baseline.py, pickup_cmd.py and adopt.py use fr.run.steps directly.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-lookup-capture created=2026-11-27T18:29:45+00:00 phase=2 -->
+### p2-lookup-capture · discovery · the lookup capture drives one case table through run_cmd's old functions once and now through the moved ones (phase 2) (phase 2)
+
+tests/unit/test_run_verdict_steps.py holds the cases; the fixtures in tests/fixtures/run_verdict/steps/ were taken by a throwaway script (not committed) that called run_cmd's pre-move functions with the same table, in commit 74f3a5ee8 before the move. The test calls only fr.run.steps; no pre-move driver is left behind. 9 cases: 7 unit_key refusals incl. the unparseable-plan AdoptError path, 2 drift warnings (step list, members).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-27T18:29:45+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+a capture task: fixtures and a test, nothing pre-existing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-27T18:29:45+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+a verbatim move that must keep its bytes; the only cleanup (unused imports left in run_cmd) was done in the green step
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-27T18:35:50+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · pickup_cmd._say prints through a highlight-on Console, while the old warning used run_cmd's highlight=False console, so a TTY warning is no longer byte-identical (phase 2)
+
+packages/fr/src/fr/commands/pickup_cmd.py `_say`; pickup's err_console is Console(stderr=True) with highlighting on. Fix - pass highlight=False.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-27T18:35:50+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · fr docs check fails - fr-brainstorming-and-plan.md (pickup_cmd.py) and verification-strategies.md (baseline.py) have no updated reviewed stamp (phase 2)
+
+Both pages stay true; the change is an import re-point. Fix - stamp both.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-27T18:35:50+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · run-verdict acceptance fragment's layering-row note still says the adopt.py allowance exists until slice 2, which this phase removed (phase 2)
+
+docs/acceptance/features/2026-11-27-run-verdict.yaml run-engine-cli-free note. Fix - set-status --notes with current wording.
+
+<!-- fr:journal kind=review scope=plan id=review-p2-1 created=2026-11-27T18:35:50+00:00 phase=2 -->
+### review-p2-1 · review · phase 2 reviewed by an independent reviewer; 3 findings, all in scope, all fixed (phase 2)
+
+Reviewer confirmed byte identity of all seven unit_key Says and the drift warning, the run_cmd adapters keep refusals at the same frame for _advance_once, derive, resolve_in_process and the claim/resolve paths, record/apply.py reaches no RunRefusal-raising function, fixtures captured in 74f3a5ee8 before the move with no dead driver, no compat re-export, layering names kept, budget +20; ran 446 tests green. Findings p2-r1 (pickup warning highlighting), p2-r2 (two page stamps), p2-r3 (stale row note), all fixed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-27T18:35:50+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: pickup_cmd._say prints through a highlight-on Console, while the old warning used run_cmd's highlight=False console, so a TTY warning is no longer byte-identical (phase 2)
+
+pickup_cmd._say passes highlight=False; test_pickup_prints_the_drift_warning_unhighlighted failed before the fix and passes after.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-27T18:35:50+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: fr docs check fails - fr-brainstorming-and-plan.md (pickup_cmd.py) and verification-strategies.md (baseline.py) have no updated reviewed stamp (phase 2)
+
+Stamped fr-brainstorming-and-plan.md and verification-strategies.md, plus fr-exit-gates.md which covers the latter; fr docs check reports 33 pages current.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-27T18:35:50+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: run-verdict acceptance fragment's layering-row note still says the adopt.py allowance exists until slice 2, which this phase removed (phase 2)
+
+set-status --notes on run-engine-cli-free now names the single workspace.py allowance.
+
+<!-- fr:journal kind=decision scope=plan id=p3-adapters-in-run-cmd created=2026-11-27T20:01:02+00:00 phase=3 -->
+### p3-adapters-in-run-cmd · decision · questions_from_flags and answered_by_or_exit keep one run_cmd adapter each; the witness and the resume hint are parameters (phase 3) (phase 3)
+
+resolve_in_process reads the answered-by narrowing inside its held-stdout try, so a refusal there must still be a typer.Exit: `_answered_by_or_exit` and `_questions_from_flags` run the moved function inside `_refusals()`. `deliver_label_sync` takes the `fr run resolve` hint, and `deliver_local_stamp_plan` / `local_stamp_plan` take the local-suite witness function, because `_resolve_hint` (slice 4) and `_local_stamp_witness` (slice 5) are still in run_cmd and fr/run cannot import it.
+
+<!-- fr:journal kind=decision scope=plan id=p3-stays-in-run-cmd created=2026-11-27T20:01:02+00:00 phase=3 -->
+### p3-stays-in-run-cmd · decision · _queue_exit_baseline, _print_unrunnable_warnings and _spec_review_ids stay in run_cmd (phase 3) (phase 3)
+
+They sit inside the H line range but are not gates: `_queue_exit_baseline` writes a journal decision through `_queue_gate_decision` (slice 6, C), `_print_unrunnable_warnings` reads `_unrunnable_spec_warnings` (still in run_cmd) and `_spec_review_ids` is also called from outside H. `_print_unrunnable_warnings` takes `deliver.repo_relative(root, value)`.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-show-me-skill-names-moved-function created=2026-11-27T20:01:02+00:00 phase=3 -->
+### p3-show-me-skill-names-moved-function · discovery · the fr-show-me skill's call-tree example named `_deliver_pr_gate`, and test_show_me_skill checks that every function it names is defined (phase 3) (phase 3)
+
+The example now names `deliver_pr_gate`; the OpenCode and Hermes mirrors were regenerated and docs/explainers/fr-show-me.md (which covers the skill) was stamped.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-deliver-capture created=2026-11-27T20:01:02+00:00 phase=3 -->
+### p3-deliver-capture · discovery · the deliver capture drives one 40-case table through run_cmd's old functions once and now through the moved ones (phase 3) (phase 3)
+
+tests/unit/test_run_verdict_deliver.py holds the cases; the fixtures in tests/fixtures/run_verdict/deliver/ were taken by a throwaway script (not committed) that called run_cmd's pre-move functions with the same table, in commit 6fffb053f's successor before the move. The test drives only fr.run.deliver. Repo root is a fixed path so no temp directory reaches a fixture.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-27T20:01:02+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+a capture task: fixtures and a test, nothing pre-existing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-27T20:01:02+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+a verbatim move that must keep its bytes; the only cleanup (imports left unused in run_cmd, the test fakes' shapes) was done in the green step
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-27T20:11:59+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · test_run_verdict_deliver.py keeps a dead sym/_ALIASES shim that existed to drive run_cmd's pre-move functions; call deliver directly (phase 3)
+
+tests/unit/test_run_verdict_deliver.py:27-41. Fix - drop _ALIASES and sym, look names up on the moved module directly.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-27T20:11:59+00:00 phase=3 state=open review_scope=out -->
+### p3-r2 · finding [open] (reviewer: out of scope) · tests/unit/test_deliver_local_stamp.py:508 docstring still names removed _deliver_exit_guard (cosmetic) (phase 3)
+
+Only the docstring is stale; the body patches deliver.deliver_exit_guard.
+
+<!-- fr:journal kind=review scope=plan id=review-p3-1 created=2026-11-27T20:11:59+00:00 phase=3 -->
+### review-p3-1 · review · phase 3 reviewed by an independent reviewer; 1 in-scope finding fixed, 1 out-of-scope note (phase 3)
+
+Reviewer confirmed byte identity of every moved Say (style="red" refusals, markup lines, warn-routed warnings), _resolve_body's gate order, RECORD_ROWS name and set/reset, the held-stdout flush after a refusal, record/apply.py untouched, layering, no dead names or re-exports, patches at the lookup site, fixtures captured before the move, the stay-in-run_cmd decisions, the needed fr-show-me example edit with both mirror generators in sync, budget +20, docs current. Findings p3-r1 (dead name fallback in the capture test, fixed) and p3-r2 (stale docstring, out of scope).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-27T20:11:59+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: test_run_verdict_deliver.py keeps a dead sym/_ALIASES shim that existed to drive run_cmd's pre-move functions; call deliver directly (phase 3)
+
+Removed _ALIASES and sym in 07ba9b646; the module parameter stays as the one injection point every case uses. 67 tests pass.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-27T20:11:59+00:00 phase=3 state=open resolves=p3-r2 out_of_scope=true -->
+### p3-r2-resolved · finding [out-of-scope] · resolves p3-r2: tests/unit/test_deliver_local_stamp.py:508 docstring still names removed _deliver_exit_guard (cosmetic) (phase 3)
+
+Cosmetic docstring only; the reviewer tagged it out of scope. The docstring was updated in passing in 07ba9b646 to name fr.run.deliver.deliver_exit_guard.
+
+<!-- fr:journal kind=decision scope=plan id=p4-warn-and-refusal-plumbing created=2026-11-27T23:00:16+00:00 phase=4 -->
+### p4-warn-and-refusal-plumbing · decision · the dispatch-record helpers take a `warn` callable and raise RunRefusal; run_cmd's call sites wrap them in `_refusals()` (phase 4) (phase 4)
+
+`merge_claim`, `claimed_identity`, `close_on_resolve` and `observed_model` print a warning (`Say`, markup and wrap as before) through a `warn` parameter run_cmd fills with `_say`; `claimed_identity`, `tests_brief`, `manual_placement_preflight` and `lens_set_or_refuse` raise `RunRefusal`. The call sites in `_advance_group`, `_advance_step`, `_resolve_member`, `_resolve_body`, `_claim_identity` and `_print_member_dispatch` run them inside `with _refusals():`, so `resolve_in_process` and `_advance_once` still see `typer.Exit`. `_print_member_dispatch` takes `repo_root`, which `_advance_group` already holds.
+
+<!-- fr:journal kind=decision scope=plan id=p4-phase-executor-agent-lives-in-brief created=2026-11-27T23:00:16+00:00 phase=4 -->
+### p4-phase-executor-agent-lives-in-brief · decision · PHASE_EXECUTOR_AGENT moved to fr/run/brief.py with the briefs (phase 4) (phase 4)
+
+`tests_brief` keys on it and fr/run cannot import run_cmd, so the constant is defined in brief.py and run_cmd imports it for the reviewer check that still uses it (slice 5 moves that check).
+
+<!-- fr:journal kind=discovery scope=plan id=p4-brief-capture created=2026-11-27T23:00:16+00:00 phase=4 -->
+### p4-brief-capture · discovery · the brief capture drives one 22-case table through run_cmd's old functions once and now through the moved ones (phase 4) (phase 4)
+
+tests/unit/test_run_verdict_brief.py holds the cases; fixtures in tests/fixtures/run_verdict/brief/ (stderr, exit code, and the returned value as JSON, covering one flat brief and one grouped member brief) were taken by a throwaway driver (not committed) calling the pre-move `_`-named functions with `resolve_repo_root` patched to the test's root, in the commit before the move. The test drives only fr.run.brief and fr.run.evidence.lenses.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-docs-check-clean created=2026-11-27T23:00:16+00:00 phase=4 -->
+### p4-docs-check-clean · discovery · fr docs check reported every page current after the brief move (phase 4) (phase 4)
+
+Earlier phases stamped the pages that cover run_cmd.py; no page names a moved function, so nothing needed a new stamp.
+
+<!-- fr:journal kind=discovery scope=plan id=p4-fast-tier-run created=2026-11-27T23:00:16+00:00 phase=4 -->
+### p4-fast-tier-run · discovery · the fast tier ran 9908 passed, 118 skipped; its one collection error (test_git_policy_briefs importing commit_templates_brief from run_cmd) was fixed after and the file re-run green (phase 4) (phase 4)
+
+The re-point grep matched `_name` and `run_cmd.<name>` spellings but not a public name imported with `from fr.commands.run_cmd import commit_templates_brief`; the run's only error was that file, and it passes alone (2 passed).
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t1 created=2026-11-27T23:00:16+00:00 phase=4 -->
+### no-refactor-p4-t1 · discovery · no-refactor-because P4.T1 (phase 4)
+
+a capture task: fixtures and a test, nothing pre-existing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p4-t2 created=2026-11-27T23:00:16+00:00 phase=4 -->
+### no-refactor-p4-t2 · discovery · no-refactor-because P4.T2 (phase 4)
+
+a verbatim move that must keep its bytes; the only cleanup (imports left unused in run_cmd, the re-pointed tests) was done in the green step
+
+<!-- fr:journal kind=review scope=plan id=review-p4-1 created=2026-11-27T23:04:36+00:00 phase=4 -->
+### review-p4-1 · review · phase 4 reviewed by an independent reviewer; no findings (phase 4)
+
+Reviewer compared every moved function and constant in fr/run/brief.py with the pre-move run_cmd by an AST script: differences are only the underscore renames, docstring names, repo_root for resolve_repo_root(), a threaded warn, and RunRefusal for typer.Exit(2). Every Say keeps text and kwargs; lens_set_or_refuse keeps its cause; brief dicts identical in key order and values; every repo_root caller passes a root it held; every refusing call sits in _refusals(); the binding guard and its helpers and _print_member_dispatch stay; layering clean; no stale old names in packages, tests, plugins, scripts, docs, AGENTS.md or the mirrors; capture test has no pre-move driver or alias shim; budget +20; docs current; 34 focused tests pass. No findings raised.
+
+<!-- fr:journal kind=decision scope=plan id=p5-evidence-modules created=2026-11-28T00:46:33+00:00 phase=5 -->
+### p5-evidence-modules · decision · the evidence cluster split into emitted, target, journals, review, lenses, walk, suite, ci and owed; derived gained visual and single-phase (phase 5)
+
+fr/run/evidence/: emitted.py (parse_emitted), target.py (the obligation sets, EvidenceTarget, evidence_hint, parse_evidence), journals.py (journal readers, verify_review_entry, closed_findings_witness), review.py (historical bound, verify_reviewer, check_returned_findings, dispatches_since, return_unobserved/return_refusal), lenses.py (+ owed_on, verify_lens_reviewers, lenses_witness, check_lens_returns), walk.py, suite.py (tests logs, reuse, local stamps; named suite, not tests, so it never reads as a test module), ci.py (exit 75 kept), owed.py. Largest is suite.py at 557 lines. `DERIVED_EVIDENCE` stays only in fr.workflow.artifacts (run_cmd's `_DERIVED_EVIDENCE` was a pure alias); the tests that read it import it from there. `fr.run.evidence.refusal(text)` builds the one-line soft-wrapped refusal most verifiers print. review.py imports PHASE_EXECUTOR_AGENT inside verify_reviewer, because fr.run.brief imports the lens checks, which import review.py.
+
+<!-- fr:journal kind=decision scope=plan id=p5-verified-evidence-wiring created=2026-11-28T00:46:33+00:00 phase=5 -->
+### p5-verified-evidence-wiring · decision · _verified_evidence settles each witness verdict with _settle or the new _witness, and runs each raising check inside _refusals() (phase 5)
+
+`_witness` is `_settle` with the witness asserted present, for the tests and walk witnesses the resolve stores directly. derive's lambdas settle single-phase, visual and lenses; the findings closure runs check_returned_findings inside `_refusals()` and settles closed_findings_witness. Every warning-printing callee takes `warn=_say`. Verifiers that call a raising check (verify_tests_log, verify_phase_tests_log, lenses_witness) catch its RunRefusal into their refusal with the warnings gathered first. `_derived_refusal` is gone.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-evidence-capture created=2026-11-28T00:46:33+00:00 phase=5 -->
+### p5-evidence-capture · discovery · the evidence capture drives one 146-case table through run_cmd's old functions once and now through fr.run.evidence, plus one fr run resolve pinning gh#768's summary line (phase 5)
+
+tests/unit/test_run_verdict_evidence.py holds the cases; fixtures in tests/fixtures/run_verdict/evidence/ (stderr at width 80 with colour, exit code, returned value and noted unobserved gates as JSON, tmp paths normalised to <ROOT>) were taken by a throwaway driver (not committed) in commit 7a001a30f, before the move. `_patch` fakes an input at its source module and follows it, by identity, into every fr.run.evidence module that imported it. resolve-two-derived-refusals.txt is a real `fr run resolve --step deliver` with no base for proportionality or docs. The test drives only fr.run.evidence and run_cmd's adapters.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-historical-prose-kept created=2026-11-28T00:46:33+00:00 phase=5 -->
+### p5-historical-prose-kept · discovery · dated observations naming `_verify_tests_log` were left as written (phase 5)
+
+parity.yaml's 2026-10-23 live-verification note, the acceptance legacy fragment's RE-OBSERVED note and docs/triage's judgement records name `_verify_tests_log` or `_ci_tests_witness` as they stood when observed; they record history, not the current module layout, so they were not edited. Code comments and docstrings naming moved names (settle/read.py, run/ci_evidence.py, run/deliver.py, AGENTS.md's lens-review sentence) were re-pointed.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-test-runs created=2026-11-28T00:46:33+00:00 phase=5 -->
+### p5-test-runs · discovery · the fast tier ran 10378 passed, 118 skipped after the last code commit; the plan's focused set ran green as that tier plus its 21 unselected files (phase 5)
+
+`uv run pytest --fr-scope origin/main -n 2 -q --no-cov` on 0ae5c3815: 10378 passed, 118 skipped, exit 0 (63 min on a loaded host). The P5.T2.S2 glob (test_run_*, test_deliver*, test_record_*, test_verification*) is 87 files; 66 were in the fast tier, and the other 21 ran on their own at the same commit: 417 passed. The whole suite collects with `-m ""` (20422 tests, no error). ruff format/check and mypy are clean; `fr docs check` reports every page current.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t1 created=2026-11-28T00:46:33+00:00 phase=5 -->
+### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
+
+a capture task: fixtures and a test, nothing pre-existing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t2 created=2026-11-28T00:46:33+00:00 phase=5 -->
+### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
+
+a move that must keep its bytes; the only cleanup (run_cmd imports left unused, the re-pointed tests, the stale prose names) was done in the green steps
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1 created=2026-11-28T00:54:58+00:00 phase=5 state=open review_scope=in -->
+### p5-r1 · finding [open] (reviewer: in scope) · P5.T3.S1 ticked but no reviewed: stamp names slice 5 (docs/reference/cli.md, docs/reference/workflow-shapes.md cover run_cmd.py) (phase 5)
+
+Both stamps stopped at slice 2; the gate passed only because earlier slices touched the pages. Fix - stamp both naming slices 3-5.
+
+<!-- fr:journal kind=review scope=plan id=review-p5-1 created=2026-11-28T00:54:58+00:00 phase=5 -->
+### review-p5-1 · review · phase 5 reviewed by an independent reviewer; 1 in-scope finding, fixed (phase 5)
+
+Reviewer checked every moved string literal and print's markup/soft_wrap/style, warnings-before-refusal order, both exit-75 paths and every exit 2, the same unobserved notes at the same sites, R7's fold and merge rules (lenses_witness, verify_tests_log, verify_phase_tests_log, verify_lens_reviewers to verify_reviewer), _verified_evidence's settle/_refusals wiring and the gh#768 summary line pinned by a resolve fixture, layering, modules under 800 lines, budget +20, fixtures before the move with no pre-move driver, no compat re-exports, no weakened assertion, and judged the remaining old names (parity.yaml scope_note, legacy.yaml note, docs/triage) dated history. 515 focused tests pass; docs current; mypy clean. Finding p5-r1 (missing slice stamps) fixed.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1-resolved created=2026-11-28T00:54:58+00:00 phase=5 state=fixed resolves=p5-r1 -->
+### p5-r1-resolved · finding [fixed] · resolves p5-r1: P5.T3.S1 ticked but no reviewed: stamp names slice 5 (docs/reference/cli.md, docs/reference/workflow-shapes.md cover run_cmd.py) (phase 5)
+
+Stamped docs/reference/cli.md and docs/reference/workflow-shapes.md naming slices 3-5 in 7bc1b6328; fr docs check current.
+
+<!-- fr:journal kind=decision scope=plan id=p6-provenance-api created=2026-11-28T02:15:49+00:00 phase=6 -->
+### p6-provenance-api · decision · the gate provenance cluster joined fr/run/provenance.py with public names; refusals raise RunRefusal and gate_provenance takes warn (phase 6) (phase 6)
+
+gate_degradation_notice, refuse_gate_flags, clears_gate, question_rounds_refusal (and ANNOUNCEMENTS), queue_gate_decision, flush_gate_decisions, GATE_DECISIONS (ContextVar name string fr_gate_decisions unchanged), observed_gate_rounds, GateAnswer, derive_gate_answer, gate_provenance, record_round_two, refuse_missing_emits. run_cmd wraps each refusing call in `with _refusals():` and passes warn=_say; record/apply.py imports clears_gate and derive_gate_answer from fr.run.provenance directly, dropping its run_cmd import in _run_context. The queue_exit_baseline caller in run_cmd also wraps queue_gate_decision in _refusals().
+
+<!-- fr:journal kind=discovery scope=plan id=p6-provenance-capture created=2026-11-28T02:15:49+00:00 phase=6 -->
+### p6-provenance-capture · discovery · the provenance capture drives one 46-case table through run_cmd's old functions once and now through fr.run.provenance (phase 6) (phase 6)
+
+tests/unit/test_run_verdict_provenance.py holds the cases; fixtures in tests/fixtures/run_verdict/provenance/ (stderr at width 80 with colour, exit code, returned value, queued gate decisions and noted unobserved gates as JSON) were taken by a throwaway driver (not committed) in commit 9ba4ff522, before the move. The unobserved note lands in take_unobserved (operator-gate). The test drives only fr.run.provenance and run_cmd's adapters.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-acceptance-check-baseline created=2026-11-28T02:15:49+00:00 phase=6 -->
+### p6-acceptance-check-baseline · discovery · fr acceptance check reports 49 errors on this checkout before and after this phase, none on this feature's rows (phase 6) (phase 6)
+
+They name rows of other features (e.g. queue-followups) whose specs or tests this branch does not hold; the count is the same with this phase's changes stashed. The harness-gate-degrades-loudly row was amended (status ci kept, note re-pointed), and run-verdict-refusals-preserved and run-cmd-clusters-in-fr-run moved to ci.
+
+<!-- fr:journal kind=discovery scope=plan id=p6-docs-stamps created=2026-11-28T02:15:49+00:00 phase=6 -->
+### p6-docs-stamps · discovery · fr docs check reports every page current; cli.md and workflow-shapes.md carry a slice 6 reviewed stamp (phase 6) (phase 6)
+
+Both cover run_cmd.py and fr/run/**; AGENTS.md's fr/run paragraph now names verdict.py, unobserved.py, steps.py, deliver.py, brief.py, provenance.py, evidence/ and the no-typer/no-console rule. run_cmd.py is 4093 lines, budget 4115.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t1 created=2026-11-28T02:15:49+00:00 phase=6 -->
+### no-refactor-p6-t1 · discovery · no-refactor-because P6.T1 (phase 6)
+
+a capture task: fixtures and a test, nothing pre-existing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p6-t2 created=2026-11-28T02:15:49+00:00 phase=6 -->
+### no-refactor-p6-t2 · discovery · no-refactor-because P6.T2 (phase 6)
+
+a move that must keep its bytes; the only cleanup (run_cmd imports left unused, the re-pointed tests, the stale prose names) was done in the green step
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1 created=2026-11-28T02:24:44+00:00 phase=6 state=open review_scope=in -->
+### p6-r1 · finding [open] (reviewer: in scope) · run_cmd.py budget was 4115 for a 4093-line module (+22), above spec R12's at-most-+20 headroom (phase 6)
+
+tests/unit/test_tripwire_module_budget.py set 4115 while its comment claimed +20. Fix - set the budget to the module's length plus 20.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2 created=2026-11-28T02:24:44+00:00 phase=6 state=open review_scope=in -->
+### p6-r2 · finding [open] (reviewer: in scope) · run_cmd.py imported the moved provenance names unprefixed, against spec R11's _-prefixed spelling (phase 6)
+
+The fr.run.provenance import block in run_cmd.py brought in GATE_DECISIONS, clears_gate, gate_provenance and the rest unprefixed, while slices 3-5 alias every moved name with a leading underscore. Fix - alias each as _<name> and re-point the call sites.
+
+<!-- fr:journal kind=review scope=plan id=review-p6-1 created=2026-11-28T02:24:44+00:00 phase=6 -->
+### review-p6-1 · review · phase 6 reviewed by an independent reviewer; 2 in-scope findings, both fixed (phase 6)
+
+Reviewer compared every moved body in fr/run/provenance.py with run_cmd.py at e26e7d925: each print + typer.Exit(2) became RunRefusal with the same text, markup, soft_wrap and style, and the two yellow warnings go through warn=_say in the same order; every call site is wrapped in _refusals(); gate_degradation_notice still raises HarnessError, which the caller maps as before; GATE_DECISIONS keeps its ContextVar name and is still reset and flushed at the same points. Layering holds (no typer, rich or fr.commands in provenance.py; the layering test walks the whole package). No dead monkeypatch of a moved name. Fixtures were committed in 9ba4ff522 before the move and are unchanged since. AGENTS.md, stamps, acceptance amendment and rows, and _WRITER_MODULES are accurate. Findings p6-r1 (budget headroom) and p6-r2 (unprefixed imports) fixed.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1-resolved created=2026-11-28T02:24:44+00:00 phase=6 state=fixed resolves=p6-r1 -->
+### p6-r1-resolved · finding [fixed] · resolves p6-r1: run_cmd.py budget was 4115 for a 4093-line module (+22), above spec R12's at-most-+20 headroom (phase 6)
+
+Budget set to 4111 for the 4091-line module (+20) in 64771b649; the comment names the new length.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2-resolved created=2026-11-28T02:24:44+00:00 phase=6 state=fixed resolves=p6-r2 -->
+### p6-r2-resolved · finding [fixed] · resolves p6-r2: run_cmd.py imported the moved provenance names unprefixed, against spec R11's _-prefixed spelling (phase 6)
+
+run_cmd.py now imports all ten provenance names as _<name> and its call sites use them (64771b649); ruff and mypy are clean, and 414 focused tests pass (budget, provenance capture, question rounds, run CLI, layering, stamp offset).
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-28T02:31:20+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · shape file said run_cmd.py is 4093 lines with budget 4115; the file has 4091 lines and the budget is 4111
+
+The shape file's numbers predated the p6-r1/p6-r2 fix that shrank run_cmd.py and lowered the budget.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-28T02:31:20+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · run/adopt.py:20 docstring still said _complete_step lives in fr.commands.run_cmd; it moved to fr.run.steps.complete_step
+
+Comments in run/provenance.py and run/model.py also used the old private name.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-28T02:31:20+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · shape file said run_cmd.py is 4093 lines with a 4115 budget; the code is 4091 lines and the budget test says 4111
+
+Same defect as l-docs-accuracy-r1, raised independently under the tests lens.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-28T02:31:20+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · acceptance row run-cmd-clusters-in-fr-run cited only the budget ceiling and the layering test, neither of which proves the clusters live in fr/run; its note said 4115
+
+Neither cited test fails if a cluster stayed in run_cmd.py within the budget. The slice capture tests import each moved name from its fr/run module, so they do.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-28T02:31:20+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · shape file stated run_cmd.py is 4093 lines with budget 4115; the diff has 4091 lines and budget 4111
+
+Same defect as l-docs-accuracy-r1, raised independently under the errors lens.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-28T02:31:20+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · Verdict warnings print only at settle, so an unexpected exception after a queued warning (run_report in proportionality_witness, evaluate in docs_witness) lost it
+
+Before the move the fallback-base warning printed as it was raised; a crash then still showed it above the traceback.
+
+<!-- fr:journal kind=review scope=plan id=review-lens-1 created=2026-11-28T02:31:20+00:00 -->
+### review-lens-1 · review · feature reviewed under the docs-accuracy, errors and tests lenses by three independent reviewers; 6 in-scope findings, all fixed
+
+docs-accuracy checked AGENTS.md's fr/run paragraph, the fr-show-me skill and its two mirrors, and every page stamped by the change against the code (no page claim made false). errors traced every RunRefusal raiser to a call site inside _refusals(), every Verdict witness to _settle/_witness, derive's typer.Exit aggregation, exit 75, and the broad excepts in deliver.py, and found no refusal text, markup, order or exit code changed. tests confirmed that each slice's fixtures were committed before its move and never regenerated, that no capture driver is left, that no re-pointed monkeypatch is dead, and that no assertion was weakened. Findings: the shape's line counts (raised by all three), a stale docstring, a row whose evidence did not prove its claim, and a warning lost on a crash. All are fixed.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-28T02:31:20+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: shape file said run_cmd.py is 4093 lines with budget 4115; the file has 4091 lines and the budget is 4111
+
+Shape file now says 8878 -> 4091 lines and budget 8895 -> 4111 (4c7e2e9d6).
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-28T02:31:20+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: run/adopt.py:20 docstring still said _complete_step lives in fr.commands.run_cmd; it moved to fr.run.steps.complete_step
+
+adopt.py names complete_step in fr.run.steps; provenance.py and model.py comments name fr.run.steps.complete_step (4c7e2e9d6). units.py's mention narrates finding f7's history and stays.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-28T02:31:20+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: shape file said run_cmd.py is 4093 lines with a 4115 budget; the code is 4091 lines and the budget test says 4111
+
+Fixed with l-docs-accuracy-r1 in 4c7e2e9d6.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-28T02:31:20+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: acceptance row run-cmd-clusters-in-fr-run cited only the budget ceiling and the layering test, neither of which proves the clusters live in fr/run; its note said 4115
+
+The row now cites the five slice capture tests (steps, deliver, brief, evidence, provenance) as unit levels, and its note says 4111 (5284fd070).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-28T02:31:20+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: shape file stated run_cmd.py is 4093 lines with budget 4115; the diff has 4091 lines and budget 4111
+
+Fixed with l-docs-accuracy-r1 in 4c7e2e9d6.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-28T02:31:20+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: Verdict warnings print only at settle, so an unexpected exception after a queued warning (run_report in proportionality_witness, evaluate in docs_witness) lost it
+
+fr.run.verdict.noted_on_crash attaches the queued warnings to an unexpected exception as notes, so the traceback shows them; proportionality_witness and docs_witness wrap their post-warning calls in it. Test test_a_crash_after_a_queued_warning_carries_the_warning failed first, then passed (44e211bc8).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved-2 created=2026-11-28T04:01:42+00:00 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved-2 · finding [fixed] · resolves p3-r2: tests/unit/test_deliver_local_stamp.py:508 docstring still names removed _deliver_exit_guard (cosmetic)
+
+The docstring at tests/unit/test_deliver_local_stamp.py:508 now names fr.run.deliver.deliver_exit_guard; it was updated in passing in phase 3, so nothing is left to file.

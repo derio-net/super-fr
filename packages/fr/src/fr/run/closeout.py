@@ -189,7 +189,7 @@ def _out_of_scope_findings(repo_root: Path, scope: str, slug: str) -> list[tuple
 def services_invalid_text(exc: Exception) -> str:
     """The one wording for an unreadable services declaration — the brief and
     `fr archive`'s open-ends step both print it."""
-    return f"the services declaration in .devcontainer/fr-profiles.yaml is invalid ({exc})"
+    return f"the services declaration in .fr/profiles.yaml is invalid ({exc})"
 
 
 def _tracker_note(repo_root: Path) -> tuple[str | None, str | None]:

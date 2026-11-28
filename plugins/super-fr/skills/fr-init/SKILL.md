@@ -25,7 +25,7 @@ Before asking anything, learn what the repo already says:
 - Languages and toolchains: manifests (pyproject/package.json/go.mod/...),
   lockfiles, `.tool-versions`, CI workflows (what does CI install?).
 - Existing `.devcontainer/` (profiles present? then this is an edit, not a green-field init),
-  incl. `.devcontainer/fr-profiles.yaml`'s `forge:`/`ci:`/`tracking:`.
+  incl. `.fr/profiles.yaml`'s `forge:`/`ci:`/`tracking:` (an unmigrated repo: `.devcontainer/fr-profiles.yaml`).
 - Which forge: `git remote get-url origin`'s hostname (`github.com` / `gitlab.com`
   self-identify; any other host is self-hosted: the operator confirms the backend explicitly).
 - Credential surface: `.env*` patterns in .gitignore, CI secret names,
@@ -86,9 +86,9 @@ Each call writes:
   checksummed `glab`/`tea` binary install for GitLab/Gitea — no official
   devcontainer feature exists for either) + mapped tool features + fr
   installed in postCreate + `--env-file` pointing at the host secrets path.
-- `.devcontainer/fr-profiles.yaml` — committed by scaffold; default profile, purpose, expected
+- `.fr/profiles.yaml` — committed by scaffold; default profile, purpose, expected
   secret keys, and the repo-level nested `forge:` / `ci:` / `tracking:` services (each `type`, optional
-  `host`; schema_version 2 — an older flat `backend`/`host` file is migrated by the CLI-entry gate).
+  `host`; schema_version 3 — the CLI-entry gate moves an older `.devcontainer/fr-profiles.yaml`, which scaffold extends at version 2 while only it exists). Under quiet/stealth the declarations live on the configuration branch (`fr-config`, `<branch>-config`; a change is a pull request): under quiet, scaffold writes the old path while that branch holds none, and once it does it refuses and says to add the profile to `.fr/profiles.yaml` there by a pull request (scaffold opens none); under stealth it refuses before writing anything.
 - `~/.config/fr/secrets/<repo>/<profile>.env` — host-only; commented
   placeholders per secret key. Existing operator values are never
   overwritten; re-runs only append missing placeholders.

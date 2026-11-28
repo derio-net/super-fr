@@ -1,0 +1,2 @@
+[31mstep/lens-review: --evidence review=r-x names no entry in the plan journal for p[0m
+  fr journal add --scope plan --slug p --kind review --global --title "the feature review" --body "<findings raised, by id; or 'no findings'>"

@@ -75,8 +75,7 @@ fr spec status --all            # every spec in docs/superpowers/specs/
 Output is markdown: per-plan state (Not Started / In Progress / Complete /
 Missing / Unreachable), step + phase counts, and an aggregate. Cross-repo
 plans resolve via the gh contents API; with `--no-gh` (or offline) they
-degrade to `Unreachable`. `.github/workflows/fr-spec-status.yml` posts this
-as a PR comment when a PR touching plans merges.
+degrade to `Unreachable`.
 
 `fr status <plan-dir>` is the read-only single-plan report: per-phase table,
 completion-guard refusals, drift warnings, archive nudge. Safe to allowlist:
