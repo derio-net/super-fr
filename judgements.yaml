@@ -13281,6 +13281,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-28T13:42:38.234603Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -14686,6 +14693,11 @@ batches:
     checks:
     - 2 failing check(s)
     delivered: none
+  - kind: approval
+    at: '2026-11-28T13:41:24.195706Z'
+    pr: 1755
+    head: cbf44258cd8a81bdf99840a3d39c0352c21b3d62
+    patch_id: f2caee1439d68ecefd1cfdad303ce7b815fc6dcf
 - id: silent-failures
   title: 'Silent failures: errors that report success or lose their reason'
   ids:

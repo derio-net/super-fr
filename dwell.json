@@ -1,0 +1,1755 @@
+{
+  "schema": 1,
+  "batches": {
+    "triage-privacy": {
+      "column": "proposed",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "queue",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "arch-plan-ops-record": {
+      "column": "proposed",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "queue",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "gitea-ci": {
+      "column": "proposed",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "queue",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "release-app-hardening-2": {
+      "column": "proposed",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "queue",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "arch-triage-ports": {
+      "column": "waiting",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "dependency",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "tester-gate-walker": {
+      "column": "waiting",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "dependency",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "s1-followups": {
+      "column": "pr-open",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "agent",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "ops-gate-truth": {
+      "column": "needs-reviewer",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "you",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "s2-alacarte-settings": {
+      "column": "needs-reviewer",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "you",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "tester-gate-auto-pass": {
+      "column": "needs-reviewer",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "you",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "board-session-state": {
+      "column": "needs-tester",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "you",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "arch-isolation-gc": {
+      "column": "closing-out",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "agent",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "arch-run-verdict": {
+      "column": "closing-out",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "agent",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "arch-triage-leaves": {
+      "column": "closing-out",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "agent",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "ci-hygiene": {
+      "column": "closing-out",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "agent",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "silent-failures": {
+      "column": "closing-out",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "agent",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "arch-card-clip": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "drive-cap-held": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "drive-forge-resilience": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "driver-pr-trust": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "unplaced-prs": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "arch-stage-dump": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "ci-health": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "ci-python-floor": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "drive-close-tabs": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "drive-closeout-recognition": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "drive-merge-train": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "drive-release-behind": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "drive-scoped-collect": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "housekeeping": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "opencode-observe-2": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "plan-and-records": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "verify-merge-false-landed": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "post-merge-install-lock": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "board-followups": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "triage-dedupe": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "triage-pages-goal": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "triage-state-integrity": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "acceptance-unittest-anchors": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "drive-checks-pending": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "forge-remainder": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "glab-host-trust": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "run-upgrade-midflight": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "debug-journal-push": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "drive-adopt-and-trust": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "drive-restart-forge": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "fr-binary-path": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "herdr-dispatch-reliability": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "opencode-tier-question": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "pickup-record-drift": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "release-major-plans": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "run-evidence-witness": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "verification-kinds": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "closing-keyword-gate": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "drive-board-lows": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "pages-deploy": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "state-sync-race": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "archive-followups": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "cost-evidence": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "driver-sessions": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "model-bindings": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "checks-latest-run": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "triage-claims": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "needs-you-columns": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "adopt-fixes": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "batch-finish-labels": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "models-hardening": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "adopt-multi-repo": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "claims-pr-authors": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "closeout-queue": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "issue-from-transcript": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "merge-queue": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "retire-vk": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "suite-health": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "deliver-evidence": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "gate-truth": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "guard-trust": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "owed-archive": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "acceptance-edits": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "placement-truth": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "release-truth": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "workspace-identity": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "suite-trust": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "triage-collect": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "triage-intake": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "consumer-delivery": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "docs-wording": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "dispatch-safety": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "owed-followups": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "run-durability": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "stealth-gitlab": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "train-truth": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "triage-pages": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "closeout-truth": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "hook-hardening": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "triage-hardening": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "consumer-followups": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "landing-method": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "merge-readiness": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "arch-isolation-split": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "arch-plan-ops-split": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "arch-run-ledger": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "arch-shared-helpers": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "closeout-state": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "export-drift": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "queue-followups": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "acceptance-init-commit": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "acceptance-init-no-ci": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "acceptance-integrity": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "apply-runner-units": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "archive-repair-scope": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "batch-launch": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "brainstorm-gate-advance": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "branch-diff-robustness": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "ci-hardening": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "closeout-always": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "closeout-always-2": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "closeout-run": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "closing-keywords": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "container-git-ownership": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "coverage-as-written": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "cursor-model": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "dedupe-filing": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "deliver-handoff": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "deliver-no-remote": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "forge-honesty": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "fr-binary-identity": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "gate-ordering": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "handoff-in-agents": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "herdr-short-labels": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "isolation-reap-names": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "isolation-timeouts": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "journal-clock": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "light-path": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "macos-log-path": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "one-phase-plans": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "opencode-identity": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "opencode-observe": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "opencode-xdg": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "package-lists": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "phase-sizing": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "phase-sizing-2": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "plan-inputs": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "plan-table-header": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "pr-body-cost": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "question-order": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "raw-input-relay": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "raw-input-relay-2": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "record-first-run": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "release-confidence": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "release-scripts": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "requirements-gate": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "requirements-gate-2": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "requirements-grammar": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "requirements-precheck": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "revert-detection": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "reverted-merge": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "runner-provisioning": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "service-split": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "service-split-2": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "spec-fidelity": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "spec-ref-followups": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "spec-ref-writers": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "spec-review-loop": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "tests-gate": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "tests-gate-remainder": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "tests-opencode-detach": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "tests-var-binding": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "tests-window": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "triage-themes": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "ui-evidence": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "ui-evidence-2": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "usage-accuracy": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "usage-opencode-empty": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "verify-merge-rewrites": {
+      "column": "done",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": null,
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    }
+  }
+}
