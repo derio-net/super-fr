@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-28-tester-gate-auto-pass-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-11-28T11:47:25+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-28T11:47:25+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: claude-opus-5-5
+          session: 67287b4e-799b-4e1a-89e1-f211d81a6415
   plan:
     state: pending
   plan-review:
