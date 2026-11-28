@@ -30,3 +30,13 @@ smoke task: one fixed-shape digest function, nothing to clean
 ### p1-review-1 · review · phase 1 review: no findings (R1-R7, R10 verified) (phase 1)
 
 An independent code reviewer (separate context) checked the phase 1 diff ce7f02608..8ca0e0471 against spec R1-R7 and R10, with file:line evidence for each. Confirmed: the digest is JSON-framed with required keyword args, and one function computes it (admit.py content_digest). Only v2 markers admit. The admit preview shows pinned comments and refuses before writing when a comment read fails. Collect's digest is None when comments were not read. The facts schema is 22, and loading older facts withholds again. The dispatch recheck reads comments with the repo's pr_authors and refuses when that read fails (admit_recheck.py; called from dispatch_batch in triage_batch_cmd.py). Outside authors' PR titles are withheld in every collection and every reader. A reopened PR is read again past a cut open-PR list. The orchestrator then checked two points itself. The double `viewed` count is the existing two-reads-per-PR accounting. The recheck sits inside dispatch_batch, the path the wave driver dispatches through. Findings: none.
+
+<!-- fr:journal kind=decision scope=plan id=p2-git-suffix created=2026-11-28T16:10:09+00:00 phase=2 -->
+### p2-git-suffix · decision · the owner/name pattern admits a trailing .git (phase 2)
+
+The spec's bound (?!\.\w) would reject https://host/acme/secret.git, which R8 requires to match, so the owner/name alternative takes an optional (?:\.git)? before the trailing bounds. Name#digits keeps the plain bounds.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-28T16:10:09+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+docs and acceptance row only; no code to clean
