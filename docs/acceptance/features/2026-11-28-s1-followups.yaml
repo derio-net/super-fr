@@ -62,8 +62,9 @@ rows:
     - spec:2026-11-28-s1-followups#R13
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: scenario tests/scenarios/s1-followups.sh is built in plan phase 4
     verify: candidate
+    scenario: tests/scenarios/s1-followups.sh
   - id: repos-manifest-home-at-call
     capability: fr repos
     acceptance: fr repos sync's default manifest is $HOME/.config/fr/repos.yaml as HOME
