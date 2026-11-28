@@ -42,6 +42,7 @@ rows:
     origin:
     - spec:2026-11-28-s1-followups#R7
     - spec:2026-11-28-s1-followups#R8
+    - spec:2026-11-28-s1-followups#R9
     levels: {}
     status: not-implemented
     notes: ''
