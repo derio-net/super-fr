@@ -192,3 +192,6 @@ row_kinds:
 run_gate: developer
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-28-s1-followups-p1 created=2026-11-28T08:22:14+00:00 -->
+### tier-2026-11-28-s1-followups-p1 · decision · hard: phase 1 changes the configuration readers, the settings writers and the movers every fr command relies on, behind a version gate that must hold on both sides
