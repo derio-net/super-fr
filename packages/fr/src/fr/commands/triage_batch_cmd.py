@@ -6980,9 +6980,9 @@ class _Driver:
             except _GATE_WRITE_FAILURES as exc:
                 self._queue_entry_failed(repo, key, live.number, "ready", exc)
                 return None
-        return EntryInput(key=key, ref=QueueEntryRef(batch=key), pr=pr.number, title=pr.title,
-                          head=live.head, head_ref=live.head_ref or pr.head_ref,
-                          bump=batch.bump)  # fmt: skip
+        return EntryInput(key=key, ref=QueueEntryRef(batch=key), pr=pr.number,
+                          title=pr.title or batch.title, head=live.head,
+                          head_ref=live.head_ref or pr.head_ref, bump=batch.bump)  # fmt: skip
 
     def _queue_entry_failed(
         self, repo: str, key: str, number: int, what: str, exc: Exception

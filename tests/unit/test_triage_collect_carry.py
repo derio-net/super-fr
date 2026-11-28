@@ -328,7 +328,7 @@ def test_a_judged_pr_past_the_limit_is_viewed_and_recorded() -> None:
         False,
     )
     assert pr.url == f"https://github.com/{REPO}/pull/7"
-    assert (pr.merged_at, pr.created_at, pr.author) == (None, None, None)
+    assert (pr.merged_at, pr.created_at, pr.author) == (None, None, "operator")
     assert facts.unviewed == []
     assert all(i.number != 7 for i in facts.issues)
 

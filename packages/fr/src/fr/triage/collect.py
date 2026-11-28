@@ -584,12 +584,40 @@ def _withhold_untrusted_text(
     return out
 
 
-def _withhold_untrusted(facts: Facts) -> Facts:
-    """*facts* with every outsider's text withheld: the one pass collect writes through and
-    `load_facts` of an older schema runs (2026-11-28-triage-privacy R4, R6)."""
+def _withhold_untrusted_pr_titles(facts: Facts) -> Facts:
+    """*facts* with every PR's title cleared unless its author is in the claim-trust set of
+    the PR's repo (the user collect ran as, and `pr_authors`), compared case-insensitively;
+    a PR whose author was not read keeps none (2026-11-28-triage-privacy R6). Covers every
+    PR facts hold: the top-level lists and each issue's linked PRs."""
+
+    def keep(pr: PullRequest) -> PullRequest:
+        trusted = claim_trusted(facts.config_for(pr.repo), facts.viewer)
+        if not pr.title or (pr.author is not None and pr.author.lower() in trusted):
+            return pr
+        return pr.model_copy(update={"title": ""})
+
     return facts.model_copy(
+        update={
+            "prs": [keep(p) for p in facts.prs],
+            "gated_prs": [keep(p) for p in facts.gated_prs],
+            "batch_prs": [keep(p) for p in facts.batch_prs],
+            "judged_prs": [keep(p) for p in facts.judged_prs],
+            "issues": [
+                i.model_copy(update={"prs": [keep(p) for p in i.prs]}) if i.prs else i
+                for i in facts.issues
+            ],
+        }
+    )
+
+
+def _withhold_untrusted(facts: Facts) -> Facts:
+    """*facts* with every outsider's text withheld: issue titles and bodies, and PR titles.
+    The one pass collect writes through and `load_facts` of an older schema runs
+    (2026-11-28-triage-privacy R4, R6)."""
+    facts = facts.model_copy(
         update={"issues": _withhold_untrusted_text(facts.issues, facts.config, facts.viewer)}
     )
+    return _withhold_untrusted_pr_titles(facts)
 
 
 def _judged_elsewhere(
@@ -924,6 +952,7 @@ def collect_facts_counted(
                     is_draft=bool(view.get("draft")),
                     url=str(raw["url"]),
                     head_ref=str(view.get("head_ref") or ""),
+                    author=_login(raw),
                 )
             )
             continue

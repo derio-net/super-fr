@@ -1639,3 +1639,88 @@ def test_a_viewed_ineligible_issue_keeps_no_title() -> None:
     facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW, judged=["outside#5"])
     issue = next(i for i in facts.issues if i.number == 5)
     assert (issue.title, issue.body) == ("", "")
+
+
+# ------------------------------- PR titles withheld (2026-11-28-triage-privacy R6)
+
+
+def _pr_by(
+    number: int, author: str | None, *, closes: int | None = None, state: str = "OPEN"
+) -> dict[str, Any]:
+    raw = _pr_closing(owner="example-org", name="outside", number=closes or 1, pr_number=number)
+    raw["title"] = f"title of #{number}"
+    raw["state"] = state
+    raw["author"] = {"login": author} if author else None
+    if closes is None:
+        raw["closingIssuesReferences"] = []
+    return raw
+
+
+def test_an_outside_authors_pr_is_stored_with_no_title_in_every_list() -> None:
+    forge = _assoc_forge([_by(1, "operator")])
+    forge.prs[_OUTSIDE] = [
+        _pr_by(10, "eve"),  # unlinked, open: `prs`
+        _pr_by(11, "eve", closes=1),  # an issue's linked PR
+        _pr_by(12, "operator"),  # the viewer keeps its title
+        _pr_by(13, None),  # an author that was not read
+    ]
+    forge.gated = {
+        _OUTSIDE: [{**_pr_by(14, "eve", state="MERGED"), "labels": [{"name": "gate:tester"}]}]
+    }
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    by = {p.number: p.title for p in facts.prs}
+    assert by == {10: "", 12: "title of #12", 13: ""}
+    assert [(p.number, p.title) for p in facts.issues[0].prs] == [(11, "")]
+    assert [(p.number, p.title) for p in facts.gated_prs] == [(14, "")]
+
+
+def test_a_judged_pr_past_the_list_is_withheld_unless_its_author_is_trusted() -> None:
+    def pull(number: int, author: str) -> dict[str, Any]:
+        return {
+            **_viewed(number, author),
+            "title": "outsider text",
+            "url": f"https://github.com/{_OUTSIDE}/pull/{number}",
+        }
+
+    forge = _assoc_forge([_by(1, "operator")])
+    forge.closed = {(_OUTSIDE, 5): pull(5, "eve"), (_OUTSIDE, 6): pull(6, "operator")}
+    forge.pr_views = {(_OUTSIDE, n): {"state": "MERGED", "draft": False} for n in (5, 6)}
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW, judged=["outside#5", "outside#6"])
+    assert {p.number: p.title for p in facts.judged_prs} == {5: "", 6: "outsider text"}
+
+
+def test_the_withholding_pass_covers_batch_prs_and_compares_logins_case_insensitively() -> None:
+    from fr.triage.collect import _withhold_untrusted
+    from fr.triage.model import PullRequest, TriageConfig
+
+    def pr(n: int, author: str | None) -> PullRequest:
+        return PullRequest(
+            repo=_OUTSIDE, number=n, title="t", state="OPEN", is_draft=False, url="u", author=author
+        )
+
+    facts = Facts(
+        schema=FACTS_SCHEMA,
+        scope="s",
+        kind="repo",
+        collected_at="2026-11-01T00:00:00+00:00",
+        repos=[_OUTSIDE],
+        issues=[],
+        viewer="Operator",
+        config={_OUTSIDE: TriageConfig(pr_authors=["Release-Bot"])},
+        batch_prs=[pr(1, "eve"), pr(2, "RELEASE-bot"), pr(3, "operator")],
+    )
+    got = _withhold_untrusted(facts)
+    assert [p.title for p in got.batch_prs] == ["", "t", "t"]
+
+
+def test_a_schema_21_file_loads_with_outside_pr_titles_withheld(tmp_path: Path) -> None:
+    from fr.triage.model import load_facts
+
+    forge = _assoc_forge([_by(1, "operator")])
+    forge.prs[_OUTSIDE] = [_pr_by(10, "eve")]
+    doc = collect_facts(forge, _ASSOC_SCOPE, now=NOW).to_json()
+    doc["schema"] = 21
+    doc["prs"][0]["title"] = "what a schema-21 writer kept"
+    path = tmp_path / "facts.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    assert [p.title for p in load_facts(path).prs] == [""]
