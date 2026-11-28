@@ -67,9 +67,14 @@ rows:
     - spec:2026-11-27-ops-gate-truth#R12
     - spec:2026-11-27-ops-gate-truth#R13
     - spec:2026-11-27-ops-gate-truth#R14
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate.py#test_stage_5_asks_about_an_unwalked_devops_row_no_ran_step_names
+      - super-fr:tests/unit/test_ops_gate.py#test_stage_6_lists_what_the_devops_gate_owes_and_the_row_recovery
+      - super-fr:tests/unit/test_ops_gate.py#test_stage_7_reports_the_tester_gates_rows_and_steps
+    status: ci
+    notes: 'unit tests with fake ports and fixture repos, run in this PR''s CI (spec
+      Verification: none)'
   - id: ops-gate-reports-a-held-archive
     capability: 'fr ops gate: honest archive stage'
     acceptance: The DevOps stage reports archived only when the plan moved, and reports
