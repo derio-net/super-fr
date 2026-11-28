@@ -147,3 +147,8 @@ run_kind: candidate
 ### lettered-requirement-ids · decision · operator: accept R<n><letter> ids (R9a) in reader, migration and validator rather than renumber or archive triage-leaves-split
 
 Phase 1 blocked: the 1->2 rewrite refused docs/superpowers/specs/2026-11-27-triage-leaves-split-design.md:57 (R9a). Asked the operator; answer: Accept R<n><letter> ids (recommended). Spec R1 amended: an id is R<n>, optionally followed by one lowercase letter; R3 refuses an id-like line that is not an R1 id. Consumer repos using the same insert-without-renumbering habit no longer hit a whole-repo refusal.
+
+<!-- fr:journal kind=decision scope=spec id=fold-multi-paragraph created=2026-11-28T16:01:01+00:00 -->
+### fold-multi-paragraph · decision · operator: fold a multi-paragraph requirement into its cell with <br> instead of refusing it as prose between requirements
+
+After merging main, the 1->2 rewrite refused docs/superpowers/specs/2026-11-27-ops-gate-truth-design.md:107 (R10: a paragraph, a bullet list, a paragraph). 9 of 76 archived list specs hold that shape, so consumer repos would hit a whole-repo refusal. Asked the operator; answer: Fold into the cell (recommended). R3: everything up to the next requirement line, heading or section end belongs to the requirement; paragraphs join with <br>, bullets start a new <br> keeping the bullet. R5 no longer refuses prose between requirements.
