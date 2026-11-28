@@ -243,3 +243,8 @@ marker.ts mirrors the shell library one-for-one (same guard points, same fail-cl
 ### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
 
 the validator change is one key read and one branch; restructured the branch once in GREEN (an if around the old case) instead of overloading FR_PLACEMENT_SEEN
+
+<!-- fr:journal kind=decision scope=plan id=p2-old-only-switch-reads-its-text created=2026-11-28T16:51:04+00:00 phase=2 decided_by=agent -->
+### p2-old-only-switch-reads-its-text · decision · Past the end an old-only switch is fr-enabled only when its text would be; supersedes p2-old-only-switch-text (phase 2)
+
+Supersedes p2-old-only-switch-text (review p2-r1). The spec's design §C and plan step P2.T2.S2 keep fr-enabled only an old-only switch NAMING QUIET; failing closed on any old-only switch made a plain repo with an unrelated `fr` branch holding a root settings.yaml (`placement: repo`, or no placement line) fr-enabled at 9.2, denying every base-clone edit in it. Both engines now read the old blob in the ended branch and feed it to `_fr_switch_enabled` / `switchEnabled` for the enabled answer only: a text that would be enabled (quiet, or a spelling that fails closed) becomes the non-canonical `placement: only the old switch`, so it is never quiet and its worktrees are never write targets (R8); any other text is returned as is and the repo is not fr-enabled. Shared cases: `old-only-repo` ended.enabled is false, new `old-only-no-placement`; `old-only-quiet` keeps ended (read, enabled, not quiet).
