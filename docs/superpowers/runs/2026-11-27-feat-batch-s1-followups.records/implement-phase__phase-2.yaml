@@ -77,5 +77,19 @@ journal:
       so they were never seen red; the validator tests of the same step were (3 failed before
       GREEN). The literal regexes require each value exactly once with its `fr-refuse-from`
       tag, so a drift or a second copy fails them.
+  - kind: discovery
+    id: p2-fast-tier-legacy-validator-tests
+    phase: 2
+    title: The fast tier caught three open-side validator tests that relied on "no fr reads the old file"
+    body: |
+      `uv run pytest --fr-scope origin/main -n 6 -q --no-cov` (1:26:04 on a host at load ~100):
+      3 failed, 20149 passed, 130 skipped. The three were
+      tests/unit/test_config_legacy_paths.py's `test_validate_plans_reads_the_old_plan_config_with_a_notice`
+      and `test_validate_plans_ignores_the_old_plan_config_under_quiet_and_stealth[quiet|stealth]`:
+      with no fr, or a stub fr that printed no `FR_OLD_PATHS_ENDED`, the validator now counts
+      the transition as ended (R7). They now give the validator a stub fr printing
+      `FR_OLD_PATHS_ENDED=0`, the validator's own version source, so they stay on the open
+      side whatever fr's version; the module passes with and without `--fr-ended`. The other
+      v-r2 tests there (no fr beside a configuration branch) hold on both sides unchanged.
 resolves: []
 evidence: {}
