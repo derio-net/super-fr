@@ -1873,6 +1873,11 @@ def two_derived_refusals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tup
 
     body = "\n\n".join(f"{h}\n\nNone." for h in REQUIRED_SECTIONS)
     monkeypatch.setattr(gh, "view_pr_body", lambda ref, *, cwd=None: body)
+    # The capture was taken under Claude Code with no readable transcript; pin that
+    # harness so the unobserved-tests reason reads the same in CI, where none is detected.
+    monkeypatch.setenv("FR_HARNESS", "claude-code")
+    for var in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID"):
+        monkeypatch.delenv(var, raising=False)
     root = _at_deliver(tmp_path)
     monkeypatch.setattr(
         "fr.run.evidence.derived.proportionality_base",
