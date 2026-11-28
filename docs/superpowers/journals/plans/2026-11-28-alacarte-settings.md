@@ -369,3 +369,8 @@ Filed at deliver as https://github.com/derio-net/super-fr/issues/1767.
 ### l-security-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1768] · resolves l-security-r4: The transcript approval stealth relies on can be supplied by any process that sets FR_TRANSCRIPT_ROOT and the session id
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1768.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r5-resolved-2 created=2026-11-28T10:40:16+00:00 state=open resolves=l-security-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1769 -->
+### l-security-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1769] · resolves l-security-r5: Other product-repo writers (triage batch publish and create_pr, debt create_pr, the ops gate push) never consult git.push/git.pr
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1769.
