@@ -1382,7 +1382,7 @@ for a flag that bends this one.
 | Model per phase tier | `~/.config/fr/models.yaml` | Chooses which model implements a phase of a given difficulty. |
 | Manual-phase placement | Dependency on human action | Selects back-loaded continuation or front-loaded pause. |
 | Repository topology | Local and cross-repo spec references | Produces one plan and PR per repository. |
-| Repo settings | `.fr/settings.yaml`, read from the default branch (quiet: `settings.yaml` on `origin/fr`; stealth: `<target-dir>/settings.yaml` on the tracking branch) | Turns policy features off, quiets the forge, sets the git policy, and (quiet) moves fr's records onto the `fr` branch. |
+| Repo settings | `.fr/settings.yaml`, read from the default branch (quiet: `settings.yaml` on `origin/fr`; stealth: `<target-dir>/settings.yaml` on the tracking branch) | Turns policy features off, withdraws workflow shapes, drops informational PR-body sections, quiets the forge, sets the git policy, and (quiet) moves fr's records onto the `fr` branch. |
 
 ### What can the repo settings change?
 
@@ -1409,6 +1409,16 @@ does not quietly fall back to the defaults.
   stays in the journal. `forge.pr_body: minimal` keeps the live pull request to
   a plain summary. The full body fr renders stays in the run's directory as
   `<run-id>.pr-body.md`, and that is what you review.
+
+- **Fewer PR-body sections.** `forge.pr_sections` (settings `schema: 3`) takes
+  `proportionality`, `cost` and `settle`, each `on` or `off`. An off section is
+  left out of the PR body and `deliver` no longer requires it. The settle check
+  itself still runs; only its section goes.
+
+- **Fewer workflow shapes.** `workflows.disabled` (settings `schema: 3`) lists
+  shapes the repository does not offer. `fr run start`, a brainstorm's `shape:`
+  change and `fr run adopt` refuse a listed shape and name the ones still
+  available. A run that already started on it keeps going.
 
 - **Asking before a push or a pull request.** The skills push with `fr push` and
   open the draft with `fr pr create`, never with `git push` or the forge's own
@@ -1771,7 +1781,8 @@ pushes both. Run again after an interrupted push, it pushes what it already
 committed.
 
 Under stealth there is no second side to commit on, because fr never commits
-on, or pushes, the target's branch. A stealth branch's own commits may carry
+its own files on the target's branch, and pushes it only through `fr push`, on
+your approval. A stealth branch's own commits may carry
 fr's files (a spec committed with `git add -A`, say). Then `fr push` refuses
 and names them. `fr placement migrate-branch` copies them into the tracking
 repository, then refuses too. It lists the unpushed commits that carry them and
