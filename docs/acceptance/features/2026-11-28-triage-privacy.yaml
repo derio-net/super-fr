@@ -33,9 +33,12 @@ rows:
     origin:
     - spec:2026-11-28-triage-privacy#R6
     - spec:2026-11-28-triage-privacy#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect.py#test_an_outside_authors_pr_is_stored_with_no_title_in_every_list
+      - super-fr:tests/unit/test_triage_pr_title_withheld.py#test_the_queue_subject_of_a_batch_pr_with_no_title_uses_the_batchs_title
+    status: ci
+    notes: 'unit tests: collect lists, older-schema load, check, render, queue subject'
     verify: none
   - id: triage-state-scan-guard
     capability: triage-privacy
