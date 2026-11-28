@@ -1,7 +1,8 @@
 // Shared marker-resolution logic: given a file path, walk up to the nearest
 // existing ancestor directory, resolve the git toplevel, decide whether the
 // repo is "fr-enabled", and check for a valid .fr-isolation marker or
-// .fr/isolation-allow escape (`.fr-isolation-allow` is its fallback, S1 R8, R13).
+// .fr/isolation-allow escape (`.fr-isolation-allow` is its fallback before fr 9.2, S1 R8,
+// R13; spec 2026-11-28-s1-followups R7).
 // Extracted so both the deny path and any future
 // caller (e.g. a status/debug tool) share one source of truth — mirrors
 // fr-isolation-required.sh's own separation between marker lookup and the
@@ -24,6 +25,7 @@
 import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { resolveFr } from "./fr";
 import { git } from "./git";
@@ -203,6 +205,60 @@ function commonDirOf(toplevel: string): string | null {
 }
 
 /**
+ * S1's transition ends at fr 9.2 (spec 2026-11-28-s1-followups R7-R9): from then on (every
+ * 9.2 pre-release included) the old forms are no longer read — the old allowlist
+ * `.fr-isolation-allow`, a placement from the old switch `origin/fr:settings.yaml`, the
+ * note about two differing switches. The same line as `fr.config.transition.REFUSE_FROM`
+ * and the shell library's `FR_REFUSE_FROM` (tests/unit/test_transition_gate.py keeps the
+ * three equal).
+ */
+export const REFUSE_FROM = [9, 2] as const; // fr-refuse-from
+
+const PACKAGE_NAME = "@derio-net/fr-opencode-plugin";
+const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
+let versionDir = MODULE_DIR;
+
+/** Where the release is read from: this module's directory, or *dir* (tests pin a side). */
+export function setVersionDir(dir: string | undefined): void {
+  versionDir = dir ?? MODULE_DIR;
+}
+
+function majorMinor(version: unknown): [number, number] | undefined {
+  const m = typeof version === "string" ? /^\s*(\d+)\.(\d+)/.exec(version) : null;
+  return m ? [Number(m[1]), Number(m[2])] : undefined;
+}
+
+/**
+ * This plugin's release line: `VERSION` beside the module, which
+ * scripts/deliver-opencode-plugin.sh writes into the delivered plugin; else, in the source
+ * tree, this package's own package.json one directory up (never another package's).
+ */
+function releaseLine(dir: string): [number, number] | undefined {
+  try {
+    const line = majorMinor(readFileSync(join(dir, "VERSION"), "utf-8"));
+    if (line) return line;
+  } catch {
+    // no VERSION: the source tree
+  }
+  try {
+    const pkg = JSON.parse(readFileSync(join(dir, "..", "package.json"), "utf-8"));
+    return pkg?.name === PACKAGE_NAME ? majorMinor(pkg.version) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Whether S1's transition has ended: `FR_OLD_PATHS=refuse`, else this plugin's release is
+ * at or above `REFUSE_FROM`; a release that cannot be read counts as ended. Bash:
+ * `_fr_transition_ended`. */
+export function transitionEnded(): boolean {
+  if (process.env.FR_OLD_PATHS === "refuse") return true;
+  const line = releaseLine(versionDir);
+  if (!line) return true;
+  return line[0] > REFUSE_FROM[0] || (line[0] === REFUSE_FROM[0] && line[1] >= REFUSE_FROM[1]);
+}
+
+/**
  * The quiet switch's locations, newest first (spec 2026-11-19-event-driven-a-la-carte S1
  * R5, R13): `.fr/settings.yaml` on `fr-config`, then the old root `settings.yaml` on `fr`.
  * The shell library's `FR_SWITCH_NEW` / `FR_SWITCH_OLD` are the same two, and
@@ -216,8 +272,12 @@ export const SWITCH_LOCATIONS = [
 /** What a switch reads as when the two files differ: fr-enabled, never canonical quiet. */
 const DIFFERING_SWITCHES = "placement: two switches that differ";
 
+/** What an old-only switch reads as past the end (R8): fr-enabled, never canonical quiet. */
+const OLD_SWITCH_ONLY = "placement: only the old switch";
+
 /**
- * The switch's text: the file at `SWITCH_LOCATIONS[0]`, else the one at `[1]` (R13);
+ * The switch's text: the file at `SWITCH_LOCATIONS[0]`, else (before fr 9.2 only) the one
+ * at `[1]` (R13);
  * `undefined` when neither can be read. Two files that are both there and differ (by
  * blob, so byte for byte, as fr compares them, R6) read as a text `switchEnabled` calls
  * fr-enabled and `switchIsQuiet` never calls quiet (fail closed). Bash: `_fr_read_switch`.
@@ -232,12 +292,18 @@ export const SWITCH_DIFFER_NOTE =
 
 /** `SWITCH_DIFFER_NOTE` (with a leading space) when *toplevel*'s two switches differ, else "". */
 export function switchDifferNote(toplevel: string): string {
-  if (!switchRefMaybe(toplevel)) return "";
+  if (transitionEnded() || !switchRefMaybe(toplevel)) return ""; // no old copy past fr 9.2
   return readSwitch(toplevel) === DIFFERING_SWITCHES ? ` ${SWITCH_DIFFER_NOTE}` : "";
 }
 
 export function readSwitch(toplevel: string): string | undefined {
   const [fresh, old] = SWITCH_LOCATIONS.map((at) => git(toplevel, "rev-parse", "--verify", "--quiet", at));
+  if (transitionEnded()) {
+    // Past the end only the new switch is read (R7); an old one alone is fr-enabled, never
+    // quiet, so its worktrees are no write targets (R8, fail closed).
+    if (fresh === undefined) return old === undefined ? undefined : OLD_SWITCH_ONLY;
+    return git(toplevel, "cat-file", "-p", fresh);
+  }
   if (fresh !== undefined && old !== undefined && fresh !== old) return DIFFERING_SWITCHES;
   const blob = fresh ?? old;
   return blob === undefined ? undefined : git(toplevel, "cat-file", "-p", blob);
@@ -460,9 +526,10 @@ export function allowlistProtected(toplevel: string, file: string, rel: string):
 
 function matchesAllowlist(toplevel: string, file: string): boolean {
   // `.fr/isolation-allow` in the working tree (S1 R8), never read from a ref; the old
-  // `.fr-isolation-allow` only while it is absent (R13). Bash: the same two-path lookup.
+  // `.fr-isolation-allow` only while it is absent (R13), before fr 9.2 only
+  // (spec 2026-11-28-s1-followups R7). Bash: the same lookup.
   const fresh = `${toplevel}/.fr/isolation-allow`;
-  const allowPath = isFile(fresh) ? fresh : `${toplevel}/.fr-isolation-allow`;
+  const allowPath = isFile(fresh) || transitionEnded() ? fresh : `${toplevel}/.fr-isolation-allow`;
   if (!isFile(allowPath)) return false;
   // Symlink-robust: resolve the file's existing-ancestor dir the same way
   // `toplevel` was resolved, so a macOS /tmp -> /private/tmp mismatch doesn't

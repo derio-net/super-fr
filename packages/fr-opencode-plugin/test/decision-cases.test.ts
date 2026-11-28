@@ -3,7 +3,7 @@
 // drives through the bash library. A logic edit to one engine alone fails one of the two suites.
 import { describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -13,9 +13,11 @@ import {
   placementEnabled,
   readSwitch,
   resetFrPaths,
+  setVersionDir,
   stealthHeadMatches,
   switchIsQuiet,
 } from "../src/marker";
+import { OPEN_VERSION_DIR } from "./setup";
 
 type Side = null | { settings: string | null };
 const CASES = JSON.parse(
@@ -58,9 +60,20 @@ function withoutFr<T>(run: () => T): T {
   }
 }
 
+type Answers = { read: boolean; enabled: boolean; quiet: boolean };
+
+// Each switch case runs on both sides of S1's transition (spec 2026-11-28-s1-followups R7,
+// R8, R10): the preload pins 9.1.0, and the ended side reads a fixture VERSION of 9.2.0.
+const ENDED_VERSION_DIR = mkdtempSync(join(tmpdir(), "fr-ended-version-"));
+writeFileSync(join(ENDED_VERSION_DIR, "VERSION"), "9.2.0\n");
+
 describe("shared cases: switch", () => {
-  for (const c of CASES.switch as { id: string; new: Side; old: Side; read: boolean; enabled: boolean; quiet: boolean }[]) {
-    test(c.id, () => {
+  for (const [side, c] of (CASES.switch as ({ id: string; new: Side; old: Side; ended: Answers } & Answers)[]).flatMap(
+    (c) => [["open", c] as const, ["ended", c] as const],
+  )) {
+    test(`${c.id} (${side})`, () => {
+      const want = side === "open" ? c : c.ended;
+      setVersionDir(side === "open" ? OPEN_VERSION_DIR : ENDED_VERSION_DIR);
       const root = realpathSync(mkdtempSync(join(tmpdir(), "fr-cases-")));
       try {
         const repo = join(root, "r");
@@ -72,12 +85,13 @@ describe("shared cases: switch", () => {
         withoutFr(() => {
           const text = readSwitch(repo);
           expect([text !== undefined, placementEnabled(repo), text !== undefined && switchIsQuiet(text)]).toEqual([
-            c.read,
-            c.enabled,
-            c.quiet,
+            want.read,
+            want.enabled,
+            want.quiet,
           ]);
         });
       } finally {
+        setVersionDir(OPEN_VERSION_DIR);
         rmSync(root, { recursive: true, force: true });
       }
     });
