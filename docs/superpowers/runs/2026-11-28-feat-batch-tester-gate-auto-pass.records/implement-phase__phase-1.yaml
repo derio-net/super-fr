@@ -1,0 +1,31 @@
+schema_version: 12
+run: 2026-11-28-feat-batch-tester-gate-auto-pass
+step: implement-phase
+item: phase/1
+outcome: done
+ticks:
+  - P1.T1.S1
+  - P1.T1.S2
+  - P1.T1.S3
+  - P1.T2.S1
+  - P1.T2.S2
+  - P1.T3.S1
+  - P1.T3.S2
+  - P1.T4.S1
+  - P1.T4.S2
+  - P1.T4.S3
+  - P1.T5.S1
+  - P1.T5.S2
+  - P1.T5.S3
+refactor:
+  P1.T2: "drive_pass gained one three-line loop over loose ledgers calling the shared gate_actions; nothing to clean"
+  P1.T3: "gated_rows_at/_run_text gained an optional pr branch beside the unchanged first-match path; nothing to clean"
+  P1.T5: "rows, docs stamps and the change fragment only; no code to clean"
+journal:
+  - kind: discovery
+    id: p1-gated-rows-at-kw
+    phase: 1
+    title: "a batch read must not pass pr= to gated_rows_at"
+    body: "Existing tests monkeypatch triage_batch_cmd.gated_rows_at with a (checkout, ref, branch) signature, so Driver._gated_rows passes the pr keyword only for a loose PR (triage_drive_loose._pr_kw). triage_batch_cmd.py ends at exactly its 8320-line budget; the new reads and the loose action live in triage_drive_loose.py."
+resolves: []
+evidence: {}
