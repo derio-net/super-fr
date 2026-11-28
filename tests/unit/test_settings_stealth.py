@@ -378,9 +378,10 @@ def test_an_explicit_push_auto_in_the_tracking_file_is_refused(tmp_path: Path) -
     assert "git.push" in load_settings(state.worktree).contrary
     problems = check_settings(state.worktree)
     assert [p.id for p in problems] == ["stealth-forge-explicit"]
-    assert "git.push" in problems[0].message and "git.pr" not in problems[0].message.split(
-        " is set"
-    )[0]
+    assert (
+        "git.push" in problems[0].message
+        and "git.pr" not in problems[0].message.split(" is set")[0]
+    )
 
 
 def test_config_change_prs_follow_the_tracking_files_own_git_pr(tmp_path: Path) -> None:

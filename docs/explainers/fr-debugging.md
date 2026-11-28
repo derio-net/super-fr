@@ -13,7 +13,7 @@ covers:
   - plugins/super-fr/skills/fr-debugging/SKILL.md
   - packages/fr/src/fr/journal/**
   - packages/fr/src/fr/commands/journal_cmd.py
-reviewed: 2026-11-27 still true; shared-helper refactor (batch arch-shared-helpers), no behaviour change; 2026-11-25 a reused workspace starts a run only when its branch has none, fr run stays on the host, the review entry goes through the step record; 2026-11-25 the skill starts the shipped fr-debugging run (debug, review, deliver) and resolves each step with a record (batch-merge-readiness R10, R11); 2026-11-23 fr pr settle warns on a branch with two debug journals and applies the repo setting (lens review); 2026-11-23 the last step waits for the PR to settle, with three fix rounds at most (pr-readiness-wait R10); 2026-11-15 owed-archive-side-effects phase 1, owed issues are closed by reading the one issue; the page is still true
+reviewed: 2026-11-28 under stealth every code push asks, nothing is pushed before deliver, with its resume and transcript limits (alacarte R10); 2026-11-27 still true; shared-helper refactor (batch arch-shared-helpers), no behaviour change; 2026-11-25 a reused workspace starts a run only when its branch has none, fr run stays on the host, the review entry goes through the step record; 2026-11-25 the skill starts the shipped fr-debugging run (debug, review, deliver) and resolves each step with a record (batch-merge-readiness R10, R11); 2026-11-23 fr pr settle warns on a branch with two debug journals and applies the repo setting (lens review); 2026-11-23 the last step waits for the PR to settle, with three fix rounds at most (pr-readiness-wait R10); 2026-11-15 owed-archive-side-effects phase 1, owed issues are closed by reading the one issue; the page is still true
 ---
 
 ## Why is "just try something" the expensive path?
@@ -90,6 +90,14 @@ repository, `mode=stealth target=<path>`), the skill adds `--stealth` (or `--tar
 that `fr run start`. The debug journal and every other fr record then live in the tracking
 repository. The target receives only the fix and one draft pull request with a plain
 summary.
+
+Under stealth no code reaches the target until you say so. Stealth sets `git.push` and
+`git.pr` to `ask`, so the skill pushes nothing before `deliver`. Then `fr push` and
+`fr pr create` each stop and ask you to approve, and a later push that fixes the PR asks
+again. This has two costs. Until that first push the fix exists only on the host that
+wrote it, so resuming on another host before `deliver` does not bring it along. And fr
+can only check your approval where it can read the session's transcript. On a harness
+where it cannot, a stealth session stops at `deliver` and tells you.
 
 ## When does it stop and ask you?
 

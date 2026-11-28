@@ -1,0 +1,2 @@
+bump: minor
+summary: "Settings schema 3: workflows.disabled withdraws a workflow shape, forge.pr_sections turns the Proportionality, Cost and PR settle sections off, and stealth asks before every code push (git.push and git.pr forced to ask)"

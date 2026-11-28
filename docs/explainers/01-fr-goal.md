@@ -28,7 +28,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/defaults/workflows/fr-goal.yaml
-reviewed: 2026-11-25 the shipped shapes moved to `plugins/super-fr/defaults/workflows/` (S1 R15), and a repo's own shape lives in `.fr/workflows/` in its configuration space, used under quiet or stealth only while that branch is protected (S1 R7, R9); 2026-11-24 the spec carries a design shape, the lens reviewers read the run shape file, and the PR shows it as Shape of the change (show-me-visuals); 2026-11-23 the settle check is the last deliver check, after the description read-back; a merged PR settles and a closed one is refused (lens review); the agent settles the PR before and after deliver, three fix rounds at most (R9, R10); deliver checks that the draft PR has settled, merges cleanly and has finished CI, under git.settle (pr-readiness-wait); 2026-11-21 a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
+reviewed: 2026-11-28 stealth forces git.push and git.pr to ask; no per-phase push, the first push at deliver asks, with its resume and transcript limits (alacarte R7-R10); 2026-11-25 the shipped shapes moved to `plugins/super-fr/defaults/workflows/` (S1 R15), and a repo's own shape lives in `.fr/workflows/` in its configuration space, used under quiet or stealth only while that branch is protected (S1 R7, R9); 2026-11-24 the spec carries a design shape, the lens reviewers read the run shape file, and the PR shows it as Shape of the change (show-me-visuals); 2026-11-23 the settle check is the last deliver check, after the description read-back; a merged PR settles and a closed one is refused (lens review); the agent settles the PR before and after deliver, three fix rounds at most (R9, R10); deliver checks that the draft PR has settled, merges cleanly and has finished CI, under git.settle (pr-readiness-wait); 2026-11-21 a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
 ---
 
 ## What does fr-goal do?
@@ -1610,6 +1610,21 @@ the branch:
 - the branch ahead: it records the new head again (the last step's
   bookkeeping);
 - the state ahead: it refuses, naming the commit the branch lacks.
+
+Under stealth, code reaches the target only after you approve it. Stealth sets
+`git.push` and `git.pr` to `ask`, whatever the tracking file says, and
+`fr settings check` refuses a tracking file that sets either one to `auto`.
+So no phase pushes: each phase proves its work with a local test log, never
+with `tests: ci`, because `tests: ci` needs a push. The first code push is when
+`deliver` opens. There `fr push` asks you to approve it, `fr pr create` asks
+again, and every later push that adds code asks once more. fr's own records
+still go to the tracking repository on every write, without asking.
+
+That has two costs. Until the first push, the phases' code exists only on the
+host that wrote it, so a `--resume` on another host before `deliver` does not
+bring it along. And fr checks your approval by reading the session's
+transcript. On a harness where it cannot, a stealth run cannot push or open its
+pull request through fr, and stops when `deliver` opens.
 
 fr refuses runner dispatch (`fr apply --to`) under stealth, as under quiet.
 
