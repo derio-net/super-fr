@@ -139,3 +139,8 @@ The automated security review of the l-security-r2 fix found this. Comparing log
 What is left fails closed. If a bot is listed with its [bot] suffix, an admission made under one API mode is voided under the other. Listing the bot by its bare login avoids this.
 
 The fix is to carry the account type (REST user.type, GraphQL __typename) in both comment adapters, and to match x[bot] only against an author whose type is Bot. That needs a GraphQL comment query beyond gh issue view --json comments.
+
+<!-- fr:journal kind=finding scope=plan id=bot-account-type-resolved created=2026-11-28T16:52:04+00:00 state=open resolves=bot-account-type out_of_scope=true -->
+### bot-account-type-resolved · finding [out-of-scope] · resolves bot-account-type: Comment adapters do not report whether an author is a bot, so a pr_author listed as x[bot] is pinned under GraphQL but not under REST
+
+Pre-existing adapter limitation
