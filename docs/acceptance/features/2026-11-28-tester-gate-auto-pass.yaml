@@ -54,9 +54,15 @@ rows:
       - super-fr:tests/unit/test_triage_drive_loose.py#test_a_drive_narrowed_with_batch_writes_nothing_for_a_loose_pr
       - super-fr:tests/unit/test_triage_drive_loose.py#test_rows_unreadable_for_a_loose_pr_are_reported_once_and_plan_nothing
       - super-fr:tests/unit/test_triage_drive_loose.py#test_a_failed_label_write_for_a_loose_pr_is_reported_and_exits_one
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_loose_ledgers_reads_no_rows_when_the_cursor_names_another_pr
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_loose_ledgers_reports_two_runs_naming_the_branch_and_reads_nothing
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_a_loose_pr_in_a_repo_with_no_clone_is_reported_and_the_pass_goes_on
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_a_failed_gate_pass_for_a_loose_pr_is_planned_again_on_the_next_pass
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_a_runs_live_and_archived_cursors_are_one_cursor_for_a_pr
     status: ci
-    notes: no cursor, another PR, two cursors, unreadable rows, narrowed drive and failed
-      write plan or write nothing
+    notes: 'unit: cursor-PR rule at ledger and loose_ledgers over a real default branch,
+      archived twin, no-clone repo, narrowed drive, once-only report, failed write retried
+      next pass'
     verify: none
   - id: loose-gated-pr-batch-guards
     capability: Triage driver
