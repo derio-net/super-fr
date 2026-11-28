@@ -16,7 +16,8 @@ rows:
     origin:
     - spec:2026-11-26-spec-requirements-table#R1
     - spec:2026-11-26-spec-requirements-table#R2
-    - spec:2026-11-26-spec-requirements-table#R7
+    - spec:2026-11-26-spec-requirements-table#R3
+    - spec:2026-11-26-spec-requirements-table#R8
     levels: {}
     status: not-implemented
     notes: ''
