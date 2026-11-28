@@ -153,3 +153,4 @@ strategy: candidate
 
 | Plan | Repo | File | Depends on |
 |------|------|------|------------|
+| 2026-11-26-spec-requirements-table | `derio-net/super-fr` | `2026-11-26-spec-requirements-table` | — |
