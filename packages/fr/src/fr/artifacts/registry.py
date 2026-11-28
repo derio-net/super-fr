@@ -584,7 +584,10 @@ ARTIFACT_KINDS: Mapping[str, ArtifactKind] = {
         ),
         ArtifactKind(
             name="spec",
-            current_version=1,
+            # 1 -> 2: `## Requirements` is the `| ID | Requirement |` table (spec
+            # `2026-11-26-spec-requirements-table-design` R4), migration
+            # `fr.artifacts.spec_requirements_table` rewrites an `R<n>.` list.
+            current_version=2,
             locator=repo_glob("spec", "*.md"),
             stamp="`fr_schema:` in the front matter",
             read_stamp=_read_spec_stamp,

@@ -135,7 +135,10 @@ rows:
 """
 )
 
-GOOD_SPEC = """# Thermosiphon rebuild
+GOOD_SPEC = """---
+fr_schema: 2
+---
+# Thermosiphon rebuild
 
 ## 1. Problem
 
@@ -714,7 +717,10 @@ def _splice_like_commit_7ece5a9(spec_text: str, replacement: str) -> str:
     return spec_text[:start] + replacement + spec_text[end:]
 
 
-SPLICEABLE_SPEC = """# Thermosiphon rebuild
+SPLICEABLE_SPEC = """---
+fr_schema: 2
+---
+# Thermosiphon rebuild
 
 ## 1. Problem
 
@@ -760,7 +766,7 @@ def test_a_heading_fused_mid_sentence_is_caught(tmp_path: Path) -> None:
     """
     seed_good_repo(tmp_path)
     fused = (
-        "# Thermosiphon rebuild\n\n"
+        "---\nfr_schema: 2\n---\n# Thermosiphon rebuild\n\n"
         "## Implementation Plans` into `PlanRef(plan, repo, file, …)`; `PlanMeta` carries\n"
         "`target_repo` and `parent_plan`.\n"
     )
