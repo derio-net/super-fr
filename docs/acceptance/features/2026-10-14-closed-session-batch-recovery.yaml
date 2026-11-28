@@ -95,3 +95,10 @@ amendments:
     notes: Captured-roster variants and disposable CLI tests prove preview/refusal safety;
       named anchors resolve.
     why: record the post-merge candidate walk
+  - row: triage-closed-recovery-repair
+    op: set-status
+    base: 0
+    status: ci
+    notes: Fault injection and installed cross-store repair prove no replay or false
+      ownership; named anchors resolve.
+    why: record the post-merge candidate walk
