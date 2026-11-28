@@ -26,7 +26,7 @@ from fr.run.evidence import refusal
 from fr.run.model import RunState
 from fr.run.steps import emitted_plan
 from fr.run.unobserved import note_unobserved
-from fr.run.verdict import RunRefusal, Say, Verdict, Warn
+from fr.run.verdict import RunRefusal, Say, Verdict, Warn, noted_on_crash
 from fr.workflow.model import Step
 
 if TYPE_CHECKING:
@@ -70,7 +70,8 @@ def proportionality_witness(key: str, repo_root: Path, state: RunState) -> Verdi
         )
     except RunRefusal as r:
         return Verdict(None, refusal=r.lines, exit_code=r.exit_code, warnings=tuple(warnings))
-    report = run_report(repo_root, plan, base)
+    with noted_on_crash(warnings):
+        report = run_report(repo_root, plan, base)
     if report.merge_base is None:
         return Verdict(
             None,
@@ -109,8 +110,9 @@ def docs_witness(
         base = witness_base(
             key, repo_root, "docs", announce=announce, warn=warnings.append, state=state
         )
-        outcome = evaluate(repo_root, config, base)
-        merge_base = merge_base_of(repo_root, base)
+        with noted_on_crash(warnings):
+            outcome = evaluate(repo_root, config, base)
+            merge_base = merge_base_of(repo_root, base)
     except RunRefusal as r:
         return Verdict(None, refusal=r.lines, exit_code=r.exit_code, warnings=tuple(warnings))
     except DocsEnvError as e:

@@ -12,7 +12,8 @@ Engine code: stdlib only, no `typer`, no `rich`, no `fr.commands`
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 
@@ -47,3 +48,21 @@ class RunRefusal(Exception):  # noqa: N818 — the spec's name (R1): a refusal, 
 
 Warn = Callable[[Say], None]
 """How run-engine code sends a warning to the command that called it."""
+
+
+@contextmanager
+def noted_on_crash(warnings: list[Say]) -> Iterator[None]:
+    """Attach the warnings a `Verdict` has queued so far to an unexpected exception.
+
+    A queued warning prints only when the command settles the `Verdict`; an error other
+    than `RunRefusal` escaping first would drop it. As exception notes it rides the
+    traceback instead (lens finding l-errors-r2).
+    """
+    try:
+        yield
+    except RunRefusal:
+        raise
+    except Exception as e:
+        for warning in warnings:
+            e.add_note(warning.text)
+        raise

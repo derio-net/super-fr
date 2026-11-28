@@ -273,3 +273,45 @@ def test_the_moved_verifier_prints_the_captured_bytes(
     stderr, code = run_case(monkeypatch, case, case.new)
     assert stderr == (FIXTURES / f"{case.name}.txt").read_text(encoding="utf-8")
     assert code == _exit_codes()[case.name]
+
+
+def _report_crashes(mp: pytest.MonkeyPatch) -> None:
+    import fr.proportionality
+
+    def crash(_root: Path, _plan: object, _base: str) -> object:
+        raise RuntimeError("git diff exploded")
+
+    mp.setattr(fr.proportionality, "run_report", crash)
+
+
+def _evaluate_crashes(mp: pytest.MonkeyPatch) -> None:
+    import fr.docs.gate
+
+    def crash(_root: Path, _config: object, _base: str) -> object:
+        raise RuntimeError("docs gate exploded")
+
+    mp.setattr(fr.docs.gate, "evaluate", crash)
+
+
+@pytest.mark.parametrize("witness", ["proportionality", "docs"])
+def test_a_crash_after_a_queued_warning_carries_the_warning(
+    witness: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A warning queued for the Verdict is not lost when an unexpected error escapes (l-errors-r2):
+    it rides the exception as a note, so the traceback still shows the fallback base."""
+    from fr.run.evidence import derived
+
+    _no_remote(monkeypatch, _FALLBACK)
+    if witness == "proportionality":
+        _plan_parses(monkeypatch)
+        _report_crashes(monkeypatch)
+        call = lambda: derived.proportionality_witness(KEY, ROOT, _state())  # noqa: E731
+    else:
+        _docs(monkeypatch)
+        _evaluate_crashes(monkeypatch)
+        call = lambda: derived.docs_witness(KEY, ROOT, announce=True, state=_state())  # noqa: E731
+    with pytest.raises(RuntimeError) as info:
+        call()
+    notes = getattr(info.value, "__notes__", [])
+    assert notes, "the queued fallback warning was dropped"
+    assert any("main" in note for note in notes)
