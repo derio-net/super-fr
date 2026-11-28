@@ -63,7 +63,8 @@ resolves:
   body: The page now names exactly which comments an admission pins (neither owner, member or collaborator nor in pr_authors).
 - id: l-tests-r1
   state: fixed
-  body: test_every_carried_entry_is_scanned_on_push plants the secret in every REF_FILES entry (a file deep inside each directory entry), and test_a_symlinked_entry_is_neither_carried_nor_scanned covers the symlink case. Mutation-checked: dropping history/ from carried_files turns the history/ case red.
+  body: |
+    test_every_carried_entry_is_scanned_on_push plants the secret in every REF_FILES entry (a file deep inside each directory entry), and test_a_symlinked_entry_is_neither_carried_nor_scanned covers the symlink case. Mutation-checked: dropping history/ from carried_files turns the history/ case red.
 - id: l-tests-r2
   state: fixed
   body: The schema-21 load test now holds a viewer-authored PR too and asserts its title survives while the outsider's is withheld.
