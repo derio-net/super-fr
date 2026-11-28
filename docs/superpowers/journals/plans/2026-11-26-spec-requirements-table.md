@@ -319,3 +319,8 @@ header-as-continuation and fenced cases are in ::test_an_unconvertible_spec_is_l
 ### l-tests-r5-resolved · finding [out-of-scope] · resolves l-tests-r5: the R8 prose test checks only that wording is present
 
 true of the R8 prose test by design: a prose requirement can only be checked by presence
+
+<!-- fr:journal kind=decision scope=plan id=fold-multi-paragraph-impl created=2026-11-28T16:53:31+00:00 -->
+### fold-multi-paragraph-impl · decision · fold multi-paragraph requirements into the cell (operator decision fold-multi-paragraph)
+
+Everything after a requirement line, up to the next requirement or heading, belongs to that requirement. Paragraphs and bullet items are joined with a literal <br> (bullets kept) in the list reader and the table cell alike, so parse(list) == parse(table). Prose between requirements no longer refuses; a heading inside the list does (the table would drop its text). Malformed-id, ordering, header-in-list and round-trip refusals stay. ops-gate-truth and batch-silent-failures migrated with parsed requirements unchanged; 241 artifacts valid. Code aac58c6c6, specs fc5830835.
