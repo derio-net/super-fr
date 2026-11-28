@@ -13,28 +13,49 @@ from pathlib import Path
 
 from fr.workflow.model import WorkflowError
 
+_WHERE: dict[str, str] = {
+    "repo": "`.fr/settings.yaml` on the default branch",
+    "quiet": "`.fr/settings.yaml` on the `fr-config` branch",
+    "stealth": "the tracking repo's settings file (`<target-dir>/.fr/settings.yaml` on its "
+    "`<branch>-config` branch), not the target's",
+}
+"""Where `workflows.disabled` is read from, per placement (l-errors-r3)."""
+
+
+def _disabled_and_placement(repo_root: Path) -> tuple[list[str], str]:
+    from fr.settings import SettingsError, load_settings
+
+    try:
+        settings = load_settings(repo_root).settings
+    except SettingsError as e:
+        raise WorkflowError(f"cannot read workflows.disabled: {e}") from e
+    return list(settings.workflows.disabled), settings.placement
+
 
 def disabled_shapes(repo_root: Path) -> list[str]:
     """`workflows.disabled` as the effective settings say (the tracking space's under
     stealth). An unreadable settings file is a `WorkflowError`: the check fails closed."""
-    from fr.settings import SettingsError, load_settings
-
-    try:
-        return list(load_settings(repo_root).settings.workflows.disabled)
-    except SettingsError as e:
-        raise WorkflowError(f"cannot read workflows.disabled: {e}") from e
+    return _disabled_and_placement(repo_root)[0]
 
 
 def refuse_disabled(name: str, repo_root: Path) -> None:
     """Raise `WorkflowError` when *name* is disabled by the repo's settings, naming the
-    setting and the shapes still available; return None otherwise."""
+    setting, the file it lives in, the shapes still available and how to choose one;
+    return None otherwise."""
     from fr.workflow.resolve import discover_names
 
-    disabled = disabled_shapes(repo_root)
+    disabled, placement = _disabled_and_placement(repo_root)
     if name not in disabled:
         return
     names = sorted(n for n in discover_names(repo_root) if n not in disabled)
+    where = _WHERE.get(placement, "the repo's settings file")
+    fix = (
+        f"; choose one with `--workflow <shape>` (`fr run adopt <plan> --workflow "
+        f"{names[0]}`, `fr run start {names[0]}`)"
+        if names
+        else "; enable one in that file"
+    )
     raise WorkflowError(
-        f"workflow {name} is disabled by this repo's settings (workflows.disabled); "
-        f"available: {', '.join(names) or '(none)'}"
+        f"workflow {name} is disabled by workflows.disabled in {where}; "
+        f"available: {', '.join(names) or '(none)'}{fix}"
     )

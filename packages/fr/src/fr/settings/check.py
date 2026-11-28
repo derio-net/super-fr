@@ -60,9 +60,19 @@ def _driven_triage(root: Path, settings: Settings) -> tuple[str, ...]:
     if settings.placement == "stealth":
         from fr.config.space import branch_fetched
 
-        # Stealth forces `ask` on every run (alacarte R7); a tracking space not created
-        # yet holds no `.fr/triage.yaml`, so there is no driven scope to read.
+        # Stealth forces `ask` on every run (alacarte R7), so a run whose tracking space
+        # was never created must still start. fr cannot tell "not created" from "not
+        # fetched here", so it says which it read as none (l-errors-r1), never silently.
         if not branch_fetched(space):
+            import sys
+
+            branch = (space.ref or "").removeprefix("origin/")
+            print(
+                f"fr: the stealth configuration branch {branch} is not fetched here, so fr "
+                f"reads no driven triage scope from it; if it exists, fetch it: "
+                f"git fetch origin {branch}",
+                file=sys.stderr,
+            )
             return ()
     text = space.at_default(TRIAGE_PATH)
     if text is None:

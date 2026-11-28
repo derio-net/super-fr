@@ -1218,7 +1218,9 @@ def _refuse_disabled_shape(workflow: str, repo_root: Path) -> None:
     try:
         refuse_disabled(workflow, repo_root)
     except WorkflowError as e:
-        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        # A run already started on it keeps going (R2, l-errors-r4): say how to resume.
+        hint = "  a run already on this branch keeps going: fr run status, fr run advance <id>"
+        err_console.print(f"[red]{escape(str(e))}[/red]\n{hint}", soft_wrap=True)
         raise typer.Exit(2) from e
 
 

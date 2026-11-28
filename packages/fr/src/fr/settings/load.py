@@ -29,10 +29,10 @@ from fr.settings.model import PLACEMENTS, Settings, parse_settings
 
 SETTINGS_PATH: Final = rel("settings")
 SERVABLE_PLACEMENTS: Final = frozenset({"repo", "quiet", "stealth"})
+"""The placements this fr can serve."""
 STEALTH_GIT: Final = {"push": "ask", "pr": "ask"}
 """The git keys stealth sets itself (epic D7, alacarte R7): `fr push` of the product
 branch and `fr pr create` wait for the operator's confirmation."""
-"""The placements this fr can serve."""
 
 Source = Literal["remote", "local", "head", "defaults", "quiet", "stealth"]
 """Where the policy came from: R2 step 1, step 2, the CI exception, nowhere, (quiet) the
