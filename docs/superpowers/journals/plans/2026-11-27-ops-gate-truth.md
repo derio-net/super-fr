@@ -452,3 +452,355 @@ Independent review of the phase-3 diff (80a2995..HEAD) against spec R17-R20, plu
 ### p3-r4-resolved · finding [out-of-scope] · resolves p3-r4: _say_done catches only DodError and StageFailed (phase 3)
 
 A robustness note with no traced exception; the caught set matches _owed_items.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · _existing_pass (gate.py:1532-1540, reached from stage 6 at :1384 when gate:devops-passed is on the PR) judges with devops_blockers with no head exclusions, so PR-head walks/outcomes discharge the gate after a refresh and stage 6 is marked done, against R6/R12 and the shape's "stage 6 refuses while head-free blockers remain"
+
+Raised by the security lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-security-r2 · finding [open] (reviewer: in scope) · content the refresh merges in from the default branch still discharges items: only the pinned head's walks/outcomes/ticks are excluded and merged-in plan-journal entries only for reopened ops (refresh.py:102,198), contradicting the shape's "merged-in entries never count" (shape.md:8) and the lens's "merged-in content must not discharge anything"
+
+Raised by the security lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-security-r3 · finding [open] (reviewer: in scope) · gate_items judges ops by the latest plan-journal entry with no PR-head exclusion (holds.py:140-144), so stage 6's "head excluded" refusal and R20's DoD line count head-carried op closures; only stage 4 running first protects this
+
+Raised by the security lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-security-r4 · finding [open] (reviewer: in scope) · head_walks (gate.py:1257) and closeout _head_walks (closeout_cmd.py:328) read only fragment names present in the ops workspace, so walks in a head fragment the workspace lacks (renamed/moved) are never excluded; list the head's tree instead
+
+Raised by the security lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r5 created=2026-11-28T09:12:02+00:00 state=open review_scope=out -->
+### l-security-r5 · finding [open] (reviewer: out of scope) · under quiet/stealth head_walks skips every fragment (gate.py:1258) as journal exclusions already do: walks/outcomes the feature run wrote to the fr artifact branch before merge are never excluded, so the PR-controlled boundary holds only under repo placement
+
+Raised by the security lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r6 created=2026-11-28T09:12:02+00:00 state=open review_scope=out -->
+### l-security-r6 · finding [open] (reviewer: out of scope) · _passed (gate.py:1698-1706) still treats a bare gate:devops-passed label as stage 6 done without any blocker check when no refresh reopened or forgot stage 6, so a hand-added label skips the head-free check
+
+Raised by the security lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · refresh.py:152 relies on HostCheckout.fetch, which swallows a failed default-branch fetch as a warning, so drift compares against a stale origin/<default> and can read "equal" (fail-open on R1)
+
+Raised by the errors lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · GitError from materialise (refresh.py:159), is_ancestor (refresh.py:166, ops_gate_cmd.py:75-82) and a non-UTF-8 head fragment in head_walks (gate.py:1261) escapes run() as a traceback, never a StageFailed
+
+Raised by the errors lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · after a conflict merged by hand (or a failed merge commit, ops_gate_cmd.py:100), reopened.before never gains the merged-in entry ids (refresh.py:198 skipped), so default-branch entries close reopened ops against R6; the commit-failure path also leaves MERGE_HEAD with no abort hint
+
+Raised by the errors lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · _say_done (gate.py:1490-1525) reports an unreadable or owed Definition of Done but run() still returns GateResult(True), so `fr ops gate` exits 0
+
+Raised by the errors lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-errors-r5 · finding [open] (reviewer: in scope) · _existing_pass (gate.py:1541) catches only OpsLoadError; AcceptanceError/SectionError/SettingsError from run_exit/gated_rows escape as a traceback in stage 6
+
+Raised by the errors lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-errors-r6 · finding [open] (reviewer: in scope) · gate_cmd._refuse_on_blockers (gate_cmd.py:134-149) does not catch SettingsError, which the new gated_rows -> disabled() call can raise: traceback instead of an exit-2 refusal
+
+Raised by the errors lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r7 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-errors-r7 · finding [open] (reviewer: in scope) · closeout_cmd._head_walks (closeout_cmd.py:333) treats any failed `git show`, including an unknown --pr-head sha, as an absent fragment: an empty exclusion, against its docstring's refusal promise
+
+Raised by the errors lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-errors-r8 · finding [open] (reviewer: in scope) · closeout_cmd._shape_default (closeout_cmd.py:351) silently drops an unreadable cursor for an explicit --run, so the row's walk strategy changes or is refused with no signal
+
+Raised by the errors lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r9 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-errors-r9 · finding [open] (reviewer: in scope) · head_manual_ticks (gate.py:1464-1474) calls .get()/int() on PR-controlled YAML; a malformed phase raises AttributeError/ValueError that _say_done does not catch (traceback on the final line)
+
+Raised by the errors lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r10 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-errors-r10 · finding [open] (reviewer: in scope) · closeout outcome calls close_commands (closeout_cmd.py:222) before the not-committed warning (closeout_cmd.py:224); an AcceptanceError there tracebacks after the write and hides that warning
+
+Raised by the errors lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · R4 test is tautological: apply_phase already calls gate.trust (gate.py:681), so removing refresh's re-trust (refresh.py:204) keeps test_ops_gate.py:1606 green; R4 unpinned at stages 5-7
+
+Raised by the tests lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · stage 6's _existing_pass judges the pre-refresh label with devops_blockers without head walk/outcome exclusion (gate.py:1385,1540), contradicting R12 and the shape's trust boundary; existing-pass tests use only op blockers
+
+Raised by the tests lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · gate_items op items count plan-journal op entries the PR head carries (holds.py:146); stage 6 _owed_items and the R20 DoD never exclude them, unlike _unclosed/apply_phase; shape trust boundary contradicted, untested
+
+Raised by the tests lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · drift loads ops with runbook needs from a scratch tree that holds only _head_paths (gate.py:717, refresh.py:159); a runbook outside spec/plan/fragments/.fr fails stages 4-7 every run; no runbook test
+
+Raised by the tests lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · closeout_cmd._head_walks silently returns an empty exclusion when git show fails for a valid-looking sha (closeout_cmd.py:333) despite its "refuses" docstring; no negative test
+
+Raised by the tests lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-tests-r6 · finding [open] (reviewer: in scope) · FakeTree._walk_named_rows (test_ops_gate.py:164) diverges from real closeout outcome: fixed strategy live, any-passing not latest-per-harness, ignores --pr-head, edits rows not amendments
+
+Raised by the tests lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-tests-r7 · finding [open] (reviewer: in scope) · untested: R13 ran on a multi-harness row keeping status in _ask_rows; R3 records-commit-before-abort and post-conflict host state; R3 lease value (FakeTree.head constant); R14 unreadable setting
+
+Raised by the tests lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · stage 6's _existing_pass (gate.py:1532-1549) judges blockers with devops_blockers, not head-free, so PR-head outcomes or a head-written `walked` status can let a pre-refresh gate:devops-passed stand; contradicts fr-devops-gate.md:186-189 and the shape's trust boundary
+
+Raised by the docs-accuracy lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · _recovery (gate.py:1552-1580) picks open steps without head exclusion, so a step closed only by a PR-head outcome gets no `closeout outcome` command while stage 6 still refuses on it; contradicts ops.md:254 and fr-devops-gate.md:194 ("commands that close each item")
+
+Raised by the docs-accuracy lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r3 · finding [open] (reviewer: in scope) · ops.md:316-329 orders the refresh as commit, merge, push, reopen, and says a conflict leaves the workspace at the records commit, but refresh.py:181-190 reopens the ops and forgets stages before the merge, so a conflict leaves them reopened and forgotten
+
+Raised by the docs-accuracy lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r4 · finding [open] (reviewer: in scope) · fr-devops-gate SKILL.md:82-83 drops where `fr ops attest` runs (fr isolation exec on chore/ops-<slug>), its --plan (required for a runbook op, ops_cmd.py:451) and "an op with a check cannot be attested"; worse guidance than the text it replaced
+
+Raised by the docs-accuracy lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r5 created=2026-11-28T09:12:02+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r5 · finding [open] (reviewer: in scope) · fr-devops-gate SKILL.md:114 says a hand-run `fr gate pass` "judges the merged tree"; gate_cmd reads the current checkout, as ops.md says ("as the checkout holds them")
+
+Raised by the docs-accuracy lens reviewer at lens-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r6 created=2026-11-28T09:12:02+00:00 state=open review_scope=out -->
+### l-docs-accuracy-r6 · finding [open] (reviewer: out of scope) · the new "merge, never rebase, because the ops branch is already pushed; a rebase would rewrite your evidence" rationale (fr-devops-gate.md:109-111, ops.md:325-326) sits beside stage 3, which still rebases that pushed ops branch with a lease
+
+Raised by the docs-accuracy lens reviewer at lens-review.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-28T09:12:02+00:00 -->
+### lens-review-1 · review · Lens review: security, errors, tests, docs-accuracy over the whole feature diff
+
+Four lens reviewers each read the whole feature diff (merge-base 085d1cbe) under one lens. 29 findings: 26 in scope, all fixed; 3 out of scope.
+
+```review-lens
+lens: security
+examined: packages/fr/src/fr/ops/refresh.py, packages/fr/src/fr/ops/gate.py, packages/fr/src/fr/ops/holds.py, packages/fr/src/fr/acceptance/walks.py, packages/fr/src/fr/commands/ops_gate_cmd.py, packages/fr/src/fr/commands/closeout_cmd.py, packages/fr/src/fr/commands/gate_cmd.py, packages/fr/src/fr/run/dod.py, docs/superpowers/specs/2026-11-27-ops-gate-truth-design.md
+```
+```review-findings
+l-security-r1 | in | _existing_pass (gate.py:1532-1540, reached from stage 6 at :1384 when gate:devops-passed is on the PR) judges with devops_blockers with no head exclusions, so PR-head walks/outcomes discharge the gate after a refresh and stage 6 is marked done, against R6/R12 and the shape's "stage 6 refuses while head-free blockers remain"
+l-security-r2 | in | content the refresh merges in from the default branch still discharges items: only the pinned head's walks/outcomes/ticks are excluded and merged-in plan-journal entries only for reopened ops (refresh.py:102,198), contradicting the shape's "merged-in entries never count" (shape.md:8) and the lens's "merged-in content must not discharge anything"
+l-security-r3 | in | gate_items judges ops by the latest plan-journal entry with no PR-head exclusion (holds.py:140-144), so stage 6's "head excluded" refusal and R20's DoD line count head-carried op closures; only stage 4 running first protects this
+l-security-r4 | in | head_walks (gate.py:1257) and closeout _head_walks (closeout_cmd.py:328) read only fragment names present in the ops workspace, so walks in a head fragment the workspace lacks (renamed/moved) are never excluded; list the head's tree instead
+l-security-r5 | out | under quiet/stealth head_walks skips every fragment (gate.py:1258) as journal exclusions already do: walks/outcomes the feature run wrote to the fr artifact branch before merge are never excluded, so the PR-controlled boundary holds only under repo placement
+l-security-r6 | out | _passed (gate.py:1698-1706) still treats a bare gate:devops-passed label as stage 6 done without any blocker check when no refresh reopened or forgot stage 6, so a hand-added label skips the head-free check
+```
+
+```review-lens
+lens: errors
+examined: packages/fr/src/fr/ops/refresh.py, packages/fr/src/fr/ops/gate.py, packages/fr/src/fr/commands/ops_gate_cmd.py, packages/fr/src/fr/run/dod.py, packages/fr/src/fr/commands/dod_cmd.py, packages/fr/src/fr/ops/holds.py, packages/fr/src/fr/commands/gate_cmd.py, packages/fr/src/fr/commands/closeout_cmd.py, packages/fr/src/fr/run/closeout.py, packages/fr/src/fr/acceptance/walks.py, packages/fr/src/fr/commands/acceptance_cmd.py, packages/fr/src/fr/plan_review/checks.py, packages/fr/src/fr/spec.py, packages/fr/src/fr/triage/ledger.py, docs/superpowers/specs/2026-11-27-ops-gate-truth-design.md
+```
+```review-findings
+l-errors-r1 | in | refresh.py:152 relies on HostCheckout.fetch, which swallows a failed default-branch fetch as a warning, so drift compares against a stale origin/<default> and can read "equal" (fail-open on R1)
+l-errors-r2 | in | GitError from materialise (refresh.py:159), is_ancestor (refresh.py:166, ops_gate_cmd.py:75-82) and a non-UTF-8 head fragment in head_walks (gate.py:1261) escapes run() as a traceback, never a StageFailed
+l-errors-r3 | in | after a conflict merged by hand (or a failed merge commit, ops_gate_cmd.py:100), reopened.before never gains the merged-in entry ids (refresh.py:198 skipped), so default-branch entries close reopened ops against R6; the commit-failure path also leaves MERGE_HEAD with no abort hint
+l-errors-r4 | in | _say_done (gate.py:1490-1525) reports an unreadable or owed Definition of Done but run() still returns GateResult(True), so `fr ops gate` exits 0
+l-errors-r5 | in | _existing_pass (gate.py:1541) catches only OpsLoadError; AcceptanceError/SectionError/SettingsError from run_exit/gated_rows escape as a traceback in stage 6
+l-errors-r6 | in | gate_cmd._refuse_on_blockers (gate_cmd.py:134-149) does not catch SettingsError, which the new gated_rows -> disabled() call can raise: traceback instead of an exit-2 refusal
+l-errors-r7 | in | closeout_cmd._head_walks (closeout_cmd.py:333) treats any failed `git show`, including an unknown --pr-head sha, as an absent fragment: an empty exclusion, against its docstring's refusal promise
+l-errors-r8 | in | closeout_cmd._shape_default (closeout_cmd.py:351) silently drops an unreadable cursor for an explicit --run, so the row's walk strategy changes or is refused with no signal
+l-errors-r9 | in | head_manual_ticks (gate.py:1464-1474) calls .get()/int() on PR-controlled YAML; a malformed phase raises AttributeError/ValueError that _say_done does not catch (traceback on the final line)
+l-errors-r10 | in | closeout outcome calls close_commands (closeout_cmd.py:222) before the not-committed warning (closeout_cmd.py:224); an AcceptanceError there tracebacks after the write and hides that warning
+```
+
+```review-lens
+lens: tests
+examined: packages/fr/src/fr/ops/refresh.py, packages/fr/src/fr/ops/gate.py, packages/fr/src/fr/ops/holds.py, packages/fr/src/fr/acceptance/walks.py, packages/fr/src/fr/commands/closeout_cmd.py, packages/fr/src/fr/commands/gate_cmd.py, packages/fr/src/fr/commands/ops_gate_cmd.py, packages/fr/src/fr/spec.py, packages/fr/src/fr/run/dod.py, tests/unit/test_ops_gate.py, tests/unit/test_ops_refresh.py, tests/unit/test_ops_gate_cmd.py, tests/unit/test_closeout_outcome.py, tests/unit/test_ops_holds_gate_items.py, tests/unit/test_ops_gate_pass.py, tests/unit/test_run_dod.py, tests/unit/test_dod_cmd.py, tests/unit/test_acceptance_walks.py, tests/unit/test_ops_testplan.py
+```
+```review-findings
+l-tests-r1 | in | R4 test is tautological: apply_phase already calls gate.trust (gate.py:681), so removing refresh's re-trust (refresh.py:204) keeps test_ops_gate.py:1606 green; R4 unpinned at stages 5-7
+l-tests-r2 | in | stage 6's _existing_pass judges the pre-refresh label with devops_blockers without head walk/outcome exclusion (gate.py:1385,1540), contradicting R12 and the shape's trust boundary; existing-pass tests use only op blockers
+l-tests-r3 | in | gate_items op items count plan-journal op entries the PR head carries (holds.py:146); stage 6 _owed_items and the R20 DoD never exclude them, unlike _unclosed/apply_phase; shape trust boundary contradicted, untested
+l-tests-r4 | in | drift loads ops with runbook needs from a scratch tree that holds only _head_paths (gate.py:717, refresh.py:159); a runbook outside spec/plan/fragments/.fr fails stages 4-7 every run; no runbook test
+l-tests-r5 | in | closeout_cmd._head_walks silently returns an empty exclusion when git show fails for a valid-looking sha (closeout_cmd.py:333) despite its "refuses" docstring; no negative test
+l-tests-r6 | in | FakeTree._walk_named_rows (test_ops_gate.py:164) diverges from real closeout outcome: fixed strategy live, any-passing not latest-per-harness, ignores --pr-head, edits rows not amendments
+l-tests-r7 | in | untested: R13 ran on a multi-harness row keeping status in _ask_rows; R3 records-commit-before-abort and post-conflict host state; R3 lease value (FakeTree.head constant); R14 unreadable setting
+```
+
+```review-lens
+lens: docs-accuracy
+examined: docs/ops.md, docs/explainers/fr-devops-gate.md, docs/explainers/fr-exit-gates.md, docs/explainers/fr-acceptance.md, docs/explainers/fr-brainstorming-and-plan.md, docs/explainers/fr-triage.md, docs/explainers/index.md, docs/gate-backfill.md, docs/reference/acceptance-matrix.md, docs/reference/cli.md, docs/reference/workflow-shapes.md, plugins/super-fr/skills/fr-devops-gate/SKILL.md, plugins/super-fr/skills/fr-plan/SKILL.md, packages/fr/src/fr/ops/gate.py, packages/fr/src/fr/ops/refresh.py, packages/fr/src/fr/ops/holds.py, packages/fr/src/fr/run/dod.py, packages/fr/src/fr/commands/dod_cmd.py, packages/fr/src/fr/run/closeout.py, packages/fr/src/fr/commands/closeout_cmd.py, packages/fr/src/fr/commands/gate_cmd.py, packages/fr/src/fr/acceptance/walks.py, packages/fr/src/fr/spec.py, packages/fr/src/fr/plan_review/checks.py, packages/fr/src/fr/triage/ledger.py, packages/fr/src/fr/commands/ops_gate_cmd.py, packages/fr/src/fr/commands/acceptance_cmd.py, packages/fr/src/fr/cli.py
+```
+```review-findings
+l-docs-accuracy-r1 | in | stage 6's _existing_pass (gate.py:1532-1549) judges blockers with devops_blockers, not head-free, so PR-head outcomes or a head-written `walked` status can let a pre-refresh gate:devops-passed stand; contradicts fr-devops-gate.md:186-189 and the shape's trust boundary
+l-docs-accuracy-r2 | in | _recovery (gate.py:1552-1580) picks open steps without head exclusion, so a step closed only by a PR-head outcome gets no `closeout outcome` command while stage 6 still refuses on it; contradicts ops.md:254 and fr-devops-gate.md:194 ("commands that close each item")
+l-docs-accuracy-r3 | in | ops.md:316-329 orders the refresh as commit, merge, push, reopen, and says a conflict leaves the workspace at the records commit, but refresh.py:181-190 reopens the ops and forgets stages before the merge, so a conflict leaves them reopened and forgotten
+l-docs-accuracy-r4 | in | fr-devops-gate SKILL.md:82-83 drops where `fr ops attest` runs (fr isolation exec on chore/ops-<slug>), its --plan (required for a runbook op, ops_cmd.py:451) and "an op with a check cannot be attested"; worse guidance than the text it replaced
+l-docs-accuracy-r5 | in | fr-devops-gate SKILL.md:114 says a hand-run `fr gate pass` "judges the merged tree"; gate_cmd reads the current checkout, as ops.md says ("as the checkout holds them")
+l-docs-accuracy-r6 | out | the new "merge, never rebase, because the ops branch is already pushed; a rebase would rewrite your evidence" rationale (fr-devops-gate.md:109-111, ops.md:325-326) sits beside stage 3, which still rebases that pushed ops branch with a lease
+```
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: _existing_pass (gate.py:1532-1540, reached from stage 6 at :1384 when gate:devops-passed is on the PR) judges with devops_blockers with no head exclusions, so PR-head walks/outcomes discharge the gate after a refresh and stage 6 is marked done, against R6/R12 and the shape's "stage 6 refuses while head-free blockers remain"
+
+Fixed in cef624685 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-security-r2 -->
+### l-security-r2-resolved · finding [fixed] · resolves l-security-r2: content the refresh merges in from the default branch still discharges items: only the pinned head's walks/outcomes/ticks are excluded and merged-in plan-journal entries only for reopened ops (refresh.py:102,198), contradicting the shape's "merged-in entries never count" (shape.md:8) and the lens's "merged-in content must not discharge anything"
+
+Fixed in b8bad7344: the shape claimed merged-in entries never count, which overstated R6. The spec (R6) limits the exclusion to entries that would close a REOPENED op; other default-branch content is reviewed, merged evidence and is meant to count. The shape now states exactly that, so the diff and its shape agree; no code change was needed.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-security-r3 -->
+### l-security-r3-resolved · finding [fixed] · resolves l-security-r3: gate_items judges ops by the latest plan-journal entry with no PR-head exclusion (holds.py:140-144), so stage 6's "head excluded" refusal and R20's DoD line count head-carried op closures; only stage 4 running first protects this
+
+Fixed in cef624685 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-security-r4 -->
+### l-security-r4-resolved · finding [fixed] · resolves l-security-r4: head_walks (gate.py:1257) and closeout _head_walks (closeout_cmd.py:328) read only fragment names present in the ops workspace, so walks in a head fragment the workspace lacks (renamed/moved) are never excluded; list the head's tree instead
+
+Fixed in cef624685 and 61cc2aeb2 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r5-resolved created=2026-11-28T09:12:02+00:00 state=open resolves=l-security-r5 out_of_scope=true -->
+### l-security-r5-resolved · finding [out-of-scope] · resolves l-security-r5: under quiet/stealth head_walks skips every fragment (gate.py:1258) as journal exclusions already do: walks/outcomes the feature run wrote to the fr artifact branch before merge are never excluded, so the PR-controlled boundary holds only under repo placement
+
+Out of scope: under quiet/stealth placement journal exclusions already skipped artifact-branch content before this change; head_walks follows the same existing placement rule. Closing it needs a placement-aware definition of PR-controlled content, a separate design question.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r6-resolved created=2026-11-28T09:12:02+00:00 state=open resolves=l-security-r6 out_of_scope=true -->
+### l-security-r6-resolved · finding [out-of-scope] · resolves l-security-r6: _passed (gate.py:1698-1706) still treats a bare gate:devops-passed label as stage 6 done without any blocker check when no refresh reopened or forgot stage 6, so a hand-added label skips the head-free check
+
+Out of scope: _passed treating a bare gate:devops-passed label as stage 6 done predates this change (the reviewer says so); this change adds the head-free check on the paths it touches and does not alter how a hand-set label is trusted.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: refresh.py:152 relies on HostCheckout.fetch, which swallows a failed default-branch fetch as a warning, so drift compares against a stale origin/<default> and can read "equal" (fail-open on R1)
+
+Fixed in 62bb2fdd7 and 08f3a40e1 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: GitError from materialise (refresh.py:159), is_ancestor (refresh.py:166, ops_gate_cmd.py:75-82) and a non-UTF-8 head fragment in head_walks (gate.py:1261) escapes run() as a traceback, never a StageFailed
+
+Fixed in cef624685 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [fixed] · resolves l-errors-r3: after a conflict merged by hand (or a failed merge commit, ops_gate_cmd.py:100), reopened.before never gains the merged-in entry ids (refresh.py:198 skipped), so default-branch entries close reopened ops against R6; the commit-failure path also leaves MERGE_HEAD with no abort hint
+
+Fixed in 62bb2fdd7 and 08f3a40e1 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: _say_done (gate.py:1490-1525) reports an unreadable or owed Definition of Done but run() still returns GateResult(True), so `fr ops gate` exits 0
+
+Fixed in cef624685 and 08f3a40e1 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-errors-r5 -->
+### l-errors-r5-resolved · finding [fixed] · resolves l-errors-r5: _existing_pass (gate.py:1541) catches only OpsLoadError; AcceptanceError/SectionError/SettingsError from run_exit/gated_rows escape as a traceback in stage 6
+
+Fixed in cef624685 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-errors-r6 -->
+### l-errors-r6-resolved · finding [fixed] · resolves l-errors-r6: gate_cmd._refuse_on_blockers (gate_cmd.py:134-149) does not catch SettingsError, which the new gated_rows -> disabled() call can raise: traceback instead of an exit-2 refusal
+
+Fixed in 61cc2aeb2 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r7-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-errors-r7 -->
+### l-errors-r7-resolved · finding [fixed] · resolves l-errors-r7: closeout_cmd._head_walks (closeout_cmd.py:333) treats any failed `git show`, including an unknown --pr-head sha, as an absent fragment: an empty exclusion, against its docstring's refusal promise
+
+Fixed in 61cc2aeb2 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-errors-r8 -->
+### l-errors-r8-resolved · finding [fixed] · resolves l-errors-r8: closeout_cmd._shape_default (closeout_cmd.py:351) silently drops an unreadable cursor for an explicit --run, so the row's walk strategy changes or is refused with no signal
+
+Fixed in 61cc2aeb2 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r9-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-errors-r9 -->
+### l-errors-r9-resolved · finding [fixed] · resolves l-errors-r9: head_manual_ticks (gate.py:1464-1474) calls .get()/int() on PR-controlled YAML; a malformed phase raises AttributeError/ValueError that _say_done does not catch (traceback on the final line)
+
+Fixed in cef624685 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r10-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-errors-r10 -->
+### l-errors-r10-resolved · finding [fixed] · resolves l-errors-r10: closeout outcome calls close_commands (closeout_cmd.py:222) before the not-committed warning (closeout_cmd.py:224); an AcceptanceError there tracebacks after the write and hides that warning
+
+Fixed in 61cc2aeb2 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: R4 test is tautological: apply_phase already calls gate.trust (gate.py:681), so removing refresh's re-trust (refresh.py:204) keeps test_ops_gate.py:1606 green; R4 unpinned at stages 5-7
+
+Fixed in 62bb2fdd7 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: stage 6's _existing_pass judges the pre-refresh label with devops_blockers without head walk/outcome exclusion (gate.py:1385,1540), contradicting R12 and the shape's trust boundary; existing-pass tests use only op blockers
+
+Fixed in cef624685 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: gate_items op items count plan-journal op entries the PR head carries (holds.py:146); stage 6 _owed_items and the R20 DoD never exclude them, unlike _unclosed/apply_phase; shape trust boundary contradicted, untested
+
+Fixed in cef624685 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: drift loads ops with runbook needs from a scratch tree that holds only _head_paths (gate.py:717, refresh.py:159); a runbook outside spec/plan/fragments/.fr fails stages 4-7 every run; no runbook test
+
+Fixed in bc0d2f008 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: closeout_cmd._head_walks silently returns an empty exclusion when git show fails for a valid-looking sha (closeout_cmd.py:333) despite its "refuses" docstring; no negative test
+
+Fixed in 61cc2aeb2 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-tests-r6 -->
+### l-tests-r6-resolved · finding [fixed] · resolves l-tests-r6: FakeTree._walk_named_rows (test_ops_gate.py:164) diverges from real closeout outcome: fixed strategy live, any-passing not latest-per-harness, ignores --pr-head, edits rows not amendments
+
+Fixed in c0dfb331a (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-tests-r7 -->
+### l-tests-r7-resolved · finding [fixed] · resolves l-tests-r7: untested: R13 ran on a multi-harness row keeping status in _ask_rows; R3 records-commit-before-abort and post-conflict host state; R3 lease value (FakeTree.head constant); R14 unreadable setting
+
+Fixed in 62bb2fdd7 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: stage 6's _existing_pass (gate.py:1532-1549) judges blockers with devops_blockers, not head-free, so PR-head outcomes or a head-written `walked` status can let a pre-refresh gate:devops-passed stand; contradicts fr-devops-gate.md:186-189 and the shape's trust boundary
+
+Fixed in cef624685 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: _recovery (gate.py:1552-1580) picks open steps without head exclusion, so a step closed only by a PR-head outcome gets no `closeout outcome` command while stage 6 still refuses on it; contradicts ops.md:254 and fr-devops-gate.md:194 ("commands that close each item")
+
+Fixed in cef624685 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-docs-accuracy-r3 -->
+### l-docs-accuracy-r3-resolved · finding [fixed] · resolves l-docs-accuracy-r3: ops.md:316-329 orders the refresh as commit, merge, push, reopen, and says a conflict leaves the workspace at the records commit, but refresh.py:181-190 reopens the ops and forgets stages before the merge, so a conflict leaves them reopened and forgotten
+
+Fixed in 08f3a40e1 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-docs-accuracy-r4 -->
+### l-docs-accuracy-r4-resolved · finding [fixed] · resolves l-docs-accuracy-r4: fr-devops-gate SKILL.md:82-83 drops where `fr ops attest` runs (fr isolation exec on chore/ops-<slug>), its --plan (required for a runbook op, ops_cmd.py:451) and "an op with a check cannot be attested"; worse guidance than the text it replaced
+
+Fixed in 08f3a40e1 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r5-resolved created=2026-11-28T09:12:02+00:00 state=fixed resolves=l-docs-accuracy-r5 -->
+### l-docs-accuracy-r5-resolved · finding [fixed] · resolves l-docs-accuracy-r5: fr-devops-gate SKILL.md:114 says a hand-run `fr gate pass` "judges the merged tree"; gate_cmd reads the current checkout, as ops.md says ("as the checkout holds them")
+
+Fixed in 08f3a40e1 (commit subject cites this id), with a test per the lens fix list.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r6-resolved created=2026-11-28T09:12:02+00:00 state=open resolves=l-docs-accuracy-r6 out_of_scope=true -->
+### l-docs-accuracy-r6-resolved · finding [out-of-scope] · resolves l-docs-accuracy-r6: the new "merge, never rebase, because the ops branch is already pushed; a rebase would rewrite your evidence" rationale (fr-devops-gate.md:109-111, ops.md:325-326) sits beside stage 3, which still rebases that pushed ops branch with a lease
+
+Out of scope: stage 3's rebase-with-lease of the ops branch predates this change, and the new merge-never-rebase rationale is about the stage 4-7 refresh; the reviewer notes the claim is not false.
