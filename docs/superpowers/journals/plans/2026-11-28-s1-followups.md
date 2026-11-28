@@ -248,3 +248,29 @@ the validator change is one key read and one branch; restructured the branch onc
 ### p2-old-only-switch-reads-its-text · decision · Past the end an old-only switch is fr-enabled only when its text would be; supersedes p2-old-only-switch-text (phase 2)
 
 Supersedes p2-old-only-switch-text (review p2-r1). The spec's design §C and plan step P2.T2.S2 keep fr-enabled only an old-only switch NAMING QUIET; failing closed on any old-only switch made a plain repo with an unrelated `fr` branch holding a root settings.yaml (`placement: repo`, or no placement line) fr-enabled at 9.2, denying every base-clone edit in it. Both engines now read the old blob in the ended branch and feed it to `_fr_switch_enabled` / `switchEnabled` for the enabled answer only: a text that would be enabled (quiet, or a spelling that fails closed) becomes the non-canonical `placement: only the old switch`, so it is never quiet and its worktrees are never write targets (R8); any other text is returned as is and the repo is not fr-enabled. Shared cases: `old-only-repo` ended.enabled is false, new `old-only-no-placement`; `old-only-quiet` keeps ended (read, enabled, not quiet).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-28T17:57:45+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · past the gate an old-only origin/fr:settings.yaml made a repo fr-enabled whatever it said (phase 2)
+
+`fr-isolation-decision.sh:466-469` and `marker.ts:304` set an "old switch only" sentinel without
+reading the old blob, so a repo whose `fr` branch held `placement: repo`, or no placement line, was
+fr-enabled from 9.2 and every base-clone edit was denied. Design §C and P2.T2.S2 enable only an
+old-only switch naming quiet. The fixture `old-only-repo` pinned the wrong answer.
+
+<!-- fr:journal kind=review scope=plan id=p2-review-1 created=2026-11-28T17:57:45+00:00 phase=2 -->
+### p2-review-1 · review · phase 2 review: one in-scope finding (p2-r1), fixed (phase 2)
+
+Reviewer a892fc22662781cee (feature-dev:code-reviewer, claude-opus-5-5) read the phase 2 diff
+113c98eb6..6dae01f against R7-R9. It found fail-closed version reading in all three engines, each
+delivered hook copy finding its version source, RC spellings compared alike in bash, TS and Python, and
+tests pinned to a side. One finding, p2-r1. Observation not raised: `fr hermes install` stamps the
+CLI's version, as the spec asks, not the copied tree's.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-28T17:57:45+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: past the gate an old-only origin/fr:settings.yaml made a repo fr-enabled whatever it said (phase 2)
+
+7be7f80e1: the ended branch reads the old blob and judges it with `_fr_switch_enabled` /
+`switchEnabled` for the enabled answer only; it is never quiet, so R8 holds. Fixture `old-only-repo`
+now expects ended.enabled false, new case `old-only-no-placement`; eight tests red before the fix
+(Python and bun). Superseding decision p2-old-only-switch-reads-its-text (8750950cc). Fast tier after:
+20158 passed, 0 failed.
