@@ -65,9 +65,11 @@ rows:
       fr gate pass
     origin:
     - spec:2026-11-28-tester-gate-auto-pass#R2
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_r2_the_batch_guards_hold_for_a_loose_pr
+    status: ci
+    notes: the batch guards hold for a loose PR
     verify: none
   - id: closed-out-batch-gated-pr-pass
     capability: Triage driver
