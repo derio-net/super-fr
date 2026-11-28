@@ -10,6 +10,7 @@
 # (no request) when the branch is already on the remote. Nothing reaches a forge.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
+. "$here/_ask_approve.sh"
 scenario_require_fresh_repo
 
 HOME="$(mktemp -d)" && export HOME
@@ -50,7 +51,7 @@ require_exit 2 "$out"
 flat="$(printf '%s' "$out" | tr '\n' ' ')"
 expect_grep 'workflow fr-goal-light is disabled' "$flat" "run start refuses the disabled shape"
 expect_grep 'workflows\.disabled' "$flat" "the refusal names the setting"
-expect_grep 'available: [^ ]*fr-goal' "$flat" "the refusal names what is still available"
+expect_grep 'available: .*fr-goal' "$flat" "the refusal names what is still available"
 [ -z "$(git worktree list | sed -n 2p)" ] || fail "a refused start left a worktree: $(git worktree list)"
 
 # --- s2-pr-sections ---------------------------------------------------------------------
@@ -108,4 +109,14 @@ require_exit 2 "$out"
 expect_grep 'git\.push: ask' "$(printf '%s' "$out" | tr '\n' ' ')" "a code push asks for approval"
 [ -f "$requests/push-fix-s.json" ] || fail "the code push stored no request"
 [ "$(git --git-dir="$origin" rev-parse fix/s)" = "$before" ] || fail "an unapproved push moved the target"
+# The operator approves (fr verifies it in the session's transcript): the code lands, and the
+# next code push asks again for its own approval (R9).
+fr_approved out push
+require_exit 0 "$out"
+[ "$(git --git-dir="$origin" rev-parse fix/s)" = "$(git rev-parse HEAD)" ] || fail "the approved push did not land: $out"
+echo more > more.txt
+git add more.txt && git commit -qm "fix(s): a follow-up" || fail "second code commit"
+run_fr out push
+require_exit 2 "$out"
+expect_grep 'git\.push: ask' "$(printf '%s' "$out" | tr '\n' ' ')" "the next code push asks again"
 echo "ok: alacarte-settings"
