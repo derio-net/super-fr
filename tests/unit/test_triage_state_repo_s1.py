@@ -301,7 +301,7 @@ def test_a_settings_file_without_the_key_may_stay_at_schema_1() -> None:
 
 def test_a_newer_schema_is_refused_with_the_existing_message() -> None:
     with pytest.raises(SettingsError, match="newer than this fr"):
-        parse_settings({"schema": 3}, source="s")
+        parse_settings({"schema": 4}, source="s")
 
 
 @pytest.mark.parametrize("bad", ["no-slash", "a/b/c", "o/..", "", 7])

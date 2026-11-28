@@ -21,7 +21,7 @@ def _text(skill: str) -> str:
     "phrase",
     [
         "Under stealth no executor pushes",
-        "a phase's suite evidence is a local log, never `tests: ci`",
+        "no phase uses `tests: ci` as its own evidence",
         "The first code push is at `deliver`'s open, where `fr push` asks",
         "a cross-host `--resume` before `deliver` does not carry",
         "On a harness whose transcript fr cannot read, a stealth run cannot push or open its "
