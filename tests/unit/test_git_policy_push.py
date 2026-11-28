@@ -488,6 +488,30 @@ def test_a_push_to_a_branch_whose_recorded_pr_merged_is_refused(
     assert not [c for c in argv if c[0] == "push"]
 
 
+def test_an_unreadable_recorded_pr_is_named_on_stderr_and_does_not_refuse_the_push(
+    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fail-open stays (2026-11-28 R6), but the reason is no longer dropped."""
+    from fr.gh import GhError
+
+    class Forge:
+        def pr_status_by_url(self, url: str) -> dict[str, object]:
+            raise GhError("login page: SSO")
+
+    monkeypatch.setattr("fr.hostclient.client_for", lambda root: Forge())
+    repo = _feature(make_repo(tmp_path))
+    _seed_run(repo)
+    cursor = repo / "docs" / "superpowers" / "runs" / "r1.yaml"
+    cursor.write_text(cursor.read_text() + "pr: https://example.com/o/r/pull/7\n")
+    git(repo, "commit", "-qam", "chore(fr): run r1 — pr create")
+
+    result = _push(repo)
+
+    assert "warning: could not read the state of PR https://example.com/o/r/pull/7" in result.output
+    assert "login page: SSO" in result.output
+    assert "orphans the commit" not in result.output
+
+
 def test_squash_composes_through_a_template_that_names_no_type(
     tmp_path: Path, argv: list[list[str]]
 ) -> None:

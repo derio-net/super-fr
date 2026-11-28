@@ -769,7 +769,7 @@ def current_branch(repo_root: Path) -> str | None:
     return out if out and out != "HEAD" else None
 
 
-def default_pr_state(repo_root: Path) -> PrStateFn:
+def default_pr_state(repo_root: Path, warn: Callable[[str], None] | None = None) -> PrStateFn:
     """PR state via the host adapter, not a `gh` subprocess.
 
     `GhClient.pr_status_by_url` exists for exactly this question and is
@@ -777,7 +777,9 @@ def default_pr_state(repo_root: Path) -> PrStateFn:
     support instead of hardcoding one host's CLI. It already fails soft
     (`None` on any not-found/error condition); this keeps that contract by
     swallowing transport failures too — an adoption must not die because the
-    network is down, it must fall back to the row it can justify.
+    network is down, it must fall back to the row it can justify. The failure is
+    not silent: `warn`, when given, gets `fr.forge_body.read_failure`'s one line
+    (the command layer prints it; `fr.run` writes to no stream).
     """
 
     def observe(url: str) -> str | None:
@@ -785,7 +787,11 @@ def default_pr_state(repo_root: Path) -> PrStateFn:
             from fr.hostclient import client_for
 
             info = client_for(repo_root).pr_status_by_url(url)
-        except Exception:
+        except Exception as exc:
+            if warn is not None:
+                from fr.forge_body import read_failure
+
+                warn(read_failure(url, exc))
             return None
         if not info:
             return None
@@ -891,6 +897,7 @@ def adopt_run(
     supersede: bool = False,
     dry_run: bool = False,
     superseded: Superseded | None = None,
+    warn: Callable[[str], None] | None = None,
 ) -> RunState:
     """Reconstruct and save a run cursor for `target`. Returns the saved state.
 
@@ -960,7 +967,7 @@ def adopt_run(
         spec_rel=spec_rel,
         plan_rel=plan_rel,
         pr_url=pr_url,
-        pr_state=pr_state if pr_state is not None else default_pr_state(repo_root),
+        pr_state=pr_state if pr_state is not None else default_pr_state(repo_root, warn),
     )
 
     try:

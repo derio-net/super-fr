@@ -1360,3 +1360,87 @@ def test_migrate_adopt_adopts_every_in_flight_plan_on_one_branch(
     again = _invoke(repo, shipped, ["migrate", "artifacts", "--adopt"])
     assert again.exit_code == 0, again.output
     assert "would adopt" not in again.output
+
+
+# --- an unreadable PR is named, never silently dropped (2026-11-28 R5) ----------
+
+
+class _RaisingForge:
+    def pr_status_by_url(self, url: str) -> dict[str, object]:
+        raise RuntimeError("login page: SSO")
+
+
+def test_default_pr_state_warns_with_the_read_failure_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.run.adopt import default_pr_state
+
+    monkeypatch.setattr("fr.hostclient.client_for", lambda root: _RaisingForge())
+    calls: list[str] = []
+
+    assert default_pr_state(tmp_path, warn=calls.append)("https://github.com/derio-net/super-fr/pull/3") is None
+    assert calls == [
+        "warning: could not read the state of PR https://github.com/derio-net/super-fr/pull/3: login page: SSO"
+    ]
+
+
+def test_adopt_run_forwards_warn_to_the_default_pr_state(
+    tmp_path: Path, repo_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    _write_plan(repo, phases=2, complete=2)
+    monkeypatch.setattr("fr.hostclient.client_for", lambda root: _RaisingForge())
+    calls: list[str] = []
+
+    adopt_run(
+        repo,
+        repo / "docs" / "superpowers" / "plans" / PLAN_SLUG,
+        branch=BRANCH,
+        pr_url="https://github.com/derio-net/super-fr/pull/3",
+        shipped_root=shipped,
+        warn=calls.append,
+    )
+
+    assert len(calls) == 1 and "https://github.com/derio-net/super-fr/pull/3" in calls[0]
+
+
+def test_the_adopt_command_prints_the_read_failure_on_stderr(
+    tmp_path: Path, repo_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    plan_dir = _write_plan(repo, phases=2, complete=2)
+    monkeypatch.setattr("fr.hostclient.client_for", lambda root: _RaisingForge())
+    cli = CliRunner()
+
+    env = {**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
+    result = cli.invoke(
+        app,
+        ["run", "adopt", str(plan_dir), "--branch", BRANCH, "--pr", "https://github.com/derio-net/super-fr/pull/3"],
+        env=env,
+    )
+
+    assert "warning: could not read the state of PR https://github.com/derio-net/super-fr/pull/3" in result.stderr
+
+
+def test_migrate_adoption_prints_the_read_failure_on_stderr(
+    tmp_path: Path, repo_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, shipped = _repo(tmp_path, repo_root)
+    _write_spec(repo)
+    _write_plan(repo, phases=3, complete=1)
+    _commit_all(repo)
+    real = adopt_run
+
+    def adopting(repo_root_: Path, plan_dir: Path, **kw):  # type: ignore[no-untyped-def]
+        kw["warn"]("warning: could not read the state of PR https://example.com/o/r/pull/9: x")
+        return real(repo_root_, plan_dir, **kw)
+
+    monkeypatch.setattr("fr.run.adopt.adopt_run", adopting)
+    cli = CliRunner()
+    env = {**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
+
+    result = cli.invoke(app, ["migrate", "artifacts", "--yes", "--adopt"], env=env)
+
+    assert "could not read the state of PR https://example.com/o/r/pull/9" in result.stderr

@@ -22,6 +22,7 @@ import typer
 from fr.artifacts.paths import KIND_DIRS
 from fr.commands.common import resolve_repo_root
 from fr.debt.render import BOT_LOGINS  # the one definition, shared with `fr triage`
+from fr.forge_body import CONTROL as _CONTROL  # one class, shared with `read_failure`
 
 if TYPE_CHECKING:
     from fr.debt.engine import DebtForge
@@ -231,8 +232,6 @@ def issue_cmd(
 LEGACY_MARKER = "<!-- fr-acceptance-digest -->"
 
 
-# Control characters plus the bidi and format marks that reorder or hide text.
-_CONTROL = re.compile("[\x00-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 
 
 def _clean(value: object, limit: int = 120) -> str:
