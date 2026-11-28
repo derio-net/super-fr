@@ -45,8 +45,8 @@ admitted only by a trusted `fr-admit` marker whose digest equals the issue's cur
 
 ## Requirements
 
-R1. An admission pins the issue's comments as well as its title and body. `content_digest` covers a fixed first line `fr-admit-v2`, then the full title, a blank line, the full body, and then each pinned comment in a canonical form: its author's login lowercased with a trailing `[bot]` removed (`ghost` when the forge names no author), its creation time as UTC `YYYY-MM-DDTHH:MM:SSZ` (empty when it does not parse), and its full body, with `\r\n` read as `\n` throughout. A comment is pinned unless its association is OWNER, MEMBER or COLLABORATOR or its author is in the repo's `.fr/triage.yaml` `pr_authors`; the viewer is not part of this rule, so `fr triage admit`, collect and dispatch agree when they run as different users. Pinned comments are ordered by (creation time, comment id with a missing id read as -1, login, body). One function computes the digest, and `fr triage admit`, collect and the dispatch re-read all call it.
-R2. The admit marker that pins this digest is version 2 (`{"v":2,"digest":"sha256:<hex>"}`). Only a version-2 marker admits: a version-1 marker, any other version and a malformed marker are ignored, so an issue admitted before this change reads as having no trusted admit marker, with the existing reason that names `fr triage admit <key>`. Because the version-2 digest text starts with `fr-admit-v2`, no version-1 digest can equal it.
+R1. An admission pins the issue's comments as well as its title and body. `content_digest` is sha256 over one JSON document, `{"v":2,"title":…,"body":…,"comments":[[login,time,id,body],…]}` (compact separators, keys sorted, non-ASCII kept), so no field's text can pass for another's. It holds the full title, the full body and each pinned comment in a canonical form: its author's login lowercased with a trailing `[bot]` removed (`ghost` when the forge names no author), its creation time as UTC `YYYY-MM-DDTHH:MM:SSZ` (empty when it does not parse), and its full body, with `\r\n` read as `\n` throughout. A comment is pinned unless its association is OWNER, MEMBER or COLLABORATOR or its author is in the repo's `.fr/triage.yaml` `pr_authors`; the viewer is not part of this rule, so `fr triage admit`, collect and dispatch agree when they run as different users. Pinned comments are ordered by (creation time, comment id with a missing id read as -1, login, body). One function computes the digest, and `fr triage admit`, collect and the dispatch re-read all call it.
+R2. The admit marker that pins this digest is version 2 (`{"v":2,"digest":"sha256:<hex>"}`). Only a version-2 marker admits: a version-1 marker, any other version and a malformed marker are ignored, so an issue admitted before this change reads as having no trusted admit marker, with the existing reason that names `fr triage admit <key>`. Because the version-2 digest is taken over a JSON document carrying `"v":2`, no version-1 digest (over plain title and body text) can equal it.
 R3. `fr triage admit` reads the issue's comments with its title and body. Its preview shows each pinned comment (author, time, body, each passed through the preview's visible-character rendering and included in its hidden-character warning) inside the quoted untrusted block, beside the title and body, with the digest over all of them. `--yes --digest <d>` re-reads all three and refuses, writing nothing, when the live digest differs. A failed comment read refuses before any write. The marker's human line says that an edit to the title or body, or a new or edited comment by an outside author, voids the admission.
 R4. Collect computes an issue's `content_digest` from the comments it reads for the admission, so a `ready-fr` issue whose admission rests on its marker alone becomes ineligible, with the existing reason `edited after admission: run fr triage admit <key> again`, once a pinned comment is added or edited. When collect does not read the comments, the issue's `content_digest` is empty and no admit marker admits it. Facts schema 22 marks the change: a facts file of an older schema loads with every issue's admission unread and with ineligible issues' titles and bodies withheld, so a `ready-fr` issue in it is ineligible, and shows no text, until the next collect.
 R5. `batch dispatch --yes` (the wave driver's dispatch included) re-reads each admit-pinned member's comments with its title and body and recomputes the digest with that member's repo `pr_authors`; a changed digest or a failed read of either refuses the dispatch as today, naming the member and `fr triage admit <owner/repo#n>`.
@@ -60,7 +60,7 @@ R10. Collect carries a finished judged PR from the previous facts with no forge 
 
 ```
 packages/fr/src/fr/triage/
-  admit.py           ~ content_digest(title, body, comments, pinned_authors) -> v2 text  (R1)
+  admit.py           ~ content_digest(title, body, *, comments, pinned_authors) -> sha256(JSON v2) (R1)
                      + canonical_comment(c) -> (login, utc time, id, body)             (R1)
                      ~ admit_marker writes v:2, new human line; parse_admit: v2 only     (R2, R3)
   collect.py         ~ _comment_facts: content_digest from the comments it read        (R4)
@@ -86,17 +86,8 @@ packages/fr/src/fr/commands/
 
 ### A. Pinning comments (R1-R5)
 
-`content_digest(title, body, comments=(), pinned_authors=())` builds:
-
-```
-fr-admit-v2
-<title>
-
-<body>
-
---- comment <login> <YYYY-MM-DDTHH:MM:SSZ>
-<comment body>
-```
+`content_digest(title, body, *, comments, pinned_authors)` (both keyword arguments required, so no caller falls back to a title-and-body digest) hashes
+`json.dumps({"v": 2, "title": title, "body": body, "comments": [[login, time, id, body], …]}, sort_keys=True, separators=(",", ":"), ensure_ascii=False)` after the `\r\n` → `\n` normalisation of each text field. JSON framing means body text that imitates a comment can never hash like a real comment (security review of the first commits).
 
 Comment records come from either adapter (`real_ghclient.py:364` GraphQL, `real_ghrestclient.py:295`
 REST), both shaped `{association, author, body, created_at, id}`. `canonical_comment` normalises
