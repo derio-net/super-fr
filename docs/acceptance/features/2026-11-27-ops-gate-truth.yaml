@@ -20,9 +20,14 @@ rows:
     - spec:2026-11-27-ops-gate-truth#R4
     - spec:2026-11-27-ops-gate-truth#R5
     - spec:2026-11-27-ops-gate-truth#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_refresh.py#test_drift_differs_only_when_something_moved
+      - super-fr:tests/unit/test_ops_gate.py#test_a_confirmed_refresh_commits_merges_pushes_then_trusts_before_any_apply
+      - super-fr:tests/unit/test_ops_gate.py#test_a_closure_from_before_the_refresh_does_not_close_a_reopened_op
+    status: ci
+    notes: 'unit tests with fake ports and fixture repos, run in this PR''s CI (spec
+      Verification: none)'
   - id: closeout-outcome-walks-the-rows-a-step-names
     capability: 'fr closeout outcome: step-to-row walks'
     acceptance: 'A Test Plan step names the rows it proves with (rows: ...), and recording
