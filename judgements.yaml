@@ -13634,6 +13634,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-28T17:34:14.089922Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -15009,6 +15016,8 @@ batches:
     pr: 1782
     head: 491fc138ba3822555d9a8a257e29844f49bed1b8
     patch_id: e6ac19c7d072647a8f1c72c00966571269ad6cac
+  - kind: post_merge
+    at: '2026-11-28T17:34:04.259655Z'
 - id: ops-gate-truth
   title: 'Ops gate truth: no stale ops workspace; every gate walks the rows it verifies'
   ids:
@@ -17031,6 +17040,11 @@ queues:
     patch_id: e6ac19c7d072647a8f1c72c00966571269ad6cac
     base: 608d55585be96efd744e7b5168472832a6aebd7d
     parent: 608d55585be96efd744e7b5168472832a6aebd7d
+  - kind: queue_land
+    at: '2026-11-28T17:33:09.177606Z'
+    main: 81e8412e762fc84211ad0f1600f720d2a02501d0
+    entries:
+    - batch: triage-privacy
 queue_requests:
 - kind: queue_add
   at: '2026-11-27T15:25:05.595235Z'
