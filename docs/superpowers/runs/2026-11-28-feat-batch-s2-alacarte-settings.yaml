@@ -52,10 +52,21 @@ steps:
     stdout: |
       self-review passed
   implement:
-    state: pending
+    state: running
+    at: '2026-11-28T08:35:29+00:00'
     members:
     - implement-phase
     - review-phase
+    units:
+      phase/1/implement-phase:
+        state: running
+        attempts:
+        - dispatched: '2026-11-28T08:35:29+00:00'
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          tier: standard
+          bound: claude-sonnet-5
+          session: f1aab1a6-831c-498a-845a-2749af8b52b3
   journal-check:
     state: pending
   lens-review:
