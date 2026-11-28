@@ -25,7 +25,8 @@ import yaml
 
 from fr.artifacts.paths import KIND_DIRS, LEGACY_CONFIG
 from fr.config.space import SPACE_DIR
-from fr.triage.batch_drive import RUNS_DIR, GatedRow, find_run
+from fr.triage.batch_drive import RUNS_DIR, find_run
+from fr.triage.batch_drive_types import GatedRow
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout
 

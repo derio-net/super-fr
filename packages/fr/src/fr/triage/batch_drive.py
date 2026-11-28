@@ -64,11 +64,15 @@ from fr.triage.batch_drive_types import (  # noqa: F401 - re-exported, triage-le
     ActionKind,
     Admitted,
     ChecksVerdict,
-    GatedRow,
-    GateLedger,
     LivePr,
     LooseLedger,
     _wrong_base,
+)
+from fr.triage.batch_drive_types import (
+    GatedRow as GatedRow,
+)
+from fr.triage.batch_drive_types import (
+    GateLedger as GateLedger,
 )
 from fr.triage.claims import Claim, held_line, held_members
 from fr.triage.handback_rules import (  # noqa: F401 - re-exported, wave-queue-gaps §E
