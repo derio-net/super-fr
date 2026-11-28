@@ -15,9 +15,13 @@ rows:
     origin:
     - spec:2026-11-28-batch-silent-failures#R1
     - spec:2026-11-28-batch-silent-failures#R2
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      int:
+      - super-fr:tests/integration/test_install_opencode_agents.py#test_a_refusing_fr_models_apply_is_warned_with_its_whole_message
+      - super-fr:tests/integration/test_install_opencode_agents.py#test_the_warnings_survive_a_failed_install_and_no_temp_file_survives_any
+    status: ci
+    notes: 'stub fr refusing models apply: warning, closing repeat, failure ordering,
+      temp files removed'
     verify: none
   - id: bootstrap-unreadable-tag-refuses
     capability: Installer
