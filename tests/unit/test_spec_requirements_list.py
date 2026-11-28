@@ -335,3 +335,28 @@ def test_requirement_order_puts_a_lettered_id_between_its_neighbours() -> None:
         "R9b",
         "R10",
     ]
+
+
+# --- structure kept in the fold (review p1-r8, p1-r9) --------------------------
+
+
+@pytest.mark.parametrize(
+    ("body", "text"),
+    [
+        ("R1. steps:\n1. first\n2) second\n", "steps:<br>1. first<br>2) second"),
+        ("R1. kinds:\n+ plus\n- dash\n* star\n", "kinds:<br>+ plus<br>- dash<br>* star"),
+        ("R1. says:\n> quoted\n> again\n", "says:<br>> quoted<br>> again"),
+        (
+            "R1. tree:\n- a\n  - a1\n    - a1x\n   more a1x\n- b\n",
+            "tree:<br>- a<br>&nbsp;&nbsp;- a1<br>&nbsp;&nbsp;&nbsp;&nbsp;- a1x more a1x<br>- b",
+        ),
+    ],
+    ids=["numbered", "plus-dash-star", "quote", "nested"],
+)
+def test_list_structure_is_kept_in_the_fold(body: str, text: str) -> None:
+    assert _pairs(f"## Requirements\n\n{body}") == [("R1", text)]
+
+
+def test_a_trailing_backslash_hard_break_is_dropped_before_a_join() -> None:
+    spec = "## Requirements\n\nR1. one\\\ntwo\\\n\nthree\\\n"
+    assert _pairs(spec) == [("R1", "one two<br>three")]

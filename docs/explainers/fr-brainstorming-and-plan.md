@@ -124,9 +124,10 @@ It adds five things to a plain brainstorm:
   `fr_schema: 2`. An id is `R1`, `R2`, ...; a letter after the number (`R9a`) inserts a
   requirement without renumbering the rest. Plans and acceptance rows cite these ids. An older spec's `R1. ...` list
   is rewritten into the table by `fr migrate artifacts --yes`. A requirement that runs to
-  several paragraphs or a bullet list keeps all of it: each paragraph and each bullet goes into
-  the same cell, split by `<br>`. If the rewrite cannot convert a spec, for example because an
-  id is malformed or a heading sits inside the list, it leaves that spec unchanged. The error
+  several paragraphs or a list keeps all of it: each paragraph, list item and quote line goes
+  into the same cell, split by `<br>`, and a nested item keeps its indent. If the rewrite
+  cannot convert a spec, for example because an id is malformed, or a heading or a code block
+  sits inside the list, it leaves that spec unchanged. The error
   names the line to fix, and you run the command again.
 - **A `## Design shape` section**: a small picture of the change, drawn with
   [fr-show-me](fr-show-me.md)'s views, such as the files it touches as an annotated tree.

@@ -86,7 +86,7 @@ def test_blank_lines_are_added_around_the_table_only_where_none_is(tmp_path: Pat
     )
 
 
-def test_blank_lines_between_requirements_and_text_around_the_list_are_kept(
+def test_intro_prose_is_kept_and_text_after_the_last_requirement_folds_into_it(
     tmp_path: Path,
 ) -> None:
     text = "# X\n\n## Requirements\n\nIntro prose.\n\nR1. a\n\nR2. b\n\nAfter prose.\n\n## D\n"
@@ -352,12 +352,50 @@ def test_multi_paragraph_requirements_fold_into_one_cell(
     assert validate_artifact(artifact_kind("spec"), path) == ()
 
 
-def test_a_fenced_block_inside_the_list_is_not_special(tmp_path: Path) -> None:
-    """Pinned: the reader does not track fences, so the fence lines fold into R1
-    and R2 and the fenced `R2.` line is a requirement."""
-    path = _spec(tmp_path, "# X\n\n## Requirements\n\nR1. a\n\n```text\nR2. b\n```\n")
+FENCE_FIX = "move it out of the list or below the section"
+
+
+@pytest.mark.parametrize(
+    ("text", "line"),
+    [
+        # p1-r6: a fence inside the last requirement, holding a `# comment`.
+        (
+            "# X\n\n## Requirements\n\nR1. a\nR2. run:\n\n"
+            "```bash\n# install\nmake\n```\n\n## Next\n",
+            8,
+        ),
+        # p1-r6: the same fence between two requirements.
+        ("# X\n\n## Requirements\n\nR1. a\n\n```bash\n# install\n```\n\nR2. b\n", 7),
+        # p1-r7: a fenced example requirement; `~~~` and an indented fence too.
+        ("# X\n\n## Requirements\n\nR1. a\n\n```text\nR2. b\n```\n", 7),
+        ("# X\n\n## Requirements\n\nR1. a\n\n~~~\nR2. b\n~~~\n", 7),
+        ("# X\n\n## Requirements\n\nR1. a\n\n    ```\n    x\n    ```\n", 7),
+    ],
+    ids=["fence-in-last", "fence-between", "fenced-requirement", "tilde-fence", "indented-fence"],
+)
+def test_a_code_block_inside_the_list_refuses(tmp_path: Path, text: str, line: int) -> None:
+    path = _spec(tmp_path, text)
+    [failure] = _migrate(tmp_path).failed
+    assert path.read_bytes() == text.encode()
+    assert f"{path}:{line}: a code block inside the requirements list" in failure.error
+    assert FENCE_FIX in failure.error
+
+
+def test_an_indented_hash_line_is_text_not_a_heading(tmp_path: Path) -> None:
+    """p1-r6: only a line at column 0 is a heading."""
+    path = _spec(tmp_path, "# X\n\n## Requirements\n\nR1. a\n    # not a heading\nR2. b\n")
     assert not _migrate(tmp_path).failed
-    assert [line for line in path.read_text().splitlines() if line.startswith("| R")] == [
-        "| R1 | a<br>```text |",
-        "| R2 | b ``` |",
-    ]
+    rows = [line for line in path.read_text().splitlines() if line.startswith("| R")]
+    assert rows == ["| R1 | a # not a heading |", "| R2 | b |"]
+
+
+def test_a_heading_after_the_last_requirement_keeps_its_text_byte_identical(
+    tmp_path: Path,
+) -> None:
+    """p1-r10: the heading ends the last requirement; it and its text stay as they were."""
+    tail = "### Notes\n\nSome *notes* \\| kept.\n  indented\n"
+    text = f"# X\n\n## Requirements\n\nR1. a\n\n{tail}\n## D\n"
+    path = _spec(tmp_path, text)
+    assert not _migrate(tmp_path).failed
+    out = path.read_text()
+    assert "| R1 | a |\n\n" + tail + "\n## D\n" in out

@@ -202,9 +202,11 @@ def _table_rows(lines: list[str], first_line_no: int) -> list[tuple[str, str, in
 
 @dataclass(frozen=True)
 class ListItem:
-    """One `R<n>.` requirement: its id, its text with continuation lines joined,
-    the 0-based indices of its first and last line within the section, and the
-    1-based file line number of its first line (for messages)."""
+    """One `R<n>.` requirement: its id; its text, with continuation lines joined by
+    single spaces and each further paragraph, list item (`-`, `*`, `+`, `1.`, `1)`,
+    nested ones prefixed `&nbsp;&nbsp;` per level) and `>` quote line joined with
+    `<br>` (R3); the 0-based indices of its first and last line within the section;
+    and the 1-based file line number of its first line (for messages)."""
 
     id: str
     text: str
@@ -225,6 +227,10 @@ class ListLayout:
     items: tuple[ListItem, ...]
     prose: tuple[int, ...]
     base: int
+    fences: tuple[int, ...] = ()
+    """The 1-based lines of code-fence markers (```` ``` ```` or `~~~`, any indent)
+    after the first requirement: a code block inside the list, which the rewrite
+    refuses. Lines inside a fence belong to no requirement."""
 
     @property
     def start(self) -> int:
@@ -237,23 +243,37 @@ class ListLayout:
         return self.items[-1].last if self.items else -1
 
 
-_BULLET_RE = re.compile(r"^[-*]\s+\S")
+_BULLET_RE = re.compile(r"^(?:[-*+]|[0-9]+[.)])\s+\S")
+_QUOTE_RE = re.compile(r"^>")
 _HEADING_RE = re.compile(r"^#{1,6}\s")
+"""Matched on the raw line: only a heading at column 0 counts."""
+_FENCE_RE = re.compile(r"^\s*(```|~~~)")
+_NEST = "&nbsp;&nbsp;"
+"""One nesting level of a nested list item (each 2 leading spaces), after its `<br>`."""
 PARAGRAPH_BREAK = "<br>"
 """What joins a requirement's paragraphs and bullet items into one line (R3), in the
 list reader and in a table cell alike: the reader keeps it verbatim, so a list and the
 table it is rewritten to read to the same text."""
 
 
+def _part(stripped: str) -> str:
+    """One line's text as it joins the fold: one trailing `\\` (a Markdown hard break)
+    is dropped, since `\\<br>` would render the `<br>` literally (review p1-r9)."""
+    return stripped[:-1].rstrip() if stripped.endswith("\\") else stripped
+
+
 def _walk_list(lines: list[str], first_line_no: int) -> ListLayout:
     """Classify the section's lines (R3). A requirement line opens an item, and
-    everything after it up to the next requirement line, a heading or the end of the
-    section belongs to it: lines directly after it continue it (joined with single
-    spaces), a blank line starts a new paragraph, and each `- `/`* ` bullet item starts
-    a new segment with its bullet kept; segments are joined with `<br>`. Blank lines
-    before the first requirement and after the last one's text belong to none; text
-    before the first requirement is prose and ignored. After a heading, the text up to
-    the next requirement belongs to no requirement and is recorded in `prose`."""
+    everything after it up to the next requirement line, a heading at column 0 or the
+    end of the section belongs to it: lines directly after it continue it (joined with
+    single spaces), while a blank line, a list item (`-`, `*`, `+`, `1.`, `1)`; nested
+    ones prefixed `&nbsp;&nbsp;` per 2 spaces of indent) and a `>` quote line each start
+    a new segment; segments are joined with `<br>`, and one trailing `\\` per line is
+    dropped. Blank lines before the first requirement and after the last one's text
+    belong to none; text before the first requirement is prose and ignored. After a
+    heading, the text up to the next requirement belongs to none and is recorded in
+    `prose`. A code fence (```` ``` ```` or `~~~`, any indent) after the first
+    requirement is recorded in `fences`; lines inside a fence belong to none."""
     items: list[ListItem] = []
     prose: list[int] = []
     pending: list[int] = []
@@ -269,14 +289,23 @@ def _walk_list(lines: list[str], first_line_no: int) -> ListLayout:
             items.append(ListItem(rid, text, first, last_idx, first_line_no + first))
             current = None
 
+    fences: list[int] = []
+    in_fence = False
     for idx, line in enumerate(lines):
         stripped = line.strip()
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            if items or current is not None:
+                fences.append(first_line_no + idx)
+            continue
+        if in_fence:
+            continue
         m = _LIST_ITEM_RE.match(stripped)
         if m:
             close()
             prose.extend(pending)
             pending = []
-            current = (m.group(1), [[m.group(2).strip()]], idx)
+            current = (m.group(1), [[_part(m.group(2))]], idx)
             last_idx, gap = idx, False
             continue
         like = _ID_LIKE_RE.match(stripped)
@@ -288,18 +317,23 @@ def _walk_list(lines: list[str], first_line_no: int) -> ListLayout:
         if not stripped:
             gap = True
             continue
-        if _HEADING_RE.match(stripped):
+        if _HEADING_RE.match(line):
             close()
         if current is not None:
-            if gap or _BULLET_RE.match(stripped):
-                current[1].append([stripped])
+            if _BULLET_RE.match(stripped):
+                indent = len(line) - len(line.lstrip(" "))
+                current[1].append([_NEST * (indent // 2) + _part(stripped)])
+            elif gap or _QUOTE_RE.match(stripped):
+                current[1].append([_part(stripped)])
             else:
-                current[1][-1].append(stripped)
+                current[1][-1].append(_part(stripped))
             last_idx, gap = idx, False
         elif items:
             pending.append(first_line_no + idx)
     close()
-    return ListLayout(items=tuple(items), prose=tuple(prose), base=first_line_no - 1)
+    return ListLayout(
+        items=tuple(items), prose=tuple(prose), base=first_line_no - 1, fences=tuple(fences)
+    )
 
 
 def _is_header(line: str) -> bool:

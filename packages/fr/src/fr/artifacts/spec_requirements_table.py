@@ -7,8 +7,9 @@ the table renders as rows. The rewrite:
 
 - takes the list's layout from `fr.requirements.list_layout`, the walk the
   reader itself uses, so the two cannot disagree on which lines belong to a
-  requirement (continuation lines are joined with single spaces, paragraphs and
-  bullet items with `<br>`);
+  requirement (continuation lines are joined with single spaces; paragraphs, list
+  items and `>` quote lines with `<br>`, nested items prefixed `&nbsp;&nbsp;` per
+  level, a trailing `\\` hard break dropped);
 - keeps every line outside the requirement and continuation lines byte for
   byte, adds one blank line before and after the table where none is, writes
   the table's lines in the file's own line ending, and escapes `|` as `\\|`;
@@ -19,8 +20,9 @@ the table renders as rows. The rewrite:
 Each requirement's paragraphs and bullet items fold into its cell, joined with
 `<br>` (R3, decision fold-multi-paragraph), so text between requirements is no
 refusal. A spec it cannot convert — a `RequirementsError` (an id-like line with a
-malformed id such as `R09.`, or ids out of order), a table header or a heading
-inside the list, or a failed round trip — raises before a byte
+malformed id such as `R09.`, or ids out of order), a table header, a heading or a
+code block (a ```` ``` ```` or `~~~` fence at any indent) inside the list, or a failed
+round trip — raises before a byte
 moves, so the file stays byte-identical and unstamped, and the error names the
 file, the line, the cause and a hand fix chosen for that cause. Every other
 spec still migrates.
@@ -83,6 +85,7 @@ _HEADER_FIX = (
     "delete the header line, or finish the table by hand and add `fr_schema: 2` "
     f"front matter, {_RERUN}"
 )
+_FENCE_FIX = f"move it out of the list or below the section, {_RERUN}"
 _HEADING_FIX = f"move the heading and its text out of the requirements list, {_RERUN}"
 _JOIN_FIX = f"join the requirement's lines into one line in the spec, {_RERUN}"
 _GENERIC_FIX = f"fix that line of the requirements list, {_RERUN}"
@@ -132,6 +135,10 @@ def build(path: Path, text: str) -> str | None:
         raise _refuse(
             path, _line_of(message), message.partition(": ")[2] or message, _fix_for(message)
         ) from e
+    if layout.fences:
+        raise _refuse(
+            path, layout.fences[0], "a code block inside the requirements list", _FENCE_FIX
+        )
     if layout.prose:
         # Text after a heading belongs to no requirement (R3); the table would drop it.
         raise _refuse(path, layout.prose[0], "a heading inside the requirements list", _HEADING_FIX)
