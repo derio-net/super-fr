@@ -27,27 +27,33 @@ journal:
   - kind: decision
     id: d-admit-pins-comments
     title: "#1633: the admit digest also pins every untrusted author's comment"
-    body: Operator chose (round 1 q1, recommended) to extend the digest over untrusted comments (login, time, body, in order); a new or edited untrusted comment voids the admission until re-admitted; the preview shows them. Rejected: void on a newer comment only; a brief-only fence.
+    body: |
+      Operator chose (round 1 q1, recommended) to extend the digest over untrusted comments (login, time, body, in order); a new or edited untrusted comment voids the admission until re-admitted; the preview shows them. Rejected: void on a newer comment only; a brief-only fence.
   - kind: decision
     id: d-v1-markers-stop
     title: "#1633: version-1 admit markers stop admitting"
-    body: Operator chose (round 1 q2, recommended) fail closed; a v1 marker gives a reason naming fr triage admit <key>. Rejected - keep v1 admitting while no untrusted comment exists.
+    body: |
+      Operator chose (round 1 q2, recommended) fail closed; a v1 marker gives a reason naming fr triage admit <key>. Rejected - keep v1 admitting while no untrusted comment exists.
   - kind: decision
     id: d-pr-title-login-rule
     title: "#1632: a PR keeps its title only when its author is in the claim-trust set"
-    body: Operator chose (round 1 q3, recommended) the login rule (viewer + pr_authors), no new association read. Rejected - logins plus OWNER/MEMBER/COLLABORATOR via a PR association read.
+    body: |
+      Operator chose (round 1 q3, recommended) the login rule (viewer + pr_authors), no new association read. Rejected - logins plus OWNER/MEMBER/COLLABORATOR via a PR association read.
   - kind: decision
     id: d-guard-scans-carried-files
     title: "#1634: the guard scans every carried file for non-public repo names"
-    body: Operator leaned to the scan in round 1 q4 but asked about cost; measured on the host's state dirs (largest 50 carried files / 4.6 MB, ~150 ms cold; others < 5 ms), and in round 2 the operator chose the scan, with the short circuits (state repo public and some repo non-public). Rejected - per-file extractors.
+    body: |
+      Operator leaned to the scan in round 1 q4 but asked about cost; measured on the host's state dirs (largest 50 carried files / 4.6 MB, ~150 ms cold; others < 5 ms), and in round 2 the operator chose the scan, with the short circuits (state repo public and some repo non-public). Rejected - per-file extractors.
   - kind: decision
     id: d-verification-none
     title: "Verification: strategy none, CI unit tests; gate developer"
-    body: Operator chose (round 1 q5, recommended) strategy none; every requirement is engine behaviour fakes prove in CI.
+    body: |
+      Operator chose (round 1 q5, recommended) strategy none; every requirement is engine behaviour fakes prove in CI.
   - kind: decision
     id: d-reopened-pr-truncation
     title: "#1631: carry a CLOSED judged PR only when the open-PR list was complete"
-    body: Settled from the code, not asked - a reopened PR within the open-PR list's limit is already found there (listed_prs precedes finished_prs, collect.py:875); only a truncated list strands it, and carried closed issues already skip the carry on truncation (collect.py:881).
+    body: |
+      Settled from the code, not asked - a reopened PR within the open-PR list's limit is already found there (listed_prs precedes finished_prs, collect.py:875); only a truncated list strands it, and carried closed issues already skip the carry on truncation (collect.py:881).
 acceptance:
   - id: triage-admit-pins-comments
     capability: triage-intake
