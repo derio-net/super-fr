@@ -93,6 +93,12 @@ def outcome(
         "operator", "--harness", help="--ran: the harness a named row's walk ran on."
     ),
     model: str = typer.Option("human", "--model", help="--ran: the model that walked it."),
+    pr_head: str | None = typer.Option(
+        None,
+        "--pr-head",
+        hidden=True,
+        help="--ran: the PR head whose own walks count toward no harness (the DevOps stage).",
+    ),
 ) -> None:
     """Record one outcome for each Test Plan step in --step (R18).
 
@@ -186,7 +192,7 @@ def outcome(
                 )
             )
     walks = (
-        _row_walks(root, run, spec_path, steps, numbers, text, harness, model)
+        _row_walks(root, run, spec_path, steps, numbers, text, harness, model, pr_head)
         if kind == "ran"
         else None
     )
@@ -245,6 +251,7 @@ def _row_walks(
     evidence: str,
     harness: str,
     model: str,
+    pr_head: str | None = None,
 ) -> _RowWalks | None:
     """A passing walk on each row the steps in *numbers* name (R9), or `None` when they
     name none or acceptance is off (R8). Refuses, before anything is written, a named id
@@ -277,6 +284,7 @@ def _row_walks(
     except (AcceptanceError, SectionError) as e:
         raise _refuse(str(e)) from e
     citing = {r.id: r for r in rows_citing(matrix, spec_ref)}
+    head = _head_walks(root, pr_head) if pr_head else {}
     at = _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     items, before, lines = [], [], []
     for rid, n in sorted(named.items(), key=lambda kv: (kv[1], kv[0])):
@@ -289,8 +297,9 @@ def _row_walks(
         walk = Walk(strategy=strategy, harness=harness, model=model, outcome="pass", at=at,
                     evidence=f"Test Plan step {n}: {evidence}")  # fmt: skip
         after = row.model_copy(update={"walks": (*row.walks, walk)})
-        owed = owed_harnesses(after)
-        if walk_verified(after):
+        mine = [w for w in after.walks if w not in head.get(rid, set())]  # R12: head-free
+        owed = owed_harnesses(after, mine)
+        if walk_verified(after.model_copy(update={"walks": tuple(mine)})):
             status, notes = "walked", f"walked by Test Plan step {n}: {evidence}"
             lines.append(f"{rid}: walked")
         else:
@@ -300,6 +309,33 @@ def _row_walks(
         items.append(AcceptanceItem(id=rid, status=status, notes=notes, walk=walk))
         before.append(row)
     return _RowWalks(tuple(items), fragment_slug_for_spec(spec_rel), tuple(before), tuple(lines))
+
+
+def _head_walks(root: Path, sha: str) -> dict[str, set[Any]]:
+    """Row id -> the walks *sha*'s acceptance fragments carry (R12), read with `git show`;
+    an unreadable head or fragment refuses, never an empty exclusion."""
+    import subprocess
+
+    from fr.acceptance.fragment import FRAGMENTS_DIR
+    from fr.acceptance.model import AcceptanceError
+    from fr.acceptance.walks import fragment_walks
+    from fr.artifacts.paths import artifact_root
+
+    folder = artifact_root(root) / FRAGMENTS_DIR
+    if not re.fullmatch(r"[0-9a-f]{7,64}", sha):
+        raise _refuse(f"--pr-head {sha!r} is not a commit sha")
+    texts = []
+    for path in sorted(folder.glob("*.yaml")):
+        shown = subprocess.run(
+            ["git", "-C", str(folder), "show", f"{sha}:./{path.name}"],
+            capture_output=True, text=True, check=False,
+        )  # fmt: skip
+        if shown.returncode == 0:
+            texts.append(((FRAGMENTS_DIR / path.name).as_posix(), shown.stdout))
+    try:
+        return fragment_walks(texts)
+    except AcceptanceError as e:
+        raise _refuse(f"the PR head's fragments cannot be read: {e}") from e
 
 
 def _shape_default(root: Path, run: str | None) -> str | None:

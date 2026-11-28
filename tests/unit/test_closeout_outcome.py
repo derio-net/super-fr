@@ -540,3 +540,25 @@ def test_a_run_spec_takes_the_run_and_walks_its_rows(
 
     assert res.exit_code == 0, res.output
     assert _w_rows(root)["r1"].status == "walked"  # type: ignore[attr-defined]
+
+
+def test_p2_r1_a_walk_the_pr_head_carries_does_not_discharge_a_harness(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Stage-written walks count owed harnesses over the walks the PR head does not carry
+    (R12): `--pr-head <sha>` names that head."""
+    root = _walk_repo(tmp_path)
+    head_walk = {"strategy": "live", "harness": "b", "model": "m", "outcome": "pass",
+                 "at": "2026-11-27T08:00:00Z", "evidence": "head"}  # fmt: skip
+    rows = [_w_row("r1", issues=["acme/gizmo#7"]),
+            _w_row("r2", harnesses=["a", "b"], walks=[head_walk]), _w_row("r3")]  # fmt: skip
+    (root / W_FRAGMENT).write_text(_w_fragment(rows))
+    _git(root, "commit", "-qam", "the PR head walks b")
+    head = _git(root, "rev-parse", "HEAD").strip()
+
+    res = _w(root, monkeypatch, "--step", "2", "--ran", "--evidence", "E", "--harness", "a",
+             "--pr-head", head)  # fmt: skip
+
+    assert res.exit_code == 0, res.output
+    assert _w_rows(root)["r2"].status == "walk-owed"  # type: ignore[attr-defined]
+    assert "still owed: b" in res.output
