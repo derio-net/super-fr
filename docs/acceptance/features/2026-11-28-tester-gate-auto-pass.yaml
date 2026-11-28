@@ -49,20 +49,26 @@ rows:
     - spec:2026-11-28-tester-gate-auto-pass#R7
     levels:
       unit:
-      - super-fr:tests/unit/test_triage_pr_gates.py#test_a_cursor_naming_another_pr_gives_no_rows
       - super-fr:tests/unit/test_triage_pr_gates.py#test_two_cursors_naming_the_branch_are_unreadable_for_a_pr
       - super-fr:tests/unit/test_triage_drive_loose.py#test_a_drive_narrowed_with_batch_writes_nothing_for_a_loose_pr
       - super-fr:tests/unit/test_triage_drive_loose.py#test_rows_unreadable_for_a_loose_pr_are_reported_once_and_plan_nothing
       - super-fr:tests/unit/test_triage_drive_loose.py#test_a_failed_label_write_for_a_loose_pr_is_reported_and_exits_one
-      - super-fr:tests/unit/test_triage_drive_loose.py#test_loose_ledgers_reads_no_rows_when_the_cursor_names_another_pr
       - super-fr:tests/unit/test_triage_drive_loose.py#test_loose_ledgers_reports_two_runs_naming_the_branch_and_reads_nothing
       - super-fr:tests/unit/test_triage_drive_loose.py#test_a_loose_pr_in_a_repo_with_no_clone_is_reported_and_the_pass_goes_on
       - super-fr:tests/unit/test_triage_drive_loose.py#test_a_failed_gate_pass_for_a_loose_pr_is_planned_again_on_the_next_pass
       - super-fr:tests/unit/test_triage_pr_gates.py#test_a_runs_live_and_archived_cursors_are_one_cursor_for_a_pr
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_a_cursor_naming_another_pr_is_unreadable
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_a_cursor_naming_this_number_in_another_repo_is_unreadable
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_a_cursor_whose_pr_is_not_a_url_is_unreadable
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_a_pr_from_a_fork_or_of_unknown_origin_is_never_loose
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_loose_ledgers_reports_a_cursor_naming_another_pr_and_reads_nothing
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_loose_ledgers_reports_the_same_pr_number_of_another_repo_on_the_cursor
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_a_repo_failure_is_reported_once_per_repo_and_a_pr_failure_names_its_repo
     status: ci
-    notes: 'unit: cursor-PR rule at ledger and loose_ledgers over a real default branch,
-      archived twin, no-clone repo, narrowed drive, once-only report, failed write retried
-      next pass'
+    notes: 'unit: fork/unknown-origin PRs never loose; cursor recording another PR,
+      another repo''s PR or a non-url is unreadable and reported; two runs; archived
+      twin; no-clone repo reported once per repo; per-PR reports name owner/repo#n;
+      narrowed drive; failed write retried'
     verify: none
   - id: loose-gated-pr-batch-guards
     capability: Triage driver
