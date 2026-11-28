@@ -32,5 +32,11 @@ journal:
     title: dated observations naming `_verify_tests_log` were left as written
     body: |
       parity.yaml's 2026-10-23 live-verification note, the acceptance legacy fragment's RE-OBSERVED note and docs/triage's judgement records name `_verify_tests_log` or `_ci_tests_witness` as they stood when observed; they record history, not the current module layout, so they were not edited. Code comments and docstrings naming moved names (settle/read.py, run/ci_evidence.py, run/deliver.py, AGENTS.md's lens-review sentence) were re-pointed.
+  - kind: discovery
+    id: p5-test-runs
+    phase: 5
+    title: the fast tier ran 10378 passed, 118 skipped after the last code commit; the plan's focused set ran green as that tier plus its 21 unselected files
+    body: |
+      `uv run pytest --fr-scope origin/main -n 2 -q --no-cov` on 0ae5c3815: 10378 passed, 118 skipped, exit 0 (63 min on a loaded host). The P5.T2.S2 glob (test_run_*, test_deliver*, test_record_*, test_verification*) is 87 files; 66 were in the fast tier, and the other 21 ran on their own at the same commit: 417 passed. The whole suite collects with `-m ""` (20422 tests, no error). ruff format/check and mypy are clean; `fr docs check` reports every page current.
 resolves: []
 evidence: {}
