@@ -3,7 +3,7 @@ run: 2026-11-28-feat-batch-triage-privacy
 workflow: fr-goal@1
 branch: feat/batch-triage-privacy
 started: '2026-11-28T14:16:48+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -46,7 +46,11 @@ steps:
           returned: '2026-11-28T14:43:38+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-11-28T14:43:58+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
