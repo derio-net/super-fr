@@ -483,7 +483,7 @@ def test_the_last_refusal_missing_emits_writes_no_stamp(
     tmp_path: Path, live: dict[str, str], deliver
 ) -> None:  # type: ignore[no-untyped-def]
     """l-tests-r1: the PR gate passes (the live body carries every section) and the
-    exit guard and label sync pass too; `_refuse_missing_emits`, the resolve's last
+    exit guard and label sync pass too; `refuse_missing_emits`, the resolve's last
     refusal, refuses a `done` naming no `pr`. The stamp, planned before every one of
     them, is never written."""
     root = _at_deliver(tmp_path)

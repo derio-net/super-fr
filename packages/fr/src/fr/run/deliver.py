@@ -55,7 +55,7 @@ def questions_from_flags(
     rounds: int | None, trigger: str | None, reason: str | None
 ) -> QuestionRounds | None:
     """The flag form of a record's `questions:` section — the SAME model, so
-    both paths hand `_gate_provenance` one value (spec 2026-09-26 §3.B)."""
+    both paths hand `gate_provenance` one value (spec 2026-09-26 §3.B)."""
     from pydantic import ValidationError
 
     from fr.record.model import QuestionRounds
@@ -848,7 +848,7 @@ def local_stamp_plan(
 
 def deliver_local_stamp_write(repo_root: Path, plan: LocalStamps | None) -> None:
     """Write `deliver_local_stamp_plan`'s fragment — called beside
-    `_flush_gate_decisions`, after `deliver`'s last refusal, so a refused resolve
+    `flush_gate_decisions`, after `deliver`'s last refusal, so a refused resolve
     writes no stamp; remembered for a `--record` restore and committed with the
     resolve (in the artifact root's checkout under quiet or stealth)."""
     if plan is None:

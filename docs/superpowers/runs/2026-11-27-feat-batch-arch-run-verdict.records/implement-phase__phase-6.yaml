@@ -1,0 +1,32 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-arch-run-verdict
+step: implement-phase
+item: phase/6
+outcome: done
+ticks: [P6.T1.S1, P6.T2.S1, P6.T3.S1, P6.T3.S2]
+refactor:
+  P6.T1: "a capture task: fixtures and a test, nothing pre-existing to clean"
+  P6.T2: "a move that must keep its bytes; the only cleanup (run_cmd imports left unused, the re-pointed tests, the stale prose names) was done in the green step"
+journal:
+  - kind: decision
+    id: p6-provenance-api
+    title: the gate provenance cluster joined fr/run/provenance.py with public names; refusals raise RunRefusal and gate_provenance takes warn (phase 6)
+    body: "gate_degradation_notice, refuse_gate_flags, clears_gate, question_rounds_refusal (and ANNOUNCEMENTS), queue_gate_decision, flush_gate_decisions, GATE_DECISIONS (ContextVar name string fr_gate_decisions unchanged), observed_gate_rounds, GateAnswer, derive_gate_answer, gate_provenance, record_round_two, refuse_missing_emits. run_cmd wraps each refusing call in `with _refusals():` and passes warn=_say; record/apply.py imports clears_gate and derive_gate_answer from fr.run.provenance directly, dropping its run_cmd import in _run_context. The queue_exit_baseline caller in run_cmd also wraps queue_gate_decision in _refusals()."
+    phase: 6
+  - kind: discovery
+    id: p6-provenance-capture
+    title: the provenance capture drives one 46-case table through run_cmd's old functions once and now through fr.run.provenance (phase 6)
+    body: "tests/unit/test_run_verdict_provenance.py holds the cases; fixtures in tests/fixtures/run_verdict/provenance/ (stderr at width 80 with colour, exit code, returned value, queued gate decisions and noted unobserved gates as JSON) were taken by a throwaway driver (not committed) in commit 9ba4ff522, before the move. The unobserved note lands in take_unobserved (operator-gate). The test drives only fr.run.provenance and run_cmd's adapters."
+    phase: 6
+  - kind: discovery
+    id: p6-acceptance-check-baseline
+    title: fr acceptance check reports 49 errors on this checkout before and after this phase, none on this feature's rows (phase 6)
+    body: "They name rows of other features (e.g. queue-followups) whose specs or tests this branch does not hold; the count is the same with this phase's changes stashed. The harness-gate-degrades-loudly row was amended (status ci kept, note re-pointed), and run-verdict-refusals-preserved and run-cmd-clusters-in-fr-run moved to ci."
+    phase: 6
+  - kind: discovery
+    id: p6-docs-stamps
+    title: fr docs check reports every page current; cli.md and workflow-shapes.md carry a slice 6 reviewed stamp (phase 6)
+    body: "Both cover run_cmd.py and fr/run/**; AGENTS.md's fr/run paragraph now names verdict.py, unobserved.py, steps.py, deliver.py, brief.py, provenance.py, evidence/ and the no-typer/no-console rule. run_cmd.py is 4093 lines, budget 4115."
+    phase: 6
+resolves: []
+evidence: {}

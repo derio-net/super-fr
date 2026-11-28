@@ -192,8 +192,8 @@ class _Context:
     the entry was filed as, which a step record's `resolves:` never does."""
     gate_answer: Any = None
     """When this record clears an operator gate (the brainstorm record): who the
-    gate's DERIVED provenance says answered it (`run_cmd.derive_gate_answer`,
-    the same derivation `_gate_provenance` records), with the answered rounds
+    gate's DERIVED provenance says answered it (`fr.run.provenance.derive_gate_answer`,
+    the same derivation `gate_provenance` records), with the answered rounds
     it read. Its decisions are stamped `decided_by=operator` from it (spec
     2026-10-14 R12; reviews p3-r2, p3-r3) — see `_stamped_decider`."""
     identity: tuple[str, str] | None = None
@@ -206,9 +206,9 @@ class _Context:
 
 
 def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Context, Any]:
-    from fr.commands import run_cmd
     from fr.run.adopt import AdoptError
     from fr.run.model import RunStateError, load_run_state
+    from fr.run.provenance import clears_gate, derive_gate_answer
     from fr.run.steps import find_step, item_phase, rebind_shape, resolve_manifest_for_state
     from fr.workflow.model import WorkflowError
 
@@ -262,11 +262,11 @@ def _run_context(repo_root: Path, run_id: str, record: StepRecord) -> tuple[_Con
     emits_ticks = "plan:ticks" in owner_emits
     current = state.steps.get(record.step)
     gate_answer = (
-        run_cmd.derive_gate_answer(
+        derive_gate_answer(
             current, no_questions=record.no_questions, claimed=record.evidence.get("answered_by")
         )
         if current is not None
-        and run_cmd._clears_gate(step, current, "done" if record.outcome == "done" else "failed")
+        and clears_gate(step, current, "done" if record.outcome == "done" else "failed")
         else None
     )
     context = _Context(
