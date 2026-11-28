@@ -58,7 +58,9 @@ rows:
       next collect, even when the repo's open-PR list is cut at its limit
     origin:
     - spec:2026-11-28-triage-privacy#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect_carry.py#test_a_closed_judged_pr_is_viewed_again_when_the_open_list_was_cut
+    status: ci
+    notes: 'unit tests: call counts over two collects'
     verify: none
