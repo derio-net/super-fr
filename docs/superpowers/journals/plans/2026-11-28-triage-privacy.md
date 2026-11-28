@@ -130,3 +130,12 @@ carried_text_leaks scans each carried path, with its suffix dropped, as well as 
 ### l-security-r5-resolved · finding [fixed] · resolves l-security-r5: TOCTOU: push_state scanned the files, then commit_tree_from_paths re-read them; a write in between pushed unscanned bytes
 
 push_state builds the commit first and runs guard_state over that commit's blobs (carried= the tree's paths, read= blob bytes), so the bytes scanned are the bytes pushed. test_a_push_scans_the_bytes_it_commits_not_the_directory_again rewrites the file clean after the commit is built and still sees the refusal.
+
+<!-- fr:journal kind=finding scope=plan id=bot-account-type created=2026-11-28T16:51:22+00:00 state=open review_scope=out -->
+### bot-account-type · finding [open] (reviewer: out of scope) · Comment adapters do not report whether an author is a bot, so a pr_author listed as x[bot] is pinned under GraphQL but not under REST
+
+The automated security review of the l-security-r2 fix found this. Comparing logins symmetrically widened trust to a user account with the same name, so the fix went back to the one-directional rule: a listed login trusts only what it names.
+
+What is left fails closed. If a bot is listed with its [bot] suffix, an admission made under one API mode is voided under the other. Listing the bot by its bare login avoids this.
+
+The fix is to carry the account type (REST user.type, GraphQL __typename) in both comment adapters, and to match x[bot] only against an author whose type is Bot. That needs a GraphQL comment query beyond gh issue view --json comments.
