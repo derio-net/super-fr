@@ -139,3 +139,6 @@ row_kinds:
 run_gate: none
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=decision scope=spec id=tier-2026-11-26-spec-requirements-table-p1 created=2026-11-28T09:29:29+00:00 -->
+### tier-2026-11-26-spec-requirements-table-p1 · decision · hard: the single phase carries the spec 1->2 body-rewrite migration, which every consumer repo runs on upgrade and whose refusal blocks every fr command there
