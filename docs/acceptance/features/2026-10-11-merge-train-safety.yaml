@@ -208,3 +208,31 @@ rows:
     status: ci
     notes: 'configure-main-protection.sh tested with a stub gh: merge-not-overwrite
       body, both refusals, --force, --dry-run, idempotence'
+amendments:
+  - row: main-requires-ci-ok
+    op: set-status
+    base: 0
+    status: walked
+    notes: 'Walked 2026-11-28 read-only against GitHub: ruleset ''require ci-ok'' (active
+      since 2026-11-22, default branch) requires ci-ok with strict up-to-date checks,
+      its only bypass actor the release app (Integration 5872677 = FR_AUTOMATION_APP_ID).
+      PR #1738 has ci-ok SUCCESS and is MERGEABLE yet mergeStateStatus BEHIND, so it
+      is blocked until updated; the app''s direct release pushes to main still land
+      through the bypass (v9.0.0 0cffe531 on 2026-11-25, v9.1.0-rc.10 25718a99 on 2026-11-27,
+      pushed by super-fr-release[bot]).'
+    walk:
+      strategy: live
+      harness: claude
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-28T13:04:00Z'
+      evidence: gh api repos/derio-net/super-fr/rulesets/27838472; gh pr view 1738 (ci-ok
+        SUCCESS, MERGEABLE, BEHIND); push-event CI runs on 0cffe531 and 25718a99 actor
+        super-fr-release[bot]; 2026-11-28
+    why: 'Walked 2026-11-28 read-only against GitHub: ruleset ''require ci-ok'' (active
+      since 2026-11-22, default branch) requires ci-ok with strict up-to-date checks,
+      its only bypass actor the release app (Integration 5872677 = FR_AUTOMATION_APP_ID).
+      PR #1738 has ci-ok SUCCESS and is MERGEABLE yet mergeStateStatus BEHIND, so it
+      is blocked until updated; the app''s direct release pushes to main still land
+      through the bypass (v9.0.0 0cffe531 on 2026-11-25, v9.1.0-rc.10 25718a99 on 2026-11-27,
+      pushed by super-fr-release[bot]).'
