@@ -1251,10 +1251,13 @@ def head_walks(tree: OpsTree, head: str) -> dict[str, set[Walk]]:
     from fr.acceptance.fragment import FRAGMENTS_DIR
     from fr.acceptance.model import AcceptanceError
     from fr.acceptance.walks import fragment_walks
+    from fr.artifacts.paths import artifact_root
 
     texts: list[tuple[str, str]] = []
-    for path in sorted((tree.path / FRAGMENTS_DIR).glob("*.yaml")):
-        rel = (FRAGMENTS_DIR / path.name).as_posix()
+    for path in sorted((artifact_root(tree.path) / FRAGMENTS_DIR).glob("*.yaml")):
+        if not path.is_relative_to(tree.path):  # not in the product: the head cannot carry it
+            continue
+        rel = path.relative_to(tree.path).as_posix()
         text = tree.show(head, rel)
         if text:
             texts.append((rel, text))
