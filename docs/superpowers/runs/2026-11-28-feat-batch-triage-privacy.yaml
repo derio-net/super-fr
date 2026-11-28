@@ -3,7 +3,7 @@ run: 2026-11-28-feat-batch-triage-privacy
 workflow: fr-goal@1
 branch: feat/batch-triage-privacy
 started: '2026-11-28T14:16:48+00:00'
-cursor: journal-check
+cursor: lens-review
 steps:
   brainstorm:
     state: done
@@ -125,7 +125,10 @@ steps:
           visual: none
           findings: none
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-28T16:14:22+00:00'
+    exit: 0
+    stdout: ''
   lens-review:
     state: pending
   deliver:
