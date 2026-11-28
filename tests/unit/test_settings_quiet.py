@@ -18,6 +18,9 @@ from typer.testing import CliRunner
 from tests.unit.settings_repo import git, make_repo
 from tests.unit.test_placement_quiet import push_fr_branch
 
+# S1's transition behaviour, before fr 9.2 (spec 2026-11-28-s1-followups R10).
+pytestmark = pytest.mark.s1_open
+
 
 def _fr(repo: Path, *argv: str):  # type: ignore[no-untyped-def]
     return CliRunner().invoke(app, list(argv), env={**os.environ, "FR_REPO_ROOT": str(repo)})

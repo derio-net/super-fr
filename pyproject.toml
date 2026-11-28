@@ -60,6 +60,7 @@ markers = [
     "scenario: drives an installed fr or install.sh end to end; deselected locally, run by CI and the release",
     "smoke: one CLI round trip per top-level fr command group; always run by --fr-scope",
     "own_artifacts: reads this checkout's own tracked files (docs/, .fr/, .changes/, root *.md); --fr-scope selects them when those change",
+    "s1_open: runs on the pre-9.2 side of S1's transition gate (fr.config.transition.refusing forced False; spec 2026-11-28-s1-followups R10)",
 ]
 
 [tool.coverage.run]

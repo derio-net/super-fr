@@ -205,6 +205,23 @@ def _no_inherited_ci_context(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _s1_transition_side(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No `FR_OLD_PATHS` reaches a test unless it sets one, and a test marked `s1_open`
+    runs on the pre-9.2 side of S1's transition gate (spec 2026-11-28-s1-followups R10).
+
+    `fr.config.transition.refusing` reads fr's own version, so a test of transition
+    behaviour that inherited it would turn red the day a release moves fr into 9.2. The
+    mark forces the open side in process (a test that wants the ended side patches
+    `refusing` itself, after this fixture). It cannot reach an `fr` subprocess.
+    """
+    from fr.config import transition
+
+    monkeypatch.delenv(transition.ENV, raising=False)
+    if request.node.get_closest_marker("s1_open") is not None:
+        monkeypatch.setattr(transition, "refusing", lambda: False)
+
+
+@pytest.fixture(autouse=True)
 def _no_git_credential_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
     """No test may open a credential dialog, or block on the operator's desktop.
 

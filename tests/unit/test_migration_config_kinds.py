@@ -20,7 +20,8 @@ from fr.config import change
 from tests.unit.settings_repo import git, make_repo
 from tests.unit.test_placement_quiet import QUIET, push_fr_branch
 
-pytestmark = pytest.mark.own_artifacts
+# S1's transition behaviour, before fr 9.2 (spec 2026-11-28-s1-followups R10).
+pytestmark = [pytest.mark.own_artifacts, pytest.mark.s1_open]
 
 REPO = Path(__file__).resolve().parents[2]
 

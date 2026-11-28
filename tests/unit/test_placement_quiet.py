@@ -16,6 +16,9 @@ from fr.settings.load import SERVABLE_PLACEMENTS
 
 from tests.unit.settings_repo import git, land_on_main, make_repo
 
+# S1's transition behaviour, before fr 9.2 (spec 2026-11-28-s1-followups R10).
+pytestmark = pytest.mark.s1_open
+
 QUIET = "schema: 1\nplacement: quiet\nforge:\n  labels: off\n"
 
 

@@ -19,6 +19,9 @@ from fr.config import protection, space
 from tests.unit.settings_repo import git
 from tests.unit.test_migration_config_kinds import _put, _quiet
 
+# S1's transition behaviour, before fr 9.2 (spec 2026-11-28-s1-followups R10).
+pytestmark = pytest.mark.s1_open
+
 MODELS = "docs/superpowers/models.yaml"
 
 
