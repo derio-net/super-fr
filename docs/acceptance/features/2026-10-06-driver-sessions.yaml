@@ -111,3 +111,28 @@ rows:
     status: ci
     notes: refusal text and the fr-triage skill paragraph are pinned by tests
     verify: none
+amendments:
+  - row: herdr-restart-idle-live
+    op: set-status
+    base: 0
+    status: walked
+    notes: 'Walked from the live wave driver''s drive log plus operator confirmation
+      (2026-11-28): after each fr upgrade the driver restarted idle batch panes (''restart:
+      11 ok, 6 skipped, 0 failed'' and many similar passes, 0 failed); the operator
+      confirms restarted panes resumed the same Claude conversation in the same pane/tab
+      with the same label, agent name and model, and that a pane at the exit dialog
+      was reported, never answered. Wave 26 tabs still carry their batch labels.'
+    walk:
+      strategy: live
+      harness: claude
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-28T13:50:49Z'
+      evidence: drive log restart passes (wave driver, Nov 2026) + operator confirmation
+        2026-11-28
+    why: 'Walked from the live wave driver''s drive log plus operator confirmation (2026-11-28):
+      after each fr upgrade the driver restarted idle batch panes (''restart: 11 ok,
+      6 skipped, 0 failed'' and many similar passes, 0 failed); the operator confirms
+      restarted panes resumed the same Claude conversation in the same pane/tab with
+      the same label, agent name and model, and that a pane at the exit dialog was reported,
+      never answered. Wave 26 tabs still carry their batch labels.'
