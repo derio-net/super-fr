@@ -120,19 +120,25 @@ behaves as it does today.
 
 R12. Inside the DevOps stage, a row walk the pinned PR head already carries never closes a
 row: the stage judges rows with those walks excluded, as it already excludes the step
-outcomes the head carries.
+outcomes the head carries. The head's walks are read from every fragment holding a row the
+stage judges. With walks excluded, a row counts as walked only when every harness it owes has
+a latest passing walk among the walks that remain: a row status the head wrote never counts,
+and the harnesses a stage-written walk still owes are counted over the remaining walks.
 
 R13. Stage 5 also asks the operator about each devops-gated row that is not walked (R10, R12)
-and that no devops step recorded `ran` names, after the steps. This covers a row no step
+and that no walk this stage wrote has discharged, after the steps. This covers a row no step
 names and a row whose naming steps were recorded `n/a`. The answer is `ran <evidence>` or
 `owed <why>`. `ran` records the walk with `fr acceptance set-status --walk` (harness
 `operator`, model `human`, the row's effective strategy, `--feature` the spec slug).
 `owed` sets the row's status to `walk-owed` through the same command, with the reason in its
 note.
 
-R14. Stage 6 lists, before the pass, what the devops gate still owes by `gate_blockers`.
-When the pass is refused it prints, for each unwalked row, the R13 `set-status --walk`
-command to run in the ops workspace. Stage 7 reports the rows and steps the tester gate owes
+R14. Stage 6 lists, before the pass, what the devops gate still owes by `gate_blockers`,
+with the PR head's walks excluded (R12), and fails the stage without running `fr gate pass`
+while any remain. It prints, for each unwalked row, the R13 `set-status --walk` command to
+run in the ops workspace, one per harness the row still owes. An unreadable fragment,
+section or setting fails the stage with its message. Stage 7's tester pass names the run
+with `--run`, as stage 6's does. Stage 7 reports the rows and steps the tester gate owes
 by the same function.
 
 R15. Stage 8 reports `archived` only when the plan directory moved. When `fr archive` held
