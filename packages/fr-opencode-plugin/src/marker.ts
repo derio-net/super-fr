@@ -272,7 +272,8 @@ export const SWITCH_LOCATIONS = [
 /** What a switch reads as when the two files differ: fr-enabled, never canonical quiet. */
 const DIFFERING_SWITCHES = "placement: two switches that differ";
 
-/** What an old-only switch reads as past the end (R8): fr-enabled, never canonical quiet. */
+/** What an old-only switch that would be fr-enabled reads as past the end (R8): fr-enabled,
+ * never canonical quiet. */
 const OLD_SWITCH_ONLY = "placement: only the old switch";
 
 /**
@@ -299,9 +300,14 @@ export function switchDifferNote(toplevel: string): string {
 export function readSwitch(toplevel: string): string | undefined {
   const [fresh, old] = SWITCH_LOCATIONS.map((at) => git(toplevel, "rev-parse", "--verify", "--quiet", at));
   if (transitionEnded()) {
-    // Past the end only the new switch is read (R7); an old one alone is fr-enabled, never
-    // quiet, so its worktrees are no write targets (R8, fail closed).
-    if (fresh === undefined) return old === undefined ? undefined : OLD_SWITCH_ONLY;
+    // Past the end only the new switch decides the placement (R7). An old one alone keeps
+    // the repo fr-enabled when it would be (it names quiet, or fails closed), but is never
+    // quiet, so its worktrees are no write targets (R8); one naming no quiet is plain.
+    if (fresh === undefined) {
+      if (old === undefined) return undefined;
+      const text = git(toplevel, "cat-file", "-p", old);
+      return text !== undefined && switchEnabled(text) ? OLD_SWITCH_ONLY : text;
+    }
     return git(toplevel, "cat-file", "-p", fresh);
   }
   if (fresh !== undefined && old !== undefined && fresh !== old) return DIFFERING_SWITCHES;

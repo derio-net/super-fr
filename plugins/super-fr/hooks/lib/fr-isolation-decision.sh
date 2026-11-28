@@ -461,11 +461,13 @@ _fr_read_switch() {
   _fr_snew=$("$FR_GIT_BIN" -C "$1" rev-parse --verify --quiet "$FR_SWITCH_NEW" 2>/dev/null) || _fr_snew=""
   _fr_sold=$("$FR_GIT_BIN" -C "$1" rev-parse --verify --quiet "$FR_SWITCH_OLD" 2>/dev/null) || _fr_sold=""
   if _fr_transition_ended; then
-    # Past the end only the new switch is read (R7). An old one alone still makes the repo
-    # fr-enabled, but never quiet, so its worktrees are no write targets (R8, fail closed).
+    # Past the end only the new switch decides the placement (R7). An old one alone keeps
+    # the repo fr-enabled when it would be (it names quiet, or fails closed), but is never
+    # quiet, so its worktrees are no write targets (R8); one naming no quiet is plain.
     if [ -z "$_fr_snew" ]; then
       [ -n "$_fr_sold" ] || return 1
-      _fr_switch='placement: only the old switch'
+      _fr_switch=$("$FR_GIT_BIN" -C "$1" cat-file -p "$_fr_sold" 2>/dev/null) || return 1
+      if _fr_switch_enabled "$_fr_switch"; then _fr_switch='placement: only the old switch'; fi
       return 0
     fi
     _fr_sold=""

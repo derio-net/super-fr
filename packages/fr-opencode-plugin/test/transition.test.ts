@@ -178,6 +178,15 @@ describe("past the end the old forms are not read", () => {
       }
     });
 
+    for (const settings of ["placement: repo\n", "other: x\n"]) {
+      test(`an old-only switch naming no quiet is not fr-enabled (${side}, ${JSON.stringify(settings)})`, () => {
+        setVersionDir(versionDir(version));
+        const top = repo();
+        switchRef(top, "refs/remotes/origin/fr", ["settings.yaml"], settings);
+        withoutFr(() => expect(placementEnabled(top)).toBe(false));
+      });
+    }
+
     test(`differing switches add a note only before the end (${side})`, () => {
       setVersionDir(versionDir(version));
       const top = repo();

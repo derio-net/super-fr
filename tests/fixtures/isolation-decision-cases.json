@@ -1,5 +1,5 @@
 {
-  "_comment": "Behavioural cases both edit-gate engines must decide identically (review p2-r6). tests/unit/test_isolation_decision_cases.py drives plugins/super-fr/hooks/lib/fr-isolation-decision.sh with them, packages/fr-opencode-plugin/test/decision-cases.test.ts drives marker.ts. A switch side is null (no ref), {\"settings\": null} (the ref without the file) or {\"settings\": <text>}. A switch case's top-level read/enabled/quiet are the pre-9.2 answers; `ended` holds the answers once S1's transition has ended (spec 2026-11-28-s1-followups R7, R8): only the new switch is read, an old-only switch is fr-enabled but never quiet.",
+  "_comment": "Behavioural cases both edit-gate engines must decide identically (review p2-r6). tests/unit/test_isolation_decision_cases.py drives plugins/super-fr/hooks/lib/fr-isolation-decision.sh with them, packages/fr-opencode-plugin/test/decision-cases.test.ts drives marker.ts. A switch side is null (no ref), {\"settings\": null} (the ref without the file) or {\"settings\": <text>}. A switch case's top-level read/enabled/quiet are the pre-9.2 answers; `ended` holds the answers once S1's transition has ended (spec 2026-11-28-s1-followups R7, R8): only the new switch decides the placement; an old-only switch is fr-enabled only when it would be (quiet, or a spelling that fails closed), and never quiet.",
   "switch": [
     {"id": "new-only-quiet", "new": {"settings": "placement: quiet\n"}, "old": null, "read": true, "enabled": true, "quiet": true, "ended": {"read": true, "enabled": true, "quiet": true}},
     {"id": "old-only-quiet", "new": null, "old": {"settings": "placement: quiet\n"}, "read": true, "enabled": true, "quiet": true, "ended": {"read": true, "enabled": true, "quiet": false}},
@@ -11,7 +11,8 @@
     {"id": "new-ref-without-file-falls-back", "new": {"settings": null}, "old": {"settings": "placement: quiet\n"}, "read": true, "enabled": true, "quiet": true, "ended": {"read": true, "enabled": true, "quiet": false}},
     {"id": "neither", "new": null, "old": null, "read": false, "enabled": false, "quiet": false, "ended": {"read": false, "enabled": false, "quiet": false}},
     {"id": "non-canonical-quiet", "new": {"settings": "placement: 'quiet'\n"}, "old": null, "read": true, "enabled": true, "quiet": false, "ended": {"read": true, "enabled": true, "quiet": false}},
-    {"id": "old-only-repo", "new": null, "old": {"settings": "placement: repo\n"}, "read": true, "enabled": false, "quiet": false, "ended": {"read": true, "enabled": true, "quiet": false}}
+    {"id": "old-only-repo", "new": null, "old": {"settings": "placement: repo\n"}, "read": true, "enabled": false, "quiet": false, "ended": {"read": true, "enabled": false, "quiet": false}},
+    {"id": "old-only-no-placement", "new": null, "old": {"settings": "other: x\n"}, "read": true, "enabled": false, "quiet": false, "ended": {"read": true, "enabled": false, "quiet": false}}
   ],
   "allowlist": [
     {"id": "new-allowlist", "rel": ".fr/isolation-allow", "protected": true},

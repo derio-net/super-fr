@@ -172,3 +172,15 @@ def test_differing_switches_add_no_note_past_the_end(
         NO_FR,
     )
     assert (quiet.returncode == 0) is (not noted)
+
+
+@pytest.mark.parametrize("version", [OPEN_VERSION, ENDED_VERSION], ids=["open", "ended"])
+@pytest.mark.parametrize("settings", ["placement: repo\n", "other: x\n"], ids=["repo", "none"])
+def test_an_old_only_switch_naming_no_quiet_never_gates_a_repo(
+    tmp_path: Path, version: str, settings: str
+) -> None:
+    """Review p2-r1: an unrelated `fr` branch whose root settings.yaml names no quiet
+    placement leaves a plain repo ungated on both sides of the end."""
+    lib = _lib(tmp_path, version)
+    repo = quiet_repo(tmp_path, settings=settings)
+    assert _decide(lib, repo / "src.py", NO_FR) == 0
