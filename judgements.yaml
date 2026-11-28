@@ -13046,6 +13046,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-28T11:16:04.483316Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -16345,6 +16352,16 @@ queues:
     main: c4e69ecd007fb9f1e1f6cb942dc05e3bc8179e69
     entries:
     - batch: board-session-state
+  - kind: queue_built
+    at: '2026-11-28T11:15:48.601266Z'
+    slot: 1
+    sha: 9aefd594f5428890eb36037d26e5caa92fb54ef3
+    entry:
+      batch: silent-failures
+    head: f0df0c3641018589748ae302a16b386b2976dafe
+    patch_id: 781ed53a261b72e229dd4b380e3a965e5a085bcf
+    base: c4e69ecd007fb9f1e1f6cb942dc05e3bc8179e69
+    parent: c4e69ecd007fb9f1e1f6cb942dc05e3bc8179e69
 queue_requests:
 - kind: queue_add
   at: '2026-11-27T15:25:05.595235Z'
