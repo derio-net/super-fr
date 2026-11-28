@@ -48,9 +48,13 @@ rows:
     origin:
     - spec:2026-11-28-triage-privacy#R8
     - spec:2026-11-28-triage-privacy#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_privacy.py#test_an_export_scans_the_durable_set_only
+      - super-fr:tests/unit/test_triage_privacy.py#test_a_push_naming_a_private_repo_in_a_carried_file_pushes_nothing
+    status: ci
+    notes: the guard scans every carried file for non-public repo names, on push and
+      export (R8, R9)
     verify: none
   - id: triage-reopened-pr-uncarried
     capability: triage-collect
