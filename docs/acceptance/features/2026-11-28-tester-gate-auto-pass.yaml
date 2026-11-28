@@ -80,8 +80,11 @@ rows:
     levels:
       unit:
       - super-fr:tests/unit/test_triage_pr_gates.py#test_r2_the_batch_guards_hold_for_a_loose_pr
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_r2_a_loose_prs_run_gate_no_row_inherits_is_never_passed_by_walked_rows
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_r2_a_loose_prs_ops_promoted_devops_gate_is_never_passed_by_walked_rows
     status: ci
-    notes: the batch guards hold for a loose PR
+    notes: 'unit: gate_actions guards, and the same guards through the driver for a
+      loose PR (run gate not inherited, ops-promoted devops)'
     verify: none
   - id: closed-out-batch-gated-pr-pass
     capability: Triage driver
