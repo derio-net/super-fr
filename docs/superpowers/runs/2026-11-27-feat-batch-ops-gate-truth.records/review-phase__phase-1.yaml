@@ -31,9 +31,9 @@ journal:
   - kind: finding
     id: p1-r5
     phase: 1
-    review_scope: in
+    review_scope: out
     title: A no-op merge whose ops still differ re-prompts every stage and storms restarts to MAX_RESTARTS
-    body: Tagged out by the reviewer; reclassified in by the orchestrator, because this change introduced the refresh loop that storms.
+    body: Tagged out by the reviewer. Fixed anyway in this PR, because the refresh loop this phase added is what storms.
   - kind: review
     id: review-phase-1
     phase: 1
