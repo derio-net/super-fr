@@ -31,9 +31,12 @@ rows:
     origin:
     - spec:2026-11-28-batch-silent-failures#R3
     - spec:2026-11-28-batch-silent-failures#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      int:
+      - super-fr:tests/integration/test_install_channels.py#test_a_tag_whose_install_sh_cannot_be_read_stops_bootstrap
+      - super-fr:tests/integration/test_install_channels.py#test_a_failing_tag_listing_is_named_never_read_as_no_versions
+    status: ci
+    notes: fixture remote with an unreadable tag and a failing listing
     verify: none
   - id: forge-read-failure-named
     capability: Forge adapters
