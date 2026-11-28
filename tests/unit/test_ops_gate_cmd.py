@@ -491,3 +491,144 @@ def test_queue_configured_is_true_false_or_a_read_error(tmp_path: Path) -> None:
                     str(tmp_path / "nowhere.git")], check=True)  # fmt: skip
     with pytest.raises(StageFailed, match="nothing released"):
         HostCheckout(broken).queue_configured("main")  # the fetch fails: not "merge by hand"
+
+
+# ---------------------------------------------- the refresh's merge (ops-gate-truth R3)
+
+
+def _out(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(root), *args], capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+@pytest.fixture
+def origin_and_ops(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    """An origin whose main moves after an ops branch was cut from it in a clone."""
+    for var, value in (
+        ("GIT_COMMITTER_NAME", "t"),
+        ("GIT_COMMITTER_EMAIL", "t@t"),
+        ("GIT_AUTHOR_NAME", "t"),
+        ("GIT_AUTHOR_EMAIL", "t@t"),
+    ):
+        monkeypatch.setenv(var, value)
+    origin = tmp_path / "origin"
+    origin.mkdir()
+    _git(origin, "init", "-q", "-b", "main")
+    _commit(origin, "ops.yaml", "apply: old\n")
+    ops = tmp_path / "ops"
+    _git(tmp_path, "clone", "-q", str(origin), str(ops))
+    _git(ops, "switch", "-q", "-c", "chore/ops-p")
+    _commit(ops, "evidence", "evidence\n")
+    return origin, ops
+
+
+def test_merge_commit_fetches_and_merges_with_a_two_parent_commit(
+    origin_and_ops: tuple[Path, Path],
+) -> None:
+    from fr.commands.ops_gate_cmd import OpsWorkspace
+
+    origin, ops = origin_and_ops
+    fixed = _commit(origin, "ops.yaml", "apply: fixed\n")
+    before = _out(ops, "rev-parse", "HEAD")
+    head = OpsWorkspace(ops).merge_commit(fixed, "chore(ops): bring p up to date")
+    assert head == _out(ops, "rev-parse", "HEAD")
+    assert _out(ops, "rev-list", "--parents", "-n1", "HEAD").split()[1:] == [before, fixed]
+    assert _out(ops, "log", "-1", "--format=%s") == "chore(ops): bring p up to date"
+    assert (ops / "ops.yaml").read_text() == "apply: fixed\n"
+    assert (ops / "evidence").is_file()
+
+
+def test_a_conflicting_merge_is_aborted_and_names_the_paths(
+    origin_and_ops: tuple[Path, Path],
+) -> None:
+    from fr.commands.ops_gate_cmd import OpsWorkspace
+    from fr.ops.gate import MergeConflict
+
+    origin, ops = origin_and_ops
+    fixed = _commit(origin, "ops.yaml", "apply: fixed on main\n")
+    _commit(ops, "ops.yaml", "apply: edited on the ops branch\n")
+    before = _out(ops, "rev-parse", "HEAD")
+    with pytest.raises(MergeConflict) as exc:
+        OpsWorkspace(ops).merge_commit(fixed, "m")
+    assert exc.value.paths == ("ops.yaml",)
+    assert _out(ops, "rev-parse", "HEAD") == before
+    assert _out(ops, "status", "--porcelain") == ""
+    assert (ops / "ops.yaml").read_text() == "apply: edited on the ops branch\n"
+
+
+def test_merge_commit_of_a_ref_already_merged_commits_nothing(
+    origin_and_ops: tuple[Path, Path],
+) -> None:
+    from fr.commands.ops_gate_cmd import OpsWorkspace
+
+    _, ops = origin_and_ops
+    before = _out(ops, "rev-parse", "HEAD")
+    assert OpsWorkspace(ops).merge_commit(_out(ops, "rev-parse", "origin/main"), "m") == before
+    assert _out(ops, "rev-parse", "HEAD") == before
+
+
+def test_merge_commit_merges_the_pinned_sha_not_a_moved_tip(
+    origin_and_ops: tuple[Path, Path],
+) -> None:
+    """Review p1-sec-r1: origin moves after the refresh diffed it; the merge still takes the
+    commit the operator confirmed, though its own fetch sees the newer tip."""
+    from fr.commands.ops_gate_cmd import OpsWorkspace
+
+    origin, ops = origin_and_ops
+    confirmed = _commit(origin, "ops.yaml", "apply: fixed\n")
+    _git(ops, "fetch", "-q", "origin")
+    _commit(origin, "ops.yaml", "apply: moved after the question\n")
+    OpsWorkspace(ops).merge_commit(confirmed, "m")
+    assert _out(ops, "rev-parse", "HEAD^2") == confirmed
+    assert (ops / "ops.yaml").read_text() == "apply: fixed\n"
+
+
+@pytest.mark.parametrize("what", ["ref", "blob"])
+def test_merge_commit_refuses_anything_but_a_commit_sha(
+    origin_and_ops: tuple[Path, Path], what: str
+) -> None:
+    from fr.commands.ops_gate_cmd import OpsWorkspace
+    from fr.triage.gitseam import GitError
+
+    _, ops = origin_and_ops
+    before = _out(ops, "rev-parse", "HEAD")
+    arg = "origin/main" if what == "ref" else _out(ops, "rev-parse", "HEAD:evidence")
+    with pytest.raises(GitError, match="nothing merged"):
+        OpsWorkspace(ops).merge_commit(arg, "m")
+    assert _out(ops, "rev-parse", "HEAD") == before
+
+
+def test_is_ancestor_says_whether_the_ops_branch_holds_the_sha(
+    origin_and_ops: tuple[Path, Path],
+) -> None:
+    """Review p1-r5: a merge of a commit the branch already holds would change nothing."""
+    from fr.commands.ops_gate_cmd import OpsWorkspace
+
+    origin, ops = origin_and_ops
+    ws = OpsWorkspace(ops)
+    assert ws.is_ancestor(_out(ops, "rev-parse", "origin/main"))
+    assert not ws.is_ancestor(_commit(origin, "ops.yaml", "apply: new\n"))
+
+
+def test_l_security_r4_head_files_lists_the_folder_at_the_ref(tmp_path: Path) -> None:
+    import subprocess
+
+    from fr.commands.ops_gate_cmd import head_files
+
+    def git(*args: str) -> str:
+        return subprocess.run(["git", "-C", str(tmp_path), *args], check=True,
+                              capture_output=True, text=True).stdout.strip()  # fmt: skip
+
+    git("init", "-q")
+    (tmp_path / "f").mkdir()
+    (tmp_path / "f" / "a.yaml").write_text("a")
+    (tmp_path / "f" / "sub").mkdir()
+    (tmp_path / "f" / "sub" / "b.yaml").write_text("b")
+    git("add", ".")
+    git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "x")
+    sha = git("rev-parse", "HEAD")
+    (tmp_path / "f" / "a.yaml").unlink()  # the working tree no longer has it; the ref does
+
+    assert head_files(tmp_path, sha, "f") == ["f/a.yaml", "f/sub"]
+    assert head_files(tmp_path, sha, "absent") == []

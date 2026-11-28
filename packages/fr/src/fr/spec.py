@@ -572,12 +572,20 @@ _POINTER_RE = re.compile(r"^\(op:\s*(?P<id>[A-Za-z0-9][\w.-]*)\)\s+(?P<rest>\S.*
 """A step's op pointer (spec 2026-11-01-ops-gate-probes R6): `(op: <id>)` leading the
 text, after the optional gate tag, then whitespace. Anywhere else it stays text."""
 
+_ROWS_RE = re.compile(
+    r"^\(rows:\s*(?P<ids>[A-Za-z0-9][\w.-]*(?:\s*,\s*[A-Za-z0-9][\w.-]*)*)\s*\)\s+(?P<rest>\S.*)$"
+)
+"""A step's rows pointer (spec 2026-11-27-ops-gate-truth R7): `(rows: <id>[, <id>…])`
+after the optional gate tag and op pointer, then whitespace. Ids take the op id's
+characters; a blank id leaves the whole pointer as text, as does one anywhere else."""
+
 
 @dataclass(frozen=True)
 class Step:
     """One Test Plan step: its position (1-based), its text (one line, the gate tag and
-    the op pointer removed), the gate its literal tag names, if any (R12), the op its
-    pointer names, if any (R6), and the item's lines as written, fences included (R2).
+    the op and rows pointers removed), the gate its literal tag names, if any (R12), the
+    op its pointer names, if any (R6), the rows its rows pointer names (ops-gate-truth
+    R7), and the item's lines as written, fences included (R2).
 
     `raw` is not compared: two steps reading the same are the same step."""
 
@@ -589,6 +597,8 @@ class Step:
     line: int | None = field(default=None, compare=False)
     """The 0-based index, in the spec's `splitlines()`, of the item's first line; `None`
     for the one step of a section with no list item. Not compared."""
+    rows: tuple[str, ...] = ()
+    """The acceptance rows its `(rows: …)` pointer names (R7), in order; empty for none."""
 
 
 def _step(n: int, text: str, raw: tuple[str, ...] = (), line: int | None = None) -> Step:
@@ -598,7 +608,11 @@ def _step(n: int, text: str, raw: tuple[str, ...] = (), line: int | None = None)
     op: str | None = None
     if (pointer := _POINTER_RE.match(text)) is not None:
         op, text = pointer.group("id"), pointer.group("rest")
-    return Step(n, text, gate, raw, op, line)
+    rows: tuple[str, ...] = ()
+    if (named := _ROWS_RE.match(text)) is not None:
+        rows = tuple(i.strip() for i in named.group("ids").split(","))
+        text = named.group("rest")
+    return Step(n, text, gate, raw, op, line, rows)
 
 
 def _test_plan_span(lines: list[str], source: object = None) -> tuple[int, int] | None:

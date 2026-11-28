@@ -65,6 +65,16 @@ gate: developer
 - [devops] walk the stage
 - [tester] click the page
 MD
+  # A real v2 plan: the stage's last line reads the Definition of Done from it, and a
+  # plan directory with no _meta.yaml is unreadable there (exit 2, ops-gate-truth R20).
+  cat > "docs/superpowers/plans/$slug/_meta.yaml" <<YAML
+schema_version: 2
+plan: $slug
+spec: 2026-10-22-$slug-design.md
+target_repo: derio-net/fixture
+fr_version: '>=4.20.0'
+created: '2026-10-22'
+YAML
   cat > "docs/superpowers/plans/$slug/ops.yaml" <<YAML
 schema_version: 1
 ops:
