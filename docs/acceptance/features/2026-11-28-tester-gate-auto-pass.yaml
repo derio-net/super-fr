@@ -17,9 +17,12 @@ rows:
     - spec:2026-11-28-tester-gate-auto-pass#R1
     - spec:2026-11-28-tester-gate-auto-pass#R2
     - spec:2026-11-28-tester-gate-auto-pass#R4
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_a_whole_scope_drive_passes_a_loose_prs_walked_gate
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_walked_rows_of_a_loose_pr_plan_one_gate_pass_naming_its_repo
+    status: ci
+    notes: driver passes a loose PR's walked gate end to end
     verify: none
   - id: loose-gated-pr-awaiting-live
     capability: Triage driver
