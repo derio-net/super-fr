@@ -65,3 +65,13 @@ rows:
     verify: live
     issues:
     - derio-net/super-fr#1345
+amendments:
+  - row: drive-merge-train-live-wave
+    op: retire
+    base: 0
+    notes: 'Retired 2026-11-28 (operator decision): superseded by the wave merge queue
+      (spec 2026-11-19-wave-merge-queue R22/R23), whose live row wave-queue-live-wave
+      was walked in #1686. tracked by derio-net/super-fr#1345'
+    why: 'operator decision 2026-11-28: the per-merge train and its update path were
+      removed by spec 2026-11-19-wave-merge-queue (R22, R23); every merge is now a queue
+      entry, so this promise can no longer be walked'
