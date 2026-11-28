@@ -38,7 +38,9 @@ from pathlib import Path
 from fr.artifacts.atomic import write_text_atomic
 from fr.artifacts.runner import MIGRATIONS, SchemaMigration
 from fr.artifacts.text import read_utf8
-from fr.requirements import RequirementsError, list_layout, parse_requirements
+
+# `fr.requirements` is imported where it is used: it imports `fr.acceptance`, which
+# imports this package, so a module-level import is a cycle on `import fr.requirements`.
 
 _HEADER = "| ID | Requirement |"
 _DELIMITER = "|----|-------------|"
@@ -68,6 +70,8 @@ def _is_blank(line: str) -> bool:
 def build(path: Path, text: str) -> str | None:
     """The rewritten text, `None` when the spec is only stamped. Raises
     `SpecRewriteRefusedError` with the R5 message; writes nothing."""
+    from fr.requirements import RequirementsError, list_layout, parse_requirements
+
     try:
         layout = list_layout(text)
         if layout is None or not layout.items:

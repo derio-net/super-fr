@@ -288,6 +288,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "archive-dry-run",
         "wave-queue-release-hold",
         "config-homes",
+        "spec-requirements-table",
     }
     assert on_disk == here
 
