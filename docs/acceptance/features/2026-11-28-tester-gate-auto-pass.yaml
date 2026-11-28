@@ -45,3 +45,33 @@ rows:
     status: not-implemented
     notes: ''
     verify: none
+  - id: loose-gated-pr-batch-guards
+    capability: Triage driver
+    acceptance: Walked rows never pass a loose PR's run-level gate that no row inherits,
+      its ops-promoted devops gate, or a held gate with no rows; those pass only through
+      fr gate pass
+    origin:
+    - spec:2026-11-28-tester-gate-auto-pass#R2
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: closed-out-batch-gated-pr-pass
+    capability: Triage driver
+    acceptance: A whole-scope drive pass passes the walked post-merge gate of a closed-out
+      batch's merged PR, which the batch route skips
+    origin:
+    - spec:2026-11-28-tester-gate-auto-pass#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+amendments:
+  - row: loose-gated-pr-no-pass-without-evidence
+    op: reword
+    base: 0
+    acceptance: The driver passes nothing for a loose gated PR whose branch no run cursor
+      names, whose cursor names another PR, whose branch two cursors name or whose rows
+      cannot be read (both reported once), or in a drive narrowed with --batch; a failed
+      write is reported and retried next pass
+    why: 'spec review s2: the cursor must name this PR'
