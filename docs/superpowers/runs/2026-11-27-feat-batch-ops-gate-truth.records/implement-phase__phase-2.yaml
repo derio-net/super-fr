@@ -68,7 +68,7 @@ journal:
   - kind: discovery
     id: p2-reviewed-stamp-colon
     phase: 2
-    title: a reviewed stamp note holding ": " breaks the page's front matter
+    title: "a reviewed stamp note holding a colon and a space breaks the page front matter"
     body: |
       `reviewed:` is a plain YAML scalar, so a note with `: ` inside (for example the rows
       pointer spelled with its colon) makes the front matter unparseable; sync-readme then
