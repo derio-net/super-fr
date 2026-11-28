@@ -1,0 +1,72 @@
+schema_version: 12
+run: 2026-11-28-feat-batch-silent-failures
+step: spec-review
+outcome: done
+journal:
+  - kind: finding
+    id: sr-r1
+    review_scope: in
+    title: "R5's warn hook has no path from the adopt command: the command never calls default_pr_state, and migrate_cmd's adopt stays silent"
+    body: |
+      adopt.py:963 is the only default_pr_state caller (inside adopt_run, adopt.py:880-894);
+      run_cmd.py:1640 adopt_cmd and migrate_cmd.py:328 call adopt_run without pr_state. The spec
+      must name the channel and cover both callers.
+  - kind: finding
+    id: sr-r2
+    review_scope: in
+    title: "R1's 5-line stderr cap cuts the motivating refusal's remedy: the migration gate's refusal is 6-7 lines and its commands are last"
+    body: |
+      fr.artifacts.trigger._will_not_act_here (trigger.py:957-965) prints fact, because, detail,
+      optional carry line, then preview/apply/bypass; a 5-line head drops the fix.
+  - kind: finding
+    id: sr-r3
+    review_scope: in
+    title: "Design computes INSTALLABLE before any channel is chosen, so --version main now lists remote tags and can refuse on an unreadable tag"
+    body: |
+      bootstrap.sh:155-156: main lists no tags today and is the refusal's own escape hatch
+      (bootstrap.sh:148). R3 and the Design disagreed.
+  - kind: finding
+    id: sr-r4
+    review_scope: in
+    title: "'No tag is ever dropped without a message' does not hold when channel_tags' ls-remote fails inside the process substitution"
+    body: |
+      bootstrap.sh:118-121 channel_tags; bootstrap.sh:130 `done < <(channel_tags)` never sees its
+      status, so a failed ls-remote reads as "No installable versions exist yet".
+  - kind: finding
+    id: sr-r5
+    review_scope: in
+    title: "R2 is unclear on a failing install: cleanup_tmps prints after every ERROR, and recorded warnings are never repeated on failure"
+    body: |
+      install.sh:149-162 cleanup_tmps prints `install.sh failed (exit $rc)` after any error and
+      removes only .tmp sidecars on failure; the fr --version failure case was unspecified.
+  - kind: finding
+    id: sr-r6
+    review_scope: in
+    title: "read_failure redacts but does not strip control characters, unlike R8's _clean, and putting it in fr.forge_body inverts layering"
+    body: |
+      debt_cmd.py:238-242 _clean also strips control/bidi; forge_body.py is a leaf imported by
+      glab.py:38, real_glabclient.py:38, tea.py:46-47, so a module-level fr.debt.render import
+      pulls acceptance/settings into every adapter.
+  - kind: review
+    id: spec-review-1
+    title: "independent spec review: 6 findings, all in scope, all fixed in the spec"
+    body: |
+      Findings raised: sr-r1..sr-r6 (all in scope). Decisions d1-d5 honoured. The reviewer verified
+      every named file:line (install.sh:1116, 149-162; bootstrap.sh:33, 118-132, 143, 158, 161;
+      adopt.py:772-795, 880-894, 963; run_cmd.py:1640; push_cmd.py:150-170; forge_body.py:15,22;
+      debt/render.py:36,45-65; debt/engine.py:503,535-540; ghclient.py:18,42-58; debt_cmd.py:139-242;
+      test_run_writes_layering.py). Suggested lens: security.
+  - kind: lens
+    lens: security
+    title: "R5/R7/R8 echo forge-returned error text to terminals, CI logs and a published category: check redaction, control-char strip, fixed-shape tokens"
+resolves:
+  - {id: sr-r1, state: fixed, body: "R5 now covers both adopt entry points; Design: adopt_run(warn=...) forwards to default_pr_state; run_cmd adopt_cmd and migrate_cmd's loop pass a stderr warn; Design shape lists migrate_cmd.py."}
+  - {id: sr-r2, state: fixed, body: "R1 and Design: cap raised to 12 lines with a '… N more lines' marker, so the 6-7 line migration refusal fits whole."}
+  - {id: sr-r3, state: fixed, body: "R3 states --version main lists no tags, as today; Design computes INSTALLABLE only on non-main paths."}
+  - {id: sr-r4, state: fixed, body: "R3 adds the ls-remote failure ERROR ('could not list release tags'); Design captures channel_tags' output and status first."}
+  - {id: sr-r5, state: fixed, body: "R2 specifies the failing install (warnings repeated, existing failure line stays last), the fr --version failure line, and temp-file removal on every exit; Design extends cleanup_tmps."}
+  - {id: sr-r6, state: fixed, body: "R5 and Design: read_failure strips control and bidi characters like _clean and imports redact inside the function, never at module level."}
+acceptance: []
+evidence:
+  review: spec-review-1
+  reviewer: a5d426b736f12e75a
