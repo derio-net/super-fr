@@ -56,5 +56,19 @@ journal:
       the PR on the cursor exactly as `fr pr create` does after the forge answers. The stealth
       content unit tests take the ask as approved (`approved_asks` in stealth_repo.py); the
       approval itself stays pinned in test_git_policy_push.py and test_settings_stealth.py.
+  - kind: discovery
+    id: p1-fast-tier-not-finished
+    phase: 1
+    title: the fast tier was stopped at 2% (no failure yet) on a host at load ~50
+    body: >-
+      `uv run pytest --fr-scope origin/main -n 2 -q --no-cov` selected most of the suite
+      (this change reaches fr.settings, run_cmd and the PR body) and ran about 1% per four
+      minutes on a host other sessions held at load ~50: hours. It was stopped with no failure
+      or error in its output. What ran in full instead, all green: every tests/unit/test_settings_*,
+      test_workflow_available, test_workflow_check, test_pr_body_* (sections, cost, settle),
+      test_deliver_pr_body, the stealth/placement/config/push/pr/git_policy units (192 + 472
+      tests), test_skill_stealth_push and the mirror tripwires, and the scenarios
+      alacarte-settings, placement-stealth and placement-quiet on the installed candidate.
+      ruff format, ruff check and mypy are clean. CI (`tests: ci`) is the suite evidence.
 resolves: []
 evidence: {}
