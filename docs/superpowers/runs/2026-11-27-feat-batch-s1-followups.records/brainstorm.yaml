@@ -1,0 +1,76 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-s1-followups
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - kind: discovery
+    input: true
+    id: brief
+    title: "Batch s1-followups: 4 issues (#1698 #1699 #1700 #1701), one PR"
+    body: |
+      /fr-goal batch s1-followups — batch `s1-followups` of derio-net/super-fr, delivered as ONE pull request.
+      Batch title: S1 follow-ups: refuse old paths, config-branch executables, test sites, import-time home.
+      - super-fr#1698 Owed: Refuse the old configuration paths and drop the legacy settings copy (journal spec/2026-11-19-event-driven-a-la-carte entry s1-refuse-old-paths).
+      - super-fr#1699 workflow kind:cli run: and verification argv become configuration-branch executables once phase 5 moves them into .fr/ (journal plan/2026-11-24-s1-configuration-homes/p3-r6).
+      - super-fr#1700 about 20 test sites still set the old FR_SHIPPED_*_DIR variables (p5-r4).
+      - super-fr#1701 fr.repos.DEFAULT_MANIFEST takes Path.home() at import (l-tests-r6).
+      Delivery: branch feat/batch-s1-followups; draft PR as soon as the spec is committed, with one `Closes derio-net/super-fr#<n>` line per member; no member as a phase tracking_issue; the wave driver owns mergeability and CI (no `fr pr settle` loop); never add `approved-fr`.
+  - kind: decision
+    id: q1-version-gated
+    title: "#1698's refusal is version-gated at fr >= 9.2 in the code"
+    body: "Operator (round 1, q1): version-gated at fr >= 9.2.0, the journal's plan, so the PR may merge before or after 9.1.0's final. S1 ships in 9.1.0 (its minor fragment is pending, only RCs cut). Recommended option was unconditional + merge after 9.1.0; the operator chose the gate. Spec R1, R7, R8."
+  - kind: decision
+    id: q2-settings-sync-removed
+    title: "fr settings sync is removed once the transition ends"
+    body: "Operator (round 1, q2): remove it. With q1's version gate the command's code stays until the gate: past it, the command is hidden and exits 2 (spec R5); deleting the dormant code is owed after 9.2 ships (R16). The old copy on `fr` is left untouched."
+  - kind: decision
+    id: q3-shell-readers
+    title: "All shell readers drop their old-path fallbacks in this PR"
+    body: "Operator (round 1, q3): yes, all harnesses — the Claude Code and Hermes hooks (fr-isolation-decision.sh), the OpenCode plugin and validate-plans.sh, gated by their own release version (spec R7)."
+  - kind: decision
+    id: q4-argv-residue
+    title: "#1699: pin S1's whole-manifest guard and close the .fr/ file residue"
+    body: "Operator (round 1, q4): pin + close. Walk argv elements under .fr/ run from the exported checked tip; a kind:cli run: naming .fr/ under quiet/stealth is refused (spec R10-R12)."
+  - kind: decision
+    id: q5-verification
+    title: "Verification: candidate walk, gate developer"
+    body: "Operator (round 1, q5): candidate strategy, the scenario forcing the gate on (FR_OLD_PATHS=refuse); gate developer; no post-merge Test Plan rows (spec ## Verification)."
+  - kind: lens
+    lens: security
+    title: "#1699 closes a trust-boundary gap: configuration argv and .fr/ files must run only from the protected tip"
+resolves: []
+acceptance:
+  - id: s1-old-paths-refused
+    capability: configuration homes
+    acceptance: "From fr 9.2 (or with FR_OLD_PATHS=refuse) a configuration file found only at its pre-S1 path, and a per-kind FR_SHIPPED_<KIND>_DIR variable, refuse the command naming the new home and fr migrate artifacts --yes / FR_SHIPPED_DEFAULTS_DIR, while fr migrate artifacts still moves old paths; before 9.2 nothing changes"
+    origin: ["spec:2026-11-28-s1-followups#R1", "spec:2026-11-28-s1-followups#R2", "spec:2026-11-28-s1-followups#R3", "spec:2026-11-28-s1-followups#R6"]
+    status: not-implemented
+    verify: candidate
+  - id: s1-old-settings-copy-retired
+    capability: configuration homes
+    acceptance: "From fr 9.2, under quiet and stealth fr writes and reads only the configuration branch's settings file, never the old copy, refuses a repo whose switch exists only at the old location, and fr settings sync is retired (hidden, exit 2)"
+    origin: ["spec:2026-11-28-s1-followups#R4", "spec:2026-11-28-s1-followups#R5"]
+    status: not-implemented
+    verify: candidate
+  - id: s1-shell-readers-refuse
+    capability: fr-isolation
+    acceptance: "From the 9.2 release, the edit gate on Claude Code, Hermes and OpenCode and validate-plans.sh no longer read the old .fr-isolation-allow, the old origin/fr:settings.yaml switch or the old plan-config; a release version they cannot read counts as 9.2"
+    origin: ["spec:2026-11-28-s1-followups#R7", "spec:2026-11-28-s1-followups#R8"]
+    status: not-implemented
+    verify: candidate
+  - id: s1-config-argv-from-tip
+    capability: executable configuration protection
+    acceptance: "Under quiet and stealth, every .fr/ path in a walk's install or scenario argv runs from the protected branch's fetched tip, a kind:cli step naming a .fr/ path is refused before it runs, and a repo shape or strategy comes from the fetched tip when enforced or the shipped one when not"
+    origin: ["spec:2026-11-28-s1-followups#R10", "spec:2026-11-28-s1-followups#R11", "spec:2026-11-28-s1-followups#R12"]
+    status: not-implemented
+    verify: candidate
+  - id: repos-manifest-home-at-call
+    capability: fr repos
+    acceptance: "fr repos sync's default manifest is $HOME/.config/fr/repos.yaml as HOME is when the command runs; FR_REPOS_MANIFEST still wins"
+    origin: ["spec:2026-11-28-s1-followups#R14"]
+    status: not-implemented
+    verify: none
+emitted:
+  spec: docs/superpowers/specs/2026-11-28-s1-followups-design.md
+evidence: {}
