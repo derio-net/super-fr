@@ -13075,6 +13075,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-28T11:38:03.365530Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-28T11:39:05.423397Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -14501,6 +14516,13 @@ batches:
     patch_id: 781ed53a261b72e229dd4b380e3a965e5a085bcf
   - kind: post_merge
     at: '2026-11-28T11:28:31.693889Z'
+  - kind: claims_released
+    at: '2026-11-28T11:39:05.423397Z'
+    keys:
+    - super-fr#1592
+    - super-fr#1668
+    - super-fr#1682
+    - super-fr#1689
 - id: ci-hygiene
   title: CI hygiene sweep
   ids:
@@ -14752,6 +14774,12 @@ batches:
     walked.'
   order: 1
   wave: 26
+  events:
+  - kind: dispatch
+    at: '2026-11-28T11:38:35.144512Z'
+    runner: herdr
+    handle: w3X:pA
+    branch: feat/batch-tester-gate-auto-pass
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
