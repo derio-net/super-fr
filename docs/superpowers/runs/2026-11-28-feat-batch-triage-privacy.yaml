@@ -3,7 +3,7 @@ run: 2026-11-28-feat-batch-triage-privacy
 workflow: fr-goal@1
 branch: feat/batch-triage-privacy
 started: '2026-11-28T14:16:48+00:00'
-cursor: lens-review
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -130,8 +130,8 @@ steps:
     exit: 0
     stdout: ''
   lens-review:
-    state: running
-    at: '2026-11-28T16:14:25+00:00'
+    state: done
+    at: '2026-11-28T16:46:46+00:00'
     units:
       step/lens-review:
         attempts:
@@ -139,6 +139,13 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: 801d27fb-7199-425c-a6fc-89e3dd21e1b9
+          returned: '2026-11-28T16:46:46+00:00'
+          outcome: done
+        evidence:
+          review: lens-review-1
+          reviewer: docs-accuracy=ad1f83ab1c676a38b,security=a4ce7edfb37921c7b,tests=a0b81ddae8948a008
+          findings: l-docs-accuracy-r1,l-tests-r1,l-tests-r2,l-security-r1,l-security-r2,l-security-r3,l-security-r4,l-security-r5
+          lenses: docs-accuracy=9:l-docs-accuracy-r1;security=14:l-security-r1,l-security-r2,l-security-r3,l-security-r4,l-security-r5;tests=8:l-tests-r1,l-tests-r2
   deliver:
     state: pending
 fr_version: 9.1.0rc10

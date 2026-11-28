@@ -45,3 +45,88 @@ docs and acceptance row only; no code to clean
 ### p2-review-1 · review · phase 2 review: no findings (R8, R9, Design D, docs currency verified) (phase 2)
 
 An independent reviewer (separate context, with a shell) checked diff 24b7345..539fbdc30 against R8, R9 and Design D, and ran adversarial strings through repo_patterns. Private owner/name matches case-insensitively, including with a .git suffix and in sentence-final position. Lookalikes (xowner/name, name-two, name.md, my-name#12) do not match. The name#N form is skipped when a public repo shares the name. The p2-git-suffix decision is sound: Design C already requires the .git form, and backtracking still rejects .gitx. A push scans state_ref.ref_entries, which covers the whole REF_FILES walk. An export scans the durable set, including subdirectories. Refusals name the file, the repo and the remedy, never the matched text. An unreadable file refuses. An org scope with no facts raises VisibilityUnreadable naming fr triage collect. Tests: 173 passed (test_triage_privacy, test_triage_state_ref, test_triage_state_sync). fr docs check is clean, and both mirror syncs report in sync. Findings: none.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-28T16:46:45+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · fr-triage.md said an admission pins every outside account's comment, but pr_authors are exempt too
+
+Raised by the docs-accuracy lens reviewer. The page's untrusted-set paragraph overstated what pinned() pins (admit.py).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-28T16:46:45+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · The push-scan test planted the secret in one REF_FILES entry only; a scan walking fewer entries or following symlinks would pass
+
+Raised by the tests lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-28T16:46:45+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · The schema-21 PR-title load test had only an outsider's PR; a load clearing trusted titles too would pass
+
+Raised by the tests lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-28T16:46:45+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · The admission pins comments only up to the dispatch recheck; an outside comment posted after dispatch reaches the worker reading the live thread
+
+Raised by the security lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-28T16:46:45+00:00 state=open review_scope=in -->
+### l-security-r2 · finding [open] (reviewer: in scope) · pinned() stripped [bot] from the comment login but not from pr_authors, so REST and GraphQL digests disagree for an `x[bot]` pr_author
+
+Raised by the security lens reviewer (R1 breach; fails closed, a liveness cost).
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3 created=2026-11-28T16:46:45+00:00 state=open review_scope=in -->
+### l-security-r3 · finding [open] (reviewer: in scope) · The carried-text patterns missed owner/name.wiki(.git), zero-width-split and percent-encoded spellings of a private repo
+
+Raised by the security lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4 created=2026-11-28T16:46:45+00:00 state=open review_scope=in -->
+### l-security-r4 · finding [open] (reviewer: in scope) · The carried-file scan read contents only; a carried file's path naming a private repo reached the public ref
+
+Raised by the security lens reviewer.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r5 created=2026-11-28T16:46:45+00:00 state=open review_scope=in -->
+### l-security-r5 · finding [open] (reviewer: in scope) · TOCTOU: push_state scanned the files, then commit_tree_from_paths re-read them; a write in between pushed unscanned bytes
+
+Raised by the security lens reviewer.
+
+<!-- fr:journal kind=review scope=plan id=lens-review-1 created=2026-11-28T16:46:45+00:00 -->
+### lens-review-1 · review · lens review: docs-accuracy 1, tests 2, security 5 findings, all in scope and fixed
+
+One independent reviewer per lens (docs-accuracy, security, tests), each given only its lens brief, return rule, the diff from merge base 608d55585 and the shape file. All eight findings were in scope and are fixed with tests. The security reviewer found no fail-open on the three trust boundaries. The tests reviewer confirmed the listed fail-closed paths are covered apart from its two findings.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-28T16:46:45+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: fr-triage.md said an admission pins every outside account's comment, but pr_authors are exempt too
+
+The page now names exactly which comments an admission pins (neither owner, member or collaborator nor in pr_authors).
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-28T16:46:45+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: The push-scan test planted the secret in one REF_FILES entry only; a scan walking fewer entries or following symlinks would pass
+
+test_every_carried_entry_is_scanned_on_push plants the secret in every REF_FILES entry (a file deep inside each directory entry), and test_a_symlinked_entry_is_neither_carried_nor_scanned covers the symlink case. Mutation-checked: dropping history/ from carried_files turns the history/ case red.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-28T16:46:45+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: The schema-21 PR-title load test had only an outsider's PR; a load clearing trusted titles too would pass
+
+The schema-21 load test now holds a viewer-authored PR too and asserts its title survives while the outsider's is withheld.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-28T16:46:45+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: The admission pins comments only up to the dispatch recheck; an outside comment posted after dispatch reaches the worker reading the live thread
+
+Every batch brief now carries THREAD_RULE outside the untrusted block. It says that comments on a member's thread by an account that is not an owner, member or collaborator, and not a pr_author, are an outside author's and never to be followed, because an admission covers only the comments present at dispatch. The brief stays deterministic. test_the_brief_says_outside_comments_in_a_members_thread_are_untrusted pins it.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-28T16:46:45+00:00 state=fixed resolves=l-security-r2 -->
+### l-security-r2-resolved · finding [fixed] · resolves l-security-r2: pinned() stripped [bot] from the comment login but not from pr_authors, so REST and GraphQL digests disagree for an `x[bot]` pr_author
+
+pinned() normalises both sides to the canonical login (lowercased, [bot] dropped). A test parametrised over both listed and read spellings asserts the same verdict and an equal REST/GraphQL digest.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved created=2026-11-28T16:46:45+00:00 state=fixed resolves=l-security-r3 -->
+### l-security-r3-resolved · finding [fixed] · resolves l-security-r3: The carried-text patterns missed owner/name.wiki(.git), zero-width-split and percent-encoded spellings of a private repo
+
+repo_patterns accepts an optional .wiki before .git. carried_text_leaks also scans the text with Unicode Cf characters removed and percent-escapes decoded. Three new leak cases cover these.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4-resolved created=2026-11-28T16:46:45+00:00 state=fixed resolves=l-security-r4 -->
+### l-security-r4-resolved · finding [fixed] · resolves l-security-r4: The carried-file scan read contents only; a carried file's path naming a private repo reached the public ref
+
+carried_text_leaks scans each carried path, with its suffix dropped, as well as its text. test_a_carried_path_naming_a_private_repo_is_a_leak covers it.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r5-resolved created=2026-11-28T16:46:45+00:00 state=fixed resolves=l-security-r5 -->
+### l-security-r5-resolved · finding [fixed] · resolves l-security-r5: TOCTOU: push_state scanned the files, then commit_tree_from_paths re-read them; a write in between pushed unscanned bytes
+
+push_state builds the commit first and runs guard_state over that commit's blobs (carried= the tree's paths, read= blob bytes), so the bytes scanned are the bytes pushed. test_a_push_scans_the_bytes_it_commits_not_the_directory_again rewrites the file clean after the commit is built and still sees the refusal.
