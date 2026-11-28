@@ -63,11 +63,17 @@ rows:
       - super-fr:tests/unit/test_settings_stealth.py#test_stealth_forces_push_and_pr_to_ask
       - super-fr:tests/unit/test_settings_stealth.py#test_stealth_push_with_a_code_commit_asks
       - super-fr:tests/unit/test_skill_stealth_push.py
+      - super-fr:tests/unit/test_settings_stealth.py#test_stealth_pr_create_asks_and_stores_a_pr_request
+      - super-fr:tests/unit/test_settings_stealth.py#test_an_explicit_pr_auto_in_the_tracking_file_is_refused
+      - super-fr:tests/unit/test_push_moves_remote.py
       int:
       - super-fr:tests/integration/test_scenarios.py#test_alacarte_settings
+      - super-fr:tests/integration/test_scenarios.py#test_placement_stealth
     status: ci
-    notes: unit tests pin the forced ask, its source, the contrary refusal, config PRs,
-      the driven-triage text, fr push asking only for code and the skills' sentences;
-      the candidate scenario walks it
+    notes: unit tests pin the forced ask (push and pr, with no approval stubbed), its
+      source, both contrary refusals, config PRs, the driven-triage text and fetch notice,
+      fr push asking only when the push moves the remote (read live) and only after
+      the subject check, and the skills' sentences; the alacarte and placement-stealth
+      candidate scenarios walk it
     verify: candidate
     scenario: tests/scenarios/alacarte-settings.sh
