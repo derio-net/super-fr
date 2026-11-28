@@ -15,6 +15,7 @@ from fr.plan_review.checks import (
     OPS_FR_FLOOR,
     ReviewIssue,
     _acceptance_link_issues,
+    _gated_row_coverage_issues,
     _has_cycle,
     _manual_placement_issues,
     _ops_floor_issues,
@@ -192,6 +193,7 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     # silently ignoring its ops.
     issues.extend(_ops_floor_issues(plan))
     issues.extend(_ops_gap_issues(plan))
+    issues.extend(_gated_row_coverage_issues(plan))
     issues.extend(_ops_print_only_issues(plan))
 
     # The refactor-or-justify gate moved to `fr run resolve` (spec 2026-09-25

@@ -123,9 +123,7 @@ def _coverage(
             "schema_version: 1\nops:\n  - id: k\n    summary: s\n    phase: post-merge\n"
         )
     return [
-        (i.severity, i.message)
-        for i in self_review(parse_plan(plan_dir))
-        if "(rows:" in i.message
+        (i.severity, i.message) for i in self_review(parse_plan(plan_dir)) if "(rows:" in i.message
     ]
 
 
