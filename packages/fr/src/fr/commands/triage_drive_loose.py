@@ -42,22 +42,31 @@ def _repo_read(driver: _Driver, repo: str) -> RepoRead:
 
 
 def _read(driver: _Driver, loose: LooseLedger, reads: dict[str, RepoRead]) -> LedgerRead | None:
-    """*loose*'s gated rows through the one cursor that delivered it (R5); None, reported
-    once per drive for each PR and reason (R6), when they cannot be read."""
-    if loose.repo not in reads:
-        reads[loose.repo] = _repo_read(driver, loose.repo)
-    got = reads[loose.repo]
+    """*loose*'s gated rows through the one cursor that delivered it (R5); None when they
+    cannot be read (R6). A repo-level failure (no clone, a failed fetch) is reported once
+    per repo and cause; a PR's own (two runs on its branch, a cursor recording another PR,
+    an unreadable exit) once per PR, named `<repo>#<n>`, and cause."""
+    repo = loose.repo
+    if repo not in reads:
+        reads[repo] = _repo_read(driver, repo)
+    got = reads[repo]
+    if isinstance(got, TriageError):
+        driver._report_once(
+            f"ledger\0{repo}\0{got}",
+            f"cannot read the rows the gates of {repo}'s merged PRs outside a batch hold on "
+            f"its default branch ({got}); no fr:awaiting-live label and no gate pass is "
+            "planned for them",
+        )
+        return None
+    checkout, tip, texts = got
     try:
-        if isinstance(got, TriageError):
-            raise got
-        checkout, tip, texts = got
-        return gated_rows_at(checkout, tip, loose.head_ref, pr=loose.number, texts=texts)
+        return gated_rows_at(checkout, tip, loose.head_ref, pr=loose.number, repo=repo, texts=texts)
     except TriageError as exc:
-        label = f"PR #{loose.number}"
+        label = f"{repo}#{loose.number}"
         driver._report_once(
             f"ledger\0{label}\0{exc}",
-            f"cannot read the rows {label}'s gates hold on {loose.repo}'s default branch "
-            f"({exc}); no fr:awaiting-live label and no gate pass is planned for it",
+            f"cannot read the rows {label}'s gates hold on its default branch ({exc}); "
+            "no fr:awaiting-live label and no gate pass is planned for it",
         )
         return None
 

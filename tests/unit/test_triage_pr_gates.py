@@ -182,7 +182,7 @@ def test_snapshot_has_loose_ledgers_defaulting_empty() -> None:
 
 
 def _cursor_pr(
-    checkout: Any, *, pr: str | None, extra: str | None = None, archived: bool = False
+    checkout: Any, *, pr: object, extra: str | None = None, archived: bool = False
 ) -> None:
     """Record *pr* on the run cursor of `_ledger_repo`, and optionally copy that cursor to a
     second run id (a second cursor naming the same branch) or, *archived*, the same run's
@@ -213,14 +213,14 @@ def _cursor_pr(
     _git(clone, "fetch", "--quiet", "origin")
 
 
-def _read(tmp_path: Path, number: int | None, **kw: Any) -> Any:
+def _read(tmp_path: Path, number: int | None, *, repo: str | None = None, **kw: Any) -> Any:
     from fr.triage.ledger import gated_rows_at
 
     from tests.unit.test_triage_exit_gates_drive import _ledger_repo
 
     checkout = _ledger_repo(tmp_path, walked=True)
     _cursor_pr(checkout, **kw)
-    return gated_rows_at(checkout, "origin/main", "feat/batch-b1", pr=number)
+    return gated_rows_at(checkout, "origin/main", "feat/batch-b1", pr=number, repo=repo)
 
 
 def test_a_cursor_naming_this_pr_gives_its_rows(tmp_path: Path) -> None:
@@ -228,10 +228,28 @@ def test_a_cursor_naming_this_pr_gives_its_rows(tmp_path: Path) -> None:
     assert [r.id for r in read.rows] == ["r-live"]
 
 
-def test_a_cursor_naming_another_pr_gives_no_rows(tmp_path: Path) -> None:
-    from fr.triage.ledger import NO_RUN
+def test_a_cursor_naming_another_pr_is_unreadable(tmp_path: Path) -> None:
+    import pytest
+    from fr.triage.errors import TriageError
 
-    assert _read(tmp_path, 9, pr=f"https://github.com/{REPO}/pull/19") == NO_RUN
+    with pytest.raises(TriageError, match="records PR"):
+        _read(tmp_path, 9, pr=f"https://github.com/{REPO}/pull/19")
+
+
+def test_a_cursor_naming_this_number_in_another_repo_is_unreadable(tmp_path: Path) -> None:
+    import pytest
+    from fr.triage.errors import TriageError
+
+    with pytest.raises(TriageError, match="records PR"):
+        _read(tmp_path, 9, repo=REPO, pr="https://github.com/acme/fork/pull/9")
+
+
+def test_a_cursor_whose_pr_is_not_a_url_is_unreadable(tmp_path: Path) -> None:
+    import pytest
+    from fr.triage.errors import TriageError
+
+    with pytest.raises(TriageError, match="records PR"):
+        _read(tmp_path, 9, pr=9)  # type: ignore[arg-type]
 
 
 def test_a_cursor_with_no_pr_gives_its_rows(tmp_path: Path) -> None:
@@ -262,3 +280,12 @@ def test_no_cursor_gives_no_rows_and_no_pr_keeps_the_first_match(tmp_path: Path)
 def test_a_runs_live_and_archived_cursors_are_one_cursor_for_a_pr(tmp_path: Path) -> None:
     read = _read(tmp_path, 9, pr=f"https://github.com/{REPO}/pull/9", archived=True)
     assert [r.id for r in read.rows] == ["r-live"]
+
+
+def test_a_pr_from_a_fork_or_of_unknown_origin_is_never_loose() -> None:
+    merged = _merged_pr(10, "feat/x")
+    for cross in (True, None):
+        doc = _facts_with(merged).model_dump(by_alias=True)
+        doc["gated_prs"] = [{**doc["gated_prs"][0], "cross_repo": cross}]
+        f = type(_facts_with(merged)).model_validate(doc)
+        assert pr_gates.loose_prs(f, []) == []

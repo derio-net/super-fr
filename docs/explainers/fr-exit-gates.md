@@ -82,11 +82,13 @@ removes it. Nothing about a gate lives in a file in the repo, so passing one nee
 A person passes a gate, or a record shows that the work the gate guards is done.
 
 - **Tester.** When the gate has acceptance rows and every one of them reads `walked` on the
-  default branch, the triage driver passes the gate itself. A drive of the whole scope does
-  this for a merged pull request outside any batch too. It needs exactly one run cursor on that
-  pull request's branch, and that cursor must not name a different pull request. It never
-  passes a run-level gate that no row inherits, nor a `devops` gate added because the plan has
-  operations: those need an explicit pass. Otherwise you walk the rows
+  default branch, the triage driver passes the gate itself. A drive of the whole scope also
+  does this for a merged pull request that no open batch covers: one outside every batch, or
+  one whose batch has closed out. The pull request must come from the repo itself, not a fork.
+  It needs exactly one run on its branch (the run's live and archived cursors count as one),
+  and that run must not name a different pull request. When the run check fails, the driver
+  says so once and passes nothing. It never passes a run-level gate that no row inherits, nor
+  a `devops` gate added because the plan has operations: those need an explicit pass. Otherwise you walk the rows
   ([fr-acceptance](fr-acceptance.md)) or record the pass by hand:
 
         fr gate pass --pr 123 --gate tester --notes "walked the install on a clean machine" --yes

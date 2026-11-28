@@ -36,7 +36,8 @@ BRANCH = "feat/solo"
 
 
 class LooseWorld(GatedWorld):
-    """Every merged PR holding a gate label is also in `facts.gated_prs`, as collect lists it."""
+    """Every merged PR holding a gate label is also in `facts.gated_prs`, batch PRs included,
+    as collect lists it (`collect._gated_prs`)."""
 
     def facts(self) -> Facts:
         facts = super().facts()
@@ -51,9 +52,10 @@ class LooseWorld(GatedWorld):
                 head_ref=p["head_ref"],
                 url=f"https://github.com/{REPO}/pull/{n}",
                 labels=list(p["labels"]),
+                cross_repo=False,
             )
             for n, p in self.prs.items()
-            if p["state"] == "MERGED" and not p["closes"]
+            if p["state"] == "MERGED" and any(x.startswith("gate:") for x in p["labels"])
         ]
         return facts.model_copy(update={"gated_prs": gated})
 
@@ -71,11 +73,13 @@ def _loose(
     rows: tuple[GatedRow, ...] | Exception,
     *,
     batch: bool = False,
+    labels: tuple[str, ...] = ("gate:tester",),
+    **read: Any,
 ) -> list[Any]:
     """A merged gated PR no batch delivered (and, with *batch*, an unrelated one in flight)."""
     world.issues[7] = "open"
     world.issues[9] = "open"
-    world.pr(LOOSE, BRANCH, [], state="MERGED", labels=["gate:tester"],
+    world.pr(LOOSE, BRANCH, [], state="MERGED", labels=list(labels),
              merged_at=(NOW - timedelta(hours=1)).isoformat())  # fmt: skip
     _state(tmp_path, world, *([_batch("b9", 9, events=_dispatch_event("b9"))] if batch else []))
     seen: list[Any] = []
@@ -86,7 +90,7 @@ def _loose(
         seen.append((ref, branch, pr))
         if isinstance(rows, Exception):
             raise rows
-        return LedgerRead(rows, run_gate="none", run_gate_inherited=False)
+        return LedgerRead(rows, **{"run_gate": "none", "run_gate_inherited": False, **read})
 
     monkeypatch.setattr(triage_drive_loose, "gated_rows_at", _rows)
     monkeypatch.setattr(triage_drive_loose, "read_cursors", lambda checkout, ref: [])
@@ -131,7 +135,7 @@ def test_rows_unreadable_for_a_loose_pr_are_reported_once_and_plan_nothing(
     code, out = _drive(tmp_path, "--once", "--yes")
 
     assert code == 0, out
-    assert out.count(f"PR #{LOOSE}") == 1 and "more than one run cursor" in out
+    assert out.count(f"{REPO}#{LOOSE}") == 1 and "more than one run cursor" in out
     assert not [c for c in lworld.calls if c.startswith(("pr labels", "pr comment"))]
 
 
@@ -150,7 +154,7 @@ def test_the_same_unreadable_read_is_not_reported_again_on_a_later_pass(
     code, out = _drive(tmp_path, "--yes", "--interval", "5")
 
     assert len(sleeps) >= 2, out  # at least two passes ran
-    assert out.count(f"PR #{LOOSE}") == 1, out
+    assert out.count(f"{REPO}#{LOOSE}") == 1, out
 
 
 def test_a_failed_label_write_for_a_loose_pr_is_reported_and_exits_one(
@@ -170,7 +174,7 @@ def test_a_failed_label_write_for_a_loose_pr_is_reported_and_exits_one(
     assert _lines(out, "gate-pass")
 
 
-def test_a_cursor_naming_another_pr_means_no_rows_and_nothing_is_written(
+def test_no_run_rows_plan_nothing_and_write_nothing(
     tmp_path: Path, lworld: GatedWorld, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from fr.triage.ledger import NO_RUN
@@ -243,7 +247,7 @@ def test_a_loose_pr_in_a_repo_with_no_clone_is_reported_and_the_pass_goes_on(
     code, out = _drive(tmp_path, "--once", "--yes")
 
     assert code == 0, out
-    assert out.count("PR #77") == 1 and "no clone of acme/other" in out, out
+    assert out.count("no clone of acme/other") == 1, out
     assert f"pr labels {LOOSE} +['gate:tester-passed'] -['gate:tester']" in lworld.calls
 
 
@@ -300,11 +304,19 @@ def test_loose_ledgers_reads_the_rows_of_the_cursor_naming_this_pr(
     assert [r.id for r in rows] == ["r-live"] and reported == []
 
 
-def test_loose_ledgers_reads_no_rows_when_the_cursor_names_another_pr(
+def test_loose_ledgers_reports_a_cursor_naming_another_pr_and_reads_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     rows, reported = _real(tmp_path, monkeypatch, pr=f"https://github.com/{REPO}/pull/19")
-    assert rows == () and reported == []
+    assert rows is None
+    assert len(reported) == 1 and f"{REPO}#9" in reported[0] and "records PR" in reported[0]
+
+
+def test_loose_ledgers_reports_the_same_pr_number_of_another_repo_on_the_cursor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows, reported = _real(tmp_path, monkeypatch, pr="https://github.com/acme/fork/pull/9")
+    assert rows is None and len(reported) == 1
 
 
 def test_loose_ledgers_reports_two_runs_naming_the_branch_and_reads_nothing(
@@ -313,3 +325,129 @@ def test_loose_ledgers_reports_two_runs_naming_the_branch_and_reads_nothing(
     rows, reported = _real(tmp_path, monkeypatch, pr=None, extra="r2")
     assert rows is None
     assert len(reported) == 1 and "more than one run cursor" in reported[0]
+
+
+def test_r2_a_loose_prs_run_gate_no_row_inherits_is_never_passed_by_walked_rows(
+    tmp_path: Path, lworld: GatedWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _loose(lworld, tmp_path, monkeypatch, WALKED, run_gate="tester")
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 0, out
+    assert not [c for c in lworld.calls if c.startswith(f"pr labels {LOOSE}")]
+    assert not _lines(out, "gate-pass")
+
+
+def test_r2_a_loose_prs_ops_promoted_devops_gate_is_never_passed_by_walked_rows(
+    tmp_path: Path, lworld: GatedWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rows = (GatedRow("row-a", "devops", True, (ISSUE,)),)
+    _loose(lworld, tmp_path, monkeypatch, rows, labels=("gate:devops",), ops_promoted=True)
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 0, out
+    assert not [c for c in lworld.calls if c.startswith(f"pr labels {LOOSE}")]
+    assert not _lines(out, "gate-pass")
+
+
+def _batch_gated(world: GatedWorld, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                 *, closeout: bool) -> list[Any]:  # fmt: skip
+    """b1's merged PR #101 holds a walked tester gate; collect lists it in gated_prs too."""
+    from tests.unit.test_triage_exit_gates_drive import _gated
+
+    _gated(world, tmp_path, monkeypatch, WALKED)
+    if closeout:
+        event = (
+            "      - {kind: closeout, at: 2026-10-02T11:59:00Z, runner: fake, handle: h, "
+            "archived: 0}\n"
+        )
+        _state(tmp_path, world, _batch("b1", 7, events=_dispatch_event("b1") + event))
+    seen: list[Any] = []
+
+    def _rows(checkout: Any, ref: str, branch: str, **kw: Any) -> LedgerRead:
+        seen.append((branch, kw.get("pr")))
+        return LedgerRead(WALKED, run_gate="none", run_gate_inherited=False)
+
+    monkeypatch.setattr(triage_drive_loose, "gated_rows_at", _rows)
+    monkeypatch.setattr(triage_drive_loose, "read_cursors", lambda checkout, ref: [])
+    return seen
+
+
+def test_a_landed_gated_batchs_pr_in_gated_prs_is_passed_once_by_its_batch(
+    tmp_path: Path, lworld: GatedWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loose_reads = _batch_gated(lworld, tmp_path, monkeypatch, closeout=False)
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 0, out
+    swaps = [
+        c for c in lworld.calls if c == "pr labels 101 +['gate:tester-passed'] -['gate:tester']"
+    ]
+    assert len(swaps) == 1, lworld.calls
+    assert loose_reads == []  # the batch covers it: never read as loose
+    assert [ln.split(":")[0] for ln in _lines(out, "gate-pass")] == ["gate-pass b1"]
+
+
+def test_r8_a_closed_out_batchs_gated_pr_is_passed_once_through_the_loose_route(
+    tmp_path: Path, lworld: GatedWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loose_reads = _batch_gated(lworld, tmp_path, monkeypatch, closeout=True)
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 0, out
+    swaps = [
+        c for c in lworld.calls if c == "pr labels 101 +['gate:tester-passed'] -['gate:tester']"
+    ]
+    assert len(swaps) == 1, lworld.calls
+    assert loose_reads == [("feat/batch-b1", 101)]
+    assert lworld.rows_read == []  # type: ignore[attr-defined]  # the batch route skipped it
+
+
+def test_r4_a_loose_gate_pass_closes_the_prs_trackers(
+    tmp_path: Path, lworld: GatedWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.gatebackfill.trackers import tracker_body
+
+    _loose(lworld, tmp_path, monkeypatch, WALKED)
+    lworld.trackers = {
+        31: tracker_body("row:row-a", "t", "tester", LOOSE),
+        32: tracker_body("row:row-b", "t", "tester", 102),  # another PR: left open
+    }
+
+    code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert code == 0, out
+    closes = [c for c in lworld.calls if c.startswith("issue close")]
+    assert [c.split(":")[0] for c in closes] == ["issue close 31"]
+    assert "closed trackers #31" in "\n".join(_lines(out, "gate-pass"))
+
+
+def test_r4_labels_off_writes_no_gate_pass_for_a_loose_pr(
+    tmp_path: Path, lworld: GatedWorld, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.test_triage_exit_gates_drive import SETTINGS
+
+    _loose(lworld, tmp_path, monkeypatch, WALKED)
+    lworld.files[SETTINGS] = "forge:\n  labels: 'off'\n"
+
+    _code, out = _drive(tmp_path, "--once", "--yes")
+
+    assert not [c for c in lworld.calls if c.startswith(("pr labels", "issue labels"))]
+    assert "gate:tester not passed: forge.labels: off" in out
+
+
+def test_a_repo_failure_is_reported_once_per_repo_and_a_pr_failure_names_its_repo() -> None:
+    from fr.triage.batch_drive_types import GateLedger, LooseLedger
+
+    driver = _Driver(None)
+    keys: list[str] = []
+    driver._report_once = lambda key, message: keys.append(key) or True  # type: ignore[method-assign]
+    reads: dict[str, Any] = {"a/one": TriageError("no fetch"), "b/two": TriageError("no fetch")}
+    for repo in ("a/one", "a/one", "b/two"):
+        loose = LooseLedger(repo, 5, "x", GateLedger(pr=5, labels=frozenset({"gate:tester"})))
+        assert triage_drive_loose._read(driver, loose, reads) is None  # type: ignore[arg-type]
+    assert sorted(set(keys)) == ["ledger\0a/one\0no fetch", "ledger\0b/two\0no fetch"]

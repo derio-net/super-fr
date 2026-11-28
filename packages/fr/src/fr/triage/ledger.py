@@ -103,6 +103,7 @@ def _run_text(
     branch: str,
     *,
     pr: int | None = None,
+    repo: str | None = None,
     texts: Cursors | None = None,
 ) -> tuple[str, str] | None:
     """`(run id, cursor text)` of the cursor at *ref* naming *branch*; None when none does.
@@ -110,8 +111,9 @@ def _run_text(
 
     With *pr* (a merged PR outside a batch, spec 2026-11-28-tester-gate-auto-pass R5) the
     cursor must be the ONE run naming the branch (a run's live and archived copies are one),
-    and its recorded `pr`, when it has one, must end in `/<pr>`: more than one run raises
-    `TriageError`, one naming another PR is None."""
+    and its recorded `pr`, when it has one, must be this PR's url (`/<repo>/pull/<pr>`, *repo*
+    when given): more than one run, or a cursor recording another PR (or a `pr` that is not
+    a url), raises `TriageError`, so the read is reported and nothing is planned from it."""
     if texts is None:
         texts = read_cursors(checkout, ref)
     if pr is not None:
@@ -127,8 +129,14 @@ def _run_text(
             return None
         run, text, doc = named[0]
         recorded = doc.get("pr")
-        if isinstance(recorded, str) and not recorded.rstrip("/").endswith(f"/{pr}"):
-            return None
+        want = f"/{repo}/pull/{pr}" if repo else f"/{pr}"
+        if recorded is not None and not (
+            isinstance(recorded, str) and recorded.rstrip("/").lower().endswith(want.lower())
+        ):
+            raise TriageError(
+                f"the run cursor {run} on branch {branch} records PR {recorded!r}, "
+                f"not {repo or ''}#{pr}"
+            )
         return run, text
     found = find_run([doc for _, doc in texts], branch)
     if found is None:
@@ -148,6 +156,7 @@ def gated_rows_at(
     branch: str,
     *,
     pr: int | None = None,
+    repo: str | None = None,
     texts: Cursors | None = None,
 ) -> LedgerRead:
     """The ledger read for the run on *branch* at *ref* (the default branch's tip). No
@@ -163,7 +172,7 @@ def gated_rows_at(
     from fr.verification.rows import spec_section_at
     from fr.verification.spec_section import SectionError
 
-    found = _run_text(checkout, ref, branch, pr=pr, texts=texts)
+    found = _run_text(checkout, ref, branch, pr=pr, repo=repo, texts=texts)
     if found is None:
         return NO_RUN
     run, text = found

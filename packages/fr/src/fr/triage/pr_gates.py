@@ -64,7 +64,9 @@ def _closed_out(batch: Batch) -> bool:
 def loose_prs(facts: Facts, batches: Sequence[Batch]) -> list[LooseLedger]:
     """R1, R8: each merged PR of `facts.gated_prs` that is not the PR of a batch with no
     close-out event (such a batch's own route covers it). A closed-out batch's PR is loose:
-    the batch route skips it. The rows are not read here (None)."""
+    the batch route skips it. A PR from a fork, or one whose origin was never read
+    (`cross_repo` not False), is never loose: its head branch is the fork's, so a cursor of
+    the same name proves nothing about it. The rows are not read here (None)."""
     covered = {
         (pr.repo, pr.number)
         for b in batches
@@ -73,5 +75,5 @@ def loose_prs(facts: Facts, batches: Sequence[Batch]) -> list[LooseLedger]:
     return [
         LooseLedger(p.repo, p.number, p.head_ref, GateLedger(p.number, frozenset(p.labels or ())))
         for p in facts.gated_prs
-        if (p.repo, p.number) not in covered and p.labels is not None
+        if (p.repo, p.number) not in covered and p.labels is not None and p.cross_repo is False
     ]
