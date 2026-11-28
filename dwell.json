@@ -73,8 +73,8 @@
       "column": "pr-open",
       "column_since": "2026-11-28T14:32:15.739846Z",
       "column_first_seen": false,
-      "wait": "ci",
-      "wait_since": "2026-11-28T16:56:20.372454Z",
+      "wait": "agent",
+      "wait_since": "2026-11-28T17:06:12.828027Z",
       "wait_first_seen": false,
       "intervals": [
         {
@@ -110,6 +110,13 @@
           "wait": "agent",
           "start": "2026-11-28T14:32:15.739846Z",
           "end": "2026-11-28T16:56:20.372454Z",
+          "first_seen": false
+        },
+        {
+          "column": "pr-open",
+          "wait": "ci",
+          "start": "2026-11-28T16:56:20.372454Z",
+          "end": "2026-11-28T17:06:12.828027Z",
           "first_seen": false
         }
       ],
