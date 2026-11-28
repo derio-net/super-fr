@@ -160,7 +160,8 @@ and plan journals. An `owed` entry already reported in another group is left out
 group: a Test Plan step's outcome, and a manual phase that `fr archive` wrote back. Each item
 is either discharged or owed, with a one-line reason.
 
-R18. `fr run dod <run-id> [--json]` prints the Definition of Done. It changes nothing. It
+R18. `fr run dod <run-id> [--json]` prints the Definition of Done. It writes no artifact itself (the CLI-entry gate may
+migrate first, as for every `fr run` verb, and it runs host-side like them). It
 exits 0 when every item is discharged, 1 when an item is owed, and 2 when the run or its
 inputs cannot be read. It is defined in `commands/dod_cmd.py`, never in
 `commands/run_cmd.py`. `cli.py` imports that module after `run_app`, which registers it.
@@ -172,7 +173,11 @@ Definition of Done item is discharged. Otherwise it names each owed item.
 
 R20. When `fr ops gate` has run every stage, and when a rerun finds every stage already done,
 it says the DevOps stage is complete only when every Definition of Done item is discharged.
-Otherwise it says every stage ran and lists each item still owed, from every group.
+Otherwise it says every stage ran and lists each item still owed, from every group. As in R12,
+nothing the pinned PR head carries discharges an item there: an `owed` resolution record or a
+`[manual]` phase tick the head added counts as not there. A run that recorded a plan the
+derivation cannot find is unreadable (exit 2 for `fr run dod`, "cannot be read" in the briefs and
+the final line); only a run that recorded no plan has empty manual and plan-journal groups.
 
 ## Design shape
 
