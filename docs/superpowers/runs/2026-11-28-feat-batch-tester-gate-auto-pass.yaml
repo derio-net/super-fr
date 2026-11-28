@@ -3,7 +3,7 @@ run: 2026-11-28-feat-batch-tester-gate-auto-pass
 workflow: fr-goal@1
 branch: feat/batch-tester-gate-auto-pass
 started: '2026-11-28T11:40:19+00:00'
-cursor: journal-check
+cursor: lens-review
 steps:
   brainstorm:
     state: done
@@ -88,7 +88,10 @@ steps:
           visual: none
           findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5,p1-r6,p1-r7
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-28T13:02:03+00:00'
+    exit: 0
+    stdout: ''
   lens-review:
     state: pending
   deliver:
