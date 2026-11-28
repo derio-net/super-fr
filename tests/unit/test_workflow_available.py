@@ -51,6 +51,19 @@ def test_a_disabled_shape_is_refused_naming_the_setting_and_what_is_left(repo: P
     assert "fr-goal-light," not in msg.split("available:")[1]
 
 
+def test_a_disabled_default_shape_names_how_to_choose_an_available_one(tmp_path: Path) -> None:
+    root = make_repo(tmp_path)
+    land_on_main(root, "schema: 3\nworkflows:\n  disabled: [fr-goal]\n")
+    with pytest.raises(WorkflowError) as e:
+        refuse_disabled("fr-goal", root)
+    msg = _squash(str(e.value))
+    assert "`.fr/settings.yaml` on the default branch" in msg
+    assert "--workflow" in msg
+    left = msg.split("available:")[1]
+    assert "fr-debugging" in left and "fr-goal-light" in left
+    assert "fr run start fr-debugging" in msg  # a shape the operator can actually start
+
+
 def test_a_shape_that_is_not_disabled_passes(repo: Path) -> None:
     assert refuse_disabled("fr-goal", repo) is None
 
@@ -103,13 +116,16 @@ def test_under_stealth_run_start_reads_the_tracking_settings(tmp_path: Path) -> 
     assert result.exit_code == 2, result.output
     out = _squash(result.output)
     assert "workflow fr-goal is disabled" in out and "workflows.disabled" in out
+    assert "the tracking repo's settings file" in out  # where to change it, not the target's
+    assert "a run already on this branch keeps going: fr run status" in out
 
 
 # --- the brainstorm rebind --------------------------------------------------------------
 
 
 def _disable(monkeypatch: pytest.MonkeyPatch, *names: str) -> None:
-    monkeypatch.setattr(available, "disabled_shapes", lambda _root: list(names))
+    """`workflows.disabled` reads *names* (repo placement), for fixtures with no remote."""
+    monkeypatch.setattr(available, "_disabled_and_placement", lambda _root: (list(names), "repo"))
 
 
 def test_a_rebind_onto_a_disabled_shape_is_refused(
@@ -209,18 +225,26 @@ def test_supersede_onto_the_runs_own_shape_passes_and_onto_another_disabled_one_
 # --- a started run keeps going ------------------------------------------------------------
 
 
-def test_advance_resolve_and_reshape_never_consult_the_disabled_list(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_advance_resolve_and_reshape_keep_a_run_on_a_since_disabled_shape_going(
+    tmp_path: Path,
 ) -> None:
     from tests.unit.record_support import fr
     from tests.unit.test_run_light_shape import _at_brainstorm
 
     root = _at_brainstorm(tmp_path, shape="fr-goal-light")
+    # The shape is disabled after the run started, on the default branch the policy is
+    # read from (origin's main), not on the run's branch.
+    base = tmp_path / "base"
+    (base / ".fr").mkdir(exist_ok=True)
+    (base / ".fr" / "settings.yaml").write_text(DISABLE_LIGHT)
+    git(base, "add", "-A")
+    git(base, "commit", "-qm", "disable fr-goal-light")
+    git(base, "push", "-q", "origin", "main")
+    git(tmp_path / "origin.git", "symbolic-ref", "HEAD", "refs/heads/main")
+    git(base, "remote", "set-head", "origin", "main")
+    with pytest.raises(WorkflowError, match="workflow fr-goal-light is disabled"):
+        refuse_disabled("fr-goal-light", root)  # the setting is in force for this run
 
-    def _boom(*_a: object, **_k: object) -> None:
-        raise AssertionError("refuse_disabled must not run here")
-
-    monkeypatch.setattr(available, "refuse_disabled", _boom)
     for argv in (
         ["run", "advance", "r1"],
         ["run", "resolve", "r1", "--step", "brainstorm", "--state", "done",

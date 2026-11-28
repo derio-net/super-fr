@@ -114,6 +114,8 @@ def test_init_stealth_writes_and_pushes_the_target_file(
     text = git(track, "show", "main:local--origin/settings.yaml")
     assert "placement: stealth" in text.splitlines()
     assert "#  labels: off" in text and "#  pr_body: minimal" in text
+    lines = text.splitlines()
+    assert "#  push: ask" in lines and "#  pr: ask" in lines  # alacarte R6
     assert git(target, "status", "--porcelain").strip() == ""  # nothing in the target
     again = CliRunner().invoke(app, ["settings", "init", "--stealth", f"{track}@main"], env=env)
     assert again.exit_code == 2 and "never overwrites" in " ".join(again.output.split())
@@ -472,6 +474,68 @@ def test_stealth_push_with_a_code_commit_asks(tmp_path: Path) -> None:
     assert result.exit_code == 2, result.output
     assert "git.push: ask" in " ".join(result.output.split())
     assert _requests(ws) == ["push-fix-s.json"]
+
+
+def test_stealth_push_refused_by_the_subject_check_stores_no_request(tmp_path: Path) -> None:
+    """The checks run before the ask: the operator is never asked about a push fr refuses."""
+    ws = _stealth_ws(tmp_path)
+    git(ws, "push", "-q", "origin", "fix/s")
+    (ws / "code.txt").write_text("x\n")
+    git(ws, "add", "code.txt")
+    git(ws, "commit", "-qm", "wip")
+
+    result = _fr_push(ws)
+
+    assert result.exit_code == 2, result.output
+    out = " ".join(result.output.split())
+    assert "commit template" in out and "wip" in out
+    assert "git.push: ask" not in out
+    assert _requests(ws) == []
+
+
+def test_stealth_pr_create_asks_and_stores_a_pr_request(tmp_path: Path) -> None:
+    """No approval is stubbed: stealth's forced `git.pr: ask` refuses before any forge call."""
+    from fr.cli import app
+
+    ws = _stealth_ws(tmp_path)
+    body = tmp_path / "body.md"
+    body.write_text("A plain summary.\n")
+
+    result = CliRunner().invoke(
+        app,
+        ["pr", "create", "--title", "fix: a change", "--body-file", str(body)],
+        env={**os.environ, "FR_REPO_ROOT": str(ws)},
+    )
+
+    assert result.exit_code == 2, result.output
+    out = " ".join(result.output.split())
+    assert "git.pr: ask" in out and "open a draft PR for fix/s" in out
+    assert _requests(ws) == ["pr-fix-s.json"]
+
+
+def test_an_explicit_pr_auto_in_the_tracking_file_is_refused(tmp_path: Path) -> None:
+    target, track = stealth_pair(tmp_path)
+    _push_target_settings(track, tmp_path, "git:\n  pr: auto\n")
+    state = _up(target, track)
+    assert "git.pr" in load_settings(state.worktree).contrary
+    problems = check_settings(state.worktree)
+    assert [p.id for p in problems] == ["stealth-forge-explicit"]
+    assert "git.pr" in problems[0].message.split(" is set")[0]
+    assert "git.push" not in problems[0].message.split(" is set")[0]
+
+
+def test_driven_triage_under_stealth_names_the_fetch_when_the_config_branch_is_unfetched(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target, track = stealth_pair(tmp_path)
+    state = _up(target, track)  # the tracking repo has no main-config: nothing fetched
+    capsys.readouterr()
+
+    check_settings(state.worktree)
+
+    err = " ".join(capsys.readouterr().err.split())
+    assert "main-config is not fetched" in err
+    assert "git fetch origin main-config" in err
 
 
 def test_a_stealth_state_write_reads_no_settings(

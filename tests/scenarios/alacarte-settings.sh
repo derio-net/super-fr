@@ -53,6 +53,11 @@ expect_grep 'workflow fr-goal-light is disabled' "$flat" "run start refuses the 
 expect_grep 'workflows\.disabled' "$flat" "the refusal names the setting"
 expect_grep 'available: .*fr-goal' "$flat" "the refusal names what is still available"
 [ -z "$(git worktree list | sed -n 2p)" ] || fail "a refused start left a worktree: $(git worktree list)"
+# Only the listed shape is withdrawn: a shape left available still starts a run.
+run_fr out run start fr-goal --branch feat/y --run-id r-y
+require_exit 0 "$out"
+[ -f "$HOME/.cache/fr/worktrees/$repo/feat__y/docs/superpowers/runs/r-y.yaml" ] \
+  || fail "an available shape started no run: $out"
 
 # --- s2-pr-sections ---------------------------------------------------------------------
 py="$(candidate_python)"

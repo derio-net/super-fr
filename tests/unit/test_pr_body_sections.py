@@ -102,7 +102,7 @@ def _body_without(*headings: str) -> str:
     return "\n\n".join(f"{h}\n\nNone." for h in REQUIRED_SECTIONS if h not in headings)
 
 
-def test_deliver_does_not_require_an_off_section_and_the_durable_copy_matches(
+def test_deliver_does_not_require_an_off_section_on_the_live_pr(
     tmp_path: Path, live: dict[str, str]
 ) -> None:
     from fr.run.model import load_run_state
