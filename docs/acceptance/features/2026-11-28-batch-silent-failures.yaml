@@ -46,9 +46,12 @@ rows:
     origin:
     - spec:2026-11-28-batch-silent-failures#R5
     - spec:2026-11-28-batch-silent-failures#R6
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_adopt.py#test_the_adopt_command_prints_the_read_failure_on_stderr
+      - super-fr:tests/unit/test_git_policy_push.py#test_an_unreadable_recorded_pr_is_named_on_stderr_and_does_not_refuse_the_push
+    status: ci
+    notes: adopt, migrate and push print the read_failure line
     verify: none
   - id: debt-unsupported-forge-named
     capability: Debt report
