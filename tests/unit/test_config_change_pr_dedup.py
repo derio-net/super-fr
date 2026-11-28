@@ -260,7 +260,7 @@ def test_a_git_timeout_is_a_refusal_not_a_traceback(
             raise subprocess.TimeoutExpired(argv, 60)
         return real(argv, *a, **kw)
 
-    root = _quiet(tmp_path)
+    root = _root(tmp_path)
     monkeypatch.setattr(change, "prs_for_head", lambda r, h: [])
     monkeypatch.setattr(change.subprocess, "run", slow)
     with pytest.raises(SettingsError, match="timed out") as refused:

@@ -143,8 +143,8 @@ def test_p3_r9_under_tracking_none_an_unfiled_out_of_scope_finding_delivers_and_
     """No tracker: nothing can be filed, so the out-of-scope finding is no
     leftover — it rides in the PR body's out-of-scope section, as before."""
     root = _at_deliver_with_leftovers(tmp_path)
-    (root / ".devcontainer").mkdir(exist_ok=True)
-    (root / ".devcontainer/fr-profiles.yaml").write_text(
+    (root / ".fr").mkdir(exist_ok=True)
+    (root / ".fr/profiles.yaml").write_text(
         "schema_version: 2\nprofiles:\n  dev:\n    purpose: x\ntracking: {type: none}\n"
     )
     # The seeded row is not owed here; the leftover under test is the finding alone.

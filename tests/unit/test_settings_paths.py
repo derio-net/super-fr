@@ -122,6 +122,9 @@ def test_no_create_resolves_a_quiet_repo_without_creating_anything(
     git(repo, "push", "-q", "origin", "fr")
     git(repo, "checkout", "-q", "main")
     git(repo, "branch", "-qD", "fr")
+    from tests.unit.test_placement_quiet import push_config_branch
+
+    push_config_branch(repo, "placement: quiet\n")  # in step: quiet on both sides (R10)
     wt = worktree_path(repo)
 
     def local_fr() -> bool:

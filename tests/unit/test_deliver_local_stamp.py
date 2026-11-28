@@ -356,7 +356,7 @@ def test_under_quiet_the_fragment_is_written_in_the_artifact_root(
     from fr.artifacts.paths import KIND_DIRS, artifact_root
     from fr.commands import run_cmd
 
-    from tests.unit.test_placement_quiet import quiet_repo
+    from tests.unit.test_placement_quiet import quiet_repo_both as quiet_repo
 
     root = quiet_repo(tmp_path)
     (root / "tests").mkdir()

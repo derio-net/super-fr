@@ -15,7 +15,7 @@ from fr.isolation.hostworktree import HostWorktreeTarget
 from typer.testing import CliRunner
 
 from tests.unit.settings_repo import git, make_repo
-from tests.unit.test_placement_quiet import QUIET, push_fr_branch
+from tests.unit.test_placement_quiet import QUIET, push_quiet_switch
 
 FEATURE = "feat__q"
 
@@ -30,7 +30,7 @@ def _fr(cwd: Path, *argv: str) -> str:
 @pytest.fixture
 def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     state = HostWorktreeTarget(repo).up(profile=None, branch="feat/q")
     # Some commands read the cwd, not FR_REPO_ROOT: never let one reach this checkout.
     monkeypatch.chdir(state.worktree)

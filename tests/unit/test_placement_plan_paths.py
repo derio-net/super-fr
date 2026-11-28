@@ -17,7 +17,7 @@ from fr.isolation.hostworktree import HostWorktreeTarget
 from typer.testing import CliRunner
 
 from tests.unit.settings_repo import git, make_repo
-from tests.unit.test_placement_quiet import QUIET, push_fr_branch
+from tests.unit.test_placement_quiet import QUIET, push_quiet_switch
 
 FEATURE = "feat__q"
 SLUG = "2026-11-13-q"
@@ -62,7 +62,7 @@ def quiet(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
     """A quiet workspace with a spec below its feature root and one acceptance row
     citing it logically, the state brainstorm leaves."""
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     state = HostWorktreeTarget(repo).up(profile=None, branch="feat/q")
     monkeypatch.chdir(state.worktree)
     feature = Path(os.environ["HOME"]) / ".cache/fr/worktrees/work/fr/features" / FEATURE

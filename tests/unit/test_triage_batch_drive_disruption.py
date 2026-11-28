@@ -539,6 +539,7 @@ def test_a_post_merge_that_installs_a_newer_fr_restarts_the_driver_on_it(
     assert "99.0.0" in result.output
 
 
+@pytest.mark.s1_open  # reads fr's own version, which --fr-ended patches (R10)
 def test_no_restart_when_post_merge_installed_the_same_fr(
     tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner,
     monkeypatch: pytest.MonkeyPatch, execs: list[list[str]],
