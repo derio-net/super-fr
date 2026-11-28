@@ -150,3 +150,6 @@ strategy: candidate
 - pre-merge — candidate: `tests/scenarios/spec-requirements-table.sh` installs the branch through `.fr/candidate-install`, migrates a fixture repo holding a list spec with a wrapped requirement, and checks that the spec is now a stamped table, that the installed `fr`'s `fr.requirements` reads it to the same ids and joined text as before, and that `fr validate artifacts` passes on it (row `spec-requirements-table-migrate`).
 
 ## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
