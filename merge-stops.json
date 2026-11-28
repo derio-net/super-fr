@@ -1,4 +1,10 @@
 {
   "schema": 1,
-  "stops": {}
+  "stops": {
+    "tester-gate-auto-pass": {
+      "head": "f296e85200e647ac8883484022485ae3c8a6931b",
+      "reason": "PR #1771 (batch tester-gate-auto-pass): it conflicts in docs/explainers/fr-exit-gates.md",
+      "at": "2026-11-28T13:59:16+00:00"
+    }
+  }
 }

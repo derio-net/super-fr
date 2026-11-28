@@ -13310,6 +13310,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-28T14:02:13.042533Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-28T14:02:24.137118Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -14720,6 +14735,8 @@ batches:
     pr: 1755
     head: cbf44258cd8a81bdf99840a3d39c0352c21b3d62
     patch_id: f2caee1439d68ecefd1cfdad303ce7b815fc6dcf
+  - kind: post_merge
+    at: '2026-11-28T14:01:44.048702Z'
 - id: silent-failures
   title: 'Silent failures: errors that report success or lose their reason'
   ids:
@@ -15010,6 +15027,14 @@ batches:
     pr: 1771
     head: f296e85200e647ac8883484022485ae3c8a6931b
     patch_id: 0d8b526b373579236e39a174ffd570c7d1464016
+  - kind: conflict
+    at: '2026-11-28T13:59:31.792842Z'
+    head: f296e85200e647ac8883484022485ae3c8a6931b
+    paths:
+    - docs/explainers/fr-exit-gates.md
+    delivered: fresh
+    handle: w3X:pB
+    onto: 608d55585be96efd744e7b5168472832a6aebd7d
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
@@ -16659,6 +16684,18 @@ queues:
     patch_id: f2caee1439d68ecefd1cfdad303ce7b815fc6dcf
     base: 9aefd594f5428890eb36037d26e5caa92fb54ef3
     parent: 9aefd594f5428890eb36037d26e5caa92fb54ef3
+  - kind: queue_eject
+    at: '2026-11-28T13:59:10.415656Z'
+    entry:
+      batch: tester-gate-auto-pass
+    reason: conflict
+    detail: 'eject tester-gate-auto-pass: it conflicts in docs/explainers/fr-exit-gates.md'
+    head: f296e85200e647ac8883484022485ae3c8a6931b
+  - kind: queue_land
+    at: '2026-11-28T13:59:51.279981Z'
+    main: 608d55585be96efd744e7b5168472832a6aebd7d
+    entries:
+    - batch: ops-gate-truth
 queue_requests:
 - kind: queue_add
   at: '2026-11-27T15:25:05.595235Z'
