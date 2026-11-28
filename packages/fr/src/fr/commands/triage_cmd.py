@@ -68,6 +68,7 @@ from fr.triage.model import (
     Facts,
     Issue,
     Judgements,
+    PullRequest,
     Scope,
     issue_key,
     legacy_state_dir,
@@ -507,6 +508,16 @@ def collect_command(
     console.print(f"wrote {out} ({plural(n_open, 'open issue')})", markup=False, soft_wrap=True)
 
 
+def _pr_title(pr: PullRequest) -> str:
+    """A PR's title for a terminal line, or the note collect withheld it (privacy R7)."""
+    return escape(pr.title) if pr.title else "[dim]title withheld[/dim]"
+
+
+def _pr_line(pr: PullRequest) -> str:
+    """A PR's key, its URL and its title (or the withheld note)."""
+    return f"{escape(issue_key(pr.repo, pr.number))}  {escape(pr.url)}  {_pr_title(pr)}"
+
+
 def collect_into(
     scope: Scope,
     target_dir: Path,
@@ -917,7 +928,7 @@ def check_command(
     console.print(f"[bold]unranked PRs[/bold] ({len(result.unranked_prs)}) — open, no judgement")
     for pr in result.unranked_prs:
         console.print(
-            f"  {escape(issue_key(pr.repo, pr.number))}  {escape(pr.title)}",
+            f"  {_pr_line(pr)}",
             soft_wrap=True,
         )
     console.print(f"[bold]settled[/bold] ({len(result.settled)}) — judged, now closed or merged")
@@ -928,7 +939,8 @@ def check_command(
     )
     for pr in result.settled_prs:
         console.print(
-            f"  {escape(issue_key(pr.repo, pr.number))}  {pr.state.lower()}  {escape(pr.title)}",
+            f"  {escape(issue_key(pr.repo, pr.number))}  {pr.state.lower()}  "
+            f"{escape(pr.url)}  {_pr_title(pr)}",
             soft_wrap=True,
         )
     console.print(f"[bold]orphaned[/bold] ({len(result.orphaned)}) — judged, found nowhere")

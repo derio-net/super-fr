@@ -738,7 +738,7 @@ def _pr_row(
     return (
         f'<details class="row" {attr_s}>'
         f'<summary><span class="num">{esc(issue_key(pr.repo, pr.number))}</span>'
-        f'<span class="title">{esc(pr.title)}</span><span class="pr-meta">'
+        f'<span class="title">{issue_title(pr.title)}</span><span class="pr-meta">'
         f'<span class="badge {ci_class}">{ci_symbol} CI {ci_label}</span>'
         f'<span class="badge merge">merge: {esc(merge)}</span>'
         f'<span class="badge">delivery: {esc(delivery)}</span>'
@@ -1069,7 +1069,7 @@ def _pr_cell(pr: PullRequest | None) -> str:
     ref = f"#{pr.number}"
     link = f'<a href="{url}" rel="noopener noreferrer">{ref}</a>' if url else ref
     when_ = stamp_text(pr.merged_at) if pr.merged_at else pr.state.lower()
-    return f'{link} {esc(pr.title)} <span class="quiet">{esc(when_)}</span>'
+    return f'{link} {issue_title(pr.title)} <span class="quiet">{esc(when_)}</span>'
 
 
 def wave_table(

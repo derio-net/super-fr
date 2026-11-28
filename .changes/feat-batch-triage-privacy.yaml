@@ -1,0 +1,2 @@
+bump: minor
+summary: triage admissions pin outside comments (re-admit v1-admitted issues), outside PR titles are withheld, and a reopened judged PR is re-read

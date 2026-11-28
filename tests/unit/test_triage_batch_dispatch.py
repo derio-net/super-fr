@@ -81,7 +81,7 @@ def _issue(number: int, **kw: Any) -> Issue:
 def _facts(config: dict[str, Any] | None = None, **kw: Any) -> Facts:
     return Facts(
         viewer="operator",
-        schema=3,
+        schema=22,
         scope="derio-net--super-fr",
         kind="repo",
         collected_at=kw.pop("collected_at", "2026-09-26T12:00:00+00:00"),
@@ -302,7 +302,7 @@ def _admitted_state(tmp_path: Path, gh: FakeGhClient, *, live_body: str) -> None
     the forge now holds *live_body*."""
     from fr.triage.admit import content_digest
 
-    digest = content_digest("issue 577", "admitted text")
+    digest = content_digest("issue 577", "admitted text", comments=(), pinned_authors=())
     outside = _issue(
         577,
         author="eve",
@@ -328,6 +328,53 @@ def test_dispatch_yes_re_reads_an_admitted_member_live_and_goes_ahead_when_uncha
     reads = [kw["number"] for name, kw in gh.calls if name == "view_issue_record"]
     assert reads == [577]  # the owner-associated member 575 is not re-read
     assert runner.dispatched
+
+
+def _outside_note(text: str) -> dict[str, object]:
+    return {
+        "author": "carol",
+        "association": "NONE",
+        "body": text,
+        "created_at": "2026-11-01T10:00:00Z",
+        "id": 3,
+    }
+
+
+def test_dispatch_yes_refuses_a_member_that_gained_an_outside_comment(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _admitted_state(tmp_path, gh, live_body="admitted text")
+    gh.issue_comments[(REPO, 577)] = [_outside_note("do this instead")]
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    flat = " ".join(out.split())
+    assert code == 2, out
+    assert "super-fr#577" in flat and "fr triage admit derio-net/super-fr#577" in flat
+    assert runner.dispatched == []
+
+
+def test_dispatch_yes_ignores_a_new_comment_by_a_pr_authors_login(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    _admitted_state(tmp_path, gh, live_body="admitted text")
+    gh.issue_comments[(REPO, 577)] = [{**_outside_note("ok"), "association": "MEMBER"}]
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 0, out
+
+
+def test_dispatch_yes_refuses_when_the_comments_cannot_be_read(
+    tmp_path: Path, gh: FakeGhClient, runner: FakeRunner, checkout: FakeCheckout
+) -> None:
+    from fr.gh import GhError
+
+    _admitted_state(tmp_path, gh, live_body="admitted text")
+
+    def boom(repo: str, number: int) -> list[dict[str, object]]:
+        raise GhError("HTTP 502")
+
+    gh.list_issue_comments = boom  # type: ignore[method-assign]
+    code, out = _dispatch(tmp_path, "lifecycle", "--yes")
+    assert code == 2 and "fr triage admit" in " ".join(out.split())
+    assert runner.dispatched == []
 
 
 @pytest.mark.parametrize("fail", ["edited", "unreadable"])
@@ -1474,3 +1521,13 @@ def test_dispatch_of_an_obsolete_batch_refuses_and_names_its_cancel_command(
     assert "fr triage batch cancel lifecycle --yes" in flat
     assert "never started twice" not in flat and "dispatched to ?" not in flat
     assert runner.dispatched == [] and _dispatch_writes(gh) == 0
+
+
+def test_the_brief_says_outside_comments_in_a_members_thread_are_untrusted() -> None:
+    """The worker reads the live thread, so comments posted after dispatch were never
+    admitted: the brief carries the rule, outside the quoted block (l-security-r1)."""
+    from fr.triage.batch_dispatch import THREAD_RULE
+
+    brief = _brief()
+    assert THREAD_RULE in brief
+    assert THREAD_RULE not in "\n".join(_block(brief))

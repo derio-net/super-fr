@@ -1,0 +1,177 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Collect keeps outsider text out of facts — admissions pin comments, PR titles
+    withheld, reopened PRs re-read (R1-R7, R10)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - triage-admit-pins-comments
+  - triage-pr-title-withheld
+  - triage-reopened-pr-uncarried
+  skeleton: true
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/admit.py
+  - packages/fr/src/fr/triage/intake.py
+  - packages/fr/src/fr/triage/collect.py
+  - packages/fr/src/fr/triage/model.py
+  - packages/fr/src/fr/triage/admit_recheck.py
+  - packages/fr/src/fr/triage/render.py
+  - packages/fr/src/fr/triage/kanban.py
+  - packages/fr/src/fr/triage/kanban_render.py
+  - packages/fr/src/fr/triage/check.py
+  - packages/fr/src/fr/commands/triage_admit_cmd.py
+  - packages/fr/src/fr/commands/triage_cmd.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - tests/unit/test_triage_*.py
+  - tests/fixtures/**
+  - .changes/feat-batch-triage-privacy.yaml
+  - docs/acceptance/features/2026-11-28-triage-privacy.yaml
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: Smoke — the v2 digest's fixed first line (R1)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_triage_admit.py add `test_the_v2_digest_text_starts_with_its_version_line`: `content_digest("t", "b")` differs from the sha256 of `"t\n\nb"` (today's v1 text) and equals the sha256 of `"fr-admit-v2\nt\n\nb"`. Run `uv run pytest tests/unit/test_triage_admit.py -q --no-cov -n 2 -k v2_digest`: it fails.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/triage/admit.py prefix the digest text with `fr-admit-v2\n`, keeping the `\r\n` → `\n` normalisation over the whole text. Run the test: green. Run the repo's fast tier (`uv run pytest --fr-scope origin/main -n 2 -q --no-cov`) and note which existing digest tests now fail; they are fixed in T2.
+- number: 2
+  title: content_digest pins untrusted comments in a canonical form; v2 markers only
+    (R1, R2)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_triage_admit.py add tests on `content_digest(title, body, comments, pinned_authors)` with comment dicts shaped `{association, author, body, created_at, id}`: (a) an OWNER/MEMBER/COLLABORATOR comment, or one by a `pinned_authors` login (any case), does not change the digest; (b) a NONE/CONTRIBUTOR comment does, and editing its body changes it again; (c) the same comment as GraphQL and REST give it — `author: "renovate"` vs `"renovate[bot]"`, `created_at: "2026-11-01T10:00:00Z"` vs `"2026-11-01T10:00:00+00:00"` — gives one digest; an empty author reads as `ghost`; (d) two comments with the same time and `id: None` vs `id: 7` sort without a TypeError and in a stable order regardless of input order; (e) `\r\n` in a comment body reads as `\n`. Add `canonical_comment` tests for each normalisation. Add tests that `admit_marker` writes `"v":2` and a human line naming outside comments, that `parse_admit` returns a digest for a v2 marker and None for a v1 marker, a v3 marker and an extra key, and that `latest_admit` ignores a trusted v1 marker that is newer than a trusted v2 one (returns the v2 digest). Run the file: the new tests fail.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in admit.py add `canonical_comment(c) -> tuple[str, str, int, str]` (login lowercased, trailing `[bot]` removed, `ghost` for empty; time via `fr.utc_time.parse_as_utc` formatted `%Y-%m-%dT%H:%M:%SZ`, `""` when None; id or -1; body with `\r\n` → `\n`), `pinned(c, pinned_authors)` (False for an association in `claims.TRUSTED_ASSOCIATIONS` or a login in the lowercased set), and extend `content_digest(title, body, comments=(), pinned_authors=())` to append `\n\n--- comment <login> <time>\n<body>` for each pinned comment sorted by `(time, id, login, body)`. `admit_marker` writes `{"v":2,...}` and the R3 human line; `parse_admit` accepts only `v == 2`. Update the module docstring (R1-R3 of this spec). Fix the existing tests the version change broke (marker fixtures now v2; a v1 fixture asserts it no longer admits). Run tests/unit/test_triage_admit.py and tests/unit/test_triage_intake.py: green.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: grep the package for `fr-admit:{"v":1` and `content_digest(` and confirm every caller passes comments where it has them (collect, recheck, admit command are done in T3/T4); leave a call with no comments only where the issue's comments are never read. No behaviour change; re-run both test files.
+- number: 3
+  title: Collect stores the comment-pinned digest; schema 22 load (R4)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: in tests/unit/test_triage_collect.py (the existing fake-forge harness for admit markers) add: (a) a `ready-fr` issue by an outside author with a trusted v2 marker over title, body and its one outside comment is eligible; (b) the same issue after a second outside comment (or an edit to the first) is ineligible with reason `edited after admission: run fr triage admit <key> again` and is stored with no title or body; (c) an issue with only a trusted v1 marker is ineligible with the no-trusted-marker reason naming `fr triage admit`; (d) an issue no clause needs comments for has `content_digest` None; (e) a viewed (judged-elsewhere) issue gets the same comment-pinned digest. Add a load test: a schema-21 facts file whose ready-fr issue has a title-and-body `content_digest` equal to its `admit_digest` and `admit_read: true` loads with `admit_read` False, ineligible, title and body empty. Run them: fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: in collect.py make `_comment_facts` compute `content_digest(raw title, raw body, comments, repo pr_authors)` when it reads comments for admission and return it in `CommentFacts` (new field), applied to the issue's `content_digest` for listed issues and through the viewed-issue update at the `_comment_facts(..., claims=False)` call; `_issue` no longer computes a digest (None). Pass the repo's `pr_authors` (from its `TriageConfig`) down. In model.py set `FACTS_SCHEMA` to 22 with a comment line naming this spec's R4/R6, and in `load_facts` for schema < 22 set `admit_read=False` on every issue, then run `_withhold_untrusted_text` (and, after T5, the PR withholding). Run the collect and intake test files: green. Update any test fixture that pinned `FACTS_SCHEMA == 21`.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: read `_comment_needs`/`_comment_facts` once more so the digest is computed only on the admission read path, and the claim-only path is unchanged. Re-run tests/unit/test_triage_collect*.py.
+- number: 4
+  title: fr triage admit and the dispatch re-read pin comments (R3, R5)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in tests/unit/test_triage_admit.py (the command tests against a fake GhClient) add: the preview lists each outside comment's author, time and body inside the quoted untrusted block and prints the comment-pinned digest; a zero-width character in a comment body is shown visibly and triggers the hidden-character warning; `--yes --digest <d>` refuses, writing nothing, when an outside comment was added between preview and apply; a failed `list_issue_comments` refuses before any label or comment write. In the admit_recheck tests (grep `recheck_admitted` under tests/unit) add: a member whose live comments gained an outside comment refuses the dispatch naming it and `fr triage admit`; a failed comment read refuses; a trusted (pr_authors) comment added does not. Run them: fail.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: in commands/triage_admit_cmd.py read `list_issue_comments` with the issue (preview and the `--yes` re-read), compute `content_digest(title, body, comments, config.pr_authors)`, quote each pinned comment (via the existing `visible()` and hidden-character check) in the untrusted block, and refuse on a comment read failure before any write. In admit_recheck.py read the member's comments after its view and compare `content_digest(..., comments, facts.config_for(issue.repo).pr_authors)`; a comment read failure is a failed read. Run the tests: green.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: share one helper for "read title, body and comments, return the digest" between the admit command and recheck if they duplicate it; otherwise record why not in the step record's `refactor:`. Re-run the admit and recheck tests.
+- number: 5
+  title: PR titles withheld unless the author is in the claim-trust set (R6, R7)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: in tests/unit/test_triage_collect.py add a collect over a fake forge where an outside author's PR sits in each of the open-PR list (unlinked → `prs`), an issue's linked PRs, a gated merged PR (`gated_prs`), a batch-branch PR (`batch_prs`) and a judged PR past the list (`judged_prs`): each is stored with an empty title; the same PRs by the viewer or a `pr_authors` login (different case) keep their titles; a PR with `author: None` is withheld. Add a schema-21 load test: an outside author's PR title is empty after load. In tests/unit/test_triage_check.py: the text output prints an empty-titled PR as key, URL and `title withheld`, and the JSON row keeps key and url with title "". In tests/unit/test_triage_render.py: a PR row and PR cell with an empty title render the quiet withheld note. In the kanban render tests: a gated card with an empty title shows the note. In the queue tests (grep `_subject` / `EntryInput(` under tests/unit): a squash subject for a batch PR whose stored title is empty is `<batch title> (#<n>)`. Run them: fail.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: in collect.py add `_withhold_untrusted_pr_titles(facts) -> Facts` (claim_trusted per PR repo, case-insensitive) over `prs`, `gated_prs`, `batch_prs`, `judged_prs` and every issue's `prs`; apply it where `Facts(...)` is built and in model.py's below-22 load. In render.py (`_pr_cell`, the PR row and its `data-search`), kanban.py/kanban_render.py (gated card), commands/triage_cmd.py (the `unranked PRs` and `settled PRs` lines, plus any other PR line it prints) show key, URL and the withheld note for an empty title. In commands/triage_batch_cmd.py's queue `EntryInput` use `pr.title or batch.title`. Search the engine for any other `PullRequest` `.title` reader (`grep -rn "\.title" packages/fr/src/fr/triage packages/fr/src/fr/commands/triage*`) and record the list in the step record's journal as a discovery. Run the tests: green.
+  - id: P1.T5.S3
+    text: |-
+      REFACTOR: make the issue and PR withholding read as one pass in the `Facts(...)` build and the load (one helper that applies both), if that removes duplication. Re-run the collect, check, render, kanban and queue tests.
+- number: 6
+  title: A reopened judged PR is re-read when the open-PR list was cut (R10)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      RED: in tests/unit/test_triage_collect_carry.py add, over two collects with a call-counting fake forge: (a) a judged PR CLOSED in the previous facts, absent from both lists, with an open-PR list shorter than `pr_limit`: carried CLOSED, no view call; (b) the same with the open-PR list returning exactly `pr_limit` records and `view_pr` answering OPEN: recorded OPEN, one `view_issue` + one `view_pr`, `viewed` counts 2; (c) a MERGED one with a full list: carried, no call. Run them: (b) fails.
+  - id: P1.T6.S2
+    text: |-
+      GREEN: in collect.py record, per repo, whether `list_open_prs` returned `pr_limit` records; take a `finished_prs` entry only when it is MERGED, or CLOSED in a repo outside that set; otherwise fall through to the view path. Run the carry and collect tests: green.
+  - id: P1.T6.S3
+    text: |-
+      REFACTOR: none expected beyond naming the new set clearly; if nothing changes record `refactor: {P1.T6: "two-line guard beside the existing issue truncation check"}`. Add the change fragment `.changes/feat-batch-triage-privacy.yaml` (`bump: minor`, summary: admissions pin outside comments (re-admit v1-admitted issues), outside PR titles are withheld, the privacy guard scans every carried state file, a reopened judged PR is re-read). Set the three linked acceptance rows to `ci` with their test refs through the step record's `acceptance:` section. Run the fast tier last.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+    P1.T4.S3:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+    P1.T5.S3:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+    P1.T6.S2:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+    P1.T6.S3:
+      state: x
+      ticked_at: '2026-11-28T15:50:26+00:00'
+      note: null
+  completion:
+    at: '2026-11-28T15:50:26+00:00'
+    note: null
+    observed_prs: []

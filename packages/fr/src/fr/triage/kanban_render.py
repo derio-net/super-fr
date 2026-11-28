@@ -43,7 +43,7 @@ from fr.triage.kanban import (
     cutoff_hidden_waves,
 )
 from fr.triage.readiness import Readiness
-from fr.triage.render import FONTS, _safe_url, esc, noun
+from fr.triage.render import FONTS, _safe_url, esc, issue_title, noun
 from fr.triage.waits import Role, Wait
 from fr.triage.wave_report import span
 
@@ -706,7 +706,7 @@ def _gated_card(g: GatedCard, column: ColumnView) -> str:
         f'<div class="card needs-you" data-gated-pr="{esc(g.repo)}#{g.number}">'
         f'<span class="mono">{_link(f"PR #{g.number}", g.url)}</span> '
         f'<span class="meta">{esc(g.repo)}</span>'
-        f'{wait}<span class="title">{esc(g.title)}</span>'
+        f'{wait}<span class="title">{issue_title(g.title)}</span>'
         f'<span class="hint">{esc(g.reason)}</span></div>'
     )
 

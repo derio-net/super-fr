@@ -1,0 +1,70 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-28-triage-privacy
+repo: derio-net/super-fr
+rows:
+  - id: triage-admit-pins-comments
+    capability: triage-intake
+    acceptance: An admission pins the issue's untrusted comments with its title and
+      body; an untrusted comment added or edited after admission, or a version-1 marker,
+      leaves the issue ineligible until a maintainer re-admits it
+    origin:
+    - spec:2026-11-28-triage-privacy#R1
+    - spec:2026-11-28-triage-privacy#R2
+    - spec:2026-11-28-triage-privacy#R3
+    - spec:2026-11-28-triage-privacy#R4
+    - spec:2026-11-28-triage-privacy#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_admit.py#test_an_outside_comment_changes_the_digest_and_so_does_editing_it
+      - super-fr:tests/unit/test_triage_collect.py#test_a_marker_over_title_body_and_its_outside_comment_is_eligible
+      - super-fr:tests/unit/test_triage_batch_dispatch.py#test_dispatch_yes_refuses_a_member_that_gained_an_outside_comment
+    status: ci
+    notes: 'unit tests: digest, markers, collect, admit command, dispatch recheck'
+    verify: none
+  - id: triage-pr-title-withheld
+    capability: triage-intake
+    acceptance: A PR whose author is not in the claim-trust set reaches facts, check
+      and the pages with no title, in every PR list facts carry
+    origin:
+    - spec:2026-11-28-triage-privacy#R6
+    - spec:2026-11-28-triage-privacy#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect.py#test_an_outside_authors_pr_is_stored_with_no_title_in_every_list
+      - super-fr:tests/unit/test_triage_pr_title_withheld.py#test_the_queue_subject_of_a_batch_pr_with_no_title_uses_the_batchs_title
+    status: ci
+    notes: 'unit tests: collect lists, older-schema load, check, render, queue subject'
+    verify: none
+  - id: triage-state-scan-guard
+    capability: triage-privacy
+    acceptance: A push or export to a public state repo is refused when any carried
+      file names a non-public repo of the scope, and a scope with nothing non-public
+      reads no file for it
+    origin:
+    - spec:2026-11-28-triage-privacy#R8
+    - spec:2026-11-28-triage-privacy#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_privacy.py#test_an_export_scans_the_durable_set_only
+      - super-fr:tests/unit/test_triage_privacy.py#test_a_push_naming_a_private_repo_in_a_carried_file_pushes_nothing
+    status: ci
+    notes: the guard scans every carried file for non-public repo names, on push and
+      export (R8, R9)
+    verify: none
+  - id: triage-reopened-pr-uncarried
+    capability: triage-collect
+    acceptance: A judged PR that was closed and is reopened shows as open after the
+      next collect, even when the repo's open-PR list is cut at its limit
+    origin:
+    - spec:2026-11-28-triage-privacy#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_collect_carry.py#test_a_closed_judged_pr_is_viewed_again_when_the_open_list_was_cut
+    status: ci
+    notes: 'unit tests: call counts over two collects'
+    verify: none
