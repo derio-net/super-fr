@@ -12802,6 +12802,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-28T08:43:31.035728Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -14391,6 +14398,17 @@ batches:
     checks:
     - ci-ok
     delivered: session
+  - kind: approval
+    at: '2026-11-28T08:42:19.083501Z'
+    pr: 1747
+    head: 0306bb13eb6c261debfccee2edf9227765aa0060
+    voided_at: 346f5fa2e433d3c961339c1a19322896dbdf5fcf
+    patch_id: ebf9b513957be0b00f3636eda65f72ee0e085a63
+  - kind: approval
+    at: '2026-11-28T08:43:02.587689Z'
+    pr: 1747
+    head: 346f5fa2e433d3c961339c1a19322896dbdf5fcf
+    patch_id: ccc2cecebf702fbc73afd129efe2d761c597671d
 - id: s1-followups
   title: 'S1 follow-ups: refuse old paths, config-branch executables, test sites, import-time home'
   ids:
