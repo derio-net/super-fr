@@ -47,9 +47,16 @@ rows:
     - spec:2026-11-28-tester-gate-auto-pass#R5
     - spec:2026-11-28-tester-gate-auto-pass#R6
     - spec:2026-11-28-tester-gate-auto-pass#R7
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_a_cursor_naming_another_pr_gives_no_rows
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_two_cursors_naming_the_branch_are_unreadable_for_a_pr
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_a_drive_narrowed_with_batch_writes_nothing_for_a_loose_pr
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_rows_unreadable_for_a_loose_pr_are_reported_once_and_plan_nothing
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_a_failed_label_write_for_a_loose_pr_is_reported_and_exits_one
+    status: ci
+    notes: no cursor, another PR, two cursors, unreadable rows, narrowed drive and failed
+      write plan or write nothing
     verify: none
   - id: loose-gated-pr-batch-guards
     capability: Triage driver
