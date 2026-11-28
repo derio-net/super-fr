@@ -181,7 +181,13 @@ def push_cmd() -> None:
     from fr.artifacts.paths import STEALTH, outside_repo
     from fr.git_policy.ask import AskRefusedError, consume, require_approval
     from fr.git_policy.product import push_product_branch, refuse_stealth_content
-    from fr.git_policy.push import PushRefusedError, check_subjects, squash, unpushed
+    from fr.git_policy.push import (
+        PushRefusedError,
+        check_subjects,
+        push_moves_remote,
+        squash,
+        unpushed,
+    )
     from fr.git_policy.templates import run_issue
     from fr.placement.drift import refuse
     from fr.settings import SettingsError, load_settings
@@ -197,8 +203,9 @@ def push_cmd() -> None:
         refuse_closed_pr(repo_root)
         issue = run_issue(repo_root)
         rng = unpushed(repo_root, remote, branch)
-        if outside_repo(repo_root) == STEALTH and not _code_pending(rng):
-            # alacarte R9: stealth asks only for a push that adds code to the target.
+        if outside_repo(repo_root) == STEALTH and not push_moves_remote(repo_root, remote, branch):
+            # alacarte R9: stealth asks only for a push that changes the target, decided
+            # from the remote itself (l-security-r1, l-errors-r5).
             console.print(f"nothing to push to {remote}", soft_wrap=True)
             return
         # Before the ask, so the operator is never asked to approve a push fr then refuses;

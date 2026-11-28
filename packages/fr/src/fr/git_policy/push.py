@@ -171,6 +171,26 @@ def commits_the_push_adds(root: Path, remote: str, branch: str, rev: str = "HEAD
     return _git(root, "rev-list", "--reverse", rev, *exclude).split()
 
 
+def push_moves_remote(root: Path, remote: str, branch: str) -> bool:
+    """Whether `git push <remote> HEAD:<branch>` would change the remote at all: it adds
+    a commit the remote does not hold, or moves an existing remote branch to another
+    commit. Read LIVE (`commits_the_push_adds`, `ls-remote`), never from remote-tracking
+    refs, so a stale or hand-made ref cannot read as "nothing to push" (alacarte
+    l-security-r1). A branch absent on the remote whose HEAD adds no commit moves
+    nothing: creating it would carry no code (l-errors-r5). Fails closed like
+    `commits_the_push_adds`: a remote it cannot read refuses."""
+    if commits_the_push_adds(root, remote, branch):
+        return True
+    done = run_git(root, ["ls-remote", remote, f"refs/heads/{branch}"])
+    if done.returncode != 0:
+        detail = (done.stderr or done.stdout).strip()
+        raise PushRefusedError(f"cannot read {remote}'s {branch}: {detail}")
+    words = done.stdout.split()
+    if not words:
+        return False
+    return words[0] != _git(root, "rev-parse", "HEAD").strip()
+
+
 def is_migration(settings: Settings, commit: Commit) -> bool:
     """A `chore(fr): migrate …` commit: by its `Fr-Commit` trailer, which every
     template keeps (p4-r2); else, for a commit written before the trailer existed,
