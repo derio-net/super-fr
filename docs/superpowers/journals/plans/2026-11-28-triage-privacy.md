@@ -149,3 +149,8 @@ Pre-existing adapter limitation
 ### bot-account-type-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1788] · resolves bot-account-type: Comment adapters do not report whether an author is a bot, so a pr_author listed as x[bot] is pinned under GraphQL but not under REST
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1788.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved-2 created=2026-11-28T16:52:37+00:00 state=open resolves=l-security-r2 tracked_by=derio-net/super-fr#1788 -->
+### l-security-r2-resolved-2 · finding [deferred → derio-net/super-fr#1788] · resolves l-security-r2: pinned() stripped [bot] from the comment login but not from pr_authors, so REST and GraphQL digests disagree for an `x[bot]` pr_author
+
+Symmetric bot match reverted: it trusted same-named users. A bare listing gives one verdict under both adapters; the x[bot] case needs the account type, tracked in 1788
