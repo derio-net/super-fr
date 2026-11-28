@@ -186,3 +186,28 @@ rows:
       the cloud pass exits 3 on an exhausted budget or a recorded wait and renews a
       lease that would lapse. The essential-pass stretch reuses this wait in phase 2.'
     verify: none
+amendments:
+  - row: quota-shared-token-live
+    op: set-status
+    base: 0
+    status: walked
+    notes: 'Walked from the live drive log plus operator confirmation (2026-11-28):
+      wave drivers for two orgs ran overnight on this host''s one token (super-fr''s
+      and a second org''s scope, org redacted); super-fr''s drive log over weeks of
+      passes has no rate-limit or exhausted-budget failure, only a few ''quota: /rate_limit
+      could not be read ... not pacing this pass'' network blips; pacing.json showed
+      the budget healthy (core 4575/5000) on 2026-11-28.'
+    walk:
+      strategy: live
+      harness: claude
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-28T14:21:13Z'
+      evidence: super-fr wave driver drive.log + pacing.json 2026-11-28 + operator confirmation
+        of concurrent overnight drivers
+    why: 'Walked from the live drive log plus operator confirmation (2026-11-28): wave
+      drivers for two orgs ran overnight on this host''s one token (super-fr''s and
+      a second org''s scope, org redacted); super-fr''s drive log over weeks of passes
+      has no rate-limit or exhausted-budget failure, only a few ''quota: /rate_limit
+      could not be read ... not pacing this pass'' network blips; pacing.json showed
+      the budget healthy (core 4575/5000) on 2026-11-28.'
