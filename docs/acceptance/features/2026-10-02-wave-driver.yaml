@@ -158,3 +158,26 @@ rows:
     notes: 'fr triage architecture render now builds the page: measured sections from
       git ls-tree/show at two refs, authored fragments in manifest order, snapshot timeline,
       wave tabs; covered by unit tests over a real two-ref fixture repo'
+amendments:
+  - row: wave-driven-live
+    op: set-status
+    base: 0
+    status: walked
+    notes: 'Walked from recorded evidence, operator-confirmed 2026-11-28 that no hand
+      step beyond approving/readying was taken: wave 18 (workspace-identity, placement-truth,
+      release-truth, acceptance-edits) was dispatched by the driver 2026-11-16/17, ran
+      to post_merge and closed out through merged close-out PRs #1526, #1528, #1530,
+      #1537 (last 2026-11-17), with no conflict or hand-back event in the scope''s judgements.yaml.'
+    walk:
+      strategy: live
+      harness: claude
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-17T00:00:00Z'
+      evidence: scope judgements.yaml batch events for wave 18 + close-out records (PRs
+        1526/1528/1530/1537 merged); operator confirmation 2026-11-28
+    why: 'Walked from recorded evidence, operator-confirmed 2026-11-28 that no hand
+      step beyond approving/readying was taken: wave 18 (workspace-identity, placement-truth,
+      release-truth, acceptance-edits) was dispatched by the driver 2026-11-16/17, ran
+      to post_merge and closed out through merged close-out PRs #1526, #1528, #1530,
+      #1537 (last 2026-11-17), with no conflict or hand-back event in the scope''s judgements.yaml.'
