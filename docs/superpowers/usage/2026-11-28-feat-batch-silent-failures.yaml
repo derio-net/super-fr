@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-28-feat-batch-silent-failures
+captures:
+- host: h-e7436648
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-28T09:33:22+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: b15268e2-fddb-441c-9d3a-cacd364dd8d8
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 68
+        cache_write: 166448
+        cache_read: 5028259
+        output: 24766
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 18
+      other:
+        usd: null
+        turns: 8
+      paperwork:
+        usd: null
+        turns: 8
+    steps:
+      (outside run):
+        usd: null
+        turns: 3
+        input: 8
+        cache_write: 106662
+        cache_read: 270708
+        output: 571
+      brainstorm:
+        usd: null
+        turns: 29
+        input: 60
+        cache_write: 59786
+        cache_read: 4757551
+        output: 24195
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 3
+          input: 8
+          cache_write: 106662
+          cache_read: 270708
+          output: 571
+        brainstorm:
+          usd: null
+          turns: 29
+          input: 60
+          cache_write: 59786
+          cache_read: 4757551
+          output: 24195
