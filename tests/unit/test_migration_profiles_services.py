@@ -22,6 +22,10 @@ from fr.artifacts.runner import MigrationRegistry
 from fr.artifacts.runner import run_migrations as _run_migrations
 from fr.services.resolve import resolve_services
 
+# The version-1 profiles at their old path and their migration: the transition window
+# (spec 2026-11-28-s1-followups R10).
+pytestmark = pytest.mark.s1_open
+
 PROFILES_REL = ".devcontainer/fr-profiles.yaml"
 
 

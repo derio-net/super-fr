@@ -36,6 +36,7 @@ def quiet_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return named
 
 
+@pytest.mark.s1_open  # a quiet repo with no fr-config yet: the transition window (R10)
 def test_without_fr_config_it_refuses_naming_the_command(quiet_repo: Path) -> None:
     res = runner.invoke(app, ["repos", "sync", "derio-net/super-fr", "--yes", "--no-save"])
     assert res.exit_code == 0, res.output

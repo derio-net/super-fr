@@ -276,10 +276,12 @@ def write_settings(space: ConfigSpace, text: str, *, message: str) -> str | None
     Under `repo` it writes `.fr/settings.yaml` in the product working tree (committing is
     the operator's). Under `quiet` and `stealth` it commits and pushes the configuration
     branch's file first (`.fr/settings.yaml` on `fr-config`, `<target-dir>/.fr/settings.yaml`
-    on `<branch>-config`), then the same bytes at the old path (the root `settings.yaml`
-    on `fr`, `<target-dir>/settings.yaml` on `<branch>`), so an fr below S1 and older hooks
-    still read the placement. The legacy copy ends at the release R14's owed entry
-    `s1-refuse-old-paths` names.
+    on `<branch>-config`), then, before fr 9.2 only, the same bytes at the old path (the
+    root `settings.yaml` on `fr`, `<target-dir>/settings.yaml` on `<branch>`), so an fr
+    below S1 and older hooks still read the placement. Past the end of S1's transition
+    (`fr.config.transition.keeps_old_copy`) only the configuration branch's file is
+    written, and the old copy is never rewritten or deleted (spec 2026-11-28-s1-followups
+    R4).
 
     That is the creation (and a retry that only lands the legacy copy). A change to a
     configuration branch that already exists is reviewed (spec §B, plan decision
@@ -397,7 +399,7 @@ def forge_ref(client: object, repo: str) -> str | None:
     return None if found is None else CONFIG_BRANCH
 
 
-# --- the transition (R13): old paths read with a notice --------------------------------------
+# --- the transition (R13): old paths read with a notice, refused from fr 9.2 ---------------
 
 LEGACY_PROFILES: Final = ".devcontainer/fr-profiles.yaml"
 """Where `.fr/profiles.yaml` lived before S1 (R9)."""
@@ -407,12 +409,21 @@ _OLD_NOTICED: set[str] = set()
 """Old paths this process has already named (R13: one notice per command)."""
 
 
-def legacy(new: Path, old: Path) -> Path:
-    """The path a reader reads (R13): *new* when it exists or *old* does not; otherwise
-    *old*, after one stderr notice per process naming `fr migrate artifacts --yes`. The
-    refusal of old paths is the release `s1-refuse-old-paths` (R14) names."""
+def legacy(new: Path, old: Path, *, mover: bool = False) -> Path:
+    """The path a reader reads: *new* when it exists or *old* does not. Otherwise, while
+    S1's transition lasts (before fr 9.2, `fr.config.transition.refusing`), *old*, after one
+    stderr notice per process naming `fr migrate artifacts --yes` (S1 R13); once it has
+    ended, a reader is refused with `transition.old_path_refusal` (exit 2, spec
+    2026-11-28-s1-followups R2). A *mover* (R3) gets *old* on both sides of the gate, with
+    the notice only before it."""
+    from fr.config import transition
+
     if new.exists() or not old.exists():
         return new
+    if transition.refusing():
+        if mover or transition.is_moving():
+            return old
+        raise transition.old_path_refusal(old, new)
     key = str(old)
     if key not in _OLD_NOTICED:
         _OLD_NOTICED.add(key)
@@ -423,7 +434,8 @@ def legacy(new: Path, old: Path) -> Path:
 def located(root: Path, kind: str) -> Path:
     """Where configuration kind *kind* is read for the product checkout *root*: a
     `fr.artifacts.paths.CONFIG_KINDS` row or `profiles`, in the configuration space (R9),
-    or at its old path in the product checkout while only that one exists (R13).
+    or at its old path in the product checkout while only that one exists (R13), which
+    past the end of the transition is refused instead (`legacy`).
 
     Under quiet and stealth the old path is decided by the configuration branch's FETCHED
     tip, never by the worktree (review p4-r2, plan decision p4-legacy-by-tip): while that
@@ -431,27 +443,43 @@ def located(root: Path, kind: str) -> Path:
     feature branch cannot shadow the space; only while it does not may an old file be
     read, and only when its bytes are the product default branch's committed ones (an
     old directory's executable members are degraded by `fr.config.degraded`)."""
-    from fr.artifacts.paths import LEGACY_CONFIG, config_kind_path
+    return _locate(Path(root), kind, mover=False)
 
+
+def old_path(root: Path, kind: str) -> Path | None:
+    """The old file of *kind* a MOVER reads (`fr repos sync`, `fr repair`; spec
+    2026-11-28-s1-followups R3): the path `located` would read or refuse at its old
+    location, or None when the new one is read. It never refuses."""
     root = Path(root)
+    found = _locate(root, kind, mover=True)
+    return None if found == _new_path(root, kind, config_space(root)) else found
+
+
+def _new_path(root: Path, kind: str, current: ConfigSpace) -> Path:
+    from fr.artifacts.paths import config_kind_path
+
+    return current.file(PROFILES) if kind == "profiles" else config_kind_path(root, kind)
+
+
+def _locate(root: Path, kind: str, *, mover: bool) -> Path:
+    from fr.artifacts.paths import LEGACY_CONFIG
+
     current = config_space(root)
-    if kind == "profiles":
-        new, old = current.file(PROFILES), root / LEGACY_PROFILES
-    else:
-        new, old = config_kind_path(root, kind), root / LEGACY_CONFIG[kind]
+    new = _new_path(root, kind, current)
+    old = root / (LEGACY_PROFILES if kind == "profiles" else LEGACY_CONFIG[kind])
     if link_problem(root, old) is not None:
         if old.exists() or old.is_symlink():
             _old_ignored(old, f"{link_problem(root, old)}: fr never follows a link there")
         return new
     if current.placement == _REPO or not (old.exists() or old.is_symlink()):
-        return legacy(new, old)
+        return legacy(new, old, mover=mover)
     if not _holds_anything(old):  # emptied by the migration: nothing to read or ignore
         return new
     if branch_fetched(current):
         _old_ignored(old, f"{current.ref} exists, so its {SPACE_DIR}/ is read (R4)")
         return new
     if old.is_dir():
-        return legacy(new, old)
+        return legacy(new, old, mover=mover)
     if old.is_symlink() or not _committed_default(current, old):
         _old_ignored(
             old,
@@ -459,7 +487,7 @@ def located(root: Path, kind: str) -> Path:
             "it committed",
         )
         return new
-    return legacy(new, old)
+    return legacy(new, old, mover=mover)
 
 
 def _holds_anything(old: Path) -> bool:

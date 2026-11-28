@@ -39,6 +39,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.unit.shipped_env import defaults_root
 from tests.unit.test_run_cli import (
     _CLI_ONLY_SHAPE,
     _FAILING_SHAPE,
@@ -156,7 +157,7 @@ class Guard:
             PATH=f"{self.bin}:{os.environ.get('PATH', '')}",
         )
         if self.shipped is not None:
-            env["FR_SHIPPED_WORKFLOWS_DIR"] = str(self.shipped)
+            env["FR_SHIPPED_DEFAULTS_DIR"] = str(defaults_root(self.shipped, "workflows"))
         env.update(extra)
         return env
 

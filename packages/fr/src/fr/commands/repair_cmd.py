@@ -15,6 +15,7 @@ from rich.console import Console
 from fr.archive import GitStatusError, paths_dirty
 from fr.artifacts.paths import KIND_DIRS, kind_dir, space_for
 from fr.commands.common import require_migrated_layout, resolve_repo_root
+from fr.config.movers import mover
 from fr.repair import RepairResult, repair_repo, repairable_plan_config
 
 console = Console()
@@ -50,6 +51,7 @@ def _emit_json(result: RepairResult, *, applied: bool) -> None:
     console.print_json(_json.dumps(payload))
 
 
+@mover  # a mover of the old plan-config at every version (spec 2026-11-28-s1-followups R3)
 def repair_command(
     yes: bool = typer.Option(False, "--yes", help="Apply rewrites. Default is a dry-run preview."),
     format_: str = typer.Option("text", "--format", help="Output format: text | json."),

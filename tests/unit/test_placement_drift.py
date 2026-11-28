@@ -48,17 +48,16 @@ def _home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _switch_to(root: Path, settings_text: str) -> None:
-    """Point origin's `fr` at *settings_text* (a new commit, never forced) and fetch it;
-    and `fr-config`'s `.fr/settings.yaml` too when origin has that branch, as fr's own
-    writer keeps the two in step (S1 R6: two that differ refuse)."""
+    """Point origin's `fr` at *settings_text* (a new commit, never forced) and fetch it,
+    and `fr-config`'s `.fr/settings.yaml` too (created when origin has none), as fr's own
+    writer keeps the two in step before fr 9.2 (S1 R6) and the switch is read from
+    `fr-config` alone after it (spec 2026-11-28-s1-followups R4, R10)."""
     url = git(root, "remote", "get-url", "origin").strip()
     for branch, rel in (("fr-config", ".fr/settings.yaml"), ("fr", "settings.yaml")):
         probe = subprocess.run(
             ["git", "ls-remote", "--exit-code", "origin", f"refs/heads/{branch}"], cwd=root,
             check=False, capture_output=True,
         )  # fmt: skip
-        if branch == "fr-config" and probe.returncode != 0:
-            continue
         scratch = root.parent / f"{branch}-scratch"
         if probe.returncode == 0:
             git(root.parent, "clone", "-q", "-b", branch, url, str(scratch))

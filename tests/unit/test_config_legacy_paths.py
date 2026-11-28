@@ -15,7 +15,8 @@ from typing import Any
 import pytest
 from fr.config import space
 
-pytestmark = pytest.mark.own_artifacts
+# S1's transition behaviour, before fr 9.2 (spec 2026-11-28-s1-followups R10).
+pytestmark = [pytest.mark.own_artifacts, pytest.mark.s1_open]
 
 REPO = Path(__file__).resolve().parents[2]
 NOTICE = "is at its old location; run fr migrate artifacts --yes"
@@ -175,15 +176,31 @@ def _old_plan_config(root: Path) -> Path:
     return _put(root, "docs/superpowers/plans/2026-01-01-x.md", "# X\n\n**Status:** Not Started\n")
 
 
-def test_validate_plans_reads_the_old_plan_config_with_a_notice(root: Path) -> None:
-    """Under `repo` (and with no `fr` to ask) the old file is read while only it exists:
-    its rules take effect, with the notice."""
+def _open_side_fr(bin_dir: Path, *lines: str) -> Path:
+    """A stub `fr` whose `settings paths --shell` says the transition is still open
+    (`FR_OLD_PATHS_ENDED=0`, spec 2026-11-28-s1-followups R7): the validator's version
+    source, so these tests stay on the pre-9.2 side whatever fr's own version."""
+    stub = bin_dir / "fr"
+    stub.write_text("#!/bin/sh\n" + "".join(f"echo {line}\n" for line in lines))
+    stub.chmod(0o755)
+    return stub
+
+
+def test_validate_plans_reads_the_old_plan_config_with_a_notice(
+    root: Path, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """Under `repo`, before fr 9.2, the old file is read while only it exists: its rules
+    take effect, with the notice."""
     plan = _old_plan_config(root)
-    done = _validate(root, plan)
+    stub = _open_side_fr(
+        tmp_path_factory.mktemp("bin"), "FR_PLACEMENT=repo", "FR_OLD_PATHS_ENDED=0"
+    )
+    env = {"FR_HARNESS_FR": str(stub)}
+    done = _validate(root, plan, env)
     assert NOTICE in done.stderr, done.stderr + done.stdout
     assert done.returncode != 0 and OWNER_MISSING in done.stdout + done.stderr
     (root / "docs/superpowers/plan-config.yaml").unlink()
-    control = _validate(root, plan)  # the shipped default asks for no Owner
+    control = _validate(root, plan, env)  # the shipped default asks for no Owner
     assert control.returncode == 0, control.stdout + control.stderr
 
 
@@ -198,11 +215,12 @@ def test_validate_plans_ignores_the_old_plan_config_under_quiet_and_stealth(
     plan = _old_plan_config(root)
     bin_dir = tmp_path_factory.mktemp("bin")
     config_file = bin_dir / "fr-config" / ".fr" / "plan-config.yaml"  # absent
-    stub = bin_dir / "fr"
-    stub.write_text(
-        f"#!/bin/sh\necho FR_PLACEMENT={placement}\necho FR_PLAN_CONFIG_FILE={config_file}\n"
+    stub = _open_side_fr(
+        bin_dir,
+        f"FR_PLACEMENT={placement}",
+        f"FR_PLAN_CONFIG_FILE={config_file}",
+        "FR_OLD_PATHS_ENDED=0",
     )
-    stub.chmod(0o755)
     done = _validate(root, plan, {"FR_HARNESS_FR": str(stub)})
     assert NOTICE not in done.stderr, done.stderr
     assert "is ignored under placement " + placement in done.stderr, done.stderr

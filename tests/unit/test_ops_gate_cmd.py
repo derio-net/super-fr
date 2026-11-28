@@ -16,6 +16,7 @@ from fr.commands import ops_gate_cmd
 from fr.run.model import RunState, StepRecord, save_run_state
 from typer.testing import CliRunner
 
+from tests.unit.config_paths import profiles_file
 from tests.unit.test_ops_cli import PLAN_REL, _git, _repo
 from tests.unit.test_ops_gate import FakeForge
 
@@ -41,7 +42,7 @@ def _with_run(
         ),
     )
     (root / ".devcontainer").mkdir(exist_ok=True)
-    (root / ".devcontainer/fr-profiles.yaml").write_text(
+    profiles_file(root).write_text(
         "profiles:\n  ops: {purpose: operate, secrets: [], ops: true}\ndefault: ops\n"
     )
 
@@ -101,7 +102,7 @@ def test_a_run_with_no_pr_is_refused(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_two_ops_profiles_need_profile(gate_repo: Path) -> None:
-    (gate_repo / ".devcontainer/fr-profiles.yaml").write_text(
+    profiles_file(gate_repo).write_text(
         "profiles:\n  a: {ops: true}\n  b: {ops: true}\ndefault: a\n"
     )
     result = _gate("--run", "run-1")
@@ -110,7 +111,7 @@ def test_two_ops_profiles_need_profile(gate_repo: Path) -> None:
 
 
 def test_no_ops_profile_is_refused_naming_scaffold(gate_repo: Path) -> None:
-    (gate_repo / ".devcontainer/fr-profiles.yaml").write_text("profiles:\n  dev: {}\n")
+    profiles_file(gate_repo).write_text("profiles:\n  dev: {}\n")
     result = _gate("--run", "run-1")
     assert result.exit_code == 2 and "fr init scaffold --ops" in result.output
     flat = " ".join(result.output.split())

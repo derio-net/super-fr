@@ -164,6 +164,7 @@ def test_a_failed_protection_read_refuses_an_executor_but_not_fr_services(
     assert "protection unknown" in capsys.readouterr().err
 
 
+@pytest.mark.s1_open  # a quiet repo with no fr-config yet: the transition window (R10)
 def test_an_old_path_workflow_under_quiet_is_ignored_for_the_shipped_one(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -216,6 +217,7 @@ def _never_fetched(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return root
 
 
+@pytest.mark.s1_open  # a quiet repo with no fr-config yet: the transition window (R10)
 def test_a_failed_first_fetch_refuses_an_executor_instead_of_reading_no_profiles(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -226,6 +228,7 @@ def test_a_failed_first_fetch_refuses_an_executor_instead_of_reading_no_profiles
         profiles_config(root)
 
 
+@pytest.mark.s1_open  # a quiet repo with no fr-config yet: the transition window (R10)
 def test_a_failed_first_fetch_is_said_by_the_read_only_view(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -237,6 +240,7 @@ def test_a_failed_first_fetch_is_said_by_the_read_only_view(
     assert "protection unknown" in err and "connection reset" in err
 
 
+@pytest.mark.s1_open  # a quiet repo with no fr-config yet: the transition window (R10)
 def test_no_configuration_branch_on_origin_reads_no_profiles_silently(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

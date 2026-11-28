@@ -11,6 +11,8 @@ import pytest
 from fr.cli import app
 from typer.testing import CliRunner
 
+from tests.unit.config_paths import profiles_file
+
 V1_GITLAB = """\
 backend: gitlab
 host: gitlab.example.com
@@ -29,7 +31,7 @@ def _repo(tmp_path: Path, *, remote: str, profiles: str | None) -> Path:
     subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", remote], check=True)
     if profiles is not None:
         (repo / ".devcontainer").mkdir()
-        (repo / ".devcontainer" / "fr-profiles.yaml").write_text(profiles)
+        profiles_file(repo).write_text(profiles)
     return repo
 
 

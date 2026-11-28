@@ -56,8 +56,18 @@ def _check_one(name: str, repo_root: Path) -> list[str]:
 @verification_app.command("list")
 def list_cmd() -> None:
     """Every strategy that resolves, and where it came from."""
-    for name, source in list_strategies(resolve_repo_root()):
+    for name, source in _strategies(resolve_repo_root()):
         console.print(f"{name}  {source}")
+
+
+def _strategies(repo_root: Path) -> list[tuple[str, str]]:
+    """`list_strategies`, its `StrategyError` (e.g. a per-kind variable refused past
+    fr 9.2, spec 2026-11-28-s1-followups R6) an exit 2."""
+    try:
+        return list_strategies(repo_root)
+    except StrategyError as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
 
 
 @verification_app.command("check")
@@ -69,7 +79,7 @@ def check_cmd(
     repo_root = resolve_repo_root()
 
     if all_:
-        names = [n for n, _ in list_strategies(repo_root)]
+        names = [n for n, _ in _strategies(repo_root)]
         if not names:
             err_console.print("[red]no verification strategies found — nothing to validate.[/red]")
             err_console.print("Searched:")

@@ -89,7 +89,7 @@ def _shipped(tmp_path: Path, name: str, text: str) -> Path:
 
 
 def _repo_shape(repo_root: Path, name: str, text: str) -> None:
-    d = repo_root / "docs" / "superpowers" / "workflows"
+    d = repo_root / ".fr" / "workflows"
     d.mkdir(parents=True, exist_ok=True)
     (d / f"{name}.yaml").write_text(text)
 

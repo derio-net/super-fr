@@ -13,6 +13,7 @@
 #   <plugins>/fr-opencode-plugin/index.ts      the server plugin (+ its modules)
 #   <plugins>/fr-opencode-plugin/tui/index.tsx the status line (TUI only)
 #   <plugins>/fr-opencode-plugin/rules/*.md    the shipped rules (injected by rules.ts)
+#   <plugins>/fr-opencode-plugin/VERSION       package.json's version (read by marker.ts)
 #
 # The 1.x shape also wrote a top-level loader, `<plugins>/fr-opencode-plugin.ts`,
 # beside the directory. On 2.x that loads the plugin TWICE (plan finding
@@ -138,6 +139,9 @@ case "$action" in
     cp "$src"/*.ts "$plugins/$name/"
     cp "$src"/tui/*.ts "$src"/tui/*.tsx "$plugins/$name/tui/"
     cp "$segment" "$plugins/$name/tui/"
+    # marker.ts reads its release from VERSION beside itself, to know whether S1's
+    # transition has ended (spec 2026-11-28-s1-followups R7).
+    jq -r .version "$root/packages/fr-opencode-plugin/package.json" >"$plugins/$name/VERSION"
     if [ "${#rules[@]}" -gt 0 ]; then
       mkdir -p "$plugins/$name/rules"
       for rule in "${rules[@]}"; do cp "$instructions/$rule" "$plugins/$name/rules/$rule"; done

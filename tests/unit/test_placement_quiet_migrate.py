@@ -16,7 +16,7 @@ from fr.artifacts.runner import run_migrations
 from fr.isolation.hostworktree import HostWorktreeTarget
 
 from tests.unit.settings_repo import git, make_repo
-from tests.unit.test_placement_quiet import QUIET, push_fr_branch
+from tests.unit.test_placement_quiet import QUIET, push_quiet_switch
 
 STALE = "schema_version: 2\nplan: {slug}\ntarget_repo: derio-net/q\nfr_version: '>=3.0.0,<4.0.0'\n"
 
@@ -24,7 +24,7 @@ STALE = "schema_version: 2\nplan: {slug}\ntarget_repo: derio-net/q\nfr_version: 
 @pytest.fixture
 def ws(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     state = HostWorktreeTarget(repo).up(profile=None, branch="feat/q")
     monkeypatch.chdir(state.worktree)
     fr_root = Path(os.environ["HOME"]) / ".cache" / "fr" / "worktrees" / "work" / "fr"

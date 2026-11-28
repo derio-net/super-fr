@@ -161,6 +161,7 @@ def _push_fr_branch(root: Path, settings_text: str | None) -> None:
     git(root, "checkout", "-q", "main")
 
 
+@pytest.mark.s1_open  # the old switch, read before fr 9.2 (R10)
 def test_an_origin_fr_switch_to_quiet_is_served(tmp_path: Path) -> None:
     root = make_repo(tmp_path)
     _push_fr_branch(root, "schema: 1\nplacement: quiet\n")
@@ -225,6 +226,7 @@ def test_garbage_yaml_on_the_switch_is_refused_naming_the_ref(tmp_path: Path) ->
     assert "not yet available" not in message
 
 
+@pytest.mark.s1_open  # the old switch, read before fr 9.2 (R10)
 def test_a_packed_origin_fr_ref_is_seen(tmp_path: Path) -> None:
     root = make_repo(tmp_path)
     _push_fr_branch(root, "schema: 1\nplacement: quiet\n")
@@ -251,6 +253,7 @@ def test_a_marker_without_a_placement_changes_nothing(tmp_path: Path) -> None:
     assert space_for(root).placement == "repo"
 
 
+@pytest.mark.s1_open  # the old switch, read before fr 9.2 (R10)
 def test_a_worktree_sees_its_common_dirs_origin_fr(tmp_path: Path) -> None:
     root = make_repo(tmp_path)
     _push_fr_branch(root, "schema: 1\nplacement: quiet\n")

@@ -208,7 +208,7 @@ def test_an_unknown_shape_is_refused(tmp_path: Path) -> None:
 
 def test_a_shape_beginning_with_another_step_is_refused(tmp_path: Path) -> None:
     root = _at_brainstorm(tmp_path)
-    override = root / "docs" / "superpowers" / "workflows" / "other.yaml"
+    override = root / ".fr" / "workflows" / "other.yaml"
     override.parent.mkdir(parents=True, exist_ok=True)
     override.write_text(
         "workflow: other\nschema: 1\ndescription: x\nunit: run\n"
@@ -413,7 +413,7 @@ def test_spec_plan_review_resolves_with_the_spec_review_evidence(tmp_path: Path)
 
 def test_an_invalid_repo_override_of_the_target_shape_is_refused(tmp_path: Path) -> None:
     root = _at_brainstorm(tmp_path)
-    override = root / "docs" / "superpowers" / "workflows" / "fr-goal-light.yaml"
+    override = root / ".fr" / "workflows" / "fr-goal-light.yaml"
     override.parent.mkdir(parents=True, exist_ok=True)
     override.write_text(
         "workflow: fr-goal-light\nschema: 1\ndescription: x\nunit: run\n"

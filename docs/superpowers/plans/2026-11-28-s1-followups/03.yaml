@@ -1,0 +1,69 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Configuration argv runs only from the protected tip (R11-R13)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - s1-config-argv-from-tip
+  tier: standard
+  files:
+  - packages/fr/src/fr/verification/walk.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/config/space.py
+  - tests/unit/*.py
+  estimate_lines: 400
+tasks:
+- number: 1
+  title: Pin S1's whole-manifest guard (R13)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      Add tests (tests/unit/test_config_argv_guard.py, new) reusing the quiet fixture and stub forge of the existing degraded/protection tests (grep `usable_bytes` in tests/unit): a repo workflow shape and a repo strategy whose fr-config tip differs from the checkout copy resolve to the TIP's content when the rules read enforced, and to the shipped manifest when the forge answers free-plan 403. They should pass on first run (this pins existing behaviour); if one fails, that is a real gap — fix it in fr.config.degraded and note it in the record.
+- number: 2
+  title: 'Walk argv: every .fr/ element from the exported tip, other forms refused
+    (R11)'
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      RED: in test_config_argv_guard.py, under quiet with enforced rules: a strategy whose scenario argv is `["sh", ".fr/scen.sh"]` runs the exported tip's scen.sh (assert the rendered argv element lies under the export dir, not the checkout), likewise `["sh", "{repo}/.fr/scen.sh"]`; `["prog", "--cfg=.fr/x"]` raises WalkError before anything runs (no command executed). Under repo placement the argv is unchanged. See them fail.
+  - id: P3.T2.S2
+    text: |-
+      GREEN: in verification/walk.py add `_FR_SEGMENT = re.compile(r"(^|[^A-Za-z0-9_.-])\.fr/")`; under quiet/stealth `_protected` classifies every element of install and scenario (rendered with the walk's values) and asks protection once if any holds a segment; `render_template` maps each element that is a config-space path (relative, or absolute under repo/worktree root resolved to repo-relative and then `in_space`) to `_program(...)`, and raises WalkError naming the element for any other element holding a segment. Tests pass.
+- number: 3
+  title: 'kind: cli steps naming .fr/ refused under quiet/stealth (R12)'
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      RED: tests (tests/unit/test_config_argv_guard.py) driving `fr run advance` on a run whose shape (shipped-style manifest in a tmp FR_SHIPPED_DEFAULTS_DIR) has a cli step with `run: "sh .fr/x.sh"`, then `"a;.fr/x"`, `"cat <.fr/x"`, `"prog --opt=.fr/x"`: under quiet each exits 2 naming the step and `.fr/`, and nothing runs (a sentinel file the command would create is absent); under repo the same `run:` executes. See them fail.
+  - id: P3.T3.S2
+    text: |-
+      GREEN: in commands/run_cmd.py's kind == "cli" branch, after rendering and the empty check, when `config_space(repo_root).placement != "repo"` and the command matches the shared segment pattern (export `_FR_SEGMENT` once, e.g. as `fr.config.space.FR_SEGMENT`, used by walk.py too), print the refusal and raise typer.Exit(2) before run_step. Tests pass; fast tier last: `uv run pytest --fr-scope -n 2 -q --no-cov`.
+state:
+  steps:
+    P3.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P3.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

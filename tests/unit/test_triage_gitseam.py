@@ -17,6 +17,8 @@ import pytest
 from fr.triage import gitseam
 from fr.triage.gitseam import Checkout, GitError
 
+from tests.unit.config_paths import profiles_file
+
 
 def _git(cwd: Path, *args: str) -> str:
     return subprocess.run(
@@ -284,7 +286,7 @@ def test_snapshot_paths_copies_the_default_branch_not_the_working_tree(tmp_path:
     _pushed_elsewhere(tmp_path, checkout, "ci")  # b.txt on origin/main
     checkout.fetch()
     (checkout.path / ".devcontainer").mkdir()
-    (checkout.path / ".devcontainer" / "fr-profiles.yaml").write_text("ci: {type: none}\n")
+    profiles_file(checkout.path).write_text("ci: {type: none}\n")
     dest = tmp_path / "snap"
     dest.mkdir()
     checkout.snapshot_paths("origin/main", (".devcontainer/fr-profiles.yaml", "b.txt"), dest)

@@ -13,6 +13,7 @@ from fr.debt.model import ArchivablePlan, DebtReport, PlanDebt
 from fr.ghclient import UnsupportedForgeOperation
 from typer.testing import CliRunner
 
+from tests.unit.config_paths import profiles_file
 from tests.unit.fakes import FakeGhClient, FakeGhError
 
 runner = CliRunner()
@@ -366,7 +367,7 @@ def test_a_declared_host_is_the_one_the_token_goes_to(
 ) -> None:
     work = world["work"]
     (work / ".devcontainer").mkdir()
-    (work / ".devcontainer/fr-profiles.yaml").write_text(
+    profiles_file(work).write_text(
         "profiles:\n  dev:\n    purpose: x\nschema_version: 2\n"
         "forge: {type: gitlab, host: git.example.com}\n"
     )

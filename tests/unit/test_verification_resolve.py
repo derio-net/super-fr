@@ -15,6 +15,8 @@ from fr.verification.resolve import (
     resolve_strategy,
 )
 
+from tests.unit.shipped_env import defaults_root
+
 
 def _manifest(name: str, description: str = "") -> str:
     return (
@@ -44,7 +46,7 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
 def test_a_repo_file_wins_wholesale_over_a_shipped_one(env, monkeypatch) -> None:
     shipped = env["tmp"] / "shipped"
     _put(shipped, Path("."), "candidate", "shipped")
-    monkeypatch.setenv("FR_SHIPPED_VERIFICATIONS_DIR", str(shipped))
+    monkeypatch.setenv("FR_SHIPPED_DEFAULTS_DIR", str(defaults_root(shipped, "verifications")))
     _put(env["repo"], REPO_VERIFICATIONS_REL, "candidate", "repo")
 
     assert resolve_strategy("candidate", env["repo"]).description == "repo"
@@ -56,7 +58,7 @@ def test_the_env_dir_is_consulted_before_the_wheel_and_the_clone(env, monkeypatc
     _put(envdir, Path("."), "x", "env")
     _put(wheel, Path("."), "x", "wheel")
     _put(env["home"], MARKETPLACE_ROOT / PLUGIN_VERIFICATIONS_REL, "x", "clone")
-    monkeypatch.setenv("FR_SHIPPED_VERIFICATIONS_DIR", str(envdir))
+    monkeypatch.setenv("FR_SHIPPED_DEFAULTS_DIR", str(defaults_root(envdir, "verifications")))
     monkeypatch.setattr(vresolve, "packaged_shipped_verifications_dir", lambda: wheel)
 
     assert resolve_strategy("x", env["repo"]).description == "env"
@@ -78,7 +80,9 @@ def test_the_marketplace_clone_is_the_last_resort(env) -> None:
 
 
 def test_an_unknown_name_names_every_place_looked(env, monkeypatch) -> None:
-    monkeypatch.setenv("FR_SHIPPED_VERIFICATIONS_DIR", str(env["tmp"] / "envdir"))
+    monkeypatch.setenv(
+        "FR_SHIPPED_DEFAULTS_DIR", str(defaults_root(env["tmp"] / "envdir", "verifications"))
+    )
 
     with pytest.raises(StrategyError) as e:
         resolve_strategy("ghost", env["repo"])
@@ -86,7 +90,8 @@ def test_an_unknown_name_names_every_place_looked(env, monkeypatch) -> None:
     msg = str(e.value)
     assert "ghost" in msg
     assert str(env["repo"] / REPO_VERIFICATIONS_REL / "ghost.yaml") in msg
-    assert str(env["tmp"] / "envdir" / "ghost.yaml") in msg
+    envdir = defaults_root(env["tmp"] / "envdir", "verifications") / "verifications"
+    assert str(envdir / "ghost.yaml") in msg
     assert str(env["home"] / MARKETPLACE_ROOT / PLUGIN_VERIFICATIONS_REL / "ghost.yaml") in msg
 
 
@@ -108,7 +113,7 @@ def test_list_returns_every_name_once_with_its_source(env, monkeypatch) -> None:
     shipped = env["tmp"] / "shipped"
     _put(shipped, Path("."), "candidate", "shipped")
     _put(shipped, Path("."), "live", "shipped")
-    monkeypatch.setenv("FR_SHIPPED_VERIFICATIONS_DIR", str(shipped))
+    monkeypatch.setenv("FR_SHIPPED_DEFAULTS_DIR", str(defaults_root(shipped, "verifications")))
     _put(env["repo"], REPO_VERIFICATIONS_REL, "candidate", "repo")
     _put(env["repo"], REPO_VERIFICATIONS_REL, "staging", "repo")
 

@@ -124,6 +124,7 @@ def test_a_source_that_keeps_moving_refuses_and_switches_nothing(
 # --- p7-r2: killed after a step's commit, before its push -------------------------------
 
 
+@pytest.mark.s1_open  # seeds the old form: the transition window (spec 2026-11-28-s1-followups R10)
 @pytest.mark.parametrize(
     ("branch", "nth"),
     [("fr", 1), ("fr", 2), (REMOVAL, 1)],

@@ -41,6 +41,7 @@ from fr.triage.model import (
 )
 from typer.testing import CliRunner
 
+from tests.unit.config_paths import profiles_file
 from tests.unit.test_triage_batch_dispatch import FakeRunner
 
 REAL_CI_IS_NONE = triage_batch_cmd.ci_is_none
@@ -2013,13 +2014,13 @@ def test_ci_none_is_read_from_the_default_branch_not_the_working_tree(
     world.all_checks[101] = {"pass": 0, "fail": 0, "pending": 2}
     profiles = "version: 2\nforge: {type: github}\nci: {type: none}\n"
     (checkout.path / ".devcontainer").mkdir()
-    (checkout.path / ".devcontainer" / "fr-profiles.yaml").write_text(profiles)
+    profiles_file(checkout.path).write_text(profiles)
     checkout.files[("origin/main", ".github/workflows/ci.yml")] = "on: push\njobs: {}\n"
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 3, out
     assert world.merged == []
     # and when origin/main itself declares it, the merge goes ahead
-    checkout.files[("origin/main", ".devcontainer/fr-profiles.yaml")] = profiles
+    checkout.files[("origin/main", ".fr/profiles.yaml")] = profiles
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 0, out
     assert _opened(world)
@@ -2147,8 +2148,8 @@ def test_closeout_and_batch_dispatch_resolve_the_same_model(
     """rg-8: the close-out reads the clone's models.yaml as `batch dispatch` does,
     also when no --checkout is given."""
     no_model = "{runner: fake, harness: claude}"
-    models = checkout.path / "docs" / "superpowers" / "models.yaml"
-    models.parent.mkdir(parents=True)
+    models = checkout.path / ".fr" / "models.yaml"
+    models.parent.mkdir(parents=True, exist_ok=True)
     models.write_text("claude-code:\n  orchestrator: repo-model\n")
     world.issues.update({1: "closed", 2: "open"})
     world.pr(101, "feat/batch-b1", [1], state="MERGED",

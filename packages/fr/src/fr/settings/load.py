@@ -326,10 +326,13 @@ def _stealth(root: Path) -> EffectiveSettings | None:
     repo's `<branch>-config`, read by commit in the configuration clone (spec
     2026-11-19-event-driven-a-la-carte R5), or the old `<target-dir>/settings.yaml` on the
     tracking ref when the configuration branch holds none (R13); the two differing
-    refuses, naming both (R6). A target's `.fr/settings.yaml` is ignored
-    and fr prints that it was. Stealth sets the forge keys itself (R5, R24): the
-    effective values are always the quiet ones, and an explicit contrary value is
-    reported in `contrary` for `fr settings check` and `fr run start` to refuse."""
+    refuses, naming both (R6). Past the end of S1's transition (fr 9.2) the old file is not
+    read: a target whose settings are only there is refused naming the migration, and the
+    two are never compared (spec 2026-11-28-s1-followups R4). A target's
+    `.fr/settings.yaml` is ignored and fr prints that it was. Stealth sets the forge keys
+    itself (R5, R24): the effective values are always the quiet ones, and an explicit
+    contrary value is reported in `contrary` for `fr settings check` and `fr run start`
+    to refuse."""
     from fr.placement.stealth import (
         LEGACY_TARGET_SETTINGS,
         QUIET_FORGE,
@@ -371,6 +374,11 @@ def _stealth(root: Path) -> EffectiveSettings | None:
         text, rel_path, sha, source = new_text, new_rel, new_sha, f"{cref.text}:{new_rel}"
         qualified = f"refs/remotes/origin/{cref.branch}"
     else:
+        from fr.config import transition
+
+        if old_text is not None and transition.refuses_old_read():
+            # Past the end of S1's transition (spec 2026-11-28-s1-followups R4).
+            raise transition.old_path_refusal(f"{ref.text}:{old_rel}", f"{cref.text}:{new_rel}")
         text, rel_path, source = old_text, old_rel, f"{ref.text}:{old_rel}"
     data, settings = parse_target_text(text, source)
     contrary = tuple(

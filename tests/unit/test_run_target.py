@@ -25,7 +25,7 @@ def _seed(tmp_path: Path):
     git(root, "remote", "add", "origin", str(remote))
     git(root, "push", "-q", "origin", "HEAD:management")
     git(root, "fetch", "-q", "origin")
-    (root / "docs/superpowers/workflows/target-check.yaml").write_text(
+    (root / ".fr/workflows/target-check.yaml").write_text(
         "workflow: target-check\nschema: 1\nunit: run\nsteps:\n"
         "  - id: implement\n    kind: agent\n"
         "  - id: lens-review\n    kind: agent\n    emits: [journal:plan]\n"

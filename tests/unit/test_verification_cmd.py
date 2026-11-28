@@ -14,6 +14,8 @@ from fr.workflow.check import check_workflow
 from fr.workflow.model import parse_manifest
 from typer.testing import CliRunner
 
+from tests.unit.shipped_env import defaults_root
+
 pytestmark = pytest.mark.own_artifacts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -23,18 +25,18 @@ runner = CliRunner()
 def _invoke(repo: Path, argv: list[str], shipped: Path | None = None):
     env = {**os.environ, "FR_REPO_ROOT": str(repo)}
     if shipped is not None:
-        env["FR_SHIPPED_VERIFICATIONS_DIR"] = str(shipped)
+        env["FR_SHIPPED_DEFAULTS_DIR"] = str(defaults_root(shipped, "verifications"))
     return runner.invoke(app, argv, env=env)
 
 
 def _repo(tmp_path: Path) -> Path:
-    (tmp_path / "docs" / "superpowers" / "verifications").mkdir(parents=True)
+    (tmp_path / ".fr" / "verifications").mkdir(parents=True)
     return tmp_path
 
 
 def test_list_prints_each_name_with_its_source(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
-    (repo / "docs/superpowers/verifications/staging.yaml").write_text(
+    (repo / ".fr/verifications/staging.yaml").write_text(
         "verification: staging\nschema: 1\nwhen: pre-merge\ndriver: operator\n"
     )
 
@@ -58,7 +60,7 @@ def test_check_all_exits_2_on_a_malformed_repo_manifest_naming_file_and_field(
     tmp_path: Path,
 ) -> None:
     repo = _repo(tmp_path)
-    bad = repo / "docs/superpowers/verifications/broken.yaml"
+    bad = repo / ".fr/verifications/broken.yaml"
     bad.write_text("verification: broken\nschema: 1\nwhen: later\ndriver: agent\n")
 
     result = _invoke(repo, ["verification", "check", "--all"])
@@ -150,7 +152,7 @@ def test_the_shipped_shapes_declare_candidate_and_it_resolves() -> None:
 
 def test_workflow_check_cli_refuses_an_unresolvable_verification(tmp_path: Path) -> None:
     repo = tmp_path
-    d = repo / "docs" / "superpowers" / "workflows"
+    d = repo / ".fr" / "workflows"
     d.mkdir(parents=True)
     (d / "bad.yaml").write_text(
         _shape("verification: ghost\n").replace("workflow: x", "workflow: bad")
@@ -169,10 +171,10 @@ def test_every_shape_check_sees_a_repo_authored_strategy(tmp_path: Path) -> None
     from fr.artifacts.validate import _workflow_issues
 
     repo = _repo(tmp_path)
-    (repo / "docs/superpowers/verifications/staging.yaml").write_text(
+    (repo / ".fr/verifications/staging.yaml").write_text(
         "verification: staging\nschema: 1\nwhen: pre-merge\ndriver: operator\n"
     )
-    shapes = repo / "docs" / "superpowers" / "workflows"
+    shapes = repo / ".fr" / "workflows"
     shapes.mkdir(parents=True)
     (shapes / "x.yaml").write_text(_shape("verification: staging\n"))
 

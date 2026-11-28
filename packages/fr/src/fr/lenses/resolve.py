@@ -5,7 +5,7 @@ repo directory: `.fr/lenses.yaml`'s disable and replace entries are a repo's onl
 override (spec 2026-11-19-event-driven-a-la-carte R15):
 
     $FR_SHIPPED_DEFAULTS_DIR/lenses/<id>.yaml  # explicit escape (R16)
-    $FR_SHIPPED_LENSES_DIR/<id>.yaml           # older escape, with a notice
+    $FR_SHIPPED_LENSES_DIR/<id>.yaml           # older escape, before fr 9.2
     fr/defaults/lenses/<id>.yaml               # inside the `fr` wheel
     ~/.claude/plugins/marketplaces/derio-net--super-fr/plugins/super-fr/defaults/lenses/<id>.yaml
 
@@ -27,7 +27,9 @@ SHIPPED_ENV_VAR = _shipped.DEFAULTS_ENV_VAR
 
 def shipped_lens_dir() -> Path | None:
     """The first existing directory of shipped lenses, or `None` when none is installed."""
-    dirs = _shipped.shipped_dirs("lenses", packaged=_shipped.packaged_kind_dir("lenses"))
+    dirs = _shipped.shipped_dirs(
+        "lenses", packaged=_shipped.packaged_kind_dir("lenses"), error=LensError
+    )
     return next((d for d in dirs if d.is_dir() and any(d.glob("*.yaml"))), None)
 
 
@@ -43,7 +45,7 @@ def shipped_lenses() -> dict[str, Lens]:
         # reading it as "this repo has no lenses" would empty every lens set.
         raise LensError(
             f"no shipped lens manifests were found (looked in ${SHIPPED_ENV_VAR}/lenses, "
-            f"${_shipped.LEGACY_ENV_VARS['lenses']}, the fr package's "
+            "the fr package's "
             f"{_shipped.PACKAGED_DEFAULTS_DIRNAME}/lenses/ and the installed plugin): "
             "reinstall fr"
         )

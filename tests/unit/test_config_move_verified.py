@@ -87,6 +87,7 @@ class _Writer:
         return "placement: stealth\n"
 
 
+@pytest.mark.s1_open  # seeds the old form: the transition window (spec 2026-11-28-s1-followups R10)
 def test_a_creation_that_did_not_land_removes_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -99,6 +100,7 @@ def test_a_creation_that_did_not_land_removes_nothing(
     assert src.read_text() == TEXT
 
 
+@pytest.mark.s1_open  # seeds the old form: the transition window (spec 2026-11-28-s1-followups R10)
 def test_a_lost_lease_falls_into_the_exists_cases(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

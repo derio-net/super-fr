@@ -6,12 +6,15 @@ identically: the switch's fallback order and blob compare, which file wins, the 
 file drives the bash library with them; `packages/fr-opencode-plugin/test/
 decision-cases.test.ts` drives marker.ts with the same file. A logic edit to one engine
 alone fails one of the two suites, where a test pinning strings alone would stay green.
+
+Each switch case runs on both sides of S1's transition (spec 2026-11-28-s1-followups R7,
+R8, R10), through a copy of the hook tree whose plugin.json names 9.1.0 or 9.2.0 — never
+the repo's own plugin.json, whose version moves with the release.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import shlex
 import shutil
 import subprocess
@@ -20,8 +23,11 @@ from typing import Any
 
 import pytest
 
+from tests.unit.hooks_tree import ENDED_VERSION, hooks_tree, open_hooks, side_env
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
-LIB = REPO_ROOT / "plugins" / "super-fr" / "hooks" / "lib" / "fr-isolation-decision.sh"
+LIB_NAME = Path("lib") / "fr-isolation-decision.sh"
+LIB = open_hooks() / LIB_NAME
 CASES: dict[str, Any] = json.loads(
     (REPO_ROOT / "tests" / "fixtures" / "isolation-decision-cases.json").read_text()
 )
@@ -33,15 +39,20 @@ pytestmark = [
 ]
 
 
-def _bash(script: str) -> str:
+def _bash(script: str, lib: Path = LIB) -> str:
     done = subprocess.run(
-        ["bash", "-c", f'. "{LIB}"; {script}'],
+        ["bash", "-c", f'. "{lib}"; {script}'],
         capture_output=True,
         text=True,
-        env={**os.environ, **NO_FR},
+        env=side_env(NO_FR),
         check=False,
     )
     return done.stdout
+
+
+@pytest.fixture(scope="module")
+def ended_lib(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return hooks_tree(tmp_path_factory.mktemp("ended"), ENDED_VERSION) / LIB_NAME
 
 
 def _git(cwd: Path, *args: str, stdin: str | None = None) -> str:
@@ -69,8 +80,9 @@ def _switch_ref(repo: Path, ref: str, path: list[str], settings: str | None) -> 
     _git(repo, "update-ref", ref, commit)
 
 
+@pytest.mark.parametrize("side", ["open", "ended"])
 @pytest.mark.parametrize("case", CASES["switch"], ids=lambda c: c["id"])
-def test_switch(tmp_path: Path, case: dict[str, Any]) -> None:
+def test_switch(tmp_path: Path, case: dict[str, Any], side: str, ended_lib: Path) -> None:
     repo = tmp_path / "r"
     repo.mkdir()
     _git(repo, "init", "-q", "-b", "main")
@@ -87,9 +99,11 @@ def test_switch(tmp_path: Path, case: dict[str, Any]) -> None:
         f"if _fr_read_switch {top}; then r=1; "
         f'_fr_switch_enabled "$_fr_switch" && [ "$_fr_live" -eq 1 ] '
         f'&& [ "$_fr_canon" = "placement: quiet" ] && q=1; fi; '
-        f'_fr_placement_enabled {top} && e=1; echo "$r $e $q"'
+        f'_fr_placement_enabled {top} && e=1; echo "$r $e $q"',
+        lib=LIB if side == "open" else ended_lib,
     ).split()
-    assert out == [str(int(case[k])) for k in ("read", "enabled", "quiet")], case["id"]
+    want = case if side == "open" else case["ended"]
+    assert out == [str(int(want[k])) for k in ("read", "enabled", "quiet")], case["id"]
 
 
 @pytest.mark.parametrize("case", CASES["allowlist"], ids=lambda c: c["id"])

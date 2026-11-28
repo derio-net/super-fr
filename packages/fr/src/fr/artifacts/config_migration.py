@@ -213,9 +213,12 @@ def _create_space(path: Path) -> None:
         raise _refusal("the settings move runs only inside `fr migrate artifacts`")
     moves.ensure_space(product)
     if moves.settings_stamp(path) != 2:
+        from fr.config import transition
+
+        shows = " `fr settings sync` shows both" if transition.keeps_old_copy() else ""
         raise _refusal(
             f"the configuration branch's {moves.rel(moves.SETTINGS)} differs from {path}: "
-            "fr will not choose between them (S1 R6, R12). `fr settings sync` shows both"
+            f"fr will not choose between them (S1 R6, R12).{shows}"
         )
 
 
@@ -226,6 +229,6 @@ MIGRATIONS.register(
         to_version=2,
         fn=_create_space,
         description="settings-location: create the configuration branch from the old "
-        "switch, which stays as the legacy copy (S1 R5, R6)",
+        "switch, which stays as the legacy copy before fr 9.2 (S1 R5, R6)",
     )
 )

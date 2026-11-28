@@ -19,7 +19,11 @@ from fr.placement import stealth
 from typer.testing import CliRunner
 
 from tests.unit.settings_repo import git
+from tests.unit.shipped_env import defaults_root
 from tests.unit.stealth_repo import stealth_home, stealth_pair, tracked_files
+
+# S1's transition behaviour, before fr 9.2 (spec 2026-11-28-s1-followups R10).
+pytestmark = pytest.mark.s1_open
 
 __all__ = ["stealth_home"]
 
@@ -66,7 +70,7 @@ def _fr(ws: tuple[IsolationState, Path, Path], *argv: str):
     env = {
         **os.environ,
         "FR_REPO_ROOT": str(state.worktree),
-        "FR_SHIPPED_WORKFLOWS_DIR": str(shipped),
+        "FR_SHIPPED_DEFAULTS_DIR": str(defaults_root(shipped, "workflows")),
     }
     result = CliRunner().invoke(app, list(argv), env=env)
     if result.exception and not isinstance(result.exception, SystemExit):

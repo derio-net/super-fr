@@ -41,7 +41,7 @@ def test_shell_prints_the_placement_root_feature_and_every_kind(repo: Path) -> N
     assert got["FR_FEATURE"] == ""
     for kind, rel in KIND_DIRS.items():
         assert got[shell_name(kind)] == str(repo / rel)
-    assert len(got) == 3 + len(KIND_DIRS)
+    assert len(got) == 4 + len(KIND_DIRS)
     assert got["FR_PLANS_DIR"] == str(repo / "docs/superpowers/plans")
 
 
@@ -122,6 +122,9 @@ def test_no_create_resolves_a_quiet_repo_without_creating_anything(
     git(repo, "push", "-q", "origin", "fr")
     git(repo, "checkout", "-q", "main")
     git(repo, "branch", "-qD", "fr")
+    from tests.unit.test_placement_quiet import push_config_branch
+
+    push_config_branch(repo, "placement: quiet\n")  # in step: quiet on both sides (R10)
     wt = worktree_path(repo)
 
     def local_fr() -> bool:
@@ -145,3 +148,17 @@ def test_no_create_resolves_a_quiet_repo_without_creating_anything(
     # the creating form, for contrast
     assert runner.invoke(app, ["settings", "paths", "--shell"]).exit_code == 0
     assert (wt / ".git").exists() and local_fr()
+
+
+@pytest.mark.parametrize(("ended", "expected"), [(False, "0"), (True, "1")])
+def test_shell_says_whether_the_transition_has_ended(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, ended: bool, expected: str
+) -> None:
+    """`FR_OLD_PATHS_ENDED` is `refusing()`'s answer, for the shell readers (spec
+    2026-11-28-s1-followups R7)."""
+    from fr.config import transition
+
+    monkeypatch.setattr(transition, "refusing", lambda: ended)
+    result = runner.invoke(app, ["settings", "paths", "--shell"])
+    assert result.exit_code == 0, result.output
+    assert _lines(result.output)["FR_OLD_PATHS_ENDED"] == expected

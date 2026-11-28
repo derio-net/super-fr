@@ -33,6 +33,7 @@ from tests.unit.requirements_support import (
     seed_requirements,
     write_shape_file,
 )
+from tests.unit.shipped_env import defaults_root
 
 SHAPED_SPEC = "# spec\n" + DESIGN_SHAPE_SECTION
 """A fixture spec the `brainstorm` resolve accepts (spec 2026-11-24-show-me-visuals R8)."""
@@ -107,7 +108,7 @@ def _build_repo(tmp_path: Path, branch: str) -> None:
     workspace = tmp_path / "workspace"
     git(base, "worktree", "add", "-q", "-b", branch, str(workspace))
 
-    (workspace / "docs" / "superpowers" / "workflows").mkdir(parents=True, exist_ok=True)
+    (workspace / ".fr" / "workflows").mkdir(parents=True, exist_ok=True)
     (workspace / ".fr-isolation").write_text(
         json.dumps(
             {
@@ -126,7 +127,11 @@ def _write_shape(shipped: Path, name: str, text: str) -> None:
 
 
 def _invoke(repo: Path, shipped: Path, argv: list[str]):
-    env = {**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
+    env = {
+        **os.environ,
+        "FR_REPO_ROOT": str(repo),
+        "FR_SHIPPED_DEFAULTS_DIR": str(defaults_root(shipped, "workflows")),
+    }
     return runner_cli.invoke(app, argv, env=env)
 
 
@@ -146,7 +151,7 @@ def _invoke_as_harness(
     env: dict[str, str | None] = {
         **os.environ,
         "FR_REPO_ROOT": str(repo),
-        "FR_SHIPPED_WORKFLOWS_DIR": str(shipped),
+        "FR_SHIPPED_DEFAULTS_DIR": str(defaults_root(shipped, "workflows")),
     }
     # `None` (not a pop) so click's `CliRunner.isolation` actively DELETES the
     # key from the real `os.environ` for the duration of the call — a pop
@@ -317,7 +322,11 @@ def test_advance_executes_cli_step_captures_exit_and_stdout_and_moves_cursor(
     result = runner_cli.invoke(
         app,
         ["run", "advance", "r1"],
-        env={**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)},
+        env={
+            **os.environ,
+            "FR_REPO_ROOT": str(repo),
+            "FR_SHIPPED_DEFAULTS_DIR": str(defaults_root(shipped, "workflows")),
+        },
     )
     assert result.exit_code == 0, result.output
     state = load_run_state(repo, "r1")
@@ -572,7 +581,11 @@ def test_advance_agent_step_never_invokes_a_model(tmp_path: Path, monkeypatch) -
     result = runner_cli.invoke(
         app,
         ["run", "advance", "r1"],
-        env={**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)},
+        env={
+            **os.environ,
+            "FR_REPO_ROOT": str(repo),
+            "FR_SHIPPED_DEFAULTS_DIR": str(defaults_root(shipped, "workflows")),
+        },
     )
     assert result.exit_code == 0, result.output
     state = load_run_state(repo, "r1")
@@ -1345,7 +1358,7 @@ def test_the_dispatch_brief_survives_a_narrow_terminal(tmp_path: Path) -> None:
     env = {
         **os.environ,
         "FR_REPO_ROOT": str(repo),
-        "FR_SHIPPED_WORKFLOWS_DIR": str(shipped),
+        "FR_SHIPPED_DEFAULTS_DIR": str(defaults_root(shipped, "workflows")),
         "COLUMNS": "40",
     }
     runner_cli.invoke(app, ["run", "start", "wide", "--branch", "b", "--run-id", "r1"], env=env)
@@ -2111,7 +2124,7 @@ def test_an_unchanged_shape_still_advances(tmp_path: Path) -> None:
 
 def test_start_resolves_the_shape_inside_the_workspace(tmp_path: Path) -> None:
     """`advance` runs in the WORKSPACE, and a repo override lives at
-    `docs/superpowers/workflows/<name>.yaml` — a different file in the base
+    `.fr/workflows/<name>.yaml` — a different file in the base
     clone and in the worktree. Starting against one and advancing against the
     other is the drift case, arranged by fr itself (review r5-e3)."""
     import subprocess
@@ -2120,7 +2133,7 @@ def test_start_resolves_the_shape_inside_the_workspace(tmp_path: Path) -> None:
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "cli-only", _CLI_ONLY_SHAPE)
     # A repo override that exists ONLY in the workspace.
-    override = repo / "docs" / "superpowers" / "workflows" / "cli-only.yaml"
+    override = repo / ".fr" / "workflows" / "cli-only.yaml"
     override.write_text(
         "workflow: cli-only\nschema: 1\nunit: run\n"
         "steps:\n  - id: only-here\n    kind: cli\n    run: 'true'\n"
@@ -2223,9 +2236,8 @@ def _pristine(repo: Path, shipped: Path, shape: str | None = None) -> bool:
     if seen != {
         ".fr-isolation",
         "seed.md",
-        "docs",
-        "docs/superpowers",
-        "docs/superpowers/workflows",
+        ".fr",
+        ".fr/workflows",
     }:
         return False
     held = {p.name: p.read_text() for p in shipped.glob("*")} if shipped.is_dir() else {}
@@ -2588,6 +2600,7 @@ def test_resolve_on_a_step_with_no_emits_still_refuses_emitted(tmp_path: Path) -
         "quiet",
         "workflow: quiet\nschema: 1\nunit: run\nsteps:\n  - id: quiet\n    kind: agent\n",
     )
+    (repo / "docs").mkdir(exist_ok=True)
     (repo / "docs" / "spec.md").write_text(SHAPED_SPEC)
     _invoke(repo, shipped, ["run", "start", "quiet", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
@@ -2754,7 +2767,7 @@ def _invoke_measurable(repo: Path, shipped: Path, argv: list[str], root: Path, s
     env = {
         **os.environ,
         "FR_REPO_ROOT": str(repo),
-        "FR_SHIPPED_WORKFLOWS_DIR": str(shipped),
+        "FR_SHIPPED_DEFAULTS_DIR": str(defaults_root(shipped, "workflows")),
         "FR_TRANSCRIPT_ROOT": str(root),
         "CLAUDECODE": "1",
         "CLAUDE_CODE_SESSION_ID": session_id,
@@ -2817,9 +2830,7 @@ def test_advance_warns_when_the_orchestrator_is_not_on_its_bound_model(tmp_path:
     run is not refused, because the operator's `/model` choice outranks it."""
     repo = _repo(tmp_path)
     (repo / "docs" / "superpowers").mkdir(parents=True, exist_ok=True)
-    (repo / "docs" / "superpowers" / "models.yaml").write_text(
-        "claude-code:\n  orchestrator: claude-opus-5\n"
-    )
+    (repo / ".fr" / "models.yaml").write_text("claude-code:\n  orchestrator: claude-opus-5\n")
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "agentic", _AGENT_SHAPE)
     root = tmp_path / "projects"
@@ -2842,9 +2853,7 @@ def test_advance_warns_when_the_orchestrator_is_not_on_its_bound_model(tmp_path:
 def test_advance_is_silent_when_the_orchestrator_matches_its_binding(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     (repo / "docs" / "superpowers").mkdir(parents=True, exist_ok=True)
-    (repo / "docs" / "superpowers" / "models.yaml").write_text(
-        "claude-code:\n  orchestrator: claude-opus-5\n"
-    )
+    (repo / ".fr" / "models.yaml").write_text("claude-code:\n  orchestrator: claude-opus-5\n")
     shipped = tmp_path / "shipped"
     _write_shape(shipped, "agentic", _AGENT_SHAPE)
     root = tmp_path / "projects"
@@ -3732,7 +3741,7 @@ member's."""
 
 
 def _write_repo_models(repo: Path, text: str) -> None:
-    path = repo / "docs" / "superpowers" / "models.yaml"
+    path = repo / ".fr" / "models.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
 

@@ -25,7 +25,7 @@ from fr.placement import stealth
 from fr.placement.merged import MergedPr, append_record, merged_features
 
 from tests.unit.settings_repo import git, make_repo
-from tests.unit.test_placement_quiet import QUIET, push_fr_branch
+from tests.unit.test_placement_quiet import QUIET, push_quiet_switch
 
 REPO = "derio-net/widgets"
 ROW = "alpha-spins"
@@ -200,7 +200,7 @@ class Product:
 @pytest.fixture
 def quiet(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Product:
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     git(repo, "checkout", "-q", "-b", "feat/view")
     monkeypatch.chdir(repo)
     space = space_for(repo)

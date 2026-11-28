@@ -174,7 +174,7 @@ def test_none_and_no_strategy_are_neither_post_merge_nor_pre_merge(tmp_path: Pat
 
 
 def test_a_repo_authored_post_merge_strategy_counts(tmp_path: Path) -> None:
-    d = tmp_path / "docs/superpowers/verifications"
+    d = tmp_path / ".fr/verifications"
     d.mkdir(parents=True)
     (d / "staging.yaml").write_text(
         "verification: staging\nschema: 1\nwhen: post-merge\ndriver: operator\n"

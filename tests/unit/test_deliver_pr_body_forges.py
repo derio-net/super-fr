@@ -50,7 +50,7 @@ def _checkout(tmp_path: Path, backend: str) -> Path:
     `detect_backend`; `origin` stays the fixture's local bare repo, which the
     gate's merge-base check needs."""
     root = _at_deliver(tmp_path)
-    profiles = root / ".devcontainer" / "fr-profiles.yaml"
+    profiles = root / ".fr" / "profiles.yaml"
     profiles.parent.mkdir(parents=True, exist_ok=True)
     profiles.write_text(f"backend: {backend}\n")
     commit_all(root, f"declare {backend}")

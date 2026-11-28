@@ -485,7 +485,7 @@ def test_the_checkouts_repo_models_yaml_overrides_the_user_orchestrator_binding(
 
     _state(tmp_path, judgements=_no_model_judgements())
     set_binding(default_models_path(), "claude-code", "orchestrator", "user-model")
-    repo_models = checkout.path / "docs" / "superpowers" / "models.yaml"
+    repo_models = checkout.path / ".fr" / "models.yaml"
     repo_models.parent.mkdir(parents=True, exist_ok=True)
     repo_models.write_text("claude-code:\n  orchestrator: repo-model\n")
     code, out = _dispatch(tmp_path, "lifecycle", "--yes")

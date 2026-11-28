@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 from fr.lenses.check import check_config
 
+from tests.unit.shipped_env import defaults_root
+
 
 def _write(root: Path, text: str) -> None:
     (root / ".fr").mkdir(exist_ok=True)
@@ -71,7 +73,7 @@ def test_a_malformed_shipped_manifest_is_a_problem_not_a_crash(
     shipped = tmp_path / "shipped"
     shipped.mkdir()
     (shipped / "security.yaml").write_text("lens: [\n")
-    monkeypatch.setenv("FR_SHIPPED_LENSES_DIR", str(shipped))
+    monkeypatch.setenv("FR_SHIPPED_DEFAULTS_DIR", str(defaults_root(shipped, "lenses")))
     _write(tmp_path, "disable: []\n")
 
     problems = check_config(tmp_path)

@@ -25,6 +25,8 @@ from fr.workflow.check import check_workflow
 from fr.workflow.model import parse_manifest
 from typer.testing import CliRunner
 
+from tests.unit.shipped_env import defaults_root
+
 runner_cli = CliRunner()
 
 
@@ -133,7 +135,7 @@ def test_multiple_problems_all_reported_together() -> None:
 
 
 def _repo(tmp_path: Path) -> Path:
-    (tmp_path / "docs" / "superpowers" / "workflows").mkdir(parents=True)
+    (tmp_path / ".fr" / "workflows").mkdir(parents=True)
     return tmp_path
 
 
@@ -142,7 +144,11 @@ def _invoke(monkeypatch: object, repo: Path, shipped: Path, argv: list[str]):
 
     from fr.cli import app
 
-    env = {**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
+    env = {
+        **os.environ,
+        "FR_REPO_ROOT": str(repo),
+        "FR_SHIPPED_DEFAULTS_DIR": str(defaults_root(shipped, "workflows")),
+    }
     return runner_cli.invoke(app, argv, env=env)
 
 

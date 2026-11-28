@@ -35,6 +35,7 @@ from fr.workflow.resolve import resolve_workflow
 from typer.testing import CliRunner
 
 from tests.unit.requirements_support import seed_requirements, write_phase_splits, write_shape_file
+from tests.unit.shipped_env import defaults_root
 from tests.unit.spec_review_support import spec_review_evidence
 
 pytestmark = pytest.mark.own_artifacts
@@ -91,7 +92,7 @@ def test_shipped_manifest_step_order_matches_the_skill_narration() -> None:
 
 def test_a_repo_authored_manifest_overrides_the_shipped_one_wholesale(tmp_path: Path) -> None:
     repo_root = tmp_path / "consumer-repo"
-    repo_workflows = repo_root / "docs" / "superpowers" / "workflows"
+    repo_workflows = repo_root / ".fr" / "workflows"
     repo_workflows.mkdir(parents=True)
     (repo_workflows / "fr-goal.yaml").write_text(
         textwrap.dedent(
@@ -201,7 +202,7 @@ def _fr(root: Path, argv: list[str]):
         env={
             **os.environ,
             "FR_REPO_ROOT": str(root),
-            "FR_SHIPPED_WORKFLOWS_DIR": str(SHIPPED_WORKFLOWS_DIR),
+            "FR_SHIPPED_DEFAULTS_DIR": str(defaults_root(SHIPPED_WORKFLOWS_DIR, "workflows")),
         },
     )
 

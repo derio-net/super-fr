@@ -135,10 +135,10 @@ def test_under_quiet_a_refused_artifact_fails_and_the_real_tree_is_untouched(
     from fr.isolation.hostworktree import HostWorktreeTarget
 
     from tests.unit.settings_repo import make_repo
-    from tests.unit.test_placement_quiet import QUIET, push_fr_branch
+    from tests.unit.test_placement_quiet import QUIET, push_quiet_switch
 
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     state = HostWorktreeTarget(repo).up(profile=None, branch="feat/q")
     monkeypatch.chdir(state.worktree)
     _check_placement(state.worktree)

@@ -14,6 +14,8 @@ from pathlib import Path
 import pytest
 from fr import git as frgit
 
+from tests.unit.config_paths import profiles_file
+
 SPACED = "ign dir/a b.txt"
 NON_ASCII = "ign dir/é.txt"
 
@@ -157,7 +159,7 @@ def test_scaffold_commit_carries_an_agent_only_when_git_does_not_ignore_it(
     (repo / agent).write_text("agent\n")
     (repo / ".devcontainer" / "dev").mkdir(parents=True)
     (repo / ".devcontainer" / "dev" / "devcontainer.json").write_text("{}\n")
-    (repo / ".devcontainer" / "fr-profiles.yaml").write_text("profiles: {}\n")
+    profiles_file(repo).write_text("profiles: {}\n")
     _commit_profile(repo, "dev")
     assert "git-ignored" not in capsys.readouterr().err
     committed = subprocess.run(

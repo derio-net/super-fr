@@ -323,7 +323,7 @@ prove nothing."""
 
 
 def _author_repo_shape(work: Path, name: str, text: str) -> None:
-    d = work / "docs" / "superpowers" / "workflows"
+    d = work / ".fr" / "workflows"
     d.mkdir(parents=True, exist_ok=True)
     (d / f"{name}.yaml").write_text(text)
 

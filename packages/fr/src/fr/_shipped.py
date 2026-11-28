@@ -11,8 +11,10 @@ R15): `plugins/super-fr/defaults/<kind>/` for `workflows`, `verifications` and
    caller prepends it, and under quiet/stealth reads it through
    `fr.config.degraded`, whose fallback is this shipped walk);
 2. `$FR_SHIPPED_DEFAULTS_DIR/<kind>/` when set (R16);
-3. the per-kind `$FR_SHIPPED_<KIND>_DIR` when set, kept until the release
-   R14 names, with one notice per process naming `FR_SHIPPED_DEFAULTS_DIR`;
+3. the per-kind `$FR_SHIPPED_<KIND>_DIR` when set, before fr 9.2 only, with one
+   notice per process naming `FR_SHIPPED_DEFAULTS_DIR`; past the end of S1's
+   transition (`fr.config.transition`) a set one is refused through the kind's own
+   error type (spec 2026-11-28-s1-followups R6);
 4. the copy inside the `fr` wheel (`fr/defaults/<kind>/`);
 5. the Claude Code marketplace clone
    (`~/<MARKETPLACE_ROOT>/plugins/super-fr/defaults/<kind>/`).
@@ -27,6 +29,7 @@ import atexit
 import contextlib
 import os
 import sys
+from collections.abc import Callable
 from importlib import resources
 from pathlib import Path
 
@@ -90,7 +93,7 @@ LEGACY_ENV_VARS: dict[str, str] = {
     "lenses": "FR_SHIPPED_LENSES_DIR",
 }
 """The per-kind variables S1 replaces. Each names a flat directory of that kind's
-manifests and keeps working until the release R14 names (`s1-refuse-old-paths`)."""
+manifests and works only before fr 9.2 (`fr.config.transition.refusing`)."""
 
 KINDS: tuple[str, ...] = tuple(LEGACY_ENV_VARS)
 
@@ -126,16 +129,25 @@ def packaged_kind_dir(kind: str) -> Path | None:
 
 
 def _legacy_dir(kind: str) -> Path | None:
+    """The per-kind variable's directory before fr 9.2 (with one notice); past the end
+    of S1's transition a set one raises `fr.config.transition.LegacyEnvRefused`."""
     var = LEGACY_ENV_VARS[kind]
     value = os.environ.get(var)
     if not value:
         return None
+    from fr.config import transition  # lazily: it needs fr.settings
+
+    if transition.refusing():
+        raise transition.LegacyEnvRefused(
+            f"${var} is no longer read (fr 9.2 ended S1's transition): set "
+            f"${DEFAULTS_ENV_VAR} to a tree holding {kind}/ instead, so "
+            f"{DEFAULTS_ENV_VAR}/{kind}/ holds these manifests"
+        )
     if var not in _LEGACY_NOTICED:
         _LEGACY_NOTICED.add(var)
         print(
             f"fr: ${var} is deprecated; set ${DEFAULTS_ENV_VAR} to a tree holding "
-            f"{kind}/ instead (the per-kind variables stop working in the release that "
-            "refuses old configuration paths)",
+            f"{kind}/ instead (the per-kind variables stop working in fr 9.2)",
             file=sys.stderr,
         )
     return Path(value)
@@ -158,6 +170,7 @@ def shipped_dirs(
     *,
     packaged: Path | None,
     shipped_root: Path | None = None,
+    error: Callable[[str], Exception] | None = None,
 ) -> list[Path]:
     """The shipped sources for *kind*, in lookup order (steps 2-5 of the module docstring).
 
@@ -166,8 +179,22 @@ def shipped_dirs(
     wheel's own copy, and the marketplace clone last, so an `fr` upgrade cannot be
     shadowed by a clone nobody re-installed. *packaged* is the caller's wheel directory
     (normally `packaged_kind_dir(kind)`), passed in so a test can replace it.
+
+    *error* is the caller's own error type: a per-kind variable refused past the end of
+    S1's transition is re-raised as it, so each kind's commands report it as they report
+    every other resolver failure (exit 2, spec 2026-11-28-s1-followups R6).
     """
-    dirs: list[Path] = [shipped_root] if shipped_root is not None else env_dirs(kind)
+    if shipped_root is not None:
+        dirs: list[Path] = [shipped_root]
+    else:
+        from fr.config.transition import LegacyEnvRefused
+
+        try:
+            dirs = env_dirs(kind)
+        except LegacyEnvRefused as e:
+            if error is None:
+                raise
+            raise error(str(e)) from e
     if packaged is not None:
         dirs.append(packaged)
     marketplace = marketplace_dir(kind)

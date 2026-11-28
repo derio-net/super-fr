@@ -38,6 +38,8 @@ from fr.run.adopt import AdoptError, adopt_run, adoptable_plans
 from fr.run.model import load_run_state, run_path
 from typer.testing import CliRunner
 
+from tests.unit.shipped_env import defaults_root
+
 pytestmark = pytest.mark.own_artifacts
 
 runner_cli = CliRunner()
@@ -165,7 +167,11 @@ def _commit_all(repo: Path) -> None:
 
 
 def _invoke(repo: Path, shipped: Path, argv: list[str]):
-    env = {**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
+    env = {
+        **os.environ,
+        "FR_REPO_ROOT": str(repo),
+        "FR_SHIPPED_DEFAULTS_DIR": str(defaults_root(shipped, "workflows")),
+    }
     return runner_cli.invoke(app, argv, env=env)
 
 

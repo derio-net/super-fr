@@ -24,6 +24,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 
 from fr._shipped import DEFAULTS_ENV_VAR
 from fr.commands.common import resolve_repo_root
@@ -81,7 +82,11 @@ def check_cmd(
     shipped_dir: Path | None = None
 
     if all_:
-        names = _discover_names(repo_root, shipped_dir)
+        try:
+            names = _discover_names(repo_root, shipped_dir)
+        except WorkflowError as e:  # e.g. a per-kind variable refused past fr 9.2 (R6)
+            err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+            raise typer.Exit(2) from e
         if not names:
             # Exit 1, not 0 (review r5-b5). "Nothing to validate" is a broken
             # installation, not a clean bill of health, and reporting it as

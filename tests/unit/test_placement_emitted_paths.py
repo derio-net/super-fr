@@ -15,7 +15,7 @@ from typer.testing import CliRunner
 
 from tests.unit.requirements_support import DESIGN_SHAPE_SECTION
 from tests.unit.settings_repo import make_repo
-from tests.unit.test_placement_quiet import QUIET, push_fr_branch
+from tests.unit.test_placement_quiet import QUIET, push_quiet_switch
 
 FEATURE = "feat__q"
 SPEC = "2026-11-13-q-design.md"
@@ -30,7 +30,7 @@ def _fr(cwd: Path, *argv: str) -> tuple[int, str]:
 @pytest.fixture
 def started(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, str]:
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     state = HostWorktreeTarget(repo).up(profile=None, branch="feat/q")
     monkeypatch.chdir(state.worktree)
     fr_root = Path(os.environ["HOME"]) / ".cache" / "fr" / "worktrees" / "work" / "fr"
@@ -84,7 +84,7 @@ def test_the_brainstorm_brief_carries_a_record_template_under_quiet(
     import json
 
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     state = HostWorktreeTarget(repo).up(profile=None, branch="feat/q")
     monkeypatch.chdir(state.worktree)
     code, out = _fr(state.worktree, "run", "start", "fr-goal", "--branch", "feat/q")

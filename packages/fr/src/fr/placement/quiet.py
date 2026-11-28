@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from fr.artifacts import paths
+from fr.config import transition
 from fr.settings import SettingsError
 
 QUIET_BRANCH: Final = "fr"
@@ -190,7 +191,12 @@ def _read_legacy(root: Path) -> Switch | None:
 
 def _read(root: Path) -> Switch | None:
     """The switch: `origin/fr-config:.fr/settings.yaml` (R5), else the old
-    `origin/fr:settings.yaml` (R13). Both there and different refuses, naming both (R6)."""
+    `origin/fr:settings.yaml` (R13). Both there and different refuses, naming both (R6).
+
+    Past the end of S1's transition (fr 9.2, `fr.config.transition`) the old copy is not
+    read: the two are never compared, and a switch only at the old location is refused
+    naming `fr migrate artifacts --yes` (spec 2026-11-28-s1-followups R4), except inside a
+    mover (`transition.moving`, R3)."""
     common = paths._common_dir(root)
     if common is None:
         return None
@@ -198,7 +204,8 @@ def _read(root: Path) -> Switch | None:
     old_sha = _ref_sha(common, paths.LEGACY_SWITCH_REF)
     if new_sha is None and old_sha is None:
         return None
-    key = (str(common), new_sha or "", old_sha or "")
+    refuse_old = transition.refuses_old_read()
+    key = (str(common), new_sha or "", f"{old_sha or ''}{'!' if refuse_old else ''}")
     if key in _CACHE:
         return _CACHE[key]
     new, old = switch_texts(root)
@@ -211,6 +218,8 @@ def _read(root: Path) -> Switch | None:
             result = Switch(parsed[0], parsed[1], new[0], paths.SWITCH_REF, _SOURCE)
     elif old is not None:
         parsed = parse_switch_text(old[1], source=_LEGACY_SOURCE)
+        if parsed is not None and refuse_old:
+            raise transition.old_path_refusal(_LEGACY_SOURCE, _SOURCE)
         if parsed is not None:
             result = Switch(parsed[0], parsed[1], old[0], paths.LEGACY_SWITCH_REF, _LEGACY_SOURCE)
     _CACHE[key] = result
@@ -293,7 +302,10 @@ def mismatch_refusal(what: str, new_at: str, old_at: str) -> SettingsError:
 
 def _settle_differing(root: Path, new: tuple[str, str], old: tuple[str, str]) -> None:
     """The two switches differ (R6): refuse, saying whether the old one lags (and naming
-    `fr settings sync`) or neither matches. Never writes."""
+    `fr settings sync`) or neither matches. Never writes. Past the end of S1's transition
+    the old copy is not kept, so nothing is compared (spec 2026-11-28-s1-followups R4)."""
+    if not transition.keeps_old_copy():
+        return
     what = "the two quiet switches"
     new_at = f"{_SOURCE} ({new[0][:12]})"
     old_at = f"{_LEGACY_SOURCE} ({old[0][:12]})"
@@ -420,7 +432,10 @@ def sync_plan(root: Path) -> SyncPlan:
 def half_written(root: Path) -> SyncPlan | None:
     """The `absent` sync plan when origin's `fr-config` holds the quiet switch and the old
     copy on `fr` is missing (a write that stopped between its two pushes), else None.
-    Fetches like the preview; writes nothing."""
+    Fetches like the preview; writes nothing. Past the end of S1's transition there is no
+    old copy to miss, so never (spec 2026-11-28-s1-followups R4)."""
+    if not transition.keeps_old_copy():
+        return None
     plan = sync_plan(root)
     return plan if plan.state == "absent" else None
 
@@ -1266,8 +1281,9 @@ def write_switch(
     `fr-config-change/<slug>` (`fr.config.change.open_change`) and returns its URL; the
     legacy copy follows after the merge (`_settle_differing`).
 
-    The legacy copy is written until the release R14's owed entry names
-    (`s1-refuse-old-paths`); that release drops it."""
+    The legacy copy is kept only before fr 9.2: past the end of S1's transition
+    (`fr.config.transition.keeps_old_copy`) only `fr-config` is written, and the old file
+    is never rewritten or deleted (spec 2026-11-28-s1-followups R4)."""
     root = Path(root)
     net = network or _default_network(root)
     _fetch_both(root, net, None)
@@ -1288,10 +1304,14 @@ def write_switch(
             text=text,
             message=message,
         )
+        after = (
+            f"; once it merges, fr brings the old copy on `{QUIET_BRANCH}` in step (before fr 9.2)"
+            if transition.keeps_old_copy()
+            else ""
+        )
         print(
             f"fr: opened {url}: the change to {paths.SWITCH_SETTINGS} waits for review on "
-            f"`{CONFIG_BRANCH}`; once it merges, fr brings the old copy on `{QUIET_BRANCH}` "
-            "in step",
+            f"`{CONFIG_BRANCH}`{after}",
             file=sys.stderr,
         )
         _CACHE.clear()
@@ -1301,7 +1321,8 @@ def write_switch(
             root, CONFIG_BRANCH, paths.SWITCH_REF, paths.SWITCH_SETTINGS, text, message,
             network=net, push=push,
         )  # fmt: skip
-    write_legacy(root, text, message, network=net, push=push)
+    if transition.keeps_old_copy():
+        write_legacy(root, text, message, network=net, push=push)
     _CACHE.clear()
     return None
 

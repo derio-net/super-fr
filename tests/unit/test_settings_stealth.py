@@ -21,6 +21,9 @@ from typer.testing import CliRunner
 from tests.unit.settings_repo import git, land_on_main
 from tests.unit.stealth_repo import stealth_home, stealth_pair, tracked_files
 
+# S1's transition behaviour, before fr 9.2 (spec 2026-11-28-s1-followups R10).
+pytestmark = pytest.mark.s1_open
+
 __all__ = ["stealth_home"]
 
 

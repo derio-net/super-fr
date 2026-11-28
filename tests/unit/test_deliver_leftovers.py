@@ -23,6 +23,7 @@ from fr.verification.exit import Exit as RunExit
 from fr.verification.exit import run_exit
 
 from tests.unit.acceptance_helpers import write_matrix_fragments
+from tests.unit.config_paths import profiles_file
 from tests.unit.test_verification_walk import RUN, SPEC, SPEC_REF, _git, _repo
 
 IDENTITY = ("o", "proj")
@@ -127,7 +128,7 @@ def test_an_open_owed_entry_counts_as_recorded_when_the_forge_cannot_list_issues
 
     _git(root, "remote", "add", "origin", "https://gitlab.example.com/acme/widgets.git")
     (root / ".devcontainer").mkdir()
-    (root / ".devcontainer" / "fr-profiles.yaml").write_text(
+    profiles_file(root).write_text(
         "profiles:\n  dev:\n    purpose: x\nforge: {type: gitlab, host: gitlab.example.com}\n"
     )
     _commit(root)
@@ -194,7 +195,7 @@ def test_under_tracking_none_only_the_gate_route_applies(tmp_path: Path) -> None
         ],
     )
     (root / ".devcontainer").mkdir()
-    (root / ".devcontainer/fr-profiles.yaml").write_text(
+    profiles_file(root).write_text(
         "schema_version: 2\nprofiles:\n  dev:\n    purpose: x\ntracking: {type: none}\n"
     )
     _journal(root, *_out_of_scope(), _owed(), _narrowing())
@@ -422,7 +423,7 @@ def test_an_unreadable_ci_declaration_offers_no_local(tmp_path: Path) -> None:
     root = _repo(tmp_path, rows={"owed-row": None})
     _rows(root, [{"id": "owed-row", "status": "unwired"}])
     (root / ".devcontainer").mkdir()
-    (root / ".devcontainer/fr-profiles.yaml").write_text(
+    profiles_file(root).write_text(
         "schema_version: 2\nprofiles:\n  dev:\n    purpose: x\nci: {type: bogus}\n"
     )
     _journal(root, *_out_of_scope(), _owed(), _narrowing())

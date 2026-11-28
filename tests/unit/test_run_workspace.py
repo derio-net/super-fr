@@ -24,6 +24,8 @@ from fr.run.model import run_path
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
 from typer.testing import CliRunner
 
+from tests.unit.shipped_env import defaults_root
+
 runner_cli = CliRunner()
 
 _SHAPE = """
@@ -79,7 +81,11 @@ def _start(repo: Path, shipped: Path, branch: str = "feat/x"):
     return runner_cli.invoke(
         app,
         ["run", "start", "tiny", "--branch", branch, "--run-id", "r1"],
-        env={**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)},
+        env={
+            **os.environ,
+            "FR_REPO_ROOT": str(repo),
+            "FR_SHIPPED_DEFAULTS_DIR": str(defaults_root(shipped, "workflows")),
+        },
     )
 
 

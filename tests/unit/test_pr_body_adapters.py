@@ -132,7 +132,7 @@ def test_gitea_no_matching_pr_raises_tea_error(
 
 
 def _repo_on(tmp_path: Path, backend: str) -> Path:
-    profiles = tmp_path / ".devcontainer" / "fr-profiles.yaml"
+    profiles = tmp_path / ".fr" / "profiles.yaml"
     profiles.parent.mkdir(parents=True)
     profiles.write_text(f"backend: {backend}\n")
     return tmp_path

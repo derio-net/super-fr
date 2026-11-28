@@ -1,5 +1,6 @@
 import re
 
+import pytest
 from fr import __version__
 
 
@@ -13,6 +14,7 @@ def test_version_is_semver():
     assert re.fullmatch(r"\d+\.\d+\.\d+(?:rc[1-9]\d*)?", __version__), __version__
 
 
+@pytest.mark.s1_open  # reads fr's own version, which --fr-ended patches (R10)
 def test_version_value():
     """__version__ should match the installed package metadata."""
     from importlib.metadata import version

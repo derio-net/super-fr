@@ -269,3 +269,15 @@ def test_register_drops_duplicates_then_appends_and_keeps_non_strings(tmp_path: 
     cli.write_text(json.dumps({"plugins": [ours, {"package": "x"}, 3, None, ours, "b"]}))
     assert _run("install", str(plugins)).returncode == 0
     assert json.loads(cli.read_text())["plugins"] == [{"package": "x"}, 3, None, "b", ours]
+
+
+def test_install_writes_the_package_version_beside_the_modules(tmp_path: Path) -> None:
+    """marker.ts reads its release from `VERSION` beside itself in the delivered plugin
+    (spec 2026-11-28-s1-followups R7)."""
+    plugins = tmp_path / "plugins"
+    result = _run("install", str(plugins))
+    assert result.returncode == 0, result.stderr
+    package = json.loads((PLUGIN_SRC.parent / "package.json").read_text())
+    version = plugins / "fr-opencode-plugin" / "VERSION"
+    assert version.read_text().strip() == package["version"]
+    assert (plugins / "fr-opencode-plugin" / "marker.ts").is_file()

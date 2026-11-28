@@ -20,8 +20,9 @@ repo's checkout contains. The walk is `fr._shipped`'s, one for every kind:
    override, which wins wholesale (under quiet/stealth only from the protected
    branch's reviewed tip, else the shipped shape is used: `fr.config.degraded`);
 2. `$FR_SHIPPED_DEFAULTS_DIR/workflows/<name>.yaml`, then the older
-   `$FR_SHIPPED_WORKFLOWS_DIR/<name>.yaml` (R16, with a notice) — the explicit
-   escape, for tests and for any harness that is not Claude Code;
+   `$FR_SHIPPED_WORKFLOWS_DIR/<name>.yaml` (R16, with a notice; before fr 9.2 only,
+   refused after it) — the explicit escape, for tests and for any harness that is not
+   Claude Code;
 3. the copy **inside the `fr` wheel** (`fr/defaults/workflows/`,
    `packaged_shipped_workflows_dir()`) — version-matched with the running
    `fr` by construction;
@@ -97,6 +98,7 @@ def shipped_workflow_dirs(shipped_root: Path | None = None) -> list[Path]:
         "workflows",
         packaged=packaged_shipped_workflows_dir(),
         shipped_root=shipped_root,
+        error=WorkflowError,
     )
 
 

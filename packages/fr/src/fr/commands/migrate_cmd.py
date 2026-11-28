@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from fr.commands.common import require_migrated_layout
+from fr.config.movers import mover
 from fr.git_policy.templates import FR_COMMIT_TRAILER
 from fr.migrate import MigrationError, migrate_repo
 
@@ -134,6 +135,7 @@ def dirs_cmd(
 
 
 @migrate_app.command("artifacts")
+@mover  # reads the old forms at every version (spec 2026-11-28-s1-followups R3)
 def artifacts_cmd(
     yes: bool = typer.Option(
         False,

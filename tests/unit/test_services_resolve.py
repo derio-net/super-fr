@@ -11,6 +11,8 @@ from fr.services import resolve as resolve_mod
 from fr.services.model import ServicesError
 from fr.services.resolve import resolve_forge, resolve_services
 
+from tests.unit.config_paths import profiles_file
+
 PROFILES = "profiles:\n  dev:\n    purpose: x\n"
 
 
@@ -22,7 +24,7 @@ def _repo(tmp_path: Path, *, remote: str | None = None, profiles: str | None = N
         subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", remote], check=True)
     if profiles is not None:
         (repo / ".devcontainer").mkdir()
-        (repo / ".devcontainer" / "fr-profiles.yaml").write_text(profiles)
+        profiles_file(repo).write_text(profiles)
     return repo
 
 
@@ -214,7 +216,7 @@ class TestUnreadable:
 
         repo = _repo(tmp_path, remote="https://gitlab.com/g/p.git")
         (repo / ".devcontainer").mkdir()
-        (repo / ".devcontainer" / "fr-profiles.yaml").write_bytes(b"backend: \xff\xfe gitlab\n")
+        profiles_file(repo).write_bytes(b"backend: \xff\xfe gitlab\n")
         assert _hosts.detect_backend(repo) == "gitlab"
         assert _hosts.host_for(repo) is None
         assert resolve_forge(repo, lenient=True).source == "default"

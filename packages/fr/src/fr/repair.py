@@ -331,10 +331,13 @@ def plan_config_path(repo_root: Path) -> Path:
     """The repo's `plan-config.yaml`: repository configuration, so `.fr/plan-config.yaml`
     in the configuration space (or the old path while only that one exists), never the
     quiet or stealth feature root the plans and specs sit in (spec
-    2026-11-19-event-driven-a-la-carte R9, R13)."""
-    from fr.config.space import located
+    2026-11-19-event-driven-a-la-carte R9, R13). `fr repair` is a mover, so the old path
+    is read on both sides of S1's transition gate (spec 2026-11-28-s1-followups R3)."""
+    from fr.artifacts.paths import config_kind_path
+    from fr.config.space import old_path
 
-    return located(Path(repo_root), "plan-config")
+    root = Path(repo_root)
+    return old_path(root, "plan-config") or config_kind_path(root, "plan-config")
 
 
 def repairable_plan_config(repo_root: Path) -> Path | None:

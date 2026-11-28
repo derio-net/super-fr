@@ -224,15 +224,15 @@ def test_a_dead_repo_layer_binding_refuses_naming_the_file(
     bf.install(monkeypatch, bf.ScriptedProber(CATALOGUE, dead={"prov/std": None}))
     repo, shipped = _grouped(env)
     _write_repo_models(repo, "opencode:\n  standard: prov/std\n")
-    repo_models = (repo / "docs/superpowers/models.yaml").read_bytes()
+    repo_models = (repo / ".fr/models.yaml").read_bytes()
     cursor = run_path(repo, "r1").read_bytes()
     journal = _plan_journal(repo).read_bytes()
 
     result = _advance(repo, shipped)
 
     assert result.exit_code == 2, result.output
-    assert "docs/superpowers/models.yaml" in result.output
-    assert (repo / "docs/superpowers/models.yaml").read_bytes() == repo_models
+    assert ".fr/models.yaml" in result.output
+    assert (repo / ".fr/models.yaml").read_bytes() == repo_models
     assert not (env / ".config" / "fr" / "models.yaml").exists()
     assert run_path(repo, "r1").read_bytes() == cursor
     assert _plan_journal(repo).read_bytes() == journal

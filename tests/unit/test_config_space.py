@@ -31,6 +31,10 @@ def _home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _push_orphan(root: Path, branch: str, files: dict[str, str]) -> None:
     """An orphan *branch* on origin holding *files*; the local branch is deleted again."""
+    if branch == "fr-config" and ".fr/settings.yaml" not in files:
+        # The switch in step with the old copy, as fr writes it: an fr-config holding no
+        # settings is read as no switch past S1's gate (spec 2026-11-28-s1-followups R10).
+        files = {".fr/settings.yaml": QUIET, **files}
     back = git(root, "symbolic-ref", "--short", "HEAD").strip()
     git(root, "checkout", "-q", "--orphan", branch)
     git(root, "rm", "-rfq", ".")
@@ -99,6 +103,7 @@ def test_repo_at_default_reads_the_default_branch_never_the_working_tree(tmp_pat
     assert config_space(root).at_default("ci.yaml") == "gate_checks: [a]\n"
 
 
+@pytest.mark.s1_open  # a quiet repo with no fr-config yet: the transition window (R10)
 def test_quiet_space_is_the_fr_config_worktree(tmp_path: Path, _home: Path) -> None:
     root = quiet_repo(tmp_path)
     space = config_space(root)
@@ -117,6 +122,7 @@ def test_quiet_at_default_reads_the_fr_config_tip(tmp_path: Path) -> None:
     assert config_space(root).at_default(".fr/docs.yaml") is None
 
 
+@pytest.mark.s1_open  # a quiet repo with no fr-config yet: the transition window (R10)
 def test_quiet_with_no_fr_config_yet_refuses_rather_than_reading_no_configuration(
     tmp_path: Path,
 ) -> None:
@@ -591,6 +597,7 @@ def test_triage_config_read_propagates_a_forge_error_on_the_switch_probe() -> No
         read_config_lenient(_Failing(ForgeError("HTTP 500: boom")), "o/r")  # type: ignore[arg-type]
 
 
+@pytest.mark.s1_open  # a quiet repo with no fr-config yet: the transition window (R10)
 def test_the_queue_refuses_its_required_checks_when_fr_config_is_missing(
     tmp_path: Path,
 ) -> None:

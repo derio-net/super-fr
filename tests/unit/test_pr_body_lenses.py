@@ -205,7 +205,7 @@ def test_a_shape_fr_cannot_read_is_named_never_called_predating(tmp_path: Path) 
     section = _section(root, state)
     assert section.startswith("fr could not read the workflow shape: unknown workflow shape")
     assert "predates" not in section
-    shapes = root / "docs" / "superpowers" / "workflows"
+    shapes = root / ".fr" / "workflows"
     shapes.mkdir(parents=True)
     (shapes / "broken.yaml").write_text("steps: [unclosed\n")
     state.workflow = "broken@1"

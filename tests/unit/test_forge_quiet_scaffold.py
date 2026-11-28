@@ -11,6 +11,7 @@ from fr.acceptance import scaffold
 from fr.cli import app
 from typer.testing import CliRunner
 
+from tests.unit.config_paths import profiles_file
 from tests.unit.settings_repo import land_on_main, make_repo
 
 WORKFLOW = ".github/workflows/acceptance-report.yml"
@@ -68,7 +69,7 @@ def test_refresh_ci_drops_the_debt_steps_once_issues_are_off(
 ) -> None:
     root = make_repo(tmp_path)
     (root / ".devcontainer").mkdir()
-    (root / ".devcontainer" / "fr-profiles.yaml").write_text(
+    profiles_file(root).write_text(
         "schema_version: 2\nforge: {type: github}\nci: {type: github-actions}\n"
         "tracking: {type: github}\n"
     )

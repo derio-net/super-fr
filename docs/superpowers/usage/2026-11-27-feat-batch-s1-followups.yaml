@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-27-feat-batch-s1-followups
+captures:
+- host: h-16251446
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-28T08:09:39+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 60d0bf5c-32b1-4550-a539-8668d011d1d8
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 70
+        cache_write: 328364
+        cache_read: 5027839
+        output: 30918
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 10
+      other:
+        usd: null
+        turns: 9
+      paperwork:
+        usd: null
+        turns: 14
+    steps:
+      (outside run):
+        usd: null
+        turns: 4
+        input: 10
+        cache_write: 106804
+        cache_read: 402277
+        output: 694
+      brainstorm:
+        usd: null
+        turns: 29
+        input: 60
+        cache_write: 221560
+        cache_read: 4625562
+        output: 30224
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 4
+          input: 10
+          cache_write: 106804
+          cache_read: 402277
+          output: 694
+        brainstorm:
+          usd: null
+          turns: 29
+          input: 60
+          cache_write: 221560
+          cache_read: 4625562
+          output: 30224

@@ -256,3 +256,18 @@ def test_cli_smoke(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0, result.output
     assert not (home / hermes.HOOKS_SUBDIR).exists()
+
+
+def test_install_writes_fr_version_beside_the_hook_tree(tmp_path: Path) -> None:
+    """The Hermes hook tree has no plugin.json, so its edit gate reads its release from
+    `VERSION` at the tree's root (spec 2026-11-28-s1-followups R7)."""
+    import fr
+
+    home = tmp_path / "hermes-home"
+    home.mkdir()
+    hermes.install(REPO_ROOT, home)
+    version = home / hermes.HOOKS_SUBDIR / "VERSION"
+    assert version.read_text().strip() == fr.__version__
+    # the edit gate's library finds it at `$lib/../VERSION`
+    lib = home / hermes.HOOKS_SUBDIR / "lib"
+    assert (lib / ".." / "VERSION").resolve() == version.resolve()

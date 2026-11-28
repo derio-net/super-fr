@@ -192,3 +192,50 @@ def test_under_quiet_the_validator_creates_no_fr_branch_or_worktree(
     assert branches == ""
     assert not (home / ".cache" / "fr" / "worktrees").exists()
     assert len(git(root, "worktree", "list", "--porcelain").split("worktree ")) == 2
+
+
+# --- spec 2026-11-28-s1-followups R7: the old plan-config past S1's transition ------------
+
+OLD_PROFILE = 'plan:\n  filename: "YYYY-MM-DD--{layer}--{details}.md"\n'
+
+
+def _repo_with_only_the_old_plan_config(root: Path) -> None:
+    """A plan whose name passes the default profile and fails the old file's `{layer}` one,
+    so the exit code says which profile validated it."""
+    (root / "docs/superpowers/plan-config.yaml").write_text(OLD_PROFILE)
+    (root / "docs/superpowers/plans/2026-01-01-x.md").write_text("# x\n\n**Status:** Draft\n")
+
+
+def _paths_fr(bindir: Path, ended: str | None) -> None:
+    line = "" if ended is None else f"echo FR_OLD_PATHS_ENDED={ended}\n"
+    _fake_fr(bindir, "echo FR_PLACEMENT=repo\n" + line)
+
+
+@pytest.mark.parametrize("ended", ["1", None], ids=["ended", "key-absent"])
+def test_past_the_end_the_old_plan_config_is_ignored_with_one_line(
+    repo: Path, tmp_path: Path, ended: str | None
+) -> None:
+    _repo_with_only_the_old_plan_config(repo)
+    _paths_fr(tmp_path / "bin", ended)
+    res = _run(repo, tmp_path / "bin")
+    assert res.returncode == 0, (res.stdout, res.stderr)
+    lines = [ln for ln in res.stderr.splitlines() if "plan-config.yaml" in ln]
+    assert len(lines) == 1, res.stderr
+    assert "fr migrate artifacts --yes" in lines[0]
+    assert "ignored" in lines[0]
+
+
+def test_before_the_end_the_old_plan_config_is_read(repo: Path, tmp_path: Path) -> None:
+    _repo_with_only_the_old_plan_config(repo)
+    _paths_fr(tmp_path / "bin", "0")
+    res = _run(repo, tmp_path / "bin")
+    assert res.returncode == 1, (res.stdout, res.stderr)
+    assert "malformed filename" in res.stderr
+    assert "old location" in res.stderr
+
+
+def test_without_a_usable_fr_the_transition_counts_as_ended(repo: Path) -> None:
+    _repo_with_only_the_old_plan_config(repo)
+    res = _run(repo, None)
+    assert res.returncode == 0, (res.stdout, res.stderr)
+    assert "fr migrate artifacts --yes" in res.stderr

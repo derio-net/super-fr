@@ -3,7 +3,7 @@ R15, R16).
 
     repo .fr/<kind>/<name>.yaml            (workflows, verifications; never lenses)
     $FR_SHIPPED_DEFAULTS_DIR/<kind>/
-    $FR_SHIPPED_<KIND>_DIR                 (kept until R14's release, with a notice)
+    $FR_SHIPPED_<KIND>_DIR                 (before fr 9.2 only, with a notice)
     the wheel, fr/defaults/<kind>/
     the marketplace clone, plugins/super-fr/defaults/<kind>/
 """
@@ -30,6 +30,13 @@ def clean(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     for var in (_shipped.DEFAULTS_ENV_VAR, *_shipped.LEGACY_ENV_VARS.values()):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(_shipped, "_LEGACY_NOTICED", set())
+    # These tests are of the per-kind variables before the end of S1's transition: they
+    # force that side of the gate, so a release into 9.2 turns none of them red (spec
+    # 2026-11-28-s1-followups R10). The ended side is tested below.
+    from fr.config import transition
+
+    monkeypatch.delenv(transition.ENV, raising=False)
+    monkeypatch.setattr(transition, "refusing", lambda: False)
     return home
 
 
@@ -249,3 +256,82 @@ def test_lenses_keep_the_lenses_yaml_override(
 
     assert "simplicity" not in lenses
     assert {"security", "tests", "errors"} <= set(lenses)
+
+
+# ── past the end of S1's transition: the per-kind variables are refused (R6) ──────────
+
+
+@pytest.mark.parametrize(
+    ("argv", "var", "kind"),
+    [
+        (["workflow", "check", "--all"], "FR_SHIPPED_WORKFLOWS_DIR", "workflows"),
+        (["verification", "list"], "FR_SHIPPED_VERIFICATIONS_DIR", "verifications"),
+        (["lenses", "list"], "FR_SHIPPED_LENSES_DIR", "lenses"),
+    ],
+)
+def test_past_the_gate_a_per_kind_variable_is_refused_through_its_kinds_error(
+    clean: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    argv: list[str],
+    var: str,
+    kind: str,
+) -> None:
+    import subprocess
+
+    from fr.cli import app
+    from fr.config import transition
+    from typer.testing import CliRunner
+
+    monkeypatch.setattr(transition, "refusing", lambda: True)
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    monkeypatch.chdir(repo)
+    (tmp_path / "legacy").mkdir()
+    monkeypatch.setenv(var, str(tmp_path / "legacy"))
+    result = CliRunner().invoke(app, argv, env={"FR_REPO_ROOT": str(repo)})
+    assert result.exit_code == 2, result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    flat = " ".join(result.output.split())
+    assert var in flat and f"FR_SHIPPED_DEFAULTS_DIR/{kind}/" in flat, flat
+    assert "Traceback" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("resolver", "error"),
+    [
+        ("fr.workflow.resolve:shipped_workflow_dirs", "fr.workflow.model:WorkflowError"),
+        (
+            "fr.verification.resolve:shipped_verification_dirs",
+            "fr.verification.model:StrategyError",
+        ),
+        ("fr.lenses.resolve:shipped_lens_dir", "fr.lenses.model:LensError"),
+    ],
+)
+def test_past_the_gate_each_resolver_raises_its_own_error_type(
+    clean: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, resolver: str, error: str
+) -> None:
+    import importlib
+
+    from fr.config import transition
+
+    monkeypatch.setattr(transition, "refusing", lambda: True)
+    for var in _shipped.LEGACY_ENV_VARS.values():
+        monkeypatch.setenv(var, str(tmp_path))
+    module, name = resolver.split(":")
+    err_module, err_name = error.split(":")
+    err_type = getattr(importlib.import_module(err_module), err_name)
+    with pytest.raises(err_type) as caught:
+        getattr(importlib.import_module(module), name)()
+    assert "FR_SHIPPED_DEFAULTS_DIR" in str(caught.value)
+
+
+def test_past_the_gate_without_a_per_kind_variable_nothing_is_refused(
+    clean: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.config import transition
+
+    monkeypatch.setattr(transition, "refusing", lambda: True)
+    _workflow(tmp_path / "root" / "workflows", "from-root")
+    monkeypatch.setenv("FR_SHIPPED_DEFAULTS_DIR", str(tmp_path / "root"))
+    assert _steps(tmp_path / "repo") == ["from-root"]

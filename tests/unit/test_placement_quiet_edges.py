@@ -22,7 +22,7 @@ from fr.settings import SettingsError
 from typer.testing import CliRunner
 
 from tests.unit.settings_repo import git, make_repo
-from tests.unit.test_placement_quiet import QUIET, push_fr_branch
+from tests.unit.test_placement_quiet import QUIET, push_quiet_switch
 
 
 @pytest.fixture(autouse=True)
@@ -52,7 +52,7 @@ def test_a_marker_written_before_quiet_refuses_once_the_switch_appears(tmp_path:
     data = json.loads(marker.read_text())
     del data["placement"]  # as an fr that predates plan 3 wrote it
     marker.write_text(json.dumps(data))
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     with pytest.raises(SettingsError, match="placement: repo.*placement: quiet"):
         space_for(state.worktree)
 
@@ -98,7 +98,7 @@ def _unrelated_local_fr(repo: Path) -> None:
 
 def test_an_unrelated_local_fr_branch_is_refused_not_adopted(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     _unrelated_local_fr(repo)
     with pytest.raises(SettingsError, match="neither an ancestor nor a descendant"):
         ensure_worktree(repo)
@@ -106,7 +106,7 @@ def test_an_unrelated_local_fr_branch_is_refused_not_adopted(tmp_path: Path) -> 
 
 def test_a_local_fr_behind_origin_is_still_adopted(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     git(repo, "branch", "-q", "fr", "refs/remotes/origin/fr")
     assert (ensure_worktree(repo) / "settings.yaml").is_file()
 
@@ -125,7 +125,7 @@ def test_init_quiet_refuses_a_preexisting_local_fr_branch(tmp_path: Path) -> Non
 
 def test_apply_to_is_refused_by_the_switch_alone_without_a_worktree(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     git(repo, "checkout", "-q", "-b", "feat/q")  # space_for would create the fr worktree
     code, out = _invoke(repo, "apply", "--all", "--to", "vk")
     assert code == 2, out
@@ -139,7 +139,7 @@ def test_apply_to_is_refused_by_the_switch_alone_without_a_worktree(tmp_path: Pa
 
 def test_the_first_fr_commit_records_the_owning_branch(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     state = HostWorktreeTarget(repo).up(profile=None, branch="feat/q")
     code, out = _invoke(
         state.worktree, "plan", "create", "--slug", "2026-11-12-q", "--target-repo", "derio-net/q"
@@ -153,7 +153,7 @@ def test_the_first_fr_commit_records_the_base_the_branch_claimed_from(tmp_path: 
     """Review p5-r1: BASE, beside OWNER in the same commit, is the branch's merge base
     with the default ref, so commits already there never count as the feature's."""
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     main = git(repo, "rev-parse", "origin/main").strip()
     state = HostWorktreeTarget(repo).up(profile=None, branch="feat/q")
     code, out = _invoke(
@@ -169,7 +169,7 @@ def test_the_first_fr_commit_records_the_base_the_branch_claimed_from(tmp_path: 
 def test_a_feature_root_owned_by_another_branch_is_refused(tmp_path: Path) -> None:
     """gh#1419 across clones: the other branch need not exist here, its OWNER file does."""
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     state = HostWorktreeTarget(repo).up(profile=None, branch="feat/q")
     fr_root = ensure_worktree(state.worktree)
     owner = fr_root / "features" / "feat__q" / "OWNER"

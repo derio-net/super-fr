@@ -169,6 +169,7 @@ def _run(root: Path, *args: str, **kw: Any) -> list[str]:
 # --- repo -> quiet --------------------------------------------------------------------
 
 
+@pytest.mark.s1_open  # seeds the old form: the transition window (spec 2026-11-28-s1-followups R10)
 def test_move_to_quiet_copies_verifies_switches_and_removes(tmp_path: Path) -> None:
     root = repo_with_artifacts(tmp_path)
     before = fold(root, ref="refs/remotes/origin/main", include_pending=False)
@@ -224,6 +225,7 @@ def test_a_second_move_to_the_same_placement_is_a_no_op(tmp_path: Path) -> None:
     assert git(_origin(root), "rev-parse", "fr").strip() == tip
 
 
+@pytest.mark.s1_open  # seeds the old form: the transition window (spec 2026-11-28-s1-followups R10)
 @pytest.mark.parametrize("step", ["copy", "verify", "switch", "remove"])
 def test_a_move_killed_after_any_step_completes_on_rerun_without_duplication(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, step: str
@@ -351,6 +353,7 @@ def _land(root: Path, branch: str) -> None:
     git(root, "fetch", "-q", "origin")
 
 
+@pytest.mark.s1_open  # seeds the old form: the transition window (spec 2026-11-28-s1-followups R10)
 def test_move_back_to_repo_copies_through_a_branch_and_switches_by_a_new_commit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

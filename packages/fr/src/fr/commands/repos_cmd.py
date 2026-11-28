@@ -20,6 +20,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from fr.artifacts.paths import LEGACY_CONFIG, REPO, config_kind_path
+from fr.config.movers import mover
 from fr.repos import (
     DEFAULT_MANIFEST,
     ManifestError,
@@ -63,14 +64,15 @@ def _collection(manifest_path: Path, args: list[str]) -> list[RepoEntry]:
 
 
 def _sync_one(repo: str, root: Path, *, yes: bool, force: bool) -> None:
-    """Instrument one checkout (review p4-r9). The file is read through
-    `fr.config.space.located`, so the old `docs/superpowers/plan-config.yaml` counts as the
-    repo's file until it moves (R13), and `--force` under `repo` writes the new path and
+    """Instrument one checkout (review p4-r9). The old `docs/superpowers/plan-config.yaml`
+    is read through the mover helper `fr.config.space.old_path`, so it counts as the
+    repo's file until it moves (R13) on both sides of S1's transition gate (spec
+    2026-11-28-s1-followups R3), and `--force` under `repo` writes the new path and
     removes the old one (never both, R12). Under quiet and stealth the file lives on the
     configuration branch, which changes only by a pull request (`fr.config.change`,
     honouring `git.pr`): fr proposes it there, or refuses naming how to create the space,
     and never writes the configuration checkout directly."""
-    from fr.config.space import config_space, link_problem, located
+    from fr.config.space import config_space, link_problem, old_path
 
     space = config_space(root)
     old = root / LEGACY_CONFIG["plan-config"]
@@ -80,7 +82,7 @@ def _sync_one(repo: str, root: Path, *, yes: bool, force: bool) -> None:
         if why is not None:  # never read, write or delete through a link (security review)
             console.print(f"REFUSED         {repo}  — {escape(why)}: replace the link first")
             return
-    cfg = located(root, "plan-config")
+    cfg = old_path(root, "plan-config") or target
     if cfg.exists() and not force:
         console.print(f"SKIP (exists)   {repo}  — {cfg}")
         return
@@ -127,6 +129,7 @@ def _propose(repo: str, root: Path, *, yes: bool) -> None:
 
 
 @repos_app.command()
+@mover  # a mover of the old plan-config at every version (spec 2026-11-28-s1-followups R3)
 def sync(
     repos: list[str] = typer.Argument(None, help="owner/repo to instrument (repeatable)."),
     manifest: Path = typer.Option(
