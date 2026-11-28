@@ -343,6 +343,54 @@ def test_a_closed_judged_pr_is_carried_from_the_previous_facts_without_a_call() 
     assert [(p.number, p.state) for p in facts.judged_prs] == [(7, "MERGED")]
 
 
+# R10 (spec 2026-11-28-triage-privacy §D): a reopened PR when the open-PR list was cut.
+
+
+def _cut_forge(state: str) -> FakeForge:
+    """A forge whose open-PR list holds exactly one record (an unrelated PR), and whose
+    judged PR #7 is now *state*."""
+    other = _pr_closing(owner="o", name="repo", number=1, pr_number=99)
+    other["closingIssuesReferences"] = []
+    forge = _past_limit_forge(state)
+    forge.prs[REPO] = [other]
+    return forge
+
+
+def _closed_before() -> Any:
+    first, _ = collect_facts_counted(_past_limit_forge("CLOSED"), SCOPE, now=NOW, judged=["repo#7"])
+    return first
+
+
+def test_a_closed_judged_pr_is_carried_while_the_open_list_is_short() -> None:
+    second = _cut_forge("OPEN")
+    facts, stats = collect_facts_counted(
+        second, SCOPE, now=NOW, judged=["repo#7"], previous=_closed_before(), pr_limit=2
+    )
+    assert second.called("view_issue") == [] and second.called("view_pr") == []
+    assert [(p.number, p.state) for p in facts.judged_prs] == [(7, "CLOSED")]
+    assert stats.viewed == 0
+
+
+def test_a_closed_judged_pr_is_viewed_again_when_the_open_list_was_cut() -> None:
+    second = _cut_forge("OPEN")
+    facts, stats = collect_facts_counted(
+        second, SCOPE, now=NOW, judged=["repo#7"], previous=_closed_before(), pr_limit=1
+    )
+    assert len(second.called("view_issue")) == 1 and len(second.called("view_pr")) == 1
+    assert [(p.number, p.state) for p in facts.judged_prs] == [(7, "OPEN")]
+    assert stats.viewed == 2
+
+
+def test_a_merged_judged_pr_is_carried_even_when_the_open_list_was_cut() -> None:
+    first, _ = collect_facts_counted(_past_limit_forge("MERGED"), SCOPE, now=NOW, judged=["repo#7"])
+    second = _cut_forge("OPEN")
+    facts, _ = collect_facts_counted(
+        second, SCOPE, now=NOW, judged=["repo#7"], previous=first, pr_limit=1
+    )
+    assert second.called("view_issue") == [] and second.called("view_pr") == []
+    assert [(p.number, p.state) for p in facts.judged_prs] == [(7, "MERGED")]
+
+
 def test_an_open_judged_pr_past_the_limit_is_viewed_again() -> None:
     first, _ = collect_facts_counted(_past_limit_forge("OPEN"), SCOPE, now=NOW, judged=["repo#7"])
     second = _past_limit_forge("MERGED")

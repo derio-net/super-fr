@@ -790,6 +790,7 @@ def collect_facts_counted(
     associations: Associations = {}
     ignored: dict[str, tuple[str, ...]] = {}
     comment_facts: dict[tuple[str, int], CommentFacts] = {}
+    open_cut: set[str] = set()  # repos whose open-PR list returned `pr_limit` records
     closed_hits: list[StaleInProgress] = []
     gated: list[PullRequest] = []
     gated_unread: list[GatedUnread] = []
@@ -800,6 +801,8 @@ def collect_facts_counted(
             issues = forge.list_issues(repo=repo, state="open", limit=issue_limit)
             prs = forge.list_prs(repo=repo, state="all", limit=pr_limit)
             current = forge.list_open_prs(repo=repo, limit=pr_limit)
+            if len(current) >= pr_limit:
+                open_cut.add(repo)  # a reopened PR may sit past the cut (R10)
             repo_config, dropped = read_config_lenient(forge, repo)
             trusted = claim_trusted(repo_config or TriageConfig(), viewer)
             issues = _with_associations(
@@ -901,7 +904,8 @@ def collect_facts_counted(
     finished_prs = {
         (p.repo.lower(), p.number): p
         for p in (previous.judged_prs if previous else [])
-        if p.state != "OPEN"
+        # A CLOSED PR may have been reopened past a cut open-PR list: view it again (R10).
+        if p.state == "MERGED" or (p.state == "CLOSED" and p.repo not in open_cut)
     }
     for repo, number in _judged_elsewhere(judged, open_keys, [*collected, *sorted(keep)]):
         if prior is not None and repo in keep:
