@@ -3,7 +3,7 @@ run: 2026-11-28-feat-batch-silent-failures
 workflow: fr-goal@1
 branch: feat/batch-silent-failures
 started: '2026-11-28T09:18:20+00:00'
-cursor: plan-review
+cursor: implement
 steps:
   brainstorm:
     state: done
@@ -46,7 +46,11 @@ steps:
           returned: '2026-11-28T09:43:17+00:00'
           outcome: done
   plan-review:
-    state: pending
+    state: done
+    at: '2026-11-28T09:43:31+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
   implement:
     state: pending
     members:
