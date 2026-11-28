@@ -12824,6 +12824,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-28T09:06:44.052978Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -14201,6 +14208,13 @@ batches:
     runner: herdr
     handle: w3X:p6
     branch: feat/batch-ops-gate-truth
+  - kind: conflict
+    at: '2026-11-28T09:06:58.622435Z'
+    head: 08f3a40e1e9d8140a4b2b3907df2aa93d33c11a3
+    paths:
+    - docs/explainers/fr-triage.md
+    delivered: session
+    handle: derio-net/super-fr/run/batch-ops-gate-truth
 - id: silent-failures
   title: 'Silent failures: errors that report success or lose their reason'
   ids:
@@ -14424,6 +14438,8 @@ batches:
     pr: 1747
     head: 346f5fa2e433d3c961339c1a19322896dbdf5fcf
     patch_id: ccc2cecebf702fbc73afd129efe2d761c597671d
+  - kind: post_merge
+    at: '2026-11-28T09:06:34.188946Z'
 - id: s1-followups
   title: 'S1 follow-ups: refuse old paths, config-branch executables, test sites, import-time home'
   ids:
@@ -16058,6 +16074,11 @@ queues:
     patch_id: ccc2cecebf702fbc73afd129efe2d761c597671d
     base: 57eefe069780f09c8d513fa97a0fa0c5f73f19c4
     parent: 57eefe069780f09c8d513fa97a0fa0c5f73f19c4
+  - kind: queue_land
+    at: '2026-11-28T09:05:23.559192Z'
+    main: c4e69ecd007fb9f1e1f6cb942dc05e3bc8179e69
+    entries:
+    - batch: board-session-state
 queue_requests:
 - kind: queue_add
   at: '2026-11-27T15:25:05.595235Z'
