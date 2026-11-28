@@ -36,7 +36,7 @@ def _disabled_and_placement(repo_root: Path) -> tuple[list[str], str]:
 
 
 def refuse_disabled(name: str, repo_root: Path) -> None:
-    """Raise `WorkflowError` when *name* is disabled by the repo's settings, naming the
+    """Raise `WorkflowError` when *name* is listed in `workflows.disabled`, naming the
     setting, the file it lives in, the shapes still available and how to choose one;
     return None otherwise."""
     from fr.workflow.resolve import discover_names
