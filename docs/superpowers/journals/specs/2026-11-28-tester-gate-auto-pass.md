@@ -143,3 +143,8 @@ row_kinds:
 run_gate: developer
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=finding scope=spec id=s8-resolved-2 created=2026-11-28T13:13:18+00:00 state=open resolves=s8 tracked_by=https://github.com/derio-net/super-fr/issues/1774 -->
+### s8-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1774] · resolves s8: The board hint stays false for gated PRs with no run cursor
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1774.
