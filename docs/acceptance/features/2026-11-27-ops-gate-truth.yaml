@@ -93,9 +93,13 @@ rows:
       names, and a (rows: ...) id that names no row of the spec'
     origin:
     - spec:2026-11-27-ops-gate-truth#R16
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_plan_self_review_verification.py#test_a_devops_row_no_devops_step_names_warns
+      - super-fr:tests/unit/test_plan_self_review_verification.py#test_an_unknown_rows_id_warns
+    status: ci
+    notes: 'unit tests with fake ports and fixture repos, run in this PR''s CI (spec
+      Verification: none)'
   - id: run-definition-of-done
     capability: 'fr run dod: derived Definition of Done'
     acceptance: fr derives a run's Definition of Done (each post-merge gate's ops, steps
