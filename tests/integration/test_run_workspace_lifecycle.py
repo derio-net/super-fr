@@ -29,6 +29,8 @@ from fr.isolation.types import load_state
 from fr.run.model import load_run_state, run_path
 from typer.testing import CliRunner
 
+from tests.unit.shipped_env import defaults_root
+
 runner_cli = CliRunner()
 
 _SHAPE = """
@@ -82,7 +84,11 @@ def _fr(root: Path, shipped: Path, argv: list[str]):
     return runner_cli.invoke(
         app,
         argv,
-        env={**os.environ, "FR_REPO_ROOT": str(root), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)},
+        env={
+            **os.environ,
+            "FR_REPO_ROOT": str(root),
+            "FR_SHIPPED_DEFAULTS_DIR": str(defaults_root(shipped, "workflows")),
+        },
     )
 
 

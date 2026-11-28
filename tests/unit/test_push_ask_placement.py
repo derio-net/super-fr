@@ -22,7 +22,7 @@ from typer.testing import CliRunner
 
 from tests.unit.settings_repo import make_repo
 from tests.unit.stealth_repo import make_tracking, stealth_home
-from tests.unit.test_placement_quiet import QUIET, push_fr_branch
+from tests.unit.test_placement_quiet import QUIET, push_quiet_switch
 
 __all__ = ["stealth_home"]
 
@@ -48,7 +48,7 @@ def _journal(ws: Path) -> None:
 
 def test_quiet_finds_the_debug_journal_on_fr(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     ws = HostWorktreeTarget(repo).up(profile=None, branch="fix/q").worktree
     _journal(ws)
     assert approval_journal(ws) == ApprovalJournal("debug", SLUG)
@@ -68,7 +68,7 @@ def test_stealth_finds_the_debug_journal_in_the_tracking_repo(tmp_path: Path) ->
 
 def test_quiet_with_no_debug_journal_says_so(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     ws = HostWorktreeTarget(repo).up(profile=None, branch="fix/n").worktree
     found = approval_journal(ws)
     assert isinstance(found, str) and "added no debug journal" in found

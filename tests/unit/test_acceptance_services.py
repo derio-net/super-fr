@@ -14,6 +14,7 @@ from fr.cli import app
 from typer.testing import CliRunner
 
 from tests.unit.acceptance_helpers import make_repo, row
+from tests.unit.config_paths import profiles_file
 
 runner = CliRunner()
 PROFILES = "profiles:\n  dev:\n    purpose: x\n"
@@ -28,9 +29,7 @@ def _repo(tmp_path: Path, services: str, remote: str = GITHUB) -> Path:
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
     subprocess.run(["git", "remote", "add", "origin", remote], cwd=root, check=True)
     (root / ".devcontainer").mkdir()
-    (root / ".devcontainer" / "fr-profiles.yaml").write_text(
-        PROFILES + "schema_version: 2\n" + services
-    )
+    profiles_file(root).write_text(PROFILES + "schema_version: 2\n" + services)
     return root
 
 
@@ -65,9 +64,7 @@ class TestCiNone:
     ) -> None:
         root = make_repo(tmp_path, row(id="target", status="unwired"), ci=True)
         (root / ".devcontainer").mkdir()
-        (root / ".devcontainer" / "fr-profiles.yaml").write_text(
-            PROFILES + "schema_version: 2\nci: {type: none}\n"
-        )
+        profiles_file(root).write_text(PROFILES + "schema_version: 2\nci: {type: none}\n")
         result = _invoke(
             root, monkeypatch, "set-status", "--id", "target", "--status", "ci", "--notes", "n"
         )
@@ -227,9 +224,7 @@ class TestMalformedCiDeclarationRefuses:
     ) -> None:
         root = make_repo(tmp_path, row(id="target", status="unwired"), ci=True)
         (root / ".devcontainer").mkdir()
-        (root / ".devcontainer" / "fr-profiles.yaml").write_text(
-            PROFILES + "schema_version: 2\n" + block
-        )
+        profiles_file(root).write_text(PROFILES + "schema_version: 2\n" + block)
         matrix = root / "docs" / "acceptance" / "features" / "s.yaml"
         before = matrix.read_text()
         result = _invoke(
@@ -242,9 +237,7 @@ class TestMalformedCiDeclarationRefuses:
     def test_add_ci_refused(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         root = make_repo(tmp_path, "", ci=True)
         (root / ".devcontainer").mkdir()
-        (root / ".devcontainer" / "fr-profiles.yaml").write_text(
-            PROFILES + "schema_version: 2\nci: none\n"
-        )
+        profiles_file(root).write_text(PROFILES + "schema_version: 2\nci: none\n")
         result = _invoke(
             root, monkeypatch, "add", "--id", "n", "--capability", "C",
             "--acceptance", "A", "--status", "ci",
@@ -262,7 +255,7 @@ class TestFrOnlyScaffoldIsNotCi:
         subprocess.run(["git", "init", "-q"], cwd=root, check=True)
         subprocess.run(["git", "remote", "add", "origin", GITHUB], cwd=root, check=True)
         (root / ".devcontainer").mkdir()
-        (root / ".devcontainer" / "fr-profiles.yaml").write_text(PROFILES + "backend: github\n")
+        profiles_file(root).write_text(PROFILES + "backend: github\n")
         wf = root / ".github" / "workflows"
         wf.mkdir(parents=True)
         (wf / "acceptance-report.yml").write_text("on: push\n")

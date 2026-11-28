@@ -18,6 +18,7 @@ from fr.settings import (
     require_forge,
 )
 
+from tests.unit.config_paths import profiles_file
 from tests.unit.settings_repo import git, land_on_main, make_repo
 
 pytestmark = pytest.mark.own_artifacts
@@ -28,7 +29,7 @@ NONE = "schema_version: 2\ntracking: {type: none}\n"
 
 def _declare_tracking_none(root: Path) -> None:
     (root / ".devcontainer").mkdir(exist_ok=True)
-    (root / ".devcontainer" / "fr-profiles.yaml").write_text(NONE)
+    profiles_file(root).write_text(NONE)
     git(root, "add", "-A")
     git(root, "commit", "-qm", "tracking none")
     git(root, "push", "-q", "origin", "main")
@@ -114,7 +115,7 @@ def test_a_malformed_tracking_declaration_refuses_strictly_and_allows_leniently(
 
     root = make_repo(tmp_path)
     (root / ".devcontainer").mkdir()
-    (root / ".devcontainer" / "fr-profiles.yaml").write_text(": : not yaml [\n")
+    profiles_file(root).write_text(": : not yaml [\n")
     with pytest.raises(ServicesError):
         forge_allows(root, "issues")
     assert forge_allows(root, "issues", lenient=True) is True

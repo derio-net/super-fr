@@ -27,6 +27,7 @@ from fr.run.ci_evidence import (
 )
 from fr.run.code_tree import code_tree
 
+from tests.unit.config_paths import profiles_file
 from tests.unit.fakes import FakeGhClient
 from tests.unit.test_commit_checks import BASE, MomentGh, _sha
 
@@ -339,7 +340,7 @@ def test_ci_none_is_refused_before_any_forge_call(tmp_path: Path) -> None:
 def test_a_non_github_forge_is_refused_before_any_forge_call(tmp_path: Path) -> None:
     repo, client, _ = _world(tmp_path)
     (repo / ".devcontainer").mkdir()
-    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
+    profiles_file(repo).write_text(
         "schema_version: 2\nforge: {type: gitlab, host: gitlab.example.com}\n"
     )
     _commit(repo, "gitlab")

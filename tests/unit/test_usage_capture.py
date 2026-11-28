@@ -17,6 +17,7 @@ from fr.usage.file import archived_usage_path, host_label, load_usage, usage_pat
 from typer.testing import CliRunner
 
 from tests.unit.requirements_support import DESIGN_SHAPE_SECTION, write_shape_file
+from tests.unit.shipped_env import defaults_root
 from tests.unit.test_run_cli import _repo, _write_shape
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "usage"
@@ -69,7 +70,7 @@ def _invoke(repo: Path, shipped: Path, argv: list[str], **extra: str):
     env = {
         **os.environ,
         "FR_REPO_ROOT": str(repo),
-        "FR_SHIPPED_WORKFLOWS_DIR": str(shipped),
+        "FR_SHIPPED_DEFAULTS_DIR": str(defaults_root(shipped, "workflows")),
         **extra,
     }
     return CliRunner().invoke(app, argv, env=env)

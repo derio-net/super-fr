@@ -18,6 +18,7 @@ from fr.commands import gate_cmd
 from fr.verification.labels import gate_pass_comment
 from typer.testing import CliRunner
 
+from tests.unit.config_paths import profiles_file
 from tests.unit.fakes import FakeGhClient
 
 REPO = "derio-net/super-fr"
@@ -398,9 +399,7 @@ def test_yes_applies_the_plan_once_and_a_second_run_writes_nothing(
 def test_yes_under_tracking_none_labels_the_pr_only(backfill_env: Any, tmp_path: Path) -> None:
     root, fake, manifest = _applied_env(backfill_env, tmp_path)
     (root / ".devcontainer").mkdir()
-    (root / ".devcontainer" / "fr-profiles.yaml").write_text(
-        "schema_version: 2\ntracking: {type: none}\n"
-    )
+    profiles_file(root).write_text("schema_version: 2\ntracking: {type: none}\n")
 
     result = CliRunner().invoke(app, ["gate", "backfill", "--from", str(manifest), "--yes"])
 
@@ -437,7 +436,7 @@ def test_yes_refuses_an_unreadable_services_declaration_before_any_write(
 ) -> None:
     root, fake, manifest = _applied_env(backfill_env, tmp_path)
     (root / ".devcontainer").mkdir()
-    (root / ".devcontainer" / "fr-profiles.yaml").write_text(": : not yaml [\n")
+    profiles_file(root).write_text(": : not yaml [\n")
 
     result = CliRunner().invoke(app, ["gate", "backfill", "--from", str(manifest), "--yes"])
 
@@ -688,9 +687,7 @@ def test_p3_r1_tracking_none_in_the_checkout_still_writes_the_ledger(
     _with_tracker(fake)
     root = make_repo(tmp_path)
     (root / ".devcontainer").mkdir()
-    (root / ".devcontainer" / "fr-profiles.yaml").write_text(
-        "schema_version: 2\ntracking: {type: none}\n"
-    )
+    profiles_file(root).write_text("schema_version: 2\ntracking: {type: none}\n")
     monkeypatch.chdir(root)
     monkeypatch.setattr("fr._hosts.origin_slug", lambda _root: REPO)
     result = _pass("--gate", "tester", "--yes")

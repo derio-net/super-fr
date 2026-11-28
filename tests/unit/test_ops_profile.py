@@ -38,7 +38,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def _declarations(repo: Path) -> Path:
     """Where scaffold wrote them: `.fr/profiles.yaml` (S1 R9), or the old path a test seeded."""
     new = repo / ".fr/profiles.yaml"
-    return new if new.exists() else repo / ".devcontainer/fr-profiles.yaml"
+    return new if new.exists() else repo / ".fr/profiles.yaml"
 
 
 def _profiles(repo: Path) -> dict:
@@ -46,9 +46,9 @@ def _profiles(repo: Path) -> dict:
 
 
 def _declare(repo: Path, *, ops: bool = True) -> None:
-    d = repo / ".devcontainer"
+    d = repo / ".fr"
     d.mkdir(exist_ok=True)
-    (d / "fr-profiles.yaml").write_text(
+    (d / "profiles.yaml").write_text(
         yaml.safe_dump({"profiles": {"ops": {"purpose": "p", "ops": ops}}, "default": "ops"})
     )
 

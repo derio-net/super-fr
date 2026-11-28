@@ -47,6 +47,23 @@ def push_fr_branch(root: Path, settings_text: str | None) -> None:
     git(root, "branch", "-q", "-D", "fr")
 
 
+def push_quiet_switch(root: Path, settings_text: str) -> None:
+    """A quiet switch as `fr settings init --quiet` leaves it before fr 9.2: the orphan
+    `fr` branch holding the old copy AND `fr-config` holding the same bytes at
+    `.fr/settings.yaml`. It reads as quiet on both sides of S1's transition gate (spec
+    2026-11-28-s1-followups R10): for a test that needs a quiet repo, not the old switch."""
+    push_fr_branch(root, settings_text)
+    push_config_branch(root, settings_text)
+
+
+def quiet_repo_both(tmp_path: Path, branch: str = "feat/q") -> Path:
+    """`quiet_repo` with the switch on both branches (`push_quiet_switch`)."""
+    root = make_repo(tmp_path)
+    push_quiet_switch(root, QUIET)
+    git(root, "checkout", "-q", "-b", branch)
+    return root
+
+
 def quiet_repo(tmp_path: Path, branch: str = "feat/q") -> Path:
     root = make_repo(tmp_path)
     push_fr_branch(root, QUIET)

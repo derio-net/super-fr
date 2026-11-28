@@ -27,7 +27,7 @@ from typer.testing import CliRunner
 
 from tests.unit.settings_repo import git, make_repo
 from tests.unit.stealth_repo import make_tracking, stealth_home
-from tests.unit.test_placement_quiet import QUIET, push_fr_branch
+from tests.unit.test_placement_quiet import QUIET, push_quiet_switch
 
 __all__ = ["stealth_home"]
 
@@ -88,7 +88,7 @@ def test_fr_isolation_up_restores_the_marker(tmp_path: Path) -> None:
 
 def test_a_quiet_workspace_with_its_marker_gone_refuses(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     ws = HostWorktreeTarget(repo).up(profile=None, branch="feat/q").worktree
     (ws / MARKER).unlink()
     with pytest.raises(SettingsError, match=r"fr isolation up --branch feat/q"):

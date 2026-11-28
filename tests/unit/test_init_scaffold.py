@@ -843,6 +843,7 @@ def test_deferred_and_unknown_types_are_refused(repo: Path) -> None:
     assert not (repo / PROFILES).exists()
 
 
+@pytest.mark.s1_open  # seeds the old form: the transition window (spec 2026-11-28-s1-followups R10)
 def test_scaffold_over_a_v1_file_migrates_it_in_process(repo: Path) -> None:
     _initial_commit(repo)
     (repo / ".devcontainer").mkdir()
@@ -870,6 +871,7 @@ def test_an_unmigratable_v1_file_is_refused_untouched(repo: Path) -> None:
     assert not (repo / ".devcontainer" / "dev").exists()
 
 
+@pytest.mark.s1_open  # seeds the old form: the transition window (spec 2026-11-28-s1-followups R10)
 def test_a_refusal_after_the_migration_restores_the_v1_file(repo: Path) -> None:
     _initial_commit(repo)
     (repo / ".devcontainer").mkdir()
@@ -921,6 +923,7 @@ def test_a_missing_forge_binary_is_a_refusal_naming_tracking(
     assert not (repo / PROFILES).exists()
 
 
+@pytest.mark.s1_open  # seeds the old form: the transition window (spec 2026-11-28-s1-followups R10)
 def test_an_unexpected_exception_restores_the_v1_file(
     repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1060,6 +1063,7 @@ def test_a_github_host_gh_is_not_logged_into_is_refused_not_probed(
     assert started == []
 
 
+@pytest.mark.s1_open  # seeds the old form: the transition window (spec 2026-11-28-s1-followups R10)
 def test_over_a_v1_file_auto_detects_what_the_migration_derived(
     repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1136,6 +1140,7 @@ tracking:
 """
 
 
+@pytest.mark.s1_open  # seeds the old form: the transition window (spec 2026-11-28-s1-followups R10)
 def test_adding_a_profile_keeps_every_comment(repo: Path) -> None:
     _initial_commit(repo)
     (repo / ".devcontainer").mkdir()
@@ -1174,6 +1179,7 @@ def test_adding_a_profile_keeps_every_comment(repo: Path) -> None:
     assert data["default"] == "dev"
 
 
+@pytest.mark.s1_open  # seeds the old form: the transition window (spec 2026-11-28-s1-followups R10)
 def test_rescaffolding_a_profile_replaces_only_its_entry(repo: Path) -> None:
     _initial_commit(repo)
     (repo / ".devcontainer").mkdir()
@@ -1208,6 +1214,7 @@ def test_rescaffolding_a_profile_replaces_only_its_entry(repo: Path) -> None:
     assert data["default"] == "dev"
 
 
+@pytest.mark.s1_open  # seeds the old form: the transition window (spec 2026-11-28-s1-followups R10)
 def test_a_crlf_profiles_file_stays_crlf_and_keeps_its_comments(repo: Path) -> None:
     """Review of #805: `read_text` turned CRLF into LF before the line surgery
     saw it, so the whole file came back with new line endings."""
@@ -1238,6 +1245,7 @@ def test_a_crlf_profiles_file_stays_crlf_and_keeps_its_comments(repo: Path) -> N
     assert list(_profiles(repo)["profiles"]) == ["dev", "admin", "readonly"]
 
 
+@pytest.mark.s1_open  # seeds the old form: the transition window (spec 2026-11-28-s1-followups R10)
 def test_a_quoted_profile_key_never_ends_up_duplicated(repo: Path) -> None:
     """Review of #805: `safe_load` keeps the last of two equal keys, so a
     surgery that appended a second `dev:` beside a quoted `"dev":` read back

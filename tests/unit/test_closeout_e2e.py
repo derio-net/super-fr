@@ -40,6 +40,7 @@ from typer.testing import CliRunner
 
 from tests.unit.fakes import FakeGhClient
 from tests.unit.requirements_support import write_shape_file
+from tests.unit.shipped_env import defaults_root
 
 runner_cli = CliRunner()
 
@@ -76,7 +77,11 @@ def _git_out(root: Path, *args: str) -> str:
 
 
 def _invoke(repo: Path, shipped: Path, argv: list[str]):
-    env = {**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
+    env = {
+        **os.environ,
+        "FR_REPO_ROOT": str(repo),
+        "FR_SHIPPED_DEFAULTS_DIR": str(defaults_root(shipped, "workflows")),
+    }
     return runner_cli.invoke(app, argv, env=env)
 
 
@@ -109,7 +114,7 @@ def fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     (base / ".git" / "info").mkdir(exist_ok=True)
     with (base / ".git" / "info" / "exclude").open("a") as f:
         f.write(".fr-isolation\n")
-    (workspace / "docs" / "superpowers" / "workflows").mkdir(parents=True, exist_ok=True)
+    (workspace / ".fr" / "workflows").mkdir(parents=True, exist_ok=True)
     (workspace / ".fr-isolation").write_text(
         json.dumps(
             {

@@ -532,9 +532,9 @@ def test_tracking_none_only_lists_whatever_the_flags(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _open_ends_repo(tmp_path)
-    prof = repo / ".devcontainer"
-    prof.mkdir()
-    (prof / "fr-profiles.yaml").write_text(
+    prof = repo / ".fr"
+    prof.mkdir(exist_ok=True)
+    (prof / "profiles.yaml").write_text(
         "schema_version: 2\nprofiles:\n  dev:\n    purpose: x\ntracking: {type: none}\n"
     )
     gh = DedupGh()
@@ -549,9 +549,9 @@ def test_an_invalid_services_declaration_only_lists_with_the_warning(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _open_ends_repo(tmp_path)
-    prof = repo / ".devcontainer"
-    prof.mkdir()
-    (prof / "fr-profiles.yaml").write_text("schema_version: 2\ntracking: {type: bogus}\n")
+    prof = repo / ".fr"
+    prof.mkdir(exist_ok=True)
+    (prof / "profiles.yaml").write_text("schema_version: 2\ntracking: {type: bogus}\n")
     gh = DedupGh()
     result = _archive(monkeypatch, repo, gh, "--issues", "all")
     assert result.exit_code == 0, result.output

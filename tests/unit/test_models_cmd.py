@@ -558,8 +558,8 @@ class TestCheck:
         import yaml
 
         repo = tmp_path / "repo"
-        (repo / "docs/superpowers").mkdir(parents=True)
-        (repo / "docs/superpowers/models.yaml").write_text(
+        (repo / ".fr").mkdir(parents=True)
+        (repo / ".fr/models.yaml").write_text(
             yaml.safe_dump({"opencode": {"standard": "prov/std"}})
         )
         monkeypatch.chdir(repo)
@@ -570,5 +570,5 @@ class TestCheck:
         _interactive(monkeypatch, True)
         res = runner.invoke(app, ["models", "check"], input="y\n")
         assert res.exit_code == 1, res.output
-        assert "docs/superpowers/models.yaml" in res.output
+        assert ".fr/models.yaml" in res.output
         assert not _models_yaml(tmp_path).exists()

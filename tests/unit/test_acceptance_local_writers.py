@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from fr.acceptance.fold import load_effective
 
+from tests.unit.config_paths import profiles_file
 from tests.unit.test_record_apply import _acceptance_files, _matrix_repo, commit_all, git
 
 
@@ -203,7 +204,7 @@ BROKEN_SERVICES = "schema_version: 2\nprofiles:\n  dev:\n    purpose: x\nci: {ty
 
 def _break_services(root: Path) -> None:
     (root / ".devcontainer").mkdir(exist_ok=True)
-    (root / ".devcontainer" / "fr-profiles.yaml").write_text(BROKEN_SERVICES)
+    profiles_file(root).write_text(BROKEN_SERVICES)
     commit_all(root, "broken services")
 
 

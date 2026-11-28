@@ -683,7 +683,7 @@ def _at_spec_review_with_acceptance(tmp_path: Path) -> Path:
     from tests.integration.test_fr_goal_shape import _workspace
 
     root = _workspace(tmp_path, "feat/rec2")
-    workflows_dir = root / "docs" / "superpowers" / "workflows"
+    workflows_dir = root / ".fr" / "workflows"
     workflows_dir.mkdir(parents=True, exist_ok=True)
     (workflows_dir / "fr-goal.yaml").write_text(_spec_review_emits_acceptance_manifest())
     (root / "docs").mkdir(parents=True, exist_ok=True)

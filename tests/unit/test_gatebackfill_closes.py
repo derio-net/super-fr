@@ -373,7 +373,7 @@ def test_one_forge_error_leaves_the_rest_going_on(env: Env) -> None:
 def test_tracking_none_closes_nothing(env: Env) -> None:
     env.tracked_only(5)
     env.dry()
-    profiles = env.root / ".devcontainer" / "fr-profiles.yaml"
+    profiles = env.root / ".fr" / "profiles.yaml"
     profiles.parent.mkdir()
     profiles.write_text("schema_version: 2\ntracking: {type: none}\n")
     result = env.yes()

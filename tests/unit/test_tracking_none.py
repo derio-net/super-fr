@@ -23,7 +23,7 @@ from tests.unit.fakes import FakeGhClient
 
 NONE = "schema_version: 2\ntracking:\n  type: none\n"
 MALFORMED = "schema_version: 2\ntracking:\n  type: bogus\n"
-PROFILES = Path(".devcontainer") / "fr-profiles.yaml"
+PROFILES = Path(".fr") / "profiles.yaml"
 
 
 def _profiles(root: Path, text: str) -> None:

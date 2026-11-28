@@ -8,6 +8,8 @@ import pytest
 from fr.lenses.model import LensError
 from fr.lenses.resolve import effective_lenses, shipped_lenses
 
+from tests.unit.shipped_env import defaults_root
+
 
 def _write(root: Path, text: str) -> None:
     (root / ".fr").mkdir(exist_ok=True)
@@ -43,7 +45,7 @@ def test_a_shipped_manifest_named_for_another_lens_is_refused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     (tmp_path / "tests.yaml").write_text("lens: security\ntitle: T\nbrief: b\n")
-    monkeypatch.setenv("FR_SHIPPED_LENSES_DIR", str(tmp_path))
+    monkeypatch.setenv("FR_SHIPPED_DEFAULTS_DIR", str(defaults_root(tmp_path, "lenses")))
 
     with pytest.raises(LensError, match="tests.yaml.*security"):
         shipped_lenses()

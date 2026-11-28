@@ -22,6 +22,7 @@ from fr.journal.model import (
 from typer.testing import CliRunner
 
 from tests.unit.acceptance_helpers import write_matrix_fragments
+from tests.unit.config_paths import profiles_file
 from tests.unit.fakes import FakeGhClient, FakeGhError
 from tests.unit.test_debt_engine import NOW, FakeForge
 from tests.unit.test_merge_evidence import _add_remote, _init
@@ -226,7 +227,7 @@ def test_tracking_none_prints_the_close_command_and_asks_no_forge(
 ) -> None:
     root = _repo(tmp_path)
     (root / ".devcontainer").mkdir()
-    (root / ".devcontainer/fr-profiles.yaml").write_text(
+    profiles_file(root).write_text(
         "schema_version: 2\nprofiles:\n  dev:\n    purpose: x\ntracking: {type: none}\n"
     )
     owed = _owed()
@@ -571,14 +572,14 @@ def quiet_branch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     from fr.placement import stealth
 
     from tests.unit.settings_repo import git, make_repo
-    from tests.unit.test_placement_quiet import QUIET, push_fr_branch
+    from tests.unit.test_placement_quiet import QUIET, push_quiet_switch
 
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
     stealth.reset_caches()
     root = make_repo(tmp_path)
-    push_fr_branch(root, QUIET.replace("  labels: off\n", "  labels: on\n"))
+    push_quiet_switch(root, QUIET.replace("  labels: off\n", "  labels: on\n"))
     bare = tmp_path / "origin.git"
     url = f"https://github.com/{OWN}.git"
     git(root, "config", "remote.origin.url", url)

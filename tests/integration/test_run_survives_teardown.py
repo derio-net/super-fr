@@ -31,6 +31,8 @@ from fr.isolation.types import load_state
 from fr.run.model import load_run_state, run_path
 from typer.testing import CliRunner
 
+from tests.unit.shipped_env import defaults_root
+
 cli = CliRunner()
 BRANCH = "feat/y"
 RUN = "r1"
@@ -98,7 +100,11 @@ def _repo(tmp_path: Path) -> Path:
 
 
 def _fr(root: Path, shipped: Path, argv: list[str]) -> Any:
-    env = {**os.environ, "FR_REPO_ROOT": str(root), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
+    env = {
+        **os.environ,
+        "FR_REPO_ROOT": str(root),
+        "FR_SHIPPED_DEFAULTS_DIR": str(defaults_root(shipped, "workflows")),
+    }
     return cli.invoke(app, argv, env=env)
 
 

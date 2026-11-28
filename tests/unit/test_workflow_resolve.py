@@ -21,6 +21,8 @@ import pytest
 from fr.workflow.model import WorkflowError
 from fr.workflow.resolve import resolve_workflow
 
+from tests.unit.shipped_env import defaults_root
+
 SHIPPED_TEXT = """
 workflow: fr-goal
 schema: 1
@@ -52,14 +54,14 @@ steps:
 def _make_dirs(tmp_path: Path) -> tuple[Path, Path]:
     repo_root = tmp_path / "repo"
     shipped_root = tmp_path / "shipped"
-    (repo_root / "docs" / "superpowers" / "workflows").mkdir(parents=True)
+    (repo_root / ".fr" / "workflows").mkdir(parents=True)
     shipped_root.mkdir(parents=True)
     return repo_root, shipped_root
 
 
 def test_prefers_repo_over_shipped(tmp_path: Path) -> None:
     repo_root, shipped_root = _make_dirs(tmp_path)
-    (repo_root / "docs/superpowers/workflows/fr-goal.yaml").write_text(REPO_TEXT)
+    (repo_root / ".fr/workflows/fr-goal.yaml").write_text(REPO_TEXT)
     (shipped_root / "fr-goal.yaml").write_text(SHIPPED_TEXT)
 
     manifest = resolve_workflow("fr-goal", repo_root, shipped_root=shipped_root)
@@ -82,7 +84,7 @@ def test_override_is_wholesale_never_merged(tmp_path: Path) -> None:
     """A repo manifest with FEWER steps than shipped yields exactly those
     steps — no union of the two step lists, no merge of any kind."""
     repo_root, shipped_root = _make_dirs(tmp_path)
-    (repo_root / "docs/superpowers/workflows/fr-goal.yaml").write_text(REPO_TEXT)
+    (repo_root / ".fr/workflows/fr-goal.yaml").write_text(REPO_TEXT)
     (shipped_root / "fr-goal.yaml").write_text(SHIPPED_TEXT)
 
     manifest = resolve_workflow("fr-goal", repo_root, shipped_root=shipped_root)
@@ -99,7 +101,7 @@ def test_unknown_workflow_names_both_searched_paths(tmp_path: Path) -> None:
 
     message = str(exc_info.value)
     assert "nonexistent-shape" in message
-    assert str(repo_root / "docs/superpowers/workflows/nonexistent-shape.yaml") in message
+    assert str(repo_root / ".fr/workflows/nonexistent-shape.yaml") in message
     assert str(shipped_root / "nonexistent-shape.yaml") in message
 
 
@@ -121,11 +123,11 @@ def test_resolve_workflow_without_shipped_root_consults_the_default(
     (`shipped_workflow_dirs()`) — proving the production call site, not just
     the helper in isolation."""
     repo_root = tmp_path / "repo"
-    (repo_root / "docs" / "superpowers" / "workflows").mkdir(parents=True)
+    (repo_root / ".fr" / "workflows").mkdir(parents=True)
     default_dir = tmp_path / "shipped-via-default"
     default_dir.mkdir()
     (default_dir / "fr-goal.yaml").write_text(SHIPPED_TEXT)
-    monkeypatch.setenv("FR_SHIPPED_WORKFLOWS_DIR", str(default_dir))
+    monkeypatch.setenv("FR_SHIPPED_DEFAULTS_DIR", str(defaults_root(default_dir, "workflows")))
 
     manifest = resolve_workflow("fr-goal", repo_root)
 
@@ -173,7 +175,7 @@ def test_the_explicit_env_override_beats_everything_but_the_repo(tmp_path, monke
         "workflow: fr-goal\nschema: 1\nunit: run\n"
         "steps:\n  - id: from-env\n    kind: cli\n    run: 'true'\n"
     )
-    monkeypatch.setenv("FR_SHIPPED_WORKFLOWS_DIR", str(shipped))
+    monkeypatch.setenv("FR_SHIPPED_DEFAULTS_DIR", str(defaults_root(shipped, "workflows")))
 
     manifest = resolve_workflow("fr-goal", tmp_path / "repo")
 
@@ -231,5 +233,5 @@ def test_the_lookup_order_is_the_one_the_docstring_states(tmp_path, monkeypatch)
         home / MARKETPLACE_ROOT / SHIPPED_WORKFLOWS_REL,
     ]
 
-    monkeypatch.setenv("FR_SHIPPED_WORKFLOWS_DIR", str(tmp_path / "env"))
-    assert shipped_workflow_dirs()[0] == tmp_path / "env"
+    monkeypatch.setenv("FR_SHIPPED_DEFAULTS_DIR", str(defaults_root(tmp_path / "env", "workflows")))
+    assert shipped_workflow_dirs()[0] == defaults_root(tmp_path / "env", "workflows") / "workflows"

@@ -11,6 +11,7 @@ from fr.cli import app
 from typer.testing import CliRunner
 
 from tests.unit.acceptance_helpers import make_repo, row, write_fragments
+from tests.unit.config_paths import profiles_file
 
 runner = CliRunner()
 
@@ -290,9 +291,7 @@ def test_backfill_clean_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 def _repo_with_backend(tmp_path: Path, backend: str) -> Path:
     root = _repo(tmp_path)
     (root / ".devcontainer").mkdir()
-    (root / ".devcontainer" / "fr-profiles.yaml").write_text(
-        f"backend: {backend}\nprofiles:\n  dev:\n    purpose: x\n"
-    )
+    profiles_file(root).write_text(f"backend: {backend}\nprofiles:\n  dev:\n    purpose: x\n")
     return root
 
 

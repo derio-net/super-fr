@@ -18,7 +18,7 @@ from typer.testing import CliRunner
 
 from tests.unit.settings_repo import git
 from tests.unit.stealth_repo import stealth_home, stealth_pair
-from tests.unit.test_settings_stealth import _push_target_settings, _up
+from tests.unit.test_settings_stealth import _push_config_settings, _up
 
 __all__ = ["stealth_home"]
 
@@ -33,7 +33,7 @@ def _env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _ws(tmp_path: Path) -> tuple[Path, Path]:
     target, track = stealth_pair(tmp_path)
-    _push_target_settings(track, tmp_path, SQUASH)
+    _push_config_settings(track, tmp_path, SQUASH)
     return _up(target, track, "feat/q").worktree, tmp_path / "origin.git"
 
 

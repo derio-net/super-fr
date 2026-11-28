@@ -206,19 +206,39 @@ def _no_inherited_ci_context(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _s1_transition_side(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
-    """No `FR_OLD_PATHS` reaches a test unless it sets one, and a test marked `s1_open`
-    runs on the pre-9.2 side of S1's transition gate (spec 2026-11-28-s1-followups R10).
+    """Which side of S1's transition gate a test runs on (spec 2026-11-28-s1-followups R10).
 
-    `fr.config.transition.refusing` reads fr's own version, so a test of transition
-    behaviour that inherited it would turn red the day a release moves fr into 9.2. The
-    mark forces the open side in process (a test that wants the ended side patches
-    `refusing` itself, after this fixture). It cannot reach an `fr` subprocess.
+    No inherited `FR_OLD_PATHS` reaches a test. A test marked `s1_open` runs on the pre-9.2
+    side in process (`fr.config.transition.refusing` forced False; a test that wants the
+    ended side patches `refusing` itself, after this fixture). A test marked
+    `s1_open_subprocess` drives an `fr` subprocess on the open side, which no patch reaches,
+    so it is skipped whenever the gate has ended for real (fr at 9.2 or above) or under
+    `--fr-ended`.
+
+    `--fr-ended` proves that a release into 9.2 turns no test red: every test not marked
+    `s1_open` runs with `fr.__version__` patched to 9.2.0 and `FR_OLD_PATHS=refuse` in the
+    environment, so an `fr` subprocess is past the gate too; an `s1_open` test gets the same
+    environment (its in-process gate stays open), so one that drives an `fr` subprocess
+    shows up and is marked `s1_open_subprocess`.
     """
     from fr.config import transition
 
     monkeypatch.delenv(transition.ENV, raising=False)
+    ended = request.config.getoption("--fr-ended")
+    if request.node.get_closest_marker("s1_open_subprocess") is not None:
+        if ended or transition.refusing():
+            pytest.skip("drives an fr subprocess on the pre-9.2 side of S1's transition gate")
+        return
     if request.node.get_closest_marker("s1_open") is not None:
         monkeypatch.setattr(transition, "refusing", lambda: False)
+        if ended:  # an fr subprocess is past the gate: such a test needs s1_open_subprocess
+            monkeypatch.setenv(transition.ENV, "refuse")
+        return
+    if ended:
+        import fr
+
+        monkeypatch.setattr(fr, "__version__", "9.2.0")
+        monkeypatch.setenv(transition.ENV, "refuse")
 
 
 @pytest.fixture(autouse=True)
@@ -848,6 +868,16 @@ def pytest_addoption(parser: pytest.Parser) -> None:
             "fast advisory tier: only the tests the changes since the merge-base with "
             "BASE (default: the remote default ref) reach, plus the smoke set; never "
             "deliver evidence (tests/fr_scope.py)"
+        ),
+    )
+    parser.addoption(
+        "--fr-ended",
+        action="store_true",
+        default=False,
+        help=(
+            "run every test not marked s1_open past S1's transition gate (fr.__version__ "
+            "9.2.0 and FR_OLD_PATHS=refuse), proving a release into 9.2 turns none red "
+            "(spec 2026-11-28-s1-followups R10)"
         ),
     )
 

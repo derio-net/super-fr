@@ -263,7 +263,7 @@ def test_pickup_on_a_drifted_cursor_keeps_the_record_and_warns_once(tmp_path: Pa
     2026-10-05-run-upgrade-midflight §B): the record stays, plus ONE warning
     naming `fr run reshape`."""
     root = started_run(tmp_path)
-    override = root / "docs/superpowers/workflows/fr-goal.yaml"
+    override = root / ".fr/workflows/fr-goal.yaml"
     override.parent.mkdir(parents=True, exist_ok=True)
     override.write_text(
         _SHIPPED_MANIFEST.read_text() + '  - id: after-deliver\n    kind: cli\n    run: "true"\n'

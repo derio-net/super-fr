@@ -207,7 +207,7 @@ def test_the_walk_that_verifies_the_last_open_row_prints_the_close_commands(repo
 
 
 def test_nothing_is_printed_under_tracking_none(repo: Path) -> None:
-    profiles = repo / ".devcontainer" / "fr-profiles.yaml"
+    profiles = repo / ".fr" / "profiles.yaml"
     profiles.parent.mkdir(exist_ok=True)
     profiles.write_text(
         "schema_version: 2\nprofiles:\n  dev:\n    purpose: x\n"
@@ -226,7 +226,7 @@ def test_nothing_is_printed_under_tracking_none(repo: Path) -> None:
 
 
 def _repo_on(tmp_path: Path, backend: str) -> Path:
-    profiles = tmp_path / ".devcontainer" / "fr-profiles.yaml"
+    profiles = tmp_path / ".fr" / "profiles.yaml"
     profiles.parent.mkdir(parents=True)
     profiles.write_text(f"backend: {backend}\n")
     return tmp_path

@@ -223,9 +223,9 @@ def test_closeout_brief_under_tracking_none_keeps_the_plain_archive_line(tmp_pat
     _spec_file(tmp_path, with_test_plan=False)
     _plan_dir(tmp_path)
     _plan_out_of_scope_finding(tmp_path)
-    prof = tmp_path / ".devcontainer"
-    prof.mkdir()
-    (prof / "fr-profiles.yaml").write_text(
+    prof = tmp_path / ".fr"
+    prof.mkdir(exist_ok=True)
+    (prof / "profiles.yaml").write_text(
         "schema_version: 2\nprofiles:\n  dev:\n    purpose: x\ntracking: {type: none}\n"
     )
 

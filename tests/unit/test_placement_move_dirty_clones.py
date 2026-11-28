@@ -18,7 +18,7 @@ from fr.settings import SettingsError
 
 from tests.unit.settings_repo import make_repo
 from tests.unit.stealth_repo import make_tracking, stealth_home
-from tests.unit.test_placement_quiet import QUIET, push_fr_branch
+from tests.unit.test_placement_quiet import QUIET, push_quiet_switch
 
 __all__ = ["stealth_home"]
 
@@ -32,7 +32,7 @@ def _env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_a_pending_write_in_the_fr_worktree_refuses_the_move(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     HostWorktreeTarget(repo).up(profile=None, branch="feat/q")
     frwt = quiet.worktree_path(repo)
     (frwt / "pending.md").write_text("not yet committed\n")
@@ -53,6 +53,6 @@ def test_a_pending_write_in_a_tracking_clone_is_listed(tmp_path: Path) -> None:
 
 def test_clean_clones_are_not_listed(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     HostWorktreeTarget(repo).up(profile=None, branch="feat/q")
     assert move.dirty_workspaces(repo) == []

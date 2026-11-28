@@ -18,7 +18,7 @@ from fr.isolation.types import IsolationError, IsolationState
 from fr.settings import SettingsError
 
 from tests.unit.settings_repo import git, make_repo
-from tests.unit.test_placement_quiet import QUIET, push_fr_branch
+from tests.unit.test_placement_quiet import QUIET, push_fr_branch, push_quiet_switch
 
 
 def _target(repo: Path) -> HostWorktreeTarget:
@@ -27,8 +27,18 @@ def _target(repo: Path) -> HostWorktreeTarget:
 
 def _quiet_origin(tmp_path: Path) -> Path:
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     # Only the fetch at `up` may tell this clone about the switch.
+    git(repo, "update-ref", "-d", "refs/remotes/origin/fr")
+    return repo
+
+
+def _old_quiet_origin(tmp_path: Path) -> Path:
+    """A quiet repo whose switch is only the old `fr:settings.yaml` (no fr-config yet): the
+    transition window, so the tests using it are marked `s1_open` (spec
+    2026-11-28-s1-followups R10)."""
+    repo = make_repo(tmp_path)
+    push_fr_branch(repo, QUIET)
     git(repo, "update-ref", "-d", "refs/remotes/origin/fr")
     return repo
 
@@ -69,15 +79,16 @@ def test_up_no_fetch_reads_the_last_fetched_switch_and_says_so(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     repo = make_repo(tmp_path)
-    push_fr_branch(repo, QUIET)  # origin/fr is fetched (the push updated it)
+    push_quiet_switch(repo, QUIET)  # origin/fr is fetched (the push updated it)
     _unreachable(repo, tmp_path)
     state = _target(repo).up(profile=None, branch="feat/n", no_fetch=True)
     assert state.placement == "quiet"
     assert "--no-fetch" in capsys.readouterr().err
 
 
+@pytest.mark.s1_open  # the old switch alone: the transition window (R10)
 def test_a_deleted_fr_branch_makes_the_workspace_refuse_naming_both(tmp_path: Path) -> None:
-    repo = _quiet_origin(tmp_path)
+    repo = _old_quiet_origin(tmp_path)
     state = _target(repo).up(profile=None, branch="feat/q")
     git(repo, "push", "-q", "origin", "--delete", "fr")  # also drops origin/fr locally
     with pytest.raises(SettingsError) as caught:
@@ -89,7 +100,7 @@ def test_a_deleted_fr_branch_makes_the_workspace_refuse_naming_both(tmp_path: Pa
 def test_a_switch_appearing_under_a_repo_workspace_refuses_too(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     state = _target(repo).up(profile=None, branch="feat/r")
-    push_fr_branch(repo, QUIET)
+    push_quiet_switch(repo, QUIET)
     with pytest.raises(SettingsError, match="placement: repo.*placement: quiet"):
         space_for(state.worktree)
 
@@ -179,12 +190,13 @@ def _origin_heads(tmp_path: Path) -> str:
     return git(tmp_path / "origin.git", "for-each-ref", "--format=%(refname) %(objectname)")
 
 
+@pytest.mark.s1_open  # the old switch alone: the transition window (R10)
 def test_up_on_an_old_quiet_repo_pushes_nothing_and_names_the_remedies(tmp_path: Path) -> None:
     """A quiet repo whose switch is only the old root settings.yaml on `fr`: `up` reads it
     (R13) and pushes nothing; a configuration read refuses, naming how to create the space."""
     from fr.config.space import config_space
 
-    repo = _quiet_origin(tmp_path)
+    repo = _old_quiet_origin(tmp_path)
     before = _origin_heads(tmp_path)
     state = _target(repo).up(profile=None, branch="feat/q")
     assert state.placement == "quiet"
@@ -198,12 +210,13 @@ def test_up_on_an_old_quiet_repo_pushes_nothing_and_names_the_remedies(tmp_path:
     assert "fr migrate artifacts --yes" in message and "fr settings init" in message
 
 
+@pytest.mark.s1_open  # the old switch alone: the transition window (R10)
 def test_up_adopts_an_existing_fr_config_into_its_worktree(tmp_path: Path) -> None:
     from fr.config.space import config_space
 
     from tests.unit.test_placement_quiet import push_config_branch
 
-    repo = _quiet_origin(tmp_path)
+    repo = _old_quiet_origin(tmp_path)
     push_config_branch(repo, QUIET)
     git(repo, "update-ref", "-d", "refs/remotes/origin/fr-config")
     before = _origin_heads(tmp_path)
@@ -216,6 +229,7 @@ def test_up_adopts_an_existing_fr_config_into_its_worktree(tmp_path: Path) -> No
     assert space.checkout == wt and space.at_default("settings") == QUIET
 
 
+@pytest.mark.s1_open  # the old switch alone: the transition window (R10)
 @pytest.mark.parametrize("with_config", [False, True], ids=["old-switch", "fr-config"])
 def test_up_no_fetch_never_pushes(tmp_path: Path, with_config: bool) -> None:
     from tests.unit.test_placement_quiet import push_config_branch
@@ -248,6 +262,7 @@ def _push_fr_config_from_main(repo: Path, keep_product: bool) -> None:
     git(repo, "branch", "-q", "-D", "fr-config")
 
 
+@pytest.mark.s1_open  # the old switch alone: the transition window (R10)
 @pytest.mark.parametrize(
     ("keep_product", "why"),
     [(True, "README.md"), (False, "shares history")],
@@ -256,7 +271,7 @@ def _push_fr_config_from_main(repo: Path, keep_product: bool) -> None:
 def test_up_refuses_to_adopt_a_foreign_fr_config(
     tmp_path: Path, keep_product: bool, why: str
 ) -> None:
-    repo = _quiet_origin(tmp_path)
+    repo = _old_quiet_origin(tmp_path)
     _push_fr_config_from_main(repo, keep_product)
     with pytest.raises(IsolationError) as caught:
         _target(repo).up(profile=None, branch="feat/q")
@@ -265,6 +280,7 @@ def test_up_refuses_to_adopt_a_foreign_fr_config(
     assert not (Path(os.environ["HOME"]) / ".cache/fr/worktrees/work/fr-config").exists()
 
 
+@pytest.mark.s1_open  # the old switch alone: the transition window (R10)
 def test_fr_never_pushes_an_unrelated_local_fr_config(tmp_path: Path) -> None:
     """A local `fr-config` cut from the product, origin having none: creating the space
     (`fr settings init --quiet` on an old quiet repo) refuses rather than push it."""

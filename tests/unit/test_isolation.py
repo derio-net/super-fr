@@ -32,6 +32,8 @@ from fr.isolation.types import (
     state_path,
 )
 
+from tests.unit.config_paths import profiles_file
+
 
 def make_repo(
     tmp_path: Path,
@@ -68,9 +70,12 @@ def make_repo(
             config["runArgs"] = ["--env-file", env_file_mount]
         (d / "devcontainer.json").write_text(json.dumps(config) + "\n")
     if default:
-        (repo / ".devcontainer" / profiles_yaml).write_text(
-            f"default: {default}\nprofiles:\n  {default}:\n    purpose: test\n"
-        )
+        # `.fr/profiles.yaml` (S1 R9); another name stays under `.devcontainer/`
+        where = repo / ".fr" if profiles_yaml == "fr-profiles.yaml" else repo / ".devcontainer"
+        where.mkdir(exist_ok=True)
+        (
+            where / ("profiles.yaml" if profiles_yaml == "fr-profiles.yaml" else profiles_yaml)
+        ).write_text(f"default: {default}\nprofiles:\n  {default}:\n    purpose: test\n")
     if profiles:
         # committed, as in real repos — worktrees check out .devcontainer/
         subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
@@ -397,9 +402,7 @@ def test_profiles_config_ignores_lone_vk_profiles(
 
 def test_profiles_config_reads_only_fr(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     repo = make_repo(tmp_path, ["dev"], default="dev", profiles_yaml="vk-profiles.yaml")
-    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
-        "default: dev\nprofiles:\n  dev:\n    purpose: fr-side\n"
-    )
+    profiles_file(repo).write_text("default: dev\nprofiles:\n  dev:\n    purpose: fr-side\n")
     assert profiles_config(repo)["profiles"]["dev"]["purpose"] == "fr-side"
     assert "legacy" not in capsys.readouterr().err
 
@@ -534,9 +537,7 @@ def test_up_uncommitted_profile_raises_actionable_error(
     d = repo / ".devcontainer" / "dev"
     d.mkdir(parents=True)
     (d / "devcontainer.json").write_text('{"image": "x"}\n')
-    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
-        "default: dev\nprofiles:\n  dev:\n    purpose: test\n"
-    )
+    profiles_file(repo).write_text("default: dev\nprofiles:\n  dev:\n    purpose: test\n")
     runner = FakeRunner()
     target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
 
@@ -565,9 +566,7 @@ def test_up_committed_profile_absent_on_old_branch_no_false_positive(
     d = repo / ".devcontainer" / "dev"
     d.mkdir(parents=True)
     (d / "devcontainer.json").write_text('{"image": "x"}\n')
-    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
-        "default: dev\nprofiles:\n  dev:\n    purpose: test\n"
-    )
+    profiles_file(repo).write_text("default: dev\nprofiles:\n  dev:\n    purpose: test\n")
     subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
     subprocess.run(
         ["git", "-C", str(repo), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "p"],
@@ -853,9 +852,7 @@ def test_resolve_default_branch_gitlab_backend(tmp_path: Path) -> None:
     `glab repo view -F json --jq .default_branch`."""
     repo = make_repo(tmp_path)  # no origin → symbolic-ref fails
     (repo / ".devcontainer").mkdir()
-    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
-        "backend: gitlab\nprofiles:\n  dev:\n    purpose: x\n"
-    )
+    profiles_file(repo).write_text("backend: gitlab\nprofiles:\n  dev:\n    purpose: x\n")
     runner = FakeRunner(stdout={"glab": "develop\n"})
     target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
     assert target._resolve_default_branch() == "develop"
@@ -870,9 +867,7 @@ def test_resolve_default_branch_gitea_backend(tmp_path: Path) -> None:
     lists repos and has no such field (tests/fixtures/gitea/repo.json)."""
     repo = make_repo(tmp_path)
     (repo / ".devcontainer").mkdir()
-    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
-        "backend: gitea\nprofiles:\n  dev:\n    purpose: x\n"
-    )
+    profiles_file(repo).write_text("backend: gitea\nprofiles:\n  dev:\n    purpose: x\n")
     runner = FakeRunner(stdout={"tea": '{"default_branch": "develop"}'})
     target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
     assert target._resolve_default_branch() == "develop"
@@ -883,9 +878,7 @@ def test_resolve_default_branch_gitea_backend(tmp_path: Path) -> None:
 def test_resolve_default_branch_gitlab_backend_falls_back_on_failure(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     (repo / ".devcontainer").mkdir()
-    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
-        "backend: gitlab\nprofiles:\n  dev:\n    purpose: x\n"
-    )
+    profiles_file(repo).write_text("backend: gitlab\nprofiles:\n  dev:\n    purpose: x\n")
     runner = FakeRunner()  # glab yields empty stdout → falls through to "main"
     target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
     assert target._resolve_default_branch() == "main"
@@ -898,9 +891,7 @@ def test_pr_from_gitlab_backend(tmp_path: Path) -> None:
     branch name directly, unlike its `mr view <url>` case)."""
     repo = make_repo(tmp_path)
     (repo / ".devcontainer").mkdir()
-    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
-        "backend: gitlab\nprofiles:\n  dev:\n    purpose: x\n"
-    )
+    profiles_file(repo).write_text("backend: gitlab\nprofiles:\n  dev:\n    purpose: x\n")
     runner = FakeRunner(
         stdout={
             "glab": '{"state": "merged", "web_url": "https://gitlab.com/g/p/-/merge_requests/1"}'
@@ -916,9 +907,7 @@ def test_pr_from_gitlab_backend(tmp_path: Path) -> None:
 def test_pr_from_gitlab_backend_no_mr_returns_none(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     (repo / ".devcontainer").mkdir()
-    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
-        "backend: gitlab\nprofiles:\n  dev:\n    purpose: x\n"
-    )
+    profiles_file(repo).write_text("backend: gitlab\nprofiles:\n  dev:\n    purpose: x\n")
     runner = FakeRunner()  # empty stdout, rc=0 by default — no MR
     target = LocalWorktreeDevcontainerTarget(repo, runner=runner)
     assert target._pr_from(repo, "feat/x") is None
@@ -932,9 +921,7 @@ def test_pr_from_gitea_backend_list_and_filter_fallback(tmp_path: Path) -> None:
     PullRequest shape, not tea's listing: see tests/fixtures/gitea/pulls_all.json."""
     repo = make_repo(tmp_path)
     (repo / ".devcontainer").mkdir()
-    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
-        "backend: gitea\nprofiles:\n  dev:\n    purpose: x\n"
-    )
+    profiles_file(repo).write_text("backend: gitea\nprofiles:\n  dev:\n    purpose: x\n")
     listing = (
         '[{"state": "open", "merged": false, "html_url": "https://gitea.example.com/o/r/pulls/1", '
         '"head": {"ref": "other-branch", "label": "other-branch"}}, '
@@ -956,9 +943,7 @@ def test_pr_from_gitea_backend_merged_state(tmp_path: Path) -> None:
     PullRequest schema, verified against its live swagger spec)."""
     repo = make_repo(tmp_path)
     (repo / ".devcontainer").mkdir()
-    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
-        "backend: gitea\nprofiles:\n  dev:\n    purpose: x\n"
-    )
+    profiles_file(repo).write_text("backend: gitea\nprofiles:\n  dev:\n    purpose: x\n")
     listing = (
         '[{"state": "closed", "merged": true, "merged_at": "2026-11-01T08:26:40Z", '
         '"html_url": "https://gitea.example.com/o/r/pulls/2", '
@@ -974,9 +959,7 @@ def test_pr_from_gitea_backend_merged_state(tmp_path: Path) -> None:
 def test_pr_from_gitea_backend_no_matching_branch_returns_none(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     (repo / ".devcontainer").mkdir()
-    (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
-        "backend: gitea\nprofiles:\n  dev:\n    purpose: x\n"
-    )
+    profiles_file(repo).write_text("backend: gitea\nprofiles:\n  dev:\n    purpose: x\n")
     listing = (
         '[{"state": "open", "merged": false, "html_url": "u", '
         '"head": {"ref": "other-branch", "label": "other-branch"}}]'
@@ -3247,7 +3230,7 @@ class TestPushCheck:
             ],
             check=True,
         )
-        (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
+        profiles_file(repo).write_text(
             "default: dev\nbackend: gitlab\nprofiles:\n  dev:\n    purpose: test\n"
         )
         runner = FakeRunner(stdout={"devcontainer": "unset"})
@@ -3269,7 +3252,7 @@ class TestPushCheck:
 
     def test_backend_gitea_uses_tea_and_pr_label(self, tmp_path: Path) -> None:
         repo = make_repo(tmp_path, ["dev"], default="dev")
-        (repo / ".devcontainer" / "fr-profiles.yaml").write_text(
+        profiles_file(repo).write_text(
             "default: dev\nbackend: gitea\nprofiles:\n  dev:\n    purpose: test\n"
         )
         runner = FakeRunner(stdout={"devcontainer": "unset"})
