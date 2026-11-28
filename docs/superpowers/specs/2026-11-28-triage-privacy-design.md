@@ -195,3 +195,9 @@ anything more.
 - A comment's text in facts: facts store no comments, so nothing there needs withholding.
 - Rewriting history on a state ref that already carried a private name: the guard stops new
   pushes; it does not scrub old commits.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-28-triage-privacy | `derio-net/super-fr` | `2026-11-28-triage-privacy` | — |
