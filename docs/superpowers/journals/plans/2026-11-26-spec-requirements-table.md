@@ -324,3 +324,6 @@ true of the R8 prose test by design: a prose requirement can only be checked by 
 ### fold-multi-paragraph-impl · decision · fold multi-paragraph requirements into the cell (operator decision fold-multi-paragraph)
 
 Everything after a requirement line, up to the next requirement or heading, belongs to that requirement. Paragraphs and bullet items are joined with a literal <br> (bullets kept) in the list reader and the table cell alike, so parse(list) == parse(table). Prose between requirements no longer refuses; a heading inside the list does (the table would drop its text). Malformed-id, ordering, header-in-list and round-trip refusals stay. ops-gate-truth and batch-silent-failures migrated with parsed requirements unchanged; 241 artifacts valid. Code aac58c6c6, specs fc5830835.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r6 created=2026-11-28T17:56:10+00:00 phase=1 state=open review_scope=in -->
+### p1-r6 · finding [open] (reviewer: in scope) · a hash line inside a fenced or indented code block was read as a heading, splitting the fence (fold delta review) (phase 1)
