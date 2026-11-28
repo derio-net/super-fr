@@ -804,3 +804,28 @@ Fixed in 08f3a40e1 (commit subject cites this id), with a test per the lens fix 
 ### l-docs-accuracy-r6-resolved · finding [out-of-scope] · resolves l-docs-accuracy-r6: the new "merge, never rebase, because the ops branch is already pushed; a rebase would rewrite your evidence" rationale (fr-devops-gate.md:109-111, ops.md:325-326) sits beside stage 3, which still rebases that pushed ops branch with a lease
 
 Out of scope: stage 3's rebase-with-lease of the ops branch predates this change, and the new merge-never-rebase rationale is about the stage 4-7 refresh; the reviewer notes the claim is not false.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10-resolved-2 created=2026-11-28T13:22:34+00:00 phase=2 state=open resolves=p2-r10 tracked_by=https://github.com/derio-net/super-fr/issues/1776 -->
+### p2-r10-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1776] · resolves p2-r10: The triage driver's rows-walked tester pass bypasses gate_blockers (phase 2)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1776.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved-2 created=2026-11-28T13:22:34+00:00 phase=3 state=open resolves=p3-r4 tracked_by=https://github.com/derio-net/super-fr/issues/1777 -->
+### p3-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1777] · resolves p3-r4: _say_done catches only DodError and StageFailed (phase 3)
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1777.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r5-resolved-2 created=2026-11-28T13:22:34+00:00 state=open resolves=l-security-r5 tracked_by=https://github.com/derio-net/super-fr/issues/1778 -->
+### l-security-r5-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1778] · resolves l-security-r5: under quiet/stealth head_walks skips every fragment (gate.py:1258) as journal exclusions already do: walks/outcomes the feature run wrote to the fr artifact branch before merge are never excluded, so the PR-controlled boundary holds only under repo placement
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1778.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r6-resolved-2 created=2026-11-28T13:22:34+00:00 state=open resolves=l-security-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1779 -->
+### l-security-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1779] · resolves l-security-r6: _passed (gate.py:1698-1706) still treats a bare gate:devops-passed label as stage 6 done without any blocker check when no refresh reopened or forgot stage 6, so a hand-added label skips the head-free check
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1779.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r6-resolved-2 created=2026-11-28T13:22:34+00:00 state=open resolves=l-docs-accuracy-r6 tracked_by=https://github.com/derio-net/super-fr/issues/1780 -->
+### l-docs-accuracy-r6-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1780] · resolves l-docs-accuracy-r6: the new "merge, never rebase, because the ops branch is already pushed; a rebase would rewrite your evidence" rationale (fr-devops-gate.md:109-111, ops.md:325-326) sits beside stage 3, which still rebases that pushed ops branch with a lease
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1780.
