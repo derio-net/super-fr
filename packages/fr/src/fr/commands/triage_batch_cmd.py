@@ -103,6 +103,7 @@ from fr.commands.triage_drive_loop import _supervise as _supervise
 from fr.commands.triage_drive_loop import _wait as _wait
 from fr.commands.triage_drive_loop import drive_log_attached as drive_log_attached
 from fr.commands.triage_drive_loop import wait_out as wait_out
+from fr.commands.triage_drive_loose import act_loose, loose_ledgers
 from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
 from fr.commands.triage_kanban_cmd import probe_item, try_load
 from fr.config.space import LEGACY_PROFILES, PROFILES
@@ -4747,6 +4748,7 @@ class _Driver:
             rejected=rejected_by_batch(judgements.batches, facts),
             refused={b.id: why for b in chosen if (why := self.adapter.refusal(b)) is not None},
             ledgers=ledgers,
+            loose_ledgers=loose_ledgers(self, facts, judgements, {*unread, *carried}),
             awaiting_unlabelled=awaiting_unlabelled(facts),
             ledger_unknown=fact_ledger_unknown(judgements.batches, facts, stages),
             post_merge_repos=frozenset(
@@ -4784,7 +4786,7 @@ class _Driver:
                 or not held_gates(ledger.labels)
             ):
                 continue
-            read = self._gated_rows(repo, batch)
+            read = self._gated_rows(repo, recorded_branch(batch), batch.id)
             if read is not None:
                 ledgers[batch.id] = replace(
                     ledger,
@@ -4795,10 +4797,8 @@ class _Driver:
                 )
         return ledgers
 
-    def _gated_rows(self, repo: str, batch: Batch) -> LedgerRead | None:
-        """*batch*'s gated rows on `origin/<default>` (R14's rows-walked check reads that
-        branch's matrix); None, reported once, when the clone cannot say."""
-        branch = recorded_branch(batch)
+    def _gated_rows(self, repo: str, branch: str, label: str) -> LedgerRead | None:
+        """*branch*'s gated rows at `origin/<default>` (R14); *label* names it in a report."""
         try:
             checkout = self._fetched_reader(repo)
             tip = f"origin/{checkout.default_branch()}"
@@ -4808,8 +4808,8 @@ class _Driver:
             return self._ledger_rows[key]
         except TriageError as exc:
             self._report_once(
-                f"ledger\0{batch.id}\0{exc}",
-                f"cannot read the rows {batch.id}'s gates hold on {repo}'s default branch "
+                f"ledger\0{label}\0{exc}",
+                f"cannot read the rows {label}'s gates hold on {repo}'s default branch "
                 f"({exc}); no fr:awaiting-live label and no gate pass is planned for it",
             )
             return None
@@ -6080,6 +6080,8 @@ class _Driver:
             if action.kind == "dispatch":
                 self._held += 1  # planned in flight, did not start: still pending
             return f"held: {self._held_now[action.batch]}", False, in_flight
+        if not action.batch and action.kind in ("awaiting-live", "gate-pass"):
+            return act_loose(self, action, facts, in_flight)  # a PR outside every batch
         judgements = load_judgements(self.target / "judgements.yaml")
         batch = _find(judgements.batches, action.batch)
         repo = batch_repo(batch, facts)

@@ -26,7 +26,8 @@ import yaml
 from fr.acceptance.walks import row_walked
 from fr.artifacts.paths import KIND_DIRS, LEGACY_CONFIG
 from fr.config.space import SPACE_DIR
-from fr.triage.batch_drive import RUNS_DIR, GatedRow, find_run
+from fr.triage.batch_drive import RUNS_DIR, find_run
+from fr.triage.batch_drive_types import GatedRow
 from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout
 
@@ -74,11 +75,15 @@ def _plan_paths(state: object) -> tuple[str, ...]:
     return (plan.rstrip("/"), (IMPLEMENTED_PLANS_REL / Path(plan).name).as_posix())
 
 
-def _run_text(checkout: Checkout, ref: str, branch: str) -> tuple[str, str] | None:
-    """`(run id, cursor text)` of the cursor at *ref* naming *branch*; None when none does.
-    Both the live and the archived runs directories are read (gh#1399): the close-out
-    archives a run before its post-merge gate passes, and the rows it gates still owe."""
-    texts: list[tuple[str, object]] = []
+Cursors = list[tuple[str, object]]
+"""Every run cursor at a ref, live and archived, as `(text, parsed document)`."""
+
+
+def read_cursors(checkout: Checkout, ref: str) -> Cursors:
+    """Every live and archived run cursor at *ref* (gh#1399: the close-out archives a run
+    before its post-merge gate passes, and the rows it gates still owe). A caller reading
+    many branches at one ref reads them once (spec 2026-11-28-tester-gate-auto-pass)."""
+    texts: Cursors = []
     for runs_dir in (RUNS_DIR, ARCHIVED_RUNS_DIR):
         for name in checkout.list_dir(ref, runs_dir):
             if not name.endswith(".yaml"):
@@ -90,6 +95,50 @@ def _run_text(checkout: Checkout, ref: str, branch: str) -> tuple[str, str] | No
                 texts.append((text, yaml.safe_load(text)))
             except yaml.YAMLError:
                 continue
+    return texts
+
+
+def _run_text(
+    checkout: Checkout,
+    ref: str,
+    branch: str,
+    *,
+    pr: int | None = None,
+    repo: str | None = None,
+    texts: Cursors | None = None,
+) -> tuple[str, str] | None:
+    """`(run id, cursor text)` of the cursor at *ref* naming *branch*; None when none does.
+    *texts*: `read_cursors(checkout, ref)`, when the caller already holds it.
+
+    With *pr* (a merged PR outside a batch, spec 2026-11-28-tester-gate-auto-pass R5) the
+    cursor must be the ONE run naming the branch (a run's live and archived copies are one),
+    and its recorded `pr`, when it has one, must be this PR's url (`/<repo>/pull/<pr>`, *repo*
+    when given): more than one run, or a cursor recording another PR (or a `pr` that is not
+    a url), raises `TriageError`, so the read is reported and nothing is planned from it."""
+    if texts is None:
+        texts = read_cursors(checkout, ref)
+    if pr is not None:
+        named = list({
+            str(doc.get("run")): (str(doc.get("run")), text, doc)
+            for text, doc in texts
+            if isinstance(doc, dict) and doc.get("branch") == branch and doc.get("run")
+        }.values())  # fmt: skip
+        if len(named) > 1:
+            runs = ", ".join(sorted(r for r, _, _ in named))
+            raise TriageError(f"more than one run cursor names branch {branch}: {runs}")
+        if not named:
+            return None
+        run, text, doc = named[0]
+        recorded = doc.get("pr")
+        want = f"/{repo}/pull/{pr}" if repo else f"/{pr}"
+        if recorded is not None and not (
+            isinstance(recorded, str) and recorded.rstrip("/").lower().endswith(want.lower())
+        ):
+            raise TriageError(
+                f"the run cursor {run} on branch {branch} records PR {recorded!r}, "
+                f"not {repo or ''}#{pr}"
+            )
+        return run, text
     found = find_run([doc for _, doc in texts], branch)
     if found is None:
         return None
@@ -102,11 +151,20 @@ def _run_text(checkout: Checkout, ref: str, branch: str) -> tuple[str, str] | No
     return run, text
 
 
-def gated_rows_at(checkout: Checkout, ref: str, branch: str) -> LedgerRead:
+def gated_rows_at(
+    checkout: Checkout,
+    ref: str,
+    branch: str,
+    *,
+    pr: int | None = None,
+    repo: str | None = None,
+    texts: Cursors | None = None,
+) -> LedgerRead:
     """The ledger read for the run on *branch* at *ref* (the default branch's tip). No
     cursor naming the branch (a debug batch, a run that left none) is no row and no run
     gate: such a gate passes only explicitly. An exit that cannot be read raises
-    `TriageError`."""
+    `TriageError`. *pr* narrows the read to the cursor of that merged PR, and *texts* reuses
+    a `read_cursors` read (`_run_text`)."""
     from fr.acceptance.model import AcceptanceError, archive_twin
     from fr.requirements import run_spec
     from fr.run.model import RunStateError, parse_run_state
@@ -115,7 +173,7 @@ def gated_rows_at(checkout: Checkout, ref: str, branch: str) -> LedgerRead:
     from fr.verification.rows import spec_section_at
     from fr.verification.spec_section import SectionError
 
-    found = _run_text(checkout, ref, branch)
+    found = _run_text(checkout, ref, branch, pr=pr, repo=repo, texts=texts)
     if found is None:
         return NO_RUN
     run, text = found

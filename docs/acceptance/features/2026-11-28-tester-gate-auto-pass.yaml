@@ -1,0 +1,126 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-28-tester-gate-auto-pass
+repo: derio-net/super-fr
+rows:
+  - id: loose-gated-pr-rows-walked-pass
+    capability: Triage driver
+    acceptance: A whole-scope drive pass passes each held post-merge gate of a merged
+      PR outside any batch once every row that gate holds reads walked on the default
+      branch, swapping its label, commenting why and closing its owed trackers, under
+      the same rules as a batch
+    origin:
+    - spec:2026-11-28-tester-gate-auto-pass#R1
+    - spec:2026-11-28-tester-gate-auto-pass#R2
+    - spec:2026-11-28-tester-gate-auto-pass#R4
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_a_whole_scope_drive_passes_a_loose_prs_walked_gate
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_walked_rows_of_a_loose_pr_plan_one_gate_pass_naming_its_repo
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_r4_a_loose_gate_pass_closes_the_prs_trackers
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_r4_labels_off_writes_no_gate_pass_for_a_loose_pr
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_a_landed_gated_batchs_pr_in_gated_prs_is_passed_once_by_its_batch
+    status: ci
+    notes: 'unit: plan and driver pass for a loose PR (label swap, comment, trackers
+      closed, labels-off refused), and a landed batch''s PR also in gated_prs is passed
+      once, by its batch'
+    verify: none
+  - id: loose-gated-pr-awaiting-live
+    capability: Triage driver
+    acceptance: A whole-scope drive pass labels each open issue cited by a non-batch
+      gated PR's held rows fr:awaiting-live, at most once per issue per pass across
+      batches and such PRs
+    origin:
+    - spec:2026-11-28-tester-gate-auto-pass#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_r3_a_loose_pr_and_a_gated_batch_citing_one_issue_label_it_once
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_an_open_issue_a_row_cites_is_labelled_once_across_calls
+    status: ci
+    notes: one awaiting-live label per issue across batches and loose PRs
+    verify: none
+  - id: loose-gated-pr-no-pass-without-evidence
+    capability: Triage driver
+    acceptance: The driver passes nothing for a non-batch gated PR whose branch no run
+      cursor names, whose rows cannot be read (reported once), or in a drive narrowed
+      with --batch; a failed write is reported and retried next pass
+    origin:
+    - spec:2026-11-28-tester-gate-auto-pass#R5
+    - spec:2026-11-28-tester-gate-auto-pass#R6
+    - spec:2026-11-28-tester-gate-auto-pass#R7
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_two_cursors_naming_the_branch_are_unreadable_for_a_pr
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_a_drive_narrowed_with_batch_writes_nothing_for_a_loose_pr
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_rows_unreadable_for_a_loose_pr_are_reported_once_and_plan_nothing
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_a_failed_label_write_for_a_loose_pr_is_reported_and_exits_one
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_loose_ledgers_reports_two_runs_naming_the_branch_and_reads_nothing
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_a_loose_pr_in_a_repo_with_no_clone_is_reported_and_the_pass_goes_on
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_a_failed_gate_pass_for_a_loose_pr_is_planned_again_on_the_next_pass
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_a_runs_live_and_archived_cursors_are_one_cursor_for_a_pr
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_a_cursor_naming_another_pr_is_unreadable
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_a_cursor_naming_this_number_in_another_repo_is_unreadable
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_a_cursor_whose_pr_is_not_a_url_is_unreadable
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_a_pr_from_a_fork_or_of_unknown_origin_is_never_loose
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_loose_ledgers_reports_a_cursor_naming_another_pr_and_reads_nothing
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_loose_ledgers_reports_the_same_pr_number_of_another_repo_on_the_cursor
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_a_repo_failure_is_reported_once_per_repo_and_a_pr_failure_names_its_repo
+    status: ci
+    notes: 'unit: fork/unknown-origin PRs never loose; cursor recording another PR,
+      another repo''s PR or a non-url is unreadable and reported; two runs; archived
+      twin; no-clone repo reported once per repo; per-PR reports name owner/repo#n;
+      narrowed drive; failed write retried'
+    verify: none
+  - id: loose-gated-pr-batch-guards
+    capability: Triage driver
+    acceptance: Walked rows never pass a loose PR's run-level gate that no row inherits,
+      its ops-promoted devops gate, or a held gate with no rows; those pass only through
+      fr gate pass
+    origin:
+    - spec:2026-11-28-tester-gate-auto-pass#R2
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_r2_the_batch_guards_hold_for_a_loose_pr
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_r2_a_loose_prs_run_gate_no_row_inherits_is_never_passed_by_walked_rows
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_r2_a_loose_prs_ops_promoted_devops_gate_is_never_passed_by_walked_rows
+    status: ci
+    notes: 'unit: gate_actions guards, and the same guards through the driver for a
+      loose PR (run gate not inherited, ops-promoted devops)'
+    verify: none
+  - id: closed-out-batch-gated-pr-pass
+    capability: Triage driver
+    acceptance: A whole-scope drive pass passes the walked post-merge gate of a closed-out
+      batch's merged PR, which the batch route skips
+    origin:
+    - spec:2026-11-28-tester-gate-auto-pass#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_a_batch_pr_without_a_closeout_is_not_loose_but_a_closed_out_one_is
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_r8_a_closed_out_batchs_gated_pr_is_passed_once_through_the_loose_route
+      - super-fr:tests/unit/test_triage_drive_loose.py#test_r8_a_closed_out_batchs_gated_pr_is_passed_once_through_the_loose_route
+    status: ci
+    notes: 'unit: loose_prs selection, drive_pass, and a whole driver pass over a closed-out
+      batch whose PR is in gated_prs: passed once through the loose route'
+    verify: none
+amendments:
+  - row: loose-gated-pr-no-pass-without-evidence
+    op: reword
+    base: 0
+    acceptance: The driver passes nothing for a loose gated PR whose branch no run cursor
+      names, whose cursor names another PR, whose branch two cursors name or whose rows
+      cannot be read (both reported once), or in a drive narrowed with --batch; a failed
+      write is reported and retried next pass
+    why: 'spec review s2: the cursor must name this PR'
+  - row: loose-gated-pr-no-pass-without-evidence
+    op: reword
+    base: 1
+    acceptance: The driver passes nothing for a gated PR from a fork or of unknown origin,
+      or whose branch no run cursor names; a cursor recording another PR (by owner/repo
+      and number), two runs on its branch, or rows that cannot be read are reported
+      once (a repo-wide failure once per repo) and plan nothing; a drive narrowed with
+      --batch reads none; a failed write is reported and retried next pass
+    why: 'lens review l-security-r1, l-errors-r1/r2: forks excluded, mismatches reported'

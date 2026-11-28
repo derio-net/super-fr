@@ -123,6 +123,8 @@ class Action:
     red: bool = False  # warn: a failing batch PR, which the driver tries to recover (§C)
     checks: tuple[str, ...] = ()  # warn (red): the failing check names
     gate: str = ""  # gate-pass: the post-merge gate whose rows all read walked
+    # awaiting-live, gate-pass of a merged PR outside every batch (`batch` is ""): its repo
+    repo: str = ""
     branch: str = ""  # archive-conflict: the archive PR's head branch (merge-truth R12)
 
 
@@ -132,3 +134,44 @@ def _wrong_base(live: LivePr, default: str) -> str:
     if default and live.base == default:
         return ""
     return f"is based on {live.base or 'an unknown branch'}, not {default or 'the default branch'}"
+
+
+@dataclass(frozen=True)
+class GatedRow:
+    """A matrix row a post-merge gate gates, as the default branch reads it (exit-gates
+    R13, R14): whether it reads `walked` there, and the issues (`owner/repo#n`) it cites."""
+
+    id: str
+    gate: str
+    walked: bool
+    issues: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class GateLedger:
+    """A landed batch's merged PR as the gate ledger (R14): its number and labels, and the
+    rows its post-merge gates gate. `rows` is None when they were not read (the board,
+    which reads no clone; an unreadable default branch): no label and no pass is planned
+    from an unknown."""
+
+    pr: int
+    labels: frozenset[str]
+    rows: tuple[GatedRow, ...] | None = None
+    # The run-level gate, and whether any row inherits it (p4-r3): a run gate no row
+    # inherits is never passed by walked rows, only by `fr gate pass`.
+    run_gate: str = "none"
+    run_gate_inherited: bool = False
+    # fr-ops R13: `devops` holds because the run's plan has ops, so walked rows never pass it.
+    ops_promoted: bool = False
+
+
+@dataclass(frozen=True)
+class LooseLedger:
+    """A merged gated PR no open batch delivered, as the gate ledger (spec
+    2026-11-28-tester-gate-auto-pass R1, R8): its repo, number and head branch (the
+    branch the run cursor that delivered it names) and its `GateLedger`."""
+
+    repo: str
+    number: int
+    head_ref: str
+    ledger: GateLedger
