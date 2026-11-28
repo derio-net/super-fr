@@ -61,7 +61,10 @@ rows:
     origin:
     - spec:2026-11-28-batch-silent-failures#R7
     - spec:2026-11-28-batch-silent-failures#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_render.py#test_an_unsupported_operation_names_the_backend_and_the_tracking_issue
+      - super-fr:tests/unit/test_debt_issue.py#test_every_unavailable_source_is_named_on_stderr_before_any_write
+    status: ci
+    notes: category and fr debt issue stderr lines
     verify: none
