@@ -4,6 +4,17 @@ step: review-phase
 item: phase/1
 outcome: done
 journal:
+  - kind: review
+    id: review-p1-1
+    phase: 1
+    title: "phase 1 code review (requesting-code-review): 5 in-scope findings p1-r1..p1-r5, all fixed"
+    body: |
+      Independent reviewer (hard tier) over the phase-1 diff against spec R1-R8 and the
+      artifact-versioning migration discipline. Migration safety, round trip on every live
+      spec, CRLF, code-span pipes and imports all checked clean. Findings: has_requirements
+      raising inside sizing's handler (r1), silent table truncation on a broken row (r2) or a
+      missing delimiter row (r3), an id-like prefix matching prose (r4, spec R3 amended), and
+      proportionality hiding the cause (r5). All fixed in 5ecc797fa with tests.
   - kind: finding
     id: p1-r1
     review_scope: in
@@ -106,4 +117,7 @@ resolves:
       an `R<n>.` list; asks cannot be counted." Tests:
       test_plan_proportionality.py::test_an_invalid_requirements_section_names_the_line_and_cause and the two
       updated no-section / no-spec tests.
-evidence: {}
+evidence:
+  review: review-p1-1
+  reviewer: ac80c86b48565e3b3
+  model: claude-opus-5-5
