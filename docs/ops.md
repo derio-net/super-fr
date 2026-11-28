@@ -431,8 +431,8 @@ run their checks, and does not have to ask.
 
 A gate owns acceptance rows as well as ops and steps: each row whose effective gate is that
 gate. A row is walked when its status is `walked` and its latest walk passed. `fr gate pass`
-refuses, for `devops` and for `tester`, while a row it owns is not walked, and names why: no
-walk, a failing latest walk, or the harnesses still owed. Inside the DevOps stage, a walk
+stops, for `devops` and for `tester`, while a row it owns is not walked. It names the cause:
+no walk, a failed latest walk, or the harnesses still owed. Inside the DevOps stage, a walk
 that the PR head carries does not count.
 
 - **The pointer.** A step may name the rows it proves with `(rows: <id>, …)`, after the
@@ -445,18 +445,18 @@ that the PR head carries does not count.
     effective strategy, its evidence `Test Plan step <n>: <e>`. Its harness and model are
     `operator` and `human`, or `--harness` and `--model`. A probe that passed at stage 5
     walks as `fr-ops-probe` and `op:<id>`. A row that the walk makes walk-verified moves to
-    `walked`; any other row keeps its status, and the command names the harnesses it still
+    `walked`. Any other row keeps its status, and the command names the harnesses it still
     owes. A row that an earlier feature merged is amended into the spec's fragment. The
     command refuses, and writes nothing, an id that is no row citing the spec, or a row whose
     strategy is `none`.
 
 - **The question.** Stage 5 asks about each devops row that is still not walked and that no
-    `ran` step names, so also a row whose step you answered `na`. `ran <evidence>` runs
-    `fr acceptance set-status --walk` (harness `operator`, model `human`), and `owed <why>`
-    sets the row to `walk-owed` with the reason as its note.
+    `ran` step names. That includes a row whose step you answered `na`. `ran <evidence>` runs
+    `fr acceptance set-status --walk` (harness `operator`, model `human`). `owed <why>` sets
+    the row to `walk-owed`, with the reason as its note.
 
 - **Self-review.** `fr plan self-review` warns about each gated row that no step of the same
-    gate names, and about each `(rows: …)` id that names no row citing the spec.
+    gate names. It also warns about each `(rows: …)` id that names no row of the spec.
 
 ### Test Plan tags
 
