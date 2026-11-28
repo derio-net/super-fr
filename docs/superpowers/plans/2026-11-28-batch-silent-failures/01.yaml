@@ -1,0 +1,159 @@
+schema_version: 2
+phase:
+  number: 1
+  title: Silent failures name their reason (install.sh, bootstrap.sh, adopt/push,
+    fr debt)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - install-warns-on-fr-refusal
+  - bootstrap-unreadable-tag-refuses
+  - forge-read-failure-named
+  - debt-unsupported-forge-named
+  tier: standard
+  files:
+  - scripts/install.sh
+  - scripts/bootstrap.sh
+  - packages/fr/src/fr/forge_body.py
+  - packages/fr/src/fr/run/adopt.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/commands/migrate_cmd.py
+  - packages/fr/src/fr/commands/push_cmd.py
+  - packages/fr/src/fr/debt/render.py
+  - packages/fr/src/fr/commands/debt_cmd.py
+  - tests/integration/test_install_opencode_agents.py
+  - tests/integration/test_install_channels.py
+  - tests/integration/test_install_sh.py
+  - tests/unit/test_forge_body*.py
+  - tests/unit/test_run_adopt.py
+  - tests/unit/test_fr_push*.py
+  - tests/unit/test_push*.py
+  - tests/unit/test_debt_render.py
+  - tests/unit/test_debt_issue.py
+  - docs/**/*.md
+  - .changes/feat-batch-silent-failures.yaml
+  - docs/acceptance/features/2026-11-28-batch-silent-failures.yaml
+  estimate_lines: 550
+tasks:
+- number: 1
+  title: install.sh warns on a refusing fr and repeats every warning at the end (R1,
+    R2)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/integration/test_install_opencode_agents.py add tests that run install.sh (the file's existing harness, OpenCode config present) with a stub `fr` on PATH whose `models apply` prints the CLI-entry migration gate's real refusal shape to stderr (7 lines, copied from what `fr.artifacts.trigger._will_not_act_here` prints: fact, because, detail, `carry it:` line, then the preview / apply / bypass lines) and exits 2; every other `fr` subcommand behaves as the existing stub does. Assert: (a) the install exits 0; (b) stderr holds a `WARNING:` line naming exit 2, all 7 refusal lines, and the remedy `fr models apply --harness opencode`; (c) after `Installation complete.` stdout/stderr hold `fr version:` and then a `Warnings (N):` heading, N ≥ 1, that repeats that warning; (d) with a stub whose refusal is 20 lines, 12 appear plus `… 8 more lines`. Add one test where `fr models apply` exits 0 and nothing else warns, asserting `No warnings.` closes the output and no `WARNING:` mentions tier models. Extend the existing `test_no_model_is_pinned_when_fr_is_not_on_path_at_all` (or add a sibling) to assert the `fr is not on PATH` tier-model WARNING and its repeat in the summary. Run `uv run pytest tests/integration/test_install_opencode_agents.py -q --no-cov -n 2` and confirm the new tests fail.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in scripts/install.sh add, before the first warning site, a warnings file (`FR_INSTALL_WARNINGS="$(mktemp …)"`) and `warn()`: it prints its arguments (one line each) to stderr and appends them to that file. Convert every `WARNING:` site (17 today, at the lines `grep -n WARNING scripts/install.sh` lists; some echo to stdout, some span 2 lines, the vk-residue ones use a `$warn` variable) to `warn`, keeping each message's text. Replace `fr models apply --harness opencode || true` with: no `fr` on PATH → `warn "WARNING: tier models not applied: fr is not on PATH"`; else run it with stderr to a second mktemp file, and on non-zero exit `warn` a `WARNING: tier models not applied (fr models apply exit <n>):` line, up to 12 lines of that stderr indented, a `… <k> more lines` line when cut, and `  fix what fr names above, then run: fr models apply --harness opencode`. Update the comment above it (the `|| true` tolerance is gone: an unbound tier exits 0). After the `Verify with:` lines print a closing block: `fr version: $(fr --version)` (`fr: not on PATH` when absent; `fr version: unknown (fr --version failed, exit <n>)` when it fails), then `Warnings (N):` and each recorded line, or `No warnings.`. Run the test file again: green.
+  - id: P1.T1.S3
+    text: |-
+      GREEN: extend `cleanup_tmps` (the EXIT trap): on every exit remove both temp files; on a non-zero exit, before its existing `install.sh failed (exit $rc). Rerun after fixing.` line (which stays last), print the recorded warnings under `Warnings (N):` when the file is non-empty. Add a test in tests/integration/test_install_opencode_agents.py (or test_install_sh.py if its harness fits better) that makes the install fail after a warning (e.g. a stub that warns, then a forced failing step the existing tests already use) and asserts the repeat comes before the failure line and the failure line is last; and that no `mktemp` file of this install survives either a success or a failure run (point TMPDIR at a test dir and list it). Run the touched install test files: green.
+  - id: P1.T1.S4
+    text: |-
+      REFACTOR: read the converted warning sites once more; any warning that was multi-line stays one `warn` call with all its lines, and no site now prints its warning twice. Run `bash -n scripts/install.sh` and the install tests again.
+- number: 2
+  title: bootstrap.sh never drops a tag without a message (R3, R4)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/integration/test_install_channels.py add tests on the existing fixture remote (`_fixture_remote`, `_bootstrap`): (a) a tag whose install.sh cannot be read stops bootstrap: put a stub `git` first on PATH (the `bin_dir` `_bootstrap` already prepends) that delegates to the real git except for `show refs/tags/v1.2.0-rc.10:scripts/install.sh`, which prints `fatal: simulated read failure` to stderr and exits 128. Assert exit 1, stderr has `ERROR: could not read scripts/install.sh at v1.2.0-rc.10: fatal: simulated read failure`, and the marker file was not written (nothing installed), for the default channel, `--version RC`, `--version 1.2.0` and `--version 9.9.9`; (b) the same stub on `--version main` installs main (no tag is read); (c) a stub making `ls-remote --tags` fail gives exit 1 and `ERROR: could not list release tags:` with git's message, never `No installable versions exist yet`; (d) a tag whose commit has no scripts/install.sh at all (add one to the fixture: a commit removing the file, tagged `v0.8.0`, then restoring it) is skipped with no message and the refusal list is unchanged. Run `uv run pytest tests/integration/test_install_channels.py -q --no-cov -n 2`: the new tests fail.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in scripts/bootstrap.sh rewrite `installable_tags`: capture `channel_tags`' output and status first (git's stderr captured into a variable; on failure echo `ERROR: could not list release tags: <first stderr line>` to stderr and return 1); for each tag run `git -C "$SRC" ls-tree --name-only "refs/tags/$t" -- scripts/install.sh` (non-zero: an error; empty: absent, skip), then `git -C "$SRC" show "refs/tags/$t:scripts/install.sh"` with stderr captured (non-zero: echo `ERROR: could not read scripts/install.sh at $t: <first stderr line>` and return 1); test the marker with `grep -qx '# fr-install-channels: 1' <<<"$content"`. Make `channel_tags` itself propagate a failure (e.g. `set -o pipefail` already holds; capture `ls-remote` into a variable inside it and return its status). On every non-`main` path compute `if ! INSTALLABLE="$(installable_tags)"; then exit 1; fi` once, and make `refuse`, the default, the RC and the explicit-version branches filter `$INSTALLABLE` (`printf '%s\n' "$INSTALLABLE" | …`, guarding an empty list) instead of calling `installable_tags`. The `main` branch computes nothing. Update the comments. Run the test file: green, including test_the_refusal_lists_installable_tags_in_version_order.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: `bash -n scripts/bootstrap.sh`; read that `refuse` still works when called before `INSTALLABLE` is set (an argument error path) — if any such call exists, compute the list inside `refuse` with the same checked form. Re-run tests/integration/test_install_channels.py and tests/integration/test_bootstrap_sh.py.
+- number: 3
+  title: adopt and push name a PR read failure on stderr (R5, R6)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: add unit tests for a new `fr.forge_body.read_failure(url, exc) -> str`: it returns `warning: could not read the state of PR <url>: <reason>`; the reason is redacted (a `https://user:tok@host` credential, a `ghp_…` token and a `/Users/<name>` path are gone), control and bidi characters (e.g. `\x1b[31m`, `‮`) are replaced, only the first line of a multi-line message is kept, and the whole reason is at most 300 characters; a login-page error message (`not_json_reason`'s text) survives intact. Add a test that importing `fr.forge_body` does not import `fr.debt` (run `python -c` in a subprocess and check `sys.modules`). In tests/unit/test_run_adopt.py add: `default_pr_state(repo_root, warn=calls.append)` with a monkeypatched `fr.hostclient.client_for` whose `pr_status_by_url` raises returns None and calls warn once with the read_failure line; `adopt_run(..., warn=...)` forwards it; and a CLI test that `fr run adopt` (CliRunner, as the file's existing tests drive it) prints that line on stderr when the forge raises. Add a test that `fr migrate`'s adoption loop prints it too (find its existing test with `grep -rn adopt_run tests/unit`). For push, find the existing `fr push` merged-PR guard tests (`grep -rln "orphans the commit\|refuse_closed_pr" tests`) and add one where `pr_status_by_url` raises a `GhError`: the push is not refused and stderr has the read_failure line for the run's recorded PR. Run them: they fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: implement `read_failure` in packages/fr/src/fr/forge_body.py, importing `fr.debt.render.redact` inside the function, and the same control/bidi character class as `fr.commands.debt_cmd._CONTROL` (define it in forge_body and have debt_cmd import it from there, so there is one class). Add `warn: Callable[[str], None] | None = None` to `default_pr_state` (call `warn(read_failure(url, exc))` in the `except`, then return None as today; update the docstring) and to `adopt_run` (forwarded only when it builds the default pr_state). In commands/run_cmd.py `adopt_cmd` and commands/migrate_cmd.py's adoption loop pass `lambda line: typer.echo(line, err=True)`. In commands/push_cmd.py `refuse_closed_pr` bind the exception and `typer.echo(read_failure(state.pr, exc), err=True)` before `continue` (import typer there if the module does not already, matching its style), and update its docstring. Run the tests plus tests/unit/test_run_writes_layering.py: green.
+- number: 4
+  title: fr debt names an unsupported forge operation and prints every unavailable
+    reason (R7, R8)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in tests/unit/test_debt_render.py add tests for `source_category("forge", SourceStatus(state="unavailable", why=...))` where `why` is built exactly as `fr.debt.engine.compute` builds it, `f"{type(e).__name__}: {e}"`, from a real `fr.ghclient.UnsupportedForgeOperation("list_issues", "gitea")` → `not supported on gitea (gh#611)`; with `tracked_by="derio-net/super-fr#611"` → `not supported on gitea (derio-net/super-fr#611)`; with a backend or tracked_by that is not a fixed-shape token (e.g. backend `"Gitea Prod!"`, tracked_by `"see https://x.invalid"`) → `not supported by this forge`; any other forge failure (`GhError: boom`) → still `forge error`. Add an engine-level test (tests/unit/test_debt_engine.py, with its fake forge) that a forge whose `owed_issues` raises UnsupportedForgeOperation publishes `forge: not supported on gitea (gh#611)` in `render.markdown`. In tests/unit/test_debt_issue.py add: when the forge source is unavailable, `fr debt issue` (preview, and with `--yes`) prints `unavailable: forge: UnsupportedForgeOperation: …` on stderr before any `create:`/`refresh:` line, redacted and cleaned (a token in the reason does not appear), one line per unavailable source (make two sources unavailable in one test). Run them: they fail.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/debt/render.py `source_category`, for `name == "forge"` and state unavailable, match the why with an anchored pattern on the exception's fixed message (`^UnsupportedForgeOperation: `[^`]+` is not supported on the (?P<backend>\S+) backend yet \(tracked in (?P<issue>[^)]+)\)$`): return `not supported on <backend> (<issue>)` when backend matches `^[a-z]+$` and issue matches `^(gh#\d+|[\w.-]+/[\w.-]+#\d+)$`, else `not supported by this forge`; otherwise keep `forge error`. Correct the docstring's claim about the CI log to name `fr debt issue`'s stderr. In packages/fr/src/fr/commands/debt_cmd.py `issue_cmd`, right after `_compute`, print `unavailable: <name>: <_clean(st.why, 300)>` with `typer.echo(..., err=True)` for every source whose state is unavailable, in `report.sources` order. Run the debt tests: green.
+- number: 5
+  title: Docs, change fragment, acceptance rows, full verification
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Run `uv run fr docs check --base origin/main`; for every page it names (install.sh and bootstrap.sh are covered by an install page; debt, adopt and push pages may be too), edit the page where this change makes it untrue (the installer now ends with the fr version and a repeated warning list; bootstrap refuses on an unreadable tag; `fr debt issue` prints unavailable reasons; the unsupported-operation category), else add a dated `reviewed:` entry saying it is still true and why. Re-run until it exits 0.
+  - id: P1.T5.S2
+    text: |-
+      Add `.changes/feat-batch-silent-failures.yaml` with `bump: patch` and a one-line summary (install.sh and bootstrap.sh name the failures they used to hide; adopt, push and fr debt name forge read failures and unsupported operations). Move the four rows (install-warns-on-fr-refusal, bootstrap-unreadable-tag-refuses, forge-read-failure-named, debt-unsupported-forge-named) to `ci` with `uv run fr acceptance set-status --id <row> --status ci --notes "<the tests that pin it>" --level int=super-fr:<test path>#<test name>` (unit= for unit tests), naming the tests added above by name. Run `uv run fr acceptance check --no-fetch`.
+  - id: P1.T5.S3
+    text: |-
+      Run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, the mypy command from AGENTS.md, and the fast tier the brief names (or the touched test files), after the last code commit.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-28T10:17:26+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-11-28T10:17:26+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-11-28T10:17:26+00:00'
+      note: null
+    P1.T1.S4:
+      state: x
+      ticked_at: '2026-11-28T10:17:26+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-28T10:17:26+00:00'
+      note: null
+    P1.T2.S2:
+      state: x
+      ticked_at: '2026-11-28T10:17:26+00:00'
+      note: null
+    P1.T2.S3:
+      state: x
+      ticked_at: '2026-11-28T10:17:26+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-28T10:17:26+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-28T10:17:26+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-28T10:17:26+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-28T10:17:26+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-28T10:17:26+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-28T10:17:26+00:00'
+      note: null
+    P1.T5.S3:
+      state: x
+      ticked_at: '2026-11-28T10:17:26+00:00'
+      note: null
+  completion:
+    at: '2026-11-28T10:17:27+00:00'
+    note: null
+    observed_prs: []

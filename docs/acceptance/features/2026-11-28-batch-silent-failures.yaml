@@ -1,0 +1,70 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-28-batch-silent-failures
+repo: derio-net/super-fr
+rows:
+  - id: install-warns-on-fr-refusal
+    capability: Installer
+    acceptance: When fr models apply refuses during install, the install continues,
+      prints a WARNING naming fr's exit code, message and remedy, and repeats every
+      warning of the install at its end beside the installed fr version
+    origin:
+    - spec:2026-11-28-batch-silent-failures#R1
+    - spec:2026-11-28-batch-silent-failures#R2
+    levels:
+      int:
+      - super-fr:tests/integration/test_install_opencode_agents.py#test_a_refusing_fr_models_apply_is_warned_with_its_whole_message
+      - super-fr:tests/integration/test_install_opencode_agents.py#test_the_warnings_survive_a_failed_install_and_no_temp_file_survives_any
+    status: ci
+    notes: 'stub fr refusing models apply: warning, closing repeat, failure ordering,
+      temp files removed'
+    verify: none
+  - id: bootstrap-unreadable-tag-refuses
+    capability: Installer
+    acceptance: 'bootstrap.sh never drops a release tag silently: a tag whose install.sh
+      git cannot read stops bootstrap with an ERROR naming the tag and git''s message,
+      while an absent or unmarked install.sh is still skipped'
+    origin:
+    - spec:2026-11-28-batch-silent-failures#R3
+    - spec:2026-11-28-batch-silent-failures#R4
+    levels:
+      int:
+      - super-fr:tests/integration/test_install_channels.py#test_a_tag_whose_install_sh_cannot_be_read_stops_bootstrap
+      - super-fr:tests/integration/test_install_channels.py#test_a_failing_tag_listing_is_named_never_read_as_no_versions
+    status: ci
+    notes: fixture remote with an unreadable tag and a failing listing
+    verify: none
+  - id: forge-read-failure-named
+    capability: Forge adapters
+    acceptance: fr run adopt and fr push still fail open when a PR's state cannot be
+      read, and print one redacted stderr line naming the PR and the reason (a login
+      page included)
+    origin:
+    - spec:2026-11-28-batch-silent-failures#R5
+    - spec:2026-11-28-batch-silent-failures#R6
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_adopt.py#test_the_adopt_command_prints_the_read_failure_on_stderr
+      - super-fr:tests/unit/test_git_policy_push.py#test_an_unreadable_recorded_pr_is_named_on_stderr_and_does_not_refuse_the_push
+    status: ci
+    notes: adopt, migrate and push print the read_failure line
+    verify: none
+  - id: debt-unsupported-forge-named
+    capability: Debt report
+    acceptance: fr debt publishes a forge operation the backend does not support as
+      'not supported on <backend> (<issue>)', never 'forge error', and fr debt issue
+      prints each unavailable source's reason on stderr
+    origin:
+    - spec:2026-11-28-batch-silent-failures#R7
+    - spec:2026-11-28-batch-silent-failures#R8
+    levels:
+      unit:
+      - super-fr:tests/unit/test_debt_render.py#test_an_unsupported_operation_names_the_backend_and_the_tracking_issue
+      - super-fr:tests/unit/test_debt_issue.py#test_every_unavailable_source_is_named_on_stderr_before_any_write
+    status: ci
+    notes: category and fr debt issue stderr lines
+    verify: none

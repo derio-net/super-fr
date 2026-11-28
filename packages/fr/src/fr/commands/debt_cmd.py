@@ -22,6 +22,7 @@ import typer
 from fr.artifacts.paths import KIND_DIRS
 from fr.commands.common import resolve_repo_root
 from fr.debt.render import BOT_LOGINS  # the one definition, shared with `fr triage`
+from fr.forge_body import CONTROL as _CONTROL  # one class, shared with `read_failure`
 
 if TYPE_CHECKING:
     from fr.debt.engine import DebtForge
@@ -173,6 +174,9 @@ def issue_cmd(
     try:
         client = _client(root)
         report = _compute(root, client, slug, stale_days)
+        for source, status in report.sources.items():  # R8: the reason a body never carries
+            if status.state == "unavailable":
+                typer.echo(f"unavailable: {source}: {_clean(status.why, 300)}", err=True)
         capped = False
         try:
             found = client.list_open_issues_with_body(
@@ -229,10 +233,6 @@ def issue_cmd(
 
 
 LEGACY_MARKER = "<!-- fr-acceptance-digest -->"
-
-
-# Control characters plus the bidi and format marks that reorder or hide text.
-_CONTROL = re.compile("[\x00-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 
 
 def _clean(value: object, limit: int = 120) -> str:

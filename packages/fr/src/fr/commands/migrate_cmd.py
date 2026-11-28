@@ -325,7 +325,9 @@ def _offer_adoption(repo_root: Path, *, adopt: bool, yes: bool) -> None:
     for plan_dir in plans:
         notes: list[str] = []
         try:
-            state = adopt_run(repo_root, plan_dir, notes=notes)
+            state = adopt_run(
+                repo_root, plan_dir, notes=notes, warn=lambda line: typer.echo(line, err=True)
+            )
         except AdoptError as e:
             typer.echo(f"  could not adopt {plan_dir.name}: {e}", err=True)
             continue
