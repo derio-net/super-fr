@@ -13002,6 +13002,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-28T10:51:53.446422Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -14585,6 +14592,13 @@ batches:
     runner: herdr
     handle: w3X:p8
     branch: feat/batch-s2-alacarte-settings
+  - kind: red_handback
+    at: '2026-11-28T10:51:50.801608Z'
+    pr: 1760
+    head: 9c534e26dcffb19bbd7b9506708ba87e58cd3bf6
+    checks:
+    - ci-ok
+    delivered: session
 - id: board-session-state
   title: 'Batches page: session state, lane owners, time per column'
   ids:
