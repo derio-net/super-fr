@@ -1382,7 +1382,7 @@ for a flag that bends this one.
 | Model per phase tier | `~/.config/fr/models.yaml` | Chooses which model implements a phase of a given difficulty. |
 | Manual-phase placement | Dependency on human action | Selects back-loaded continuation or front-loaded pause. |
 | Repository topology | Local and cross-repo spec references | Produces one plan and PR per repository. |
-| Repo settings | `.fr/settings.yaml`, read from the default branch (quiet: `settings.yaml` on `origin/fr`; stealth: `<target-dir>/settings.yaml` on the tracking branch) | Turns policy features off, withdraws workflow shapes, drops informational PR-body sections, quiets the forge, sets the git policy, and (quiet) moves fr's records onto the `fr` branch. |
+| Repo settings | `.fr/settings.yaml`, read from the default branch (quiet: `.fr/settings.yaml` on the `fr-config` branch; stealth: `<target-dir>/.fr/settings.yaml` on the tracking repo's `<branch>-config` branch) | Turns policy features off, withdraws workflow shapes, drops informational PR-body sections, quiets the forge, sets the git policy, and (quiet) moves fr's records onto the `fr` branch. |
 
 ### What can the repo settings change?
 
@@ -1502,8 +1502,8 @@ commit-subject check and the squash apply to your feature branch only. fr
 refuses runner dispatch (`fr apply --to`) under quiet, because a runner works
 from the default branch, where a quiet repository keeps no plan.
 
-Under quiet the policy keys come from `fr`'s own `settings.yaml`, read from
-`origin/fr`, and fr ignores a `.fr/settings.yaml` on the default branch
+Under quiet the policy keys come from `.fr/settings.yaml` on the `fr-config`
+branch, and fr ignores a `.fr/settings.yaml` on the default branch
 (`fr settings
 show` says so). Whoever can push to `fr` can therefore change the
 policy, so **give the `fr` branch the same branch protection as your default
@@ -1597,7 +1597,8 @@ comment there. Stealth sets `forge.labels`, `forge.comments` and `forge.issues`
 to `off` and `forge.pr_body` to `minimal` itself. `fr settings check` and
 `fr run start` refuse a tracking file that sets one of them to anything else.
 
-The policy keys come from `<target-dir>/settings.yaml` on the tracking branch.
+The policy keys come from `<target-dir>/.fr/settings.yaml` on the tracking
+repository's `<branch>-config` branch.
 `fr settings init --stealth <tracking-repo>@<branch>` writes and pushes that
 file. fr ignores a `.fr/settings.yaml` in the target and prints that it did. fr
 refuses a tracking repository more visible than the target. That means a
@@ -1624,8 +1625,10 @@ the branch:
 Under stealth, code reaches the target only after you approve it. Stealth sets
 `git.push` and `git.pr` to `ask`, whatever the tracking file says, and
 `fr settings check` refuses a tracking file that sets either one to `auto`.
-So no phase pushes: each phase proves its work with a local test log, never
-with `tests: ci`, because `tests: ci` needs a push. The first code push is when
+So no phase pushes, and no phase uses `tests: ci` as its own evidence, because
+that needs a push: a phase proves its work with a local test log, or, under a
+`tests: ci` the repository declares, runs its fast tier and leaves the suite
+evidence to `deliver`, as anywhere. The first code push is when
 `deliver` opens. There `fr push` asks you to approve it, `fr pr create` asks
 again, and every later push that adds code asks once more. fr's own records
 still go to the tracking repository on every write, without asking.
