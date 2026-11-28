@@ -2236,8 +2236,7 @@ def _pristine(repo: Path, shipped: Path, shape: str | None = None) -> bool:
     if seen != {
         ".fr-isolation",
         "seed.md",
-        "docs",
-        "docs/superpowers",
+        ".fr",
         ".fr/workflows",
     }:
         return False
@@ -2600,6 +2599,7 @@ def test_resolve_on_a_step_with_no_emits_still_refuses_emitted(tmp_path: Path) -
         "quiet",
         "workflow: quiet\nschema: 1\nunit: run\nsteps:\n  - id: quiet\n    kind: agent\n",
     )
+    (repo / "docs").mkdir(exist_ok=True)
     (repo / "docs" / "spec.md").write_text(SHAPED_SPEC)
     _invoke(repo, shipped, ["run", "start", "quiet", "--branch", "b", "--run-id", "r1"])
     _invoke(repo, shipped, ["run", "advance", "r1"])
