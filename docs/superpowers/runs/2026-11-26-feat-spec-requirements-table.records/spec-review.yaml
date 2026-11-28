@@ -1,0 +1,94 @@
+schema_version: 12
+run: 2026-11-26-feat-spec-requirements-table
+step: spec-review
+outcome: done
+journal:
+- kind: finding
+  id: s1
+  review_scope: in
+  title: Hard-wrapped requirements in live specs break the R4 refusal rule
+  body: See the independent spec review (spec-review).
+- kind: finding
+  id: s2
+  review_scope: in
+  title: R3 stamps a legacy table at 2 that R6 then refuses
+  body: See the independent spec review (spec-review).
+- kind: finding
+  id: s3
+  review_scope: in
+  title: One unconvertible spec refuses every fr command in the repo
+  body: See the independent spec review (spec-review).
+- kind: finding
+  id: s4
+  review_scope: in
+  title: Malformed two-column row handling unspecified
+  body: See the independent spec review (spec-review).
+- kind: finding
+  id: s5
+  review_scope: in
+  title: Byte-preservation promise vs Design; line endings
+  body: See the independent spec review (spec-review).
+- kind: finding
+  id: s6
+  review_scope: in
+  title: Background misstates an older fr's reaction
+  body: See the independent spec review (spec-review).
+- kind: finding
+  id: s7
+  review_scope: in
+  title: Other list-form descriptions and a docs-currency page missing
+  body: See the independent spec review (spec-review).
+- kind: finding
+  id: s8
+  review_scope: in
+  title: Test Plan names files that do not exist; Design shape omits tests, scenario, fragment
+  body: See the independent spec review (spec-review).
+- kind: finding
+  id: s9
+  review_scope: in
+  title: validate_spec reading the stamp risks an import cycle
+  body: See the independent spec review (spec-review).
+- kind: discovery
+  id: spec-review
+  title: 'independent spec review: 9 findings, all in scope'
+  body: fr-spec-reviewer (hard tier) checked the spec against the three operator decisions, the codebase and itself; all three decisions honoured. Additionally found live spec 2026-11-27-triage-leaves-split
+    holds an `R9a.` id the current parser drops silently.
+- kind: lens
+  lens: tests
+  title: the migration's round trip, refusals and CRLF/wrapped-line edge cases need adversarial test review
+- kind: lens
+  lens: errors
+  title: an unconvertible spec turns into a whole-repo CLI refusal; its message and way out must be checked
+resolves:
+- id: s1
+  state: fixed
+  body: 'Continuation lines defined (new R3): joined in the reader and the rewrite, so the round trip holds; blank lines between requirements are not prose; an id-like malformed prefix (R9a.) refuses. Test
+    Plan covers wrapped and R9a cases.'
+- id: s2
+  state: fixed
+  body: R7 checks cell counts only for the `| ID | Requirement |` table and says a legacy three-column table is not refused; validator test for a stamped legacy table added.
+- id: s3
+  state: fixed
+  body: R5 now requires the failure to name file, line, cause and the hand fix; Design states the whole-repo gate consequence and the cross-branch conflict and its resolution.
+- id: s4
+  state: fixed
+  body: R1 requires outer pipes; R2 raises RequirementsError naming the line for a row of other than two cells; tests added.
+- id: s5
+  state: fixed
+  body: R4 states exactly what changes (requirement lines, blank lines around the table, stamp) and that line endings are kept; Design reads with read_utf8 and keepends; CRLF case in the Test Plan.
+- id: s6
+  state: fixed
+  body: Background now says any fr before this change silently skips sizing and proportionality reports no list; only validate reads the stamp; the window is accepted with the reason.
+- id: s7
+  state: fixed
+  body: R8 and Design/Design shape now name fr-plan, fr-acceptance, the fr-acceptance and 01-fr-goal explainers and the parser's docstring and error texts.
+- id: s8
+  state: fixed
+  body: Test Plan names test_spec_requirements_list.py, the new migration and prose test modules; Design shape draws them, the scenario, its test_scenarios.py entry and the change fragment.
+- id: s9
+  state: fixed
+  body: Design specifies a function-local import of the registry's _read_spec_stamp, as validate_spec already does for fr.spec.
+acceptance: []
+evidence:
+  review: spec-review
+  reviewer: abb711f641d9e9a81
