@@ -31,9 +31,12 @@ rows:
       batches and such PRs
     origin:
     - spec:2026-11-28-tester-gate-auto-pass#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_r3_a_loose_pr_and_a_gated_batch_citing_one_issue_label_it_once
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_an_open_issue_a_row_cites_is_labelled_once_across_calls
+    status: ci
+    notes: one awaiting-live label per issue across batches and loose PRs
     verify: none
   - id: loose-gated-pr-no-pass-without-evidence
     capability: Triage driver
