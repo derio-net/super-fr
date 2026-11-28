@@ -18,9 +18,15 @@ rows:
     - spec:2026-11-26-spec-requirements-table#R2
     - spec:2026-11-26-spec-requirements-table#R3
     - spec:2026-11-26-spec-requirements-table#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_spec_requirements_list.py#test_a_two_column_table_parses_like_the_list_and_the_legacy_table
+      - super-fr:tests/unit/test_spec_requirements_list.py#test_continuation_lines_join_the_requirement_with_single_spaces
+      - super-fr:tests/unit/test_spec_requirements_list.py#test_an_id_like_line_with_a_malformed_id_names_the_line
+      - super-fr:tests/unit/test_spec_requirements_prose.py#test_fr_brainstorming_names_the_table_its_stamp_and_the_escape
+    status: ci
+    notes: unit tests parse the table, the list with continuation lines and the legacy
+      table to the same requirements, and pin the skill wording
     verify: none
   - id: spec-requirements-table-migrate
     capability: spec requirements
