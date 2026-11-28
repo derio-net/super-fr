@@ -13663,6 +13663,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-28T17:53:42.221450Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-28T17:53:50.768904Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -15404,6 +15419,12 @@ batches:
     delivered: fresh
     handle: w3X:pB
     onto: 608d55585be96efd744e7b5168472832a6aebd7d
+  - kind: approval
+    at: '2026-11-28T17:52:13.174761Z'
+    pr: 1771
+    head: f296e85200e647ac8883484022485ae3c8a6931b
+    voided_at: ef7c13d47de09d81df64cbe2340462e1b1a0df4f
+    patch_id: 0d8b526b373579236e39a174ffd570c7d1464016
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary

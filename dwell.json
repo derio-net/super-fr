@@ -61,8 +61,8 @@
       "column": "running",
       "column_since": "2026-11-28T17:44:07.462352Z",
       "column_first_seen": false,
-      "wait": "you",
-      "wait_since": "2026-11-28T17:49:05.657221Z",
+      "wait": "agent",
+      "wait_since": "2026-11-28T17:53:53.225335Z",
       "wait_first_seen": false,
       "intervals": [
         {
@@ -77,6 +77,13 @@
           "wait": "agent",
           "start": "2026-11-28T17:44:07.462352Z",
           "end": "2026-11-28T17:49:05.657221Z",
+          "first_seen": false
+        },
+        {
+          "column": "running",
+          "wait": "you",
+          "start": "2026-11-28T17:49:05.657221Z",
+          "end": "2026-11-28T17:53:53.225335Z",
           "first_seen": false
         }
       ],
