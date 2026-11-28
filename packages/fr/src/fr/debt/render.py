@@ -51,7 +51,7 @@ _UNSUPPORTED = re.compile(
     re.DOTALL,  # a token carrying a newline still matches, and is then refused as not fixed-shape
 )
 _BACKEND = re.compile(r"[a-z]+")
-_TRACKER = re.compile(r"gh#\d+|[\w.-]+/[\w.-]+#\d+")
+_TRACKER = re.compile(r"gh#[0-9]+|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9]+")  # ASCII only
 
 
 def source_category(name: str, st: SourceStatus) -> str:

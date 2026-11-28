@@ -48,6 +48,8 @@ def test_an_unsupported_operation_names_the_backend_and_the_tracking_issue() -> 
         ("gitea", "see https://x.invalid"),
         ("gitea\n", "gh#611"),  # review p1-r2: a trailing newline is not fixed-shape
         ("gitea", "gh#611\n"),
+        ("gitea", "gh#\uff16\uff11\uff11"),  # review l-security-r1: fullwidth digits
+        ("gitea", "d\u0435rio-net/super-fr#611"),  # a Cyrillic homoglyph in the owner
     ],
 )
 def test_a_token_that_is_not_fixed_shape_never_reaches_the_category(
