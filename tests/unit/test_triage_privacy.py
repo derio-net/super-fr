@@ -774,6 +774,9 @@ def _leaks(tmp_path: Path, text: str, look_for: list[str], vis: dict[str, str | 
         "clone https://github.com/example-org/secret.wiki.git",
         "see example-org/se\u200bcret",  # zero-width space: a reader sees the name
         "see example-org%2Fsecret",  # percent-encoded, as in a URL
+        "see example-org/se%E2%80%8Bcret",  # a percent-encoded zero-width space
+        "see example-org%252Fsecret",  # double-encoded
+        "see \uff45xample-org/secret",  # a fullwidth letter NFKC folds
     ],
 )
 def test_carried_text_naming_a_private_repo_is_a_leak(tmp_path: Path, text: str) -> None:

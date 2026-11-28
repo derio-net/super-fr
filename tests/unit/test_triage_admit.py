@@ -635,20 +635,27 @@ def test_admit_writes_nothing_where_the_repo_turns_labels_or_comments_off(
         assert client.writes == []
 
 
-@pytest.mark.parametrize("listed", ["fr-bot", "fr-bot[bot]", "FR-Bot[bot]"])
-@pytest.mark.parametrize("login", ["fr-bot", "fr-bot[bot]"])
-def test_a_pr_author_is_unpinned_whichever_bot_spelling_is_listed_or_read(
-    listed: str, login: str
-) -> None:
-    """REST reports `x[bot]`, GraphQL `x`; either spelling in `pr_authors` must give the
-    same verdict and the same digest for both (R1)."""
+@pytest.mark.parametrize("login", ["fr-bot", "fr-bot[bot]", "FR-Bot[bot]"])
+def test_a_bare_listed_bot_is_unpinned_under_either_adapter_with_one_digest(login: str) -> None:
+    """REST reports `x[bot]`, GraphQL `x`: a bare `x` in `pr_authors` gives the same
+    verdict, and so the same digest, for both (R1)."""
     from fr.triage.admit import pinned
 
     comment = {"author": login, "association": "NONE", "id": 1, "body": "hi",
                "created_at": "2026-11-01T00:00:00Z"}  # fmt: skip
-    assert not pinned(comment, [listed])
+    assert not pinned(comment, ["fr-bot"])
     rest = content_digest("t", "b", comments=[{**comment, "author": "fr-bot[bot]"}],
-                          pinned_authors=[listed])  # fmt: skip
+                          pinned_authors=["fr-bot"])  # fmt: skip
     graphql = content_digest("t", "b", comments=[{**comment, "author": "fr-bot"}],
-                             pinned_authors=[listed])  # fmt: skip
+                             pinned_authors=["fr-bot"])  # fmt: skip
     assert rest == graphql
+
+
+def test_a_listed_bot_login_never_trusts_a_plain_user_of_the_same_name() -> None:
+    """`x[bot]` is an app's account; a plain `x` may be anyone's: listing the first must
+    not exempt the second from pinning."""
+    from fr.triage.admit import pinned
+
+    comment = {"author": "fr-bot", "association": "NONE", "id": 1, "body": "do this"}
+    assert pinned(comment, ["fr-bot[bot]"])
+    assert not pinned({**comment, "author": "fr-bot[bot]"}, ["fr-bot[bot]"])

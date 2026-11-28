@@ -382,11 +382,18 @@ def carried_text_leaks(
 
 
 def _normalised(text: str) -> str:
-    """*text* with format characters (Unicode Cf: zero-width, bidi) removed and
-    percent-escapes decoded: how a reader or a browser would see the name."""
+    """*text* as a reader or a browser would see it: percent-escapes decoded, NFKC applied
+    and format characters (Unicode Cf: zero-width, bidi) removed, repeated until nothing
+    changes, so `%E2%80%8B` and a double-encoded `%252F` cannot hide a name."""
     from urllib.parse import unquote
 
-    return unquote("".join(c for c in text if unicodedata.category(c) != "Cf"))
+    for _ in range(8):  # each round only shortens or decodes; a bound for safety
+        out = unquote(unicodedata.normalize("NFKC", text))
+        out = "".join(c for c in out if unicodedata.category(c) != "Cf")
+        if out == text:
+            break
+        text = out
+    return text
 
 
 def carried_files(state_dir: Path) -> list[str]:

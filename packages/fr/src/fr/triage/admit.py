@@ -55,10 +55,13 @@ def pinned(comment: Mapping[str, object], pinned_authors: Collection[str]) -> bo
     viewer is no part of this, so every caller agrees whatever account it runs as)."""
     if str(comment.get("association") or "").upper() in TRUSTED_ASSOCIATIONS:
         return False
-    # Both sides in the canonical form (lowercased, `[bot]` dropped), so the REST login
-    # `x[bot]` and the GraphQL login `x` give one verdict whichever spelling is listed.
-    allowed = {a.lower().removesuffix("[bot]") for a in pinned_authors}
-    return str(comment.get("author") or "").lower().removesuffix("[bot]") not in allowed
+    # One direction only: a listed `x` trusts the REST `x[bot]` and the GraphQL `x`, but
+    # a listed `x[bot]` never trusts a plain `x`, which may be an unrelated user account
+    # (neither adapter reports the account type yet). List a bot by its bare login for
+    # one verdict under both adapters.
+    allowed = {a.lower() for a in pinned_authors}
+    raw = str(comment.get("author") or "").lower()
+    return raw not in allowed and raw.removesuffix("[bot]") not in allowed
 
 
 def content_digest(
