@@ -224,6 +224,7 @@ def test_every_scenario_script_has_a_test_here() -> None:
         "placement-resolver",
         "placement-quiet",
         "placement-stealth",
+        "alacarte-settings",
         "placement-merged-status",
         "placement-fr-enabled",
         "placement-move-and-drift",
@@ -372,6 +373,10 @@ def test_placement_quiet(installed: Path, tmp_path: Path) -> None:
 
 def test_placement_stealth(installed: Path, tmp_path: Path) -> None:
     _scenario("placement-stealth", installed, tmp_path)
+
+
+def test_alacarte_settings(installed: Path, tmp_path: Path) -> None:
+    _scenario("alacarte-settings", installed, tmp_path)
 
 
 def test_placement_merged_status(installed: Path, tmp_path: Path) -> None:
