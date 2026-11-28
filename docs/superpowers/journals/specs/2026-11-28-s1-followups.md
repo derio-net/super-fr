@@ -204,3 +204,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-28-s1-followups-p3 created=2026-11-28T08:22:22+00:00 -->
 ### phase-split-2026-11-28-s1-followups-p3 · decision · ask: #1699, configuration argv from the protected tip (R11-R13)
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-28-s1-followups-p4 created=2026-11-28T08:22:25+00:00 -->
+### phase-split-2026-11-28-s1-followups-p4 · decision · ask: #1700 test sites and #1701 repos home, plus the scenarios and docs that need phases 1-3 (R10, R14-R17)
