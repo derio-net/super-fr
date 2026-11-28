@@ -1,3 +1,6 @@
+---
+fr_schema: 2
+---
 # Split the wave-export and hand-back leaves out of triage/batch_drive.py
 
 Issue: derio-net/super-fr#1516 (architecture review for #1318, section 5.2 of
@@ -45,19 +48,21 @@ module that only imports it; tests are not type-checked. `tests/unit/test_triage
 
 ## Requirements
 
-R1. The value types the pass and its leaves share — `ChecksVerdict`, `ActionKind`, `LivePr`, `Admitted`, `Action`, `CONFLICTING` and `_wrong_base` — move to a new pure module `fr/triage/batch_drive_types.py`.
-R2. The wave-export code — `EXPORT_PREFIX`, `export_branch`, `_wave_order`, `ExportCount`, `_outside`, `ExportTarget`, `export_wave_of`, `export_target`, `_export_row`, `_export_actions` and `_stale_orphans` — moves to a new module `fr/triage/batch_drive_export.py`.
-R3. The remaining hand-back decisions — `conflict_at`, `fresh_conflicts`, `conflict_item_id`, `ARCHIVE_HANDBACKS_PER_CLOSEOUT`, `ArchiveConflictKind`, `archive_conflict_decision`, `held_archive_conflict`, `_held_archive_conflict`, `archive_conflict_item_id`, `CLOSEOUT_HANDBACKS`, `CloseoutDecisionKind` and `closeout_handback_decision` — move into the existing `fr/triage/handback_rules.py`.
-R4. `finished_waves`, `Snapshot`, `drive_pass` and every other definition stay in `batch_drive.py`.
-R5. No import cycle: `batch_drive_types` imports no `fr.triage.batch_drive*` module; `batch_drive_export` imports `batch_drive_types` and never `fr.triage.batch_drive` at run time (`Snapshot` only under `TYPE_CHECKING`); `handback_rules` imports no `fr.triage.batch_drive*` module.
-R6. Every name `fr.triage.batch_drive` defines or re-exports today stays importable from it, the moved private names included.
-R7. Behaviour is unchanged: `drive_pass` returns the same actions in the same order for every snapshot, and every moved function keeps its name, signature, body and docstring (only import lines change).
-R8. The two purity guards cover every module of the pass: `test_the_pass_module_reaches_no_runner_git_process_or_clock` and `test_the_drive_pass_reads_no_clock_and_starts_no_process` check every `fr/triage/batch_drive*.py` file and `fr/triage/handback_rules.py`, and each fails if its file set is empty.
-R9. No test assertion changes other than R8's and R10's; tests keep importing from `fr.triage.batch_drive`.
-R9a. A source module under `packages/` that imports a moved name imports it from its new home (strict mypy refuses an implicit re-export), changing only that import line; `batch_drive` keeps the re-export for R6 and the tests.
-R10. The `batch_drive.py` budget in `test_tripwire_module_budget.py` drops to no more than 50 lines above its new size; `batch_drive.py` stays a held module.
-R11. The pages `fr docs check` reports for this change — `docs/explainers/fr-wave-driver.md` and `docs/explainers/index.md` (they cover `batch_drive.py`), `docs/explainers/fr-triage.md` (covers `fr/triage/**`), `docs/herdr-control-sessions.md` (covers `fr/triage/batch*.py`) and `docs/reference/cli.md` (covers `triage_batch_cmd.py`, edited by R9a) — get their `reviewed` stamp moved with the note `still true, module split only`, and `fr-wave-driver.md`'s `covers:` adds the two new modules (the other two pages' globs already match them).
-R12. The PR adds the change fragment `.changes/feat-batch-arch-triage-leaves.yaml` with `bump: patch`.
+| ID | Requirement |
+|----|-------------|
+| R1 | The value types the pass and its leaves share — `ChecksVerdict`, `ActionKind`, `LivePr`, `Admitted`, `Action`, `CONFLICTING` and `_wrong_base` — move to a new pure module `fr/triage/batch_drive_types.py`. |
+| R2 | The wave-export code — `EXPORT_PREFIX`, `export_branch`, `_wave_order`, `ExportCount`, `_outside`, `ExportTarget`, `export_wave_of`, `export_target`, `_export_row`, `_export_actions` and `_stale_orphans` — moves to a new module `fr/triage/batch_drive_export.py`. |
+| R3 | The remaining hand-back decisions — `conflict_at`, `fresh_conflicts`, `conflict_item_id`, `ARCHIVE_HANDBACKS_PER_CLOSEOUT`, `ArchiveConflictKind`, `archive_conflict_decision`, `held_archive_conflict`, `_held_archive_conflict`, `archive_conflict_item_id`, `CLOSEOUT_HANDBACKS`, `CloseoutDecisionKind` and `closeout_handback_decision` — move into the existing `fr/triage/handback_rules.py`. |
+| R4 | `finished_waves`, `Snapshot`, `drive_pass` and every other definition stay in `batch_drive.py`. |
+| R5 | No import cycle: `batch_drive_types` imports no `fr.triage.batch_drive*` module; `batch_drive_export` imports `batch_drive_types` and never `fr.triage.batch_drive` at run time (`Snapshot` only under `TYPE_CHECKING`); `handback_rules` imports no `fr.triage.batch_drive*` module. |
+| R6 | Every name `fr.triage.batch_drive` defines or re-exports today stays importable from it, the moved private names included. |
+| R7 | Behaviour is unchanged: `drive_pass` returns the same actions in the same order for every snapshot, and every moved function keeps its name, signature, body and docstring (only import lines change). |
+| R8 | The two purity guards cover every module of the pass: `test_the_pass_module_reaches_no_runner_git_process_or_clock` and `test_the_drive_pass_reads_no_clock_and_starts_no_process` check every `fr/triage/batch_drive*.py` file and `fr/triage/handback_rules.py`, and each fails if its file set is empty. |
+| R9 | No test assertion changes other than R8's and R10's; tests keep importing from `fr.triage.batch_drive`. |
+| R9a | A source module under `packages/` that imports a moved name imports it from its new home (strict mypy refuses an implicit re-export), changing only that import line; `batch_drive` keeps the re-export for R6 and the tests. |
+| R10 | The `batch_drive.py` budget in `test_tripwire_module_budget.py` drops to no more than 50 lines above its new size; `batch_drive.py` stays a held module. |
+| R11 | The pages `fr docs check` reports for this change — `docs/explainers/fr-wave-driver.md` and `docs/explainers/index.md` (they cover `batch_drive.py`), `docs/explainers/fr-triage.md` (covers `fr/triage/**`), `docs/herdr-control-sessions.md` (covers `fr/triage/batch*.py`) and `docs/reference/cli.md` (covers `triage_batch_cmd.py`, edited by R9a) — get their `reviewed` stamp moved with the note `still true, module split only`, and `fr-wave-driver.md`'s `covers:` adds the two new modules (the other two pages' globs already match them). |
+| R12 | The PR adds the change fragment `.changes/feat-batch-arch-triage-leaves.yaml` with `bump: patch`. |
 
 ## Design
 
