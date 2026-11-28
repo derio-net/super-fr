@@ -380,7 +380,8 @@ def test_the_configuration_pr_reads_git_pr_from_the_settings(
     assert change.pr_policy(repo) == "auto"
     asked = Settings.model_validate({"git": {"pr": "ask"}})
     monkeypatch.setattr(
-        "fr.settings.load_settings", lambda root: type("E", (), {"settings": asked})()
+        "fr.settings.load_settings",
+        lambda root: type("E", (), {"settings": asked, "config_pr": None})(),
     )
     assert change.pr_policy(repo) == "ask"
 

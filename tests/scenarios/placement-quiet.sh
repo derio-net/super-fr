@@ -13,6 +13,7 @@
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 . "$here/_placement_walk.sh"
+. "$here/_ask_approve.sh"
 scenario_require_fresh_repo
 base="$PWD"
 

@@ -300,6 +300,34 @@ EOF
   mkdir -p "$(dirname "$RECORD")" && printf '%s\n' "$deliver_record" > "$RECORD"
   : > "$FAKE_PR_BODY"   # no PR body yet: an earlier run's must not stand in for this one's
   : > "$FAKE_GH_LOG"
+  if [ "$FR_PLACEMENT" = stealth ]; then
+    # Stealth forces `git.pr: ask` (spec 2026-11-28-alacarte-settings R7): deliver accepts
+    # only the PR `fr pr create` opened and recorded on the cursor.
+    run_fr out run resolve "$run" --step deliver --record "$RECORD"
+    require_exit 2 "$out"
+    expect_grep 'accepts only a PR `fr pr create` opened' "$(printf '%s' "$out" | tr '\n' ' ')" \
+      "under stealth deliver refuses a PR fr pr create did not open"
+    # The code goes first, on the operator's approval (R9, R10) ...
+    fr_approved out push
+    require_exit 0 "$out"
+    # ... then the PR. This fixture's origin is a local path, which names no forge
+    # repository, so `fr pr create` cannot reach the forge here: what it does once the
+    # forge answers (record the PR on the cursor and commit it) is done the same way.
+    "$(candidate_python)" -P - "$run" "https://github.com/derio-net/$repo_id/pull/1" <<'PY' \
+      || fail "record the PR on the cursor"
+import sys
+from pathlib import Path
+
+from fr.records_commit import commit_records
+from fr.run.model import load_run_state, run_path, save_run_state
+
+run, url = sys.argv[1:3]
+root = Path.cwd()
+save_run_state(root, load_run_state(root, run).model_copy(update={"pr": url}))
+commit_records(root, [run_path(root, run)], f"chore(fr): run {run} — pr create")
+PY
+    printf '%s\n' "$deliver_record" > "$RECORD"
+  fi
   run_fr out run resolve "$run" --step deliver --record "$RECORD"
   local body
   if [ "$FR_PLACEMENT" = stealth ]; then
@@ -334,7 +362,7 @@ EOF
   sha="$(printf '%s\n' "$out" | sed -n 's/^cursor committed as \([0-9a-f]*\).*/\1/p')"
   [ -n "$sha" ] && git -C "$FR_ARTIFACT_ROOT" cat-file -e "$sha^{commit}" \
     || fail "'cursor committed as' does not name the commit holding the cursor: $out"
-  run_fr out push
+  fr_approved out push   # under stealth every code push asks (R9); elsewhere it does not
   require_exit 0 "$out"
 }
 

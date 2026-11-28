@@ -201,6 +201,11 @@ def push_cmd() -> None:
             # alacarte R9: stealth asks only for a push that adds code to the target.
             console.print(f"nothing to push to {remote}", soft_wrap=True)
             return
+        # Before the ask, so the operator is never asked to approve a push fr then refuses;
+        # before the squash, which rewrites; the one pusher scans again (pr1431-r1).
+        refuse_stealth_content(repo_root, remote, branch)
+        # R14 and R13 are the product branch's: `fr` is never subject-checked or squashed.
+        check_subjects(settings, rng.commits, issue)
         if settings.git.push == "ask":
             require_approval(
                 repo_root,
@@ -211,10 +216,6 @@ def push_cmd() -> None:
                 git_dir=git_dir,
                 still_current=push_still_current(repo_root, git_dir, branch, head),
             )
-        # Before the squash rewrites anything; the one pusher scans again (pr1431-r1).
-        refuse_stealth_content(repo_root, remote, branch)
-        # R14 and R13 are the product branch's: `fr` is never subject-checked or squashed.
-        check_subjects(settings, rng.commits, issue)
         if settings.git.history == "squash-unpushed":
             new = squash(
                 repo_root, settings, branch, rng.commits, issue,

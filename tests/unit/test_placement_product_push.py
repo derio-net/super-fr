@@ -28,9 +28,15 @@ from fr.placement import stealth
 from typer.testing import CliRunner
 
 from tests.unit.settings_repo import git, make_repo
-from tests.unit.stealth_repo import make_tracking, stealth_home, tracked_files
+from tests.unit.stealth_repo import approved_asks, make_tracking, stealth_home, tracked_files
 
-__all__ = ["stealth_home"]
+__all__ = ["approved_asks", "stealth_home"]
+
+
+@pytest.fixture(autouse=True)
+def _asks_approved(approved_asks: None) -> None:
+    """Stealth asks before every code push and PR (alacarte R7): taken as approved here."""
+
 
 SPEC = "docs/superpowers/specs/2026-01-01-y-design.md"
 FR_PATH = (

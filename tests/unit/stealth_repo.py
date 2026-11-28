@@ -47,3 +47,15 @@ def stealth_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     stealth.reset_caches()
     yield home
     stealth.reset_caches()
+
+
+@pytest.fixture
+def approved_asks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every `git.push`/`git.pr: ask` request counts as approved. Stealth asks before every
+    code push and PR (spec 2026-11-28-alacarte-settings R7); a test about what a stealth
+    push carries takes the approval as given. The approval itself is pinned in
+    test_git_policy_push.py and test_settings_stealth.py."""
+    from fr.git_policy import ask
+
+    monkeypatch.setattr(ask, "require_approval", lambda *_a, **_k: None)
+    monkeypatch.setattr(ask, "consume", lambda *_a, **_k: None)
