@@ -47,8 +47,9 @@ rows:
     - spec:2026-11-28-s1-followups#R9
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: scenario tests/scenarios/s1-followups.sh is built in plan phase 4
     verify: candidate
+    scenario: tests/scenarios/s1-followups.sh
   - id: s1-config-argv-from-tip
     capability: executable configuration protection
     acceptance: Under quiet and stealth, every .fr/ path in a walk's install or scenario
