@@ -244,3 +244,25 @@ amendments:
       release run is a no-op.
     why: spec 2026-11-21-release-app-hardening replaced derio-fr-automation with the
       repo-only super-fr-release app; the promise is unchanged, only the app's name
+  - row: release-pushes-as-app
+    op: set-status
+    base: 1
+    status: walked
+    notes: 'Walked 2026-11-28 read-only (operator-approved): release commits v9.0.0
+      (0cffe531, 2026-11-25) and v9.1.0-rc.10 (25718a99, 2026-11-27) were pushed by
+      super-fr-release[bot] (FR_AUTOMATION_APP_ID set); CI, Release and acceptance-report
+      ran on each release commit as push events and succeeded; the follow-up Release
+      run on 0cffe531 printed ''v9.0.0 is already tagged and released; nothing to do''.'
+    walk:
+      strategy: live
+      harness: claude
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-28T13:17:14Z'
+      evidence: push-event workflow runs on 0cffe531 and 25718a99 (actor super-fr-release[bot]);
+        follow-up Release run log; 2026-11-28
+    why: 'Walked 2026-11-28 read-only (operator-approved): release commits v9.0.0 (0cffe531,
+      2026-11-25) and v9.1.0-rc.10 (25718a99, 2026-11-27) were pushed by super-fr-release[bot]
+      (FR_AUTOMATION_APP_ID set); CI, Release and acceptance-report ran on each release
+      commit as push events and succeeded; the follow-up Release run on 0cffe531 printed
+      ''v9.0.0 is already tagged and released; nothing to do''.'
