@@ -18,9 +18,20 @@ rows:
     - spec:2026-11-27-run-verdict#R2
     - spec:2026-11-27-run-verdict#R7
     - spec:2026-11-27-run-verdict#R9
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_verdict.py#test_refusals_prints_lines_and_exits_keeping_the_cause
+      - super-fr:tests/unit/test_run_verdict_steps.py#test_the_moved_lookup_prints_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_derived.py#test_the_moved_verifier_prints_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_brief.py#test_the_moved_briefs_print_and_return_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_deliver.py#test_the_moved_gates_print_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_evidence.py#test_the_moved_verifiers_print_and_return_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_evidence.py#test_two_derived_refusals_print_the_summary_line
+      - super-fr:tests/unit/test_run_verdict_provenance.py#test_the_moved_gate_provenance_prints_and_returns_the_captured_bytes
+    status: ci
+    notes: every refusal and warning of the moved lookup, derived, brief, deliver, evidence
+      and provenance code is driven through fr/run onto a recording console and compared
+      byte for byte with a capture taken before each move
     verify: none
   - id: run-engine-cli-free
     capability: run engine layering
