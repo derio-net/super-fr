@@ -2220,8 +2220,9 @@ def test_p3_r1_a_head_carried_owed_resolution_never_makes_the_stage_complete(
     _all_recorded(ops_root, tree)
     jp = journal_path(ops_root, "plan", "p")
     for entry in (
-        JournalEntry(kind="owed", scope="plan", id="walk-the-dog", created="2026-10-22T10:00:00+00:00",
-                     title="walk the dog", body="what: w\nwhy: y\nhow: h\nowed_key: plan:p#p1"),
+        JournalEntry(kind="owed", scope="plan", id="walk-the-dog",
+                     created="2026-10-22T10:00:00+00:00", title="walk the dog",
+                     body="what: w\nwhy: y\nhow: h\nowed_key: plan:p#p1"),
         JournalEntry(kind="finding", scope="plan", id="dog-walked", resolves="walk-the-dog",
                      state="fixed", created="2026-10-22T11:00:00+00:00", title="walked", body="b"),
     ):  # fmt: skip
