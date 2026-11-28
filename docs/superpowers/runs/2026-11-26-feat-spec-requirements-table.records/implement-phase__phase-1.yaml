@@ -1,0 +1,56 @@
+# Step record. Fill it as you work and commit it with your work; then
+#   fr run resolve 2026-11-26-feat-spec-requirements-table --step implement-phase --item phase/1 --record docs/superpowers/runs/2026-11-26-feat-spec-requirements-table.records/implement-phase__phase-1.yaml
+# applies all of it in one commit (spec 2026-09-25 §5.C).
+schema_version: 12
+run: 2026-11-26-feat-spec-requirements-table
+step: implement-phase
+item: phase/1
+outcome: blocked
+ticks: [P1.T1.S1, P1.T1.S2, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S2, P1.T5.S3, P1.T5.S4]
+refactor:
+  P1.T1: "the table reader reuses the existing _split_row/_is_row helpers and mirrors _legacy_rows; Task 2's refactor step reshaped the readers onto one (lines, first_line_no) signature"
+  P1.T3: "the validator delegates to one new fr.requirements.table_form_problems, which reuses the reader's own regexes and _table_body; nothing duplicated to clean"
+  P1.T5: "prose, mirrors, a scenario and acceptance rows; no code structure to refactor"
+journal:
+  - kind: discovery
+    id: p1-r9a-blocks-migration
+    phase: 1
+    title: "fr migrate artifacts refuses the live spec 2026-11-27-triage-leaves-split (R9a.), so this repo's specs were not migrated"
+    body: |
+      A read-only dry build of the 1 -> 2 rewrite over every live spec (fr.artifacts.spec_requirements_table.build)
+      rewrites 7 specs (this one included), stamps 3 (no list), and refuses one:
+      `docs/superpowers/specs/2026-11-27-triage-leaves-split-design.md:57: malformed requirement id 'R9a'
+      (expected `R` + a positive integer) — fix the requirement id in the spec, then re-run fr migrate artifacts --yes`.
+      Per P1.T5.S1 that spec belongs to another feature, so its requirements were not edited and
+      `fr migrate artifacts --yes` was not run: P1.T5.S1 is left unticked. Until the operator decides
+      (renumber R9a in that feature's branch, or land it first and re-run here), the spec kind is at 2
+      while this repo's specs are unstamped, so `fr validate artifacts` and the own-artifacts test
+      (`test_this_repos_own_artifacts_are_structurally_valid`) stay red, and the CLI-entry gate in this
+      workspace would migrate the other ten specs and then refuse every gated fr command over the R9a
+      spec. The executor's own gated fr commands ran with FR_SKIP_MIGRATION=1. The same R9a line, read
+      under R3, also fails `tests/unit/test_dispatch_lint_corpus.py::test_the_dispatch_gate_scores_zero_on_this_repos_own_plans`
+      (phase sizing now raises `line 57: malformed requirement id 'R9a'` instead of dropping the line), and
+      `test_migration_runner.py::test_this_repos_own_artifacts_plan_only_safe_actions` sees the pending spec
+      actions. All four clear once that spec's id is fixed and `fr migrate artifacts --yes` runs here.
+  - kind: discovery
+    id: p1-fast-tier-unrelated-failures
+    phase: 1
+    title: "fast tier: 6 failures in paths this diff does not touch, 3 xdist worker crashes"
+    body: |
+      `test_install_opencode_agents.py` (2), `test_run_idle_guard.py::test_the_gh518_stop_is_blocked` and
+      `test_isolation_decision_core.py::test_a_relative_path_entry_holding_a_git_is_never_run` (4, `bash`
+      not found under a stripped PATH) fail in the devcontainer; the diff touches no install script, hook,
+      agent or isolation code. `test_sentinel_lifecycle`, `test_tripwire_own_artifacts` and
+      `test_tripwire_artifact_paths` were worker crashes under host load and pass when run alone.
+  - kind: discovery
+    id: p1-preview-cannot-show-refusal
+    phase: 1
+    title: "fr migrate artifacts (preview) lists a spec the rewrite will refuse as 'would migrate'"
+    body: |
+      The dry run never calls a SchemaMigration's fn, and SchemaMigration has no `check` hook (only Repair
+      does), so the preview cannot show the R5 refusal; only `--yes` prints it. Verified over a tmp repo with
+      prose between requirements: the preview printed `would migrate`, and `--yes` printed
+      `FAILED: ... SpecRewriteRefusedError: <file>:7: prose between requirements — move the prose out of the
+      requirements list, then re-run fr migrate artifacts --yes`, leaving the file byte-identical.
+      `fr.artifacts.spec_requirements_table.build(path, text)` is the side-effect-free check a preview
+      could call.
