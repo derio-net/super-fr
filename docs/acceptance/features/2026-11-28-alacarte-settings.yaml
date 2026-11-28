@@ -1,0 +1,79 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-28-alacarte-settings
+repo: derio-net/super-fr
+rows:
+  - id: s2-workflows-disabled
+    capability: 'à la carte settings: available workflows'
+    acceptance: A repo lists shapes in `workflows.disabled`; fr refuses to start a run
+      on one (start, rebind, adopt), names the shapes still available, lets a run already
+      started continue, and `fr settings check` refuses an unknown or all-disabling
+      list.
+    origin:
+    - spec:2026-11-28-alacarte-settings#R1
+    - spec:2026-11-28-alacarte-settings#R2
+    - spec:2026-11-28-alacarte-settings#R3
+    levels:
+      unit:
+      - super-fr:tests/unit/test_workflow_available.py
+      - super-fr:tests/unit/test_settings_check.py#test_a_disabled_name_no_shape_carries_is_refused
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_alacarte_settings
+    status: ci
+    notes: unit tests pin schema 3, the refusal at start, rebind and adopt and the two
+      settings checks; the candidate scenario walks it
+    verify: candidate
+    scenario: tests/scenarios/alacarte-settings.sh
+  - id: s2-pr-sections
+    capability: 'à la carte settings: PR-body sections'
+    acceptance: A repo turns `forge.pr_sections.proportionality`, `cost` or `settle`
+      off; the rendered and durable PR body omit that section and deliver no longer
+      requires it, while every review-bearing section stays required.
+    origin:
+    - spec:2026-11-28-alacarte-settings#R4
+    - spec:2026-11-28-alacarte-settings#R5
+    levels:
+      unit:
+      - super-fr:tests/unit/test_pr_body_sections.py
+      - super-fr:tests/unit/test_settings_model.py#test_an_unknown_pr_section_is_refused_naming_the_three
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_alacarte_settings
+    status: ci
+    notes: unit tests pin required_sections, the render and deliver's required set,
+      settle still checked; the candidate scenario walks it
+    verify: candidate
+    scenario: tests/scenarios/alacarte-settings.sh
+  - id: s2-stealth-confirm
+    capability: 'stealth: code reaches the target only on operator confirmation'
+    acceptance: Under stealth, fr push and fr pr create ask for a verified operator
+      approval whatever the tracking settings say (fr push asks nothing when no code
+      is pending), an explicit auto there is refused, and fr's state and configuration
+      PRs still reach the tracking repo without asking.
+    origin:
+    - spec:2026-11-28-alacarte-settings#R7
+    - spec:2026-11-28-alacarte-settings#R8
+    - spec:2026-11-28-alacarte-settings#R9
+    - spec:2026-11-28-alacarte-settings#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_settings_stealth.py#test_stealth_forces_push_and_pr_to_ask
+      - super-fr:tests/unit/test_settings_stealth.py#test_stealth_push_with_a_code_commit_asks
+      - super-fr:tests/unit/test_skill_stealth_push.py
+      - super-fr:tests/unit/test_settings_stealth.py#test_stealth_pr_create_asks_and_stores_a_pr_request
+      - super-fr:tests/unit/test_settings_stealth.py#test_an_explicit_pr_auto_in_the_tracking_file_is_refused
+      - super-fr:tests/unit/test_push_moves_remote.py
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_alacarte_settings
+      - super-fr:tests/integration/test_scenarios.py#test_placement_stealth
+    status: ci
+    notes: unit tests pin the forced ask (push and pr, with no approval stubbed), its
+      source, both contrary refusals, config PRs, the driven-triage text and fetch notice,
+      fr push asking only when the push moves the remote (read live) and only after
+      the subject check, and the skills' sentences; the alacarte and placement-stealth
+      candidate scenarios walk it
+    verify: candidate
+    scenario: tests/scenarios/alacarte-settings.sh

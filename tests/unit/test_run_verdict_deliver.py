@@ -45,7 +45,13 @@ ASK_STATE: Any = SimpleNamespace(run="r1", branch="feat/x", pr="https://example.
 
 def _settings(*, pr: str = "auto", pr_body: str = "full") -> Any:
     return SimpleNamespace(
-        settings=SimpleNamespace(git=SimpleNamespace(pr=pr), forge=SimpleNamespace(pr_body=pr_body))
+        settings=SimpleNamespace(
+            git=SimpleNamespace(pr=pr),
+            forge=SimpleNamespace(
+                pr_body=pr_body,
+                pr_sections=SimpleNamespace(proportionality="on", cost="on", settle="on"),
+            ),
+        )
     )
 
 

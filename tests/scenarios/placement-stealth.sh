@@ -13,6 +13,7 @@
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/_common.sh"
 . "$here/_placement_walk.sh"
+. "$here/_ask_approve.sh"
 scenario_require_fresh_repo
 
 HOME="$(mktemp -d)" && export HOME           # the worktrees and the tracking clone
@@ -101,7 +102,10 @@ git add -A && git commit -qm "feat(s): a code change" || fail "code commit"
 echo more > more.txt
 git add -A && git commit -qm "fix(s): a follow-up" || fail "second code commit"
 refuse_grep '.' "$(git status --porcelain)" "the target checkout is clean"
-run_fr out push
+run_fr out push   # stealth asks before code reaches the target (alacarte R7, R9)
+require_exit 2 "$out"
+expect_grep 'git\.push: ask' "$(printf '%s' "$out" | tr '\n' ' ')" "the code push asks first"
+fr_approved out push
 require_exit 0 "$out"
 run_id="$(git --git-dir="$track" ls-tree -r --name-only main \
   | sed -n 's|^local--origin/features/feat__s/docs/superpowers/runs/\([^/]*\)\.yaml$|\1|p' | head -1)"

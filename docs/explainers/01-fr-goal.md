@@ -28,7 +28,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/defaults/workflows/fr-goal.yaml
-reviewed: 2026-11-25 the shipped shapes moved to `plugins/super-fr/defaults/workflows/` (S1 R15), and a repo's own shape lives in `.fr/workflows/` in its configuration space, used under quiet or stealth only while that branch is protected (S1 R7, R9); 2026-11-24 the spec carries a design shape, the lens reviewers read the run shape file, and the PR shows it as Shape of the change (show-me-visuals); 2026-11-23 the settle check is the last deliver check, after the description read-back; a merged PR settles and a closed one is refused (lens review); the agent settles the PR before and after deliver, three fix rounds at most (R9, R10); deliver checks that the draft PR has settled, merges cleanly and has finished CI, under git.settle (pr-readiness-wait); 2026-11-21 a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
+reviewed: 2026-11-28 stealth forces git.push and git.pr to ask; no per-phase push, the first push at deliver asks, with its resume and transcript limits (alacarte R7-R10); 2026-11-25 the shipped shapes moved to `plugins/super-fr/defaults/workflows/` (S1 R15), and a repo's own shape lives in `.fr/workflows/` in its configuration space, used under quiet or stealth only while that branch is protected (S1 R7, R9); 2026-11-24 the spec carries a design shape, the lens reviewers read the run shape file, and the PR shows it as Shape of the change (show-me-visuals); 2026-11-23 the settle check is the last deliver check, after the description read-back; a merged PR settles and a closed one is refused (lens review); the agent settles the PR before and after deliver, three fix rounds at most (R9, R10); deliver checks that the draft PR has settled, merges cleanly and has finished CI, under git.settle (pr-readiness-wait); 2026-11-21 a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
 ---
 
 ## What does fr-goal do?
@@ -1382,7 +1382,7 @@ for a flag that bends this one.
 | Model per phase tier | `~/.config/fr/models.yaml` | Chooses which model implements a phase of a given difficulty. |
 | Manual-phase placement | Dependency on human action | Selects back-loaded continuation or front-loaded pause. |
 | Repository topology | Local and cross-repo spec references | Produces one plan and PR per repository. |
-| Repo settings | `.fr/settings.yaml`, read from the default branch (quiet: `settings.yaml` on `origin/fr`; stealth: `<target-dir>/settings.yaml` on the tracking branch) | Turns policy features off, quiets the forge, sets the git policy, and (quiet) moves fr's records onto the `fr` branch. |
+| Repo settings | `.fr/settings.yaml`, read from the default branch (quiet: `.fr/settings.yaml` on the `fr-config` branch; stealth: `<target-dir>/.fr/settings.yaml` on the tracking repo's `<branch>-config` branch) | Turns policy features off, withdraws workflow shapes, drops informational PR-body sections, quiets the forge, sets the git policy, and (quiet) moves fr's records onto the `fr` branch. |
 
 ### What can the repo settings change?
 
@@ -1409,6 +1409,16 @@ does not quietly fall back to the defaults.
   stays in the journal. `forge.pr_body: minimal` keeps the live pull request to
   a plain summary. The full body fr renders stays in the run's directory as
   `<run-id>.pr-body.md`, and that is what you review.
+
+- **Fewer PR-body sections.** `forge.pr_sections` (settings `schema: 3`) takes
+  `proportionality`, `cost` and `settle`, each `on` or `off`. An off section is
+  left out of the PR body and `deliver` no longer requires it. The settle check
+  itself still runs; only its section goes.
+
+- **Fewer workflow shapes.** `workflows.disabled` (settings `schema: 3`) lists
+  shapes the repository does not offer. `fr run start`, a brainstorm's `shape:`
+  change and `fr run adopt` refuse a listed shape and name the ones still
+  available. A run that already started on it keeps going.
 
 - **Asking before a push or a pull request.** The skills push with `fr push` and
   open the draft with `fr pr create`, never with `git push` or the forge's own
@@ -1492,8 +1502,8 @@ commit-subject check and the squash apply to your feature branch only. fr
 refuses runner dispatch (`fr apply --to`) under quiet, because a runner works
 from the default branch, where a quiet repository keeps no plan.
 
-Under quiet the policy keys come from `fr`'s own `settings.yaml`, read from
-`origin/fr`, and fr ignores a `.fr/settings.yaml` on the default branch
+Under quiet the policy keys come from `.fr/settings.yaml` on the `fr-config`
+branch, and fr ignores a `.fr/settings.yaml` on the default branch
 (`fr settings
 show` says so). Whoever can push to `fr` can therefore change the
 policy, so **give the `fr` branch the same branch protection as your default
@@ -1587,7 +1597,8 @@ comment there. Stealth sets `forge.labels`, `forge.comments` and `forge.issues`
 to `off` and `forge.pr_body` to `minimal` itself. `fr settings check` and
 `fr run start` refuse a tracking file that sets one of them to anything else.
 
-The policy keys come from `<target-dir>/settings.yaml` on the tracking branch.
+The policy keys come from `<target-dir>/.fr/settings.yaml` on the tracking
+repository's `<branch>-config` branch.
 `fr settings init --stealth <tracking-repo>@<branch>` writes and pushes that
 file. fr ignores a `.fr/settings.yaml` in the target and prints that it did. fr
 refuses a tracking repository more visible than the target. That means a
@@ -1610,6 +1621,23 @@ the branch:
 - the branch ahead: it records the new head again (the last step's
   bookkeeping);
 - the state ahead: it refuses, naming the commit the branch lacks.
+
+Under stealth, code reaches the target only after you approve it. Stealth sets
+`git.push` and `git.pr` to `ask`, whatever the tracking file says, and
+`fr settings check` refuses a tracking file that sets either one to `auto`.
+So no phase pushes, and no phase uses `tests: ci` as its own evidence, because
+that needs a push: a phase proves its work with a local test log, or, under a
+`tests: ci` the repository declares, runs its fast tier and leaves the suite
+evidence to `deliver`, as anywhere. The first code push is when
+`deliver` opens. There `fr push` asks you to approve it, `fr pr create` asks
+again, and every later push that adds code asks once more. fr's own records
+still go to the tracking repository on every write, without asking.
+
+That has two costs. Until the first push, the phases' code exists only on the
+host that wrote it, so a `--resume` on another host before `deliver` does not
+bring it along. And fr checks your approval by reading the session's
+transcript. On a harness where it cannot, a stealth run cannot push or open its
+pull request through fr, and stops when `deliver` opens.
 
 fr refuses runner dispatch (`fr apply --to`) under stealth, as under quiet.
 
@@ -1756,7 +1784,8 @@ pushes both. Run again after an interrupted push, it pushes what it already
 committed.
 
 Under stealth there is no second side to commit on, because fr never commits
-on, or pushes, the target's branch. A stealth branch's own commits may carry
+its own files on the target's branch, and pushes it only through `fr push`, on
+your approval. A stealth branch's own commits may carry
 fr's files (a spec committed with `git add -A`, say). Then `fr push` refuses
 and names them. `fr placement migrate-branch` copies them into the tracking
 repository, then refuses too. It lists the unpushed commits that carry them and

@@ -1,0 +1,165 @@
+schema_version: 2
+phase:
+  number: 1
+  title: À la carte settings — schema 3, disabled workflows, PR-body sections, placement
+    text, stealth confirmation
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - s2-workflows-disabled
+  - s2-pr-sections
+  - s2-stealth-confirm
+  tier: standard
+  files:
+  - packages/fr/src/fr/settings/*.py
+  - packages/fr/src/fr/config/change.py
+  - packages/fr/src/fr/workflow/resolve.py
+  - packages/fr/src/fr/workflow/available.py
+  - packages/fr/src/fr/commands/workflow_cmd.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/commands/push_cmd.py
+  - packages/fr/src/fr/run/steps.py
+  - packages/fr/src/fr/run/adopt.py
+  - packages/fr/src/fr/run/deliver.py
+  - packages/fr/src/fr/record/pr_body.py
+  - plugins/super-fr/skills/fr-goal/SKILL.md
+  - plugins/super-fr/skills/fr-debugging/SKILL.md
+  - .opencode/skills/*/SKILL.md
+  - .hermes/skills/fr/*/SKILL.md
+  - tests/unit/test_settings_*.py
+  - tests/unit/test_workflow_available.py
+  - tests/unit/test_pr_body_sections.py
+  - tests/unit/test_skill_stealth_push.py
+  - tests/unit/test_tripwire_module_budget.py
+  - tests/scenarios/alacarte-settings.sh
+  - tests/integration/test_scenarios.py
+  - docs/reference/*.md
+  - docs/explainers/*.md
+  - docs/*.md
+  - README.md
+  - .changes/feat-batch-s2-alacarte-settings.yaml
+  estimate_lines: 1100
+tasks:
+- number: 1
+  title: Schema 3 and the two new sections (R1, R4)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: in tests/unit/test_settings_model.py add tests that (a) `parse_settings({"schema": 3, "workflows": {"disabled": ["fr-goal-light"]}, "forge": {"pr_sections": {"cost": "off"}}}, source="t")` parses, with `settings.workflows.disabled == ["fr-goal-light"]`, `settings.forge.pr_sections.cost == "off"` and the other two `on`; (b) under `schema: 2` (and with schema absent) each of `{"workflows": {}}`, `{"workflows": {"disabled": []}}`, `{"forge": {"pr_sections": {}}}` and `{"forge": {"pr_sections": {"cost": "on"}}}` raises `SettingsError` whose text contains the dotted key (`workflows` / `forge.pr_sections`) and `schema: 3`; (c) `{"schema": 3, "forge": {"pr_sections": {"findings": "off"}}}` raises naming `findings` and the allowed keys `cost, proportionality, settle`; (d) `schema: 4` still says newer than this fr; (e) a bare YAML `off` (bool False) reads as `off`. Run `uv run pytest tests/unit/test_settings_model.py -q --no-cov` and confirm the new tests fail.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/settings/model.py set `SCHEMA_VERSION = 3`, `SCHEMAS = (1, 2, 3)`, `schema_: Literal[1, 2, 3]`, and `_strict_int`'s message to "must be the integer 1, 2 or 3". Add `PR_SECTIONS: Final = ("cost", "proportionality", "settle")`; class `PrSections(_Closed)` with three `OnOffType` fields (each `_choice("on", ON_OFF, description=...)` saying what dropping the section loses and which command still shows it) and a `model_validator(mode="before")` refusing any key outside PR_SECTIONS with `unknown key <k>; allowed: cost, proportionality, settle`. Add `pr_sections: PrSections` to `Forge` (default_factory) and class `Workflows(_Closed)` with `disabled: list[str] = Field(default_factory=list, description=...)`, plus `workflows: Workflows` on `Settings` ("Which workflow shapes this repo offers (schema 3 only)"). Add a `Settings` `model_validator(mode="before")` `_schema_3_keys`: when the raw dict has `workflows`, or its `forge` (a dict) has `pr_sections`, and `schema` is not 3, raise ValueError `<key> needs schema: 3`. Keep the triage schema-2 validator as `< 2`. Run the step's tests: green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: in packages/fr/src/fr/settings/render.py make `_scalar` render a list as a YAML flow list (`[]`, `[a, b]`) so `#disabled: []` uncomments to a valid list; change the schema hint to name 1, 2 and 3 (3 is needed by `workflows` and `forge.pr_sections`). Add a test in tests/unit/test_settings_cmd.py that the line `disabled` in `fr settings init`'s output, uncommented, parses back to `[]`. Run `uv run pytest tests/unit/test_settings_model.py tests/unit/test_settings_cmd.py tests/unit/test_settings_load.py -q --no-cov -n 2`: green.
+- number: 2
+  title: Placement text (R6)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED then GREEN: add a test in tests/unit/test_settings_model.py that `Settings.model_fields["placement"].description` does not contain "not yet served" and names `fr-config` and `<branch>-config`, and one in tests/unit/test_settings_load.py that `_repo_file` refusing `placement: quiet` names `.fr/settings.yaml` on `fr-config` (not "root settings.yaml"). Fix the description in settings/model.py: `.fr/settings.yaml` says only `repo`; quiet is switched on by `.fr/settings.yaml` on the orphan `fr-config` branch (`fr settings init --quiet`); stealth is chosen per run and reads `<target-dir>/.fr/settings.yaml` on the tracking repo's `<branch>-config`. Fix `_repo_file`'s quiet message in settings/load.py likewise. Run both test files: green.
+- number: 3
+  title: Disabled workflows (R2, R3)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: create tests/unit/test_workflow_available.py using the settings fixtures of tests/unit/settings_repo.py (a git repo whose default branch commits `.fr/settings.yaml` with `schema: 3` and `workflows: {disabled: [fr-goal-light]}`). Tests: `refuse_disabled("fr-goal-light", repo)` raises `WorkflowError` naming `workflows.disabled` and listing `fr-debugging, fr-goal` as available; `refuse_disabled("fr-goal", repo)` returns None; `fr run start fr-goal-light --branch feat/x` (CliRunner, as the existing run-start tests do) exits 2 with that message and creates no worktree; `rebind_shape` onto fr-goal-light raises; `adopt_run` of a plan with no run under workflow fr-goal-light refuses, a supersede with no existing run refuses, superseding an existing fr-goal-light run onto fr-goal-light passes the check, superseding it onto another disabled shape refuses; `advance`/`resolve`/`reshape` of an existing fr-goal-light run do not call the check (monkeypatch `refuse_disabled` to raise and assert they still run). A stealth case: with a stealth marker whose tracking settings disable fr-goal while the target's own `.fr/settings.yaml` disables nothing, run start refuses fr-goal in the workspace (follow tests/unit/test_settings_stealth.py's fixture). Run it: fails (no module).
+  - id: P1.T3.S2
+    text: |-
+      GREEN: move `_search_dirs`/`_discover_names` from packages/fr/src/fr/commands/workflow_cmd.py into packages/fr/src/fr/workflow/resolve.py as public `discover_names(repo_root, shipped_dir=None)`; workflow_cmd.py imports it. Create packages/fr/src/fr/workflow/available.py with `refuse_disabled(name, repo_root) -> None` (reads `fr.settings.load_settings(repo_root).settings.workflows.disabled`; raises `WorkflowError(f"workflow {name} is disabled by this repo's settings (workflows.disabled); available: {', '.join(names)}")`, names = discover_names minus disabled, sorted). Call it in commands/run_cmd.py's start before isolation unless `--stealth`/`--target` is given, and always in the workspace beside the manifest re-resolve (`resolve_workflow(workflow, workspace)`, ~:1373); in run/steps.py `rebind_shape` before returning the manifest; in run/adopt.py `adopt_run` unless an existing run is superseded and `name == old_state.workflow.partition("@")[0]`. Map `WorkflowError` onto each command's existing exit-2 refusal. Run the test file and tests/unit/test_workflow_check.py: green.
+  - id: P1.T3.S3
+    text: |-
+      RED then GREEN: in tests/unit/test_settings_check.py add tests that a `workflows.disabled` naming `no-such-shape` gives a problem `unknown-disabled-shape` naming it, and disabling every discovered shape gives `every-shape-disabled`. Implement both checks in packages/fr/src/fr/settings/check.py beside the existing ones (same registration table and message style), reading `discover_names(root)`. Run the check tests: green.
+- number: 4
+  title: PR-body sections (R4, R5)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: create tests/unit/test_pr_body_sections.py (reuse the run/plan fixtures of tests/unit/test_pr_body_cost.py and test_pr_body_settle.py). Tests: `required_sections(settings)` with `cost: off` lacks `## Cost` and keeps every other REQUIRED_SECTIONS heading in order; with all three off lacks the three; `render_pr_body` with `proportionality` and `cost` off contains neither heading nor their bodies, and the durable copy deliver writes is the same text; deliver's live-body section check (run/deliver.py, the caller of `missing_sections`, ~:332) passes a body lacking `## Cost` when cost is off and refuses it when on; with `settle: off` the deliver settle check is still evaluated (it still refuses an unsettled PR). Run: fails.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/record/pr_body.py add `PR_SECTION_HEADINGS = {"proportionality": "## Proportionality", "cost": "## Cost", "settle": "## PR settle"}` and `required_sections(settings) -> tuple[str, ...]` (REQUIRED_SECTIONS minus the headings whose key is off); export both. `render_pr_body` loads settings once (`fr.settings.load_settings(repo_root).settings`, falling back to defaults on SettingsError as the module's other readers do) and skips `## PR settle`, `## Proportionality`, `## Cost` (heading and body, without computing the body) when off. In run/deliver.py replace `REQUIRED_SECTIONS` with `required_sections(settings)` from the settings deliver already reads. Run the new tests plus tests/unit/test_deliver_pr_body.py, test_pr_body_cost.py, test_pr_body_settle.py: green.
+- number: 5
+  title: Stealth confirmation in the loader, check, config PRs and push (R7, R8, R9)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: in tests/unit/test_settings_stealth.py add tests (its stealth fixtures): effective `git.push == git.pr == "ask"` with sources `stealth` when the tracking file sets neither; a tracking file with explicit `git: {push: auto}` puts `git.push` in `contrary` and `fr settings check` reports `stealth-forge-explicit` naming `git.push`; `EffectiveSettings.config_pr` holds the tracking file's own `git.pr` (`auto` by default); `fr.config.change.pr_policy(product)` returns `auto` under stealth; with a tracking `.fr/triage.yaml` setting `post_merge`, the `push-ask-with-driven-triage` message says stealth forces `git.push: ask` and names the triage keys as the fix; `fr push` in a stealth workspace with no unpushed product commit (remote branch at HEAD) exits 0 printing `nothing to push` and writes no request under `<git-dir>/fr/requests/`, and with an unpushed commit exits 2 printing a request naming `git.push: ask`. Add a test that a stealth state write (the tracking clone's commit-and-push in `fr.placement.stealth`) never calls `load_settings` (monkeypatch it to raise). Run: fails.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/settings/load.py `EffectiveSettings` gains `config_pr: str | None = None`; `_stealth` sets `git` to `settings.git.model_copy(update={"push": "ask", "pr": "ask"})`, marks `git.push`/`git.pr` sources `stealth`, appends each to `contrary` when explicitly present with value `auto`, and passes `config_pr=` the parsed file's `git.pr` before forcing. In settings/check.py widen `stealth-forge-explicit`'s message to stealth's own values (forge labels, comments and issues off, pr_body minimal; git push and pr ask), and make `push-ask-with-driven-triage` under placement stealth say that placement stealth forces `git.push: ask` (D7) and to remove the driven `.fr/triage.yaml` keys. In config/change.py `pr_policy` returns `eff.config_pr` when it is not None. In settings/render.py make the stealth header and `_stealth_forge` also show `git.push: ask` and `git.pr: ask`. In commands/push_cmd.py compute `rng = unpushed(...)` before the ask; when `outside_repo(repo_root) == STEALTH` and not `_code_pending(rng)`, print `nothing to push to <remote>` and return before `require_approval`. Run tests/unit/test_settings_*.py and the push and config-change tests: green.
+- number: 6
+  title: Skills, mirrors, docs, scenario, fragment (R10, docs, verification)
+  steps:
+  - id: P1.T6.S1
+    text: |-
+      RED then GREEN: add tests/unit/test_skill_stealth_push.py asserting the canonical plugins/super-fr/skills/fr-goal/SKILL.md says, under stealth, that no executor pushes, that phase suite evidence is a local log (never `tests: ci`), that the first code push is at deliver's open where `fr push` asks, that a cross-host `--resume` before deliver does not carry the phases' code, and that on a harness whose transcript fr cannot read a stealth run stops at deliver's open; and that fr-debugging/SKILL.md's stealth bullet says its code push asks and names the same harness limit. Edit both skills (fr-goal: the stealth paragraph, §5 and §6 one sentence each; fr-debugging: the stealth bullet), keeping the tool-neutral wording rules. Run `uv run python scripts/sync-opencode.py && uv run python scripts/sync-hermes.py && uv run python scripts/sync-readme.py`, then the new test, test_tripwire_opencode_skills_sync.py, test_tripwire_hermes_skills_sync.py, test_tripwire_readme_sync.py and test_tripwire_skill_tool_neutrality.py: green.
+  - id: P1.T6.S2
+    text: |-
+      Write tests/scenarios/alacarte-settings.sh following tests/scenarios/repo-settings-file.sh and placement-stealth.sh (source _common.sh; use the installed candidate `fr`): in a fixture repo with a committed `.fr/settings.yaml` (`schema: 3`, `workflows: {disabled: [fr-goal-light]}`, `forge: {pr_sections: {cost: "off", proportionality: "off"}}`) assert `fr run start fr-goal-light --branch feat/x` exits 2 naming `workflows.disabled` and `fr settings show --json` reports both keys; render a PR body for a fixture run (as an existing scenario does) and assert it lacks `## Cost` and `## Proportionality`; in a stealth fixture assert `fr settings show --json` reports `git.push`/`git.pr` `ask` with source `stealth`, and `fr push` prints an approval request with an unpushed commit and `nothing to push` without one. Add its test to tests/integration/test_scenarios.py in the same form as its neighbours. Run `uv run pytest -m "" tests/integration/test_scenarios.py -k alacarte -q --no-cov` and `uv run pytest tests/integration/test_scenarios.py::test_every_scenario_script_has_a_test_here -q --no-cov`: green.
+  - id: P1.T6.S3
+    text: |-
+      Docs and fragment: update docs/reference/workflow-shapes.md (a `workflows.disabled` paragraph: what it refuses and that started runs continue), docs/explainers/01-fr-goal.md and docs/explainers/fr-debugging.md (stealth: the deliver-open confirmation, no per-phase push, the resume and transcript limits), and every page `uv run fr docs check --base origin/main` still reports (edit it, or bump its `reviewed` stamp with a note when still true). Add `.changes/feat-batch-s2-alacarte-settings.yaml` with `bump: minor` and a one-line summary. Run `uv run fr docs check --base origin/main`, `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/`, `uv run mypy packages/fr/src` and, last, the fast tier `.fr/ci.yaml` names: all green.
+state:
+  steps:
+    P1.T1.S1:
+      state: x
+      ticked_at: '2026-11-28T09:48:11+00:00'
+      note: null
+    P1.T1.S2:
+      state: x
+      ticked_at: '2026-11-28T09:48:11+00:00'
+      note: null
+    P1.T1.S3:
+      state: x
+      ticked_at: '2026-11-28T09:48:11+00:00'
+      note: null
+    P1.T2.S1:
+      state: x
+      ticked_at: '2026-11-28T09:48:11+00:00'
+      note: null
+    P1.T3.S1:
+      state: x
+      ticked_at: '2026-11-28T09:48:11+00:00'
+      note: null
+    P1.T3.S2:
+      state: x
+      ticked_at: '2026-11-28T09:48:11+00:00'
+      note: null
+    P1.T3.S3:
+      state: x
+      ticked_at: '2026-11-28T09:48:11+00:00'
+      note: null
+    P1.T4.S1:
+      state: x
+      ticked_at: '2026-11-28T09:48:11+00:00'
+      note: null
+    P1.T4.S2:
+      state: x
+      ticked_at: '2026-11-28T09:48:11+00:00'
+      note: null
+    P1.T5.S1:
+      state: x
+      ticked_at: '2026-11-28T09:48:11+00:00'
+      note: null
+    P1.T5.S2:
+      state: x
+      ticked_at: '2026-11-28T09:48:11+00:00'
+      note: null
+    P1.T6.S1:
+      state: x
+      ticked_at: '2026-11-28T09:48:11+00:00'
+      note: null
+    P1.T6.S2:
+      state: x
+      ticked_at: '2026-11-28T09:48:11+00:00'
+      note: null
+    P1.T6.S3:
+      state: x
+      ticked_at: '2026-11-28T09:48:11+00:00'
+      note: null
+  completion:
+    at: '2026-11-28T09:48:11+00:00'
+    note: null
+    observed_prs: []

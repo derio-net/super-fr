@@ -119,6 +119,16 @@ def test_quiet_in_the_repo_file_is_refused_pointing_at_the_fr_branch(repo: Path)
         load_settings(repo)
 
 
+def test_quiet_refusal_names_fr_config_not_the_root_settings_file(repo: Path) -> None:
+    """S1 moved quiet's switch to `.fr/settings.yaml` on `fr-config` (alacarte R6)."""
+    _land_on_main(repo, "placement: quiet\n")
+    with pytest.raises(SettingsError) as e:
+        load_settings(repo)
+    msg = str(e.value)
+    assert "fr-config" in msg
+    assert "root settings.yaml" not in msg
+
+
 def test_unparseable_yaml_names_the_file(repo: Path) -> None:
     _land_on_main(repo, "a: [unclosed\n")
     with pytest.raises(SettingsError, match=r"\.fr/settings\.yaml"):

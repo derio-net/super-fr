@@ -25,10 +25,11 @@ from pydantic.config import JsonDict
 
 from fr.settings import SettingsError
 
-SCHEMA_VERSION: Final = 2
-SCHEMAS: Final = (1, 2)
+SCHEMA_VERSION: Final = 3
+SCHEMAS: Final = (1, 2, 3)
 """The settings schemas this fr reads. Schema 2 adds the `triage` section (spec 2026-11-19
-R20); a file that sets no key of it may stay at schema 1."""
+R20); schema 3 adds `workflows` and `forge.pr_sections` (spec 2026-11-28-alacarte-settings
+R1). A file that names no key of a later schema may stay at an earlier one."""
 
 
 PLACEMENTS: Final = frozenset({"repo", "quiet", "stealth"})
@@ -38,6 +39,7 @@ AUTO_ASK: Final = frozenset({"auto", "ask"})
 HISTORIES: Final = frozenset({"keep", "squash-unpushed"})
 PLACEHOLDERS: Final = frozenset({"type", "scope", "summary", "issue"})
 SETTLE_MODES: Final = frozenset({"off", "report", "fix"})
+PR_SECTIONS: Final = ("cost", "proportionality", "settle")
 """The allowed values, stated once: the validators and `fr settings init` both read them."""
 
 
@@ -77,7 +79,7 @@ def _choice(default: str, vocab: frozenset[str], description: str) -> Any:
 
 def _strict_int(v: Any) -> Any:
     if isinstance(v, bool) or not isinstance(v, int):
-        raise ValueError(f"must be the integer 1 or 2, got {v!r}")
+        raise ValueError(f"must be the integer 1, 2 or 3, got {v!r}")
     return v
 
 
@@ -170,6 +172,38 @@ class Commit(_Closed):
         return _check_template(v, allow_issue=False)
 
 
+class PrSections(_Closed):
+    proportionality: OnOffType = _choice(
+        "on",
+        ON_OFF,
+        description="Default: the PR body carries `## Proportionality`.\n"
+        "Off: the section is not rendered or required; `fr plan proportionality` still "
+        "shows the figures.",
+    )
+    cost: OnOffType = _choice(
+        "on",
+        ON_OFF,
+        description="Default: the PR body carries `## Cost`.\n"
+        "Off: the section is not rendered or required; `fr run cost` still shows the figures.",
+    )
+    settle: OnOffType = _choice(
+        "on",
+        ON_OFF,
+        description="Default: the PR body carries `## PR settle`.\n"
+        "Off: the section is not rendered or required; `fr pr settle` still reports, and "
+        "deliver's settle check still runs as git.settle says.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _known_keys(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            for k in data:
+                if k not in PR_SECTIONS:
+                    raise ValueError(f"unknown key {k}; allowed: " + ", ".join(PR_SECTIONS))
+        return data
+
+
 class Forge(_Closed):
     labels: OnOffType = _choice(
         "on",
@@ -200,6 +234,10 @@ class Forge(_Closed):
         ON_OFF,
         description="Default: CI posts no report comment.\n"
         "On: CI keeps one report comment on the PR; needs forge.comments on.",
+    )
+    pr_sections: PrSections = Field(
+        default_factory=PrSections,
+        description="Which optional PR-body sections fr renders (schema 3 only).",
     )
 
 
@@ -260,17 +298,27 @@ class Triage(_Closed):
     )
 
 
+class Workflows(_Closed):
+    disabled: list[str] = Field(
+        default_factory=list,
+        description="Default: every shipped and repo-authored workflow shape can start a run.\n"
+        "A listed shape is refused by `fr run start`, a brainstorm's shape rebind and\n"
+        "`fr run adopt`; a run already started on it keeps going.",
+    )
+
+
 class Settings(_Closed):
-    schema_: Annotated[Literal[1, 2], BeforeValidator(_strict_int)] = Field(
+    schema_: Annotated[Literal[1, 2, 3], BeforeValidator(_strict_int)] = Field(
         1, alias="schema", description="The settings schema version this file is written for."
     )
     placement: PlacementType = _choice(
         "repo",
         PLACEMENTS,
-        description="Default: artifacts live on the feature branch.\n"
-        "Quiet keeps them on the orphan `fr` branch, switched on by that branch's own\n"
-        "settings.yaml (`fr settings init --quiet`), never by this key in .fr/settings.yaml;\n"
-        "stealth is not yet served.",
+        description="Default: artifacts live on the feature branch; this file says only repo.\n"
+        "Quiet keeps them off the feature branch, switched on by .fr/settings.yaml on the\n"
+        "orphan `fr-config` branch (`fr settings init --quiet`), never by this key here.\n"
+        "Stealth is chosen per run and reads <target-dir>/.fr/settings.yaml on the\n"
+        "tracking repo's `<branch>-config`.",
     )
     artifacts: Artifacts = Field(
         default_factory=Artifacts,
@@ -282,6 +330,27 @@ class Settings(_Closed):
         default_factory=lambda: Triage.model_validate({}),
         description="Triage of this repo (schema 2 only).",
     )
+    workflows: Workflows = Field(
+        default_factory=Workflows,
+        description="Which workflow shapes this repo offers (schema 3 only).",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _schema_3_keys(cls, data: Any) -> Any:
+        """Naming a schema-3 key at all, empty or not, declares `schema: 3` (R1)."""
+        if not isinstance(data, dict):
+            return data
+        named = []
+        if "workflows" in data:
+            named.append("workflows")
+        forge = data.get("forge")
+        if isinstance(forge, dict) and "pr_sections" in forge:
+            named.append("forge.pr_sections")
+        schema = data.get("schema")
+        if named and not (schema == 3 and isinstance(schema, int) and not isinstance(schema, bool)):
+            raise ValueError(f"{named[0]} needs schema: 3")
+        return data
 
     @model_validator(mode="after")
     def _triage_needs_schema_2(self) -> Settings:

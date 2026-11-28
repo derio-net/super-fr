@@ -60,8 +60,18 @@ def test_the_commented_file_uncommented_still_parses_to_the_defaults(repo: Path)
         ln[1:] if ln.startswith("#") and not ln.startswith("##") else ln for ln in text.splitlines()
     ]
     assert parse_settings(yaml.safe_load("\n".join(lines)), source="x") == parse_settings(
-        {}, source="x"
+        {"schema": 3}, source="x"
     )
+
+
+def test_the_disabled_list_uncommented_parses_back_to_an_empty_list(repo: Path) -> None:
+    """A list default renders as a YAML flow list (spec 2026-11-28-alacarte-settings R6)."""
+    runner.invoke(app, ["settings", "init"])
+    text = (repo / ".fr" / "settings.yaml").read_text()
+    (line,) = [ln for ln in text.splitlines() if ln.lstrip("#").strip().startswith("disabled:")]
+    assert yaml.safe_load(line.lstrip("#")) == {"disabled": []}
+    assert "#schema: 3" in text
+    assert "1, 2, 3" in text
 
 
 def test_init_does_not_commit_and_refuses_to_overwrite(repo: Path) -> None:

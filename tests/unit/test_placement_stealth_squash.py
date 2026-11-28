@@ -17,10 +17,16 @@ from fr.cli import app
 from typer.testing import CliRunner
 
 from tests.unit.settings_repo import git
-from tests.unit.stealth_repo import stealth_home, stealth_pair
+from tests.unit.stealth_repo import approved_asks, stealth_home, stealth_pair
 from tests.unit.test_settings_stealth import _push_target_settings, _up
 
-__all__ = ["stealth_home"]
+__all__ = ["approved_asks", "stealth_home"]
+
+
+@pytest.fixture(autouse=True)
+def _asks_approved(approved_asks: None) -> None:
+    """Stealth asks before every code push and PR (alacarte R7): taken as approved here."""
+
 
 SQUASH = "placement: stealth\ngit:\n  history: squash-unpushed\n"
 

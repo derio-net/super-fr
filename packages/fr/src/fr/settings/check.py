@@ -22,6 +22,8 @@ from fr.settings.model import Settings
 TRIAGE_PATH: Final = rel("triage")
 
 Predicate = Callable[[Path, Settings], tuple[str, ...]]
+Message = str | Callable[[Settings], str]
+"""A rule's message: a template with `{detail}`, or one chosen from the settings."""
 
 
 @dataclass(frozen=True)
@@ -50,10 +52,29 @@ DRIVEN_TRIAGE_KEYS: Final = ("post_merge", "export", "version", "post_merge_rest
 
 
 def _driven_triage(root: Path, settings: Settings) -> tuple[str, ...]:
-    """The driven-scope keys `.fr/triage.yaml` sets, read from the default ref's commit."""
+    """The driven-scope keys `.fr/triage.yaml` sets, read from the default ref's commit
+    (under stealth, from the tracking space, where `git.push` is always `ask`)."""
     if settings.git.push != "ask":
         return ()
-    text = config_space(root).at_default(TRIAGE_PATH)
+    space = config_space(root)
+    if settings.placement == "stealth":
+        from fr.config.space import branch_fetched
+
+        # Stealth forces `ask` on every run (alacarte R7), so a run whose tracking space
+        # was never created must still start. fr cannot tell "not created" from "not
+        # fetched here", so it says which it read as none (l-errors-r1), never silently.
+        if not branch_fetched(space):
+            import sys
+
+            branch = (space.ref or "").removeprefix("origin/")
+            print(
+                f"fr: the stealth configuration branch {branch} is not fetched here, so fr "
+                f"reads no driven triage scope from it; if it exists, fetch it: "
+                f"git fetch origin {branch}",
+                file=sys.stderr,
+            )
+            return ()
+    text = space.at_default(TRIAGE_PATH)
     if text is None:
         return ()
     from fr.triage.model import parse_triage_config
@@ -97,20 +118,51 @@ def _stealth_forge_explicit(root: Path, settings: Settings) -> tuple[str, ...]:
     return load_settings(root).contrary
 
 
-RULES: Final[tuple[tuple[str, Predicate, str], ...]] = (
+def _unknown_disabled(root: Path, settings: Settings) -> tuple[str, ...]:
+    """alacarte R3: a `workflows.disabled` entry no shipped or repo shape carries."""
+    if not settings.workflows.disabled:
+        return ()
+    from fr.workflow.resolve import discover_names
+
+    known = set(discover_names(root))
+    return tuple(n for n in settings.workflows.disabled if n not in known)
+
+
+def _every_shape_disabled(root: Path, settings: Settings) -> tuple[str, ...]:
+    """alacarte R3: a list that leaves no shape to start a run on."""
+    if not settings.workflows.disabled:
+        return ()
+    from fr.workflow.resolve import discover_names
+
+    names = discover_names(root)
+    left = [n for n in names if n not in settings.workflows.disabled]
+    return () if left else tuple(names)
+
+
+def _driven_triage_message(settings: Settings) -> str:
+    """Under stealth `git.push: ask` is forced (epic D7), so the fix is the triage keys."""
+    if settings.placement == "stealth":
+        return (
+            "placement stealth forces git.push: ask (epic D7), and .fr/triage.yaml in the "
+            "tracking space sets {detail}: `fr triage batch drive` is unattended by design "
+            "and cannot answer. git.push is not yours to change under stealth: remove the "
+            "driven keys (post_merge, export, version, post_merge_restart) from .fr/triage.yaml"
+        )
+    return (
+        "git.push: ask while .fr/triage.yaml (default branch) sets {detail}: driven triage "
+        "scope is any of post_merge, export, version, post_merge_restart, and "
+        "`fr triage batch drive` is unattended by design and cannot answer"
+    )
+
+
+RULES: Final[tuple[tuple[str, Predicate, Message], ...]] = (
     (
         "gates-off-with-ops",
         _live_plans_with_ops,
         "artifacts.gates: off while a live plan carries manual operations ({detail}); "
         "nothing would hold them",
     ),
-    (
-        "push-ask-with-driven-triage",
-        _driven_triage,
-        "git.push: ask while .fr/triage.yaml (default branch) sets {detail}: driven triage "
-        "scope is any of post_merge, export, version, post_merge_restart, and "
-        "`fr triage batch drive` is unattended by design and cannot answer",
-    ),
+    ("push-ask-with-driven-triage", _driven_triage, _driven_triage_message),
     (
         "report-comment-needs-comments",
         _report_without_comments,
@@ -125,8 +177,20 @@ RULES: Final[tuple[tuple[str, Predicate, str], ...]] = (
         "stealth-forge-explicit",
         _stealth_forge_explicit,
         "{detail} is set explicitly in the tracking repo's settings file, to a value other "
-        "than stealth's own (labels, comments and issues off, pr_body minimal): stealth sets "
-        "those keys itself and refuses a contrary value rather than ignoring it",
+        "than stealth's own (forge labels, comments and issues off, pr_body minimal; git "
+        "push and pr ask): stealth sets those keys itself and refuses a contrary value "
+        "rather than ignoring it; remove the key from the tracking repo's settings file",
+    ),
+    (
+        "unknown-disabled-shape",
+        _unknown_disabled,
+        "workflows.disabled names {detail}, which no shipped or repo workflow shape carries "
+        "(`fr workflow check --all` lists them)",
+    ),
+    (
+        "every-shape-disabled",
+        _every_shape_disabled,
+        "workflows.disabled disables every workflow shape ({detail}): no run could start",
     ),
 )
 
@@ -138,7 +202,12 @@ def check_settings(root: Path) -> list[Problem]:
     """
     settings = load_settings(root).settings
     return [
-        Problem(rule_id, message.format(detail=", ".join(details)))
+        Problem(
+            rule_id,
+            (message if isinstance(message, str) else message(settings)).format(
+                detail=", ".join(details)
+            ),
+        )
         for rule_id, predicate, message in RULES
         if (details := predicate(root, settings))
     ]

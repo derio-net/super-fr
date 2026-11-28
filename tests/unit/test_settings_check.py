@@ -141,3 +141,27 @@ def test_a_malformed_default_ref_triage_file_refuses(repo: Path) -> None:
     _land_on_main(repo, "git:\n  push: ask\n")
     with pytest.raises(SettingsError, match=r"triage\.yaml"):
         check_settings(repo)
+
+
+# --- workflows.disabled (spec 2026-11-28-alacarte-settings R3)
+
+
+def test_a_disabled_name_no_shape_carries_is_refused(repo: Path) -> None:
+    _land_on_main(repo, "schema: 3\nworkflows:\n  disabled: [no-such-shape]\n")
+    problems = check_settings(repo)
+    assert [p.id for p in problems] == ["unknown-disabled-shape"]
+    assert "no-such-shape" in problems[0].message
+
+
+def test_disabling_every_shape_is_refused(repo: Path) -> None:
+    from fr.workflow.resolve import discover_names
+
+    names = discover_names(repo)
+    assert names
+    _land_on_main(repo, f"schema: 3\nworkflows:\n  disabled: [{', '.join(names)}]\n")
+    assert [p.id for p in check_settings(repo)] == ["every-shape-disabled"]
+
+
+def test_disabling_one_known_shape_is_coherent(repo: Path) -> None:
+    _land_on_main(repo, "schema: 3\nworkflows:\n  disabled: [fr-goal-light]\n")
+    assert check_settings(repo) == []

@@ -31,9 +31,9 @@ from fr.workflow.check import check_workflow
 from fr.workflow.model import WorkflowError
 from fr.workflow.resolve import (
     REPO_WORKFLOWS_REL,
-    repo_workflows_dir,
+    discover_names,
     resolve_workflow,
-    shipped_workflow_dirs,
+    search_dirs,
 )
 
 console = Console(highlight=False)
@@ -43,23 +43,6 @@ workflow_app = typer.Typer(
     help="Workflow shape manifests: resolve (repo > shipped) and validate.",
     no_args_is_help=True,
 )
-
-
-def _search_dirs(repo_root: Path, shipped_dir: Path | None) -> list[Path]:
-    """Every directory `resolve_workflow` would look in, in the same order.
-
-    Derived from `shipped_workflow_dirs` rather than restated, so discovery
-    and resolution cannot disagree about where a shape lives.
-    """
-    return [repo_workflows_dir(repo_root), *shipped_workflow_dirs(shipped_dir)]
-
-
-def _discover_names(repo_root: Path, shipped_dir: Path | None) -> list[str]:
-    names: set[str] = set()
-    for d in _search_dirs(repo_root, shipped_dir):
-        if d.is_dir():
-            names |= {p.stem for p in d.glob("*.yaml")}
-    return sorted(names)
 
 
 def _check_one(name: str, repo_root: Path, shipped_dir: Path | None) -> list[str]:
@@ -81,7 +64,7 @@ def check_cmd(
     shipped_dir: Path | None = None
 
     if all_:
-        names = _discover_names(repo_root, shipped_dir)
+        names = discover_names(repo_root, shipped_dir)
         if not names:
             # Exit 1, not 0 (review r5-b5). "Nothing to validate" is a broken
             # installation, not a clean bill of health, and reporting it as
@@ -89,7 +72,7 @@ def check_cmd(
             # against a host with no shapes installed at all.
             err_console.print("[red]no workflow shapes found — nothing to validate.[/red]")
             err_console.print("Searched:")
-            for d in _search_dirs(repo_root, shipped_dir):
+            for d in search_dirs(repo_root, shipped_dir):
                 # soft_wrap: these are paths the operator inspects and pastes;
                 # rich's default folding would break one across lines.
                 err_console.print(f"  {d}", soft_wrap=True)

@@ -30,6 +30,9 @@ from fr.settings.model import PLACEMENTS, Settings, parse_settings
 SETTINGS_PATH: Final = rel("settings")
 SERVABLE_PLACEMENTS: Final = frozenset({"repo", "quiet", "stealth"})
 """The placements this fr can serve."""
+STEALTH_GIT: Final = {"push": "ask", "pr": "ask"}
+"""The git keys stealth sets itself (epic D7, alacarte R7): `fr push` of the product
+branch and `fr pr create` wait for the operator's confirmation."""
 
 Source = Literal["remote", "local", "head", "defaults", "quiet", "stealth"]
 """Where the policy came from: R2 step 1, step 2, the CI exception, nowhere, (quiet) the
@@ -48,8 +51,12 @@ class EffectiveSettings:
     source: Source = "defaults"
     """Which R2 step supplied `ref` (`fr settings show` reports it)."""
     contrary: tuple[str, ...] = ()
-    """Under stealth, the forge keys the tracking file sets explicitly to something other
-    than stealth's own value (R5 refuses them, `stealth-forge-explicit`)."""
+    """Under stealth, the forge keys (and `git.push`/`git.pr`) the tracking file sets
+    explicitly to something other than stealth's own value (R5 refuses them,
+    `stealth-forge-explicit`)."""
+    config_pr: str | None = None
+    """Under stealth, the tracking file's own `git.pr`, before stealth forces `ask`: the
+    configuration-change PRs fr opens on the tracking repo follow it (alacarte R8)."""
 
 
 _CACHE: dict[tuple[str, str], tuple[Settings, dict[str, str]]] = {}
@@ -279,7 +286,7 @@ def _servable(settings: Settings, source: str) -> Settings:
 
 def _repo_file(settings: Settings) -> Settings:
     """`.fr/settings.yaml` is the `repo` placement's file, so it says `repo` (§3.A: the
-    placement must match where the file lives). Quiet is switched on by the `fr` branch."""
+    placement must match where the file lives). Quiet is switched on by `fr-config`."""
     if settings.placement == "stealth":
         raise SettingsError(
             f"{SETTINGS_PATH}: placement: stealth cannot be set in repo settings: stealth is "
@@ -289,8 +296,8 @@ def _repo_file(settings: Settings) -> Settings:
     if settings.placement != "repo":
         raise SettingsError(
             f"{SETTINGS_PATH}: placement: {settings.placement} is not set here: this file is "
-            "the `repo` placement's. Quiet is switched on by the `fr` branch's root "
-            "settings.yaml (`fr settings init --quiet`)"
+            "the `repo` placement's. Quiet is switched on by .fr/settings.yaml on the "
+            "orphan `fr-config` branch (`fr settings init --quiet`)"
         )
     return settings
 
@@ -377,16 +384,25 @@ def _stealth(root: Path) -> EffectiveSettings | None:
         f"forge.{key}"
         for key, value in QUIET_FORGE.items()
         if _present(data, f"forge.{key}") and getattr(settings.forge, key) != value
+    ) + tuple(
+        # D7 (alacarte R7): code reaches the target only after the operator confirms.
+        f"git.{key}"
+        for key, value in STEALTH_GIT.items()
+        if _present(data, f"git.{key}") and getattr(settings.git, key) != value
     )
+    config_pr = settings.git.pr
     settings = settings.model_copy(
         update={
             "placement": "stealth",
             "forge": settings.forge.model_copy(update=dict(QUIET_FORGE)),
+            "git": settings.git.model_copy(update=dict(STEALTH_GIT)),
         }
     )
     sources = {k: ("stealth" if _present(data, k) else "default") for k in _leaf_keys(settings)}
     for key in QUIET_FORGE:
         sources[f"forge.{key}"] = "stealth"
+    for key in STEALTH_GIT:
+        sources[f"git.{key}"] = "stealth"
     note = f"stealth: read from {source} ({sha[:12]}); the forge keys are stealth's own"
     try:
         _, own, _, _ = _resolve_source(root)
@@ -402,7 +418,16 @@ def _stealth(root: Path) -> EffectiveSettings | None:
                 f"the tracking repo's {rel_path} wins (R24)",
                 file=sys.stderr,
             )
-    return EffectiveSettings(settings, sources, qualified, note, None, "stealth", contrary=contrary)
+    return EffectiveSettings(
+        settings,
+        sources,
+        qualified,
+        note,
+        None,
+        "stealth",
+        contrary=contrary,
+        config_pr=config_pr,
+    )
 
 
 def parse_settings_text(text: str | None, *, source: str, servable: bool = True) -> Settings:

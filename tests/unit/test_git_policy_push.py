@@ -458,6 +458,26 @@ def test_a_code_commit_after_the_request_makes_it_stale(
     assert not [c for c in argv if c[0] == "push"]
 
 
+def test_each_push_asks_anew_once_an_approved_one_has_pushed(
+    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An approval covers one push (spec 2026-11-28-alacarte-settings R9): once it has
+    pushed, the next code commit's push asks again, under a new request."""
+    repo = _ask_repo(tmp_path)
+    _answered(monkeypatch, True)
+    rid = _request_id(_push(repo).output)
+    _approve(repo, rid)
+    assert _push(repo).exit_code == 0
+    pushes = [c for c in argv if c[0] == "push"]
+    _commit(repo, "next", "feat(x): next")
+
+    result = _push(repo)
+
+    assert result.exit_code == 2, result.output
+    assert _request_id(result.output) != rid
+    assert [c for c in argv if c[0] == "push"] == pushes
+
+
 def test_the_git_runner_is_the_real_one_by_default() -> None:
     done = push_mod.run_git(Path(os.getcwd()), ["--version"])
     assert isinstance(done, subprocess.CompletedProcess) and done.returncode == 0
