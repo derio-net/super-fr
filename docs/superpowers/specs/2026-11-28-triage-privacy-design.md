@@ -102,8 +102,8 @@ and dispatch, and a different set on each side would void every admission. The d
 is already expected in `pr_authors` (triage-hardening R7), and fr's own markers are posted by it.
 
 `admit_marker` writes `"v":2` and the new human line. `parse_admit` returns a digest only for
-version 2, so `latest_admit` and `intake_reason` need no version argument. The `fr-admit-v2`
-first line guarantees no version-1 digest matches, even for an issue with no pinned comment.
+version 2, so `latest_admit` and `intake_reason` need no version argument. The JSON document's
+`"v":2` guarantees no version-1 digest matches, even for an issue with no pinned comment.
 
 Collect reads comments for admission only for a `ready-fr` issue that no other clause admits
 (`_comment_needs`, unchanged). `_comment_facts` returns the digest computed from those comments
