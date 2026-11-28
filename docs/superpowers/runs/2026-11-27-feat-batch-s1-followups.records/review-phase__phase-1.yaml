@@ -1,0 +1,68 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-s1-followups
+step: review-phase
+item: phase/1
+outcome: done
+journal:
+  - kind: finding
+    id: p1-r1
+    review_scope: in
+    phase: 1
+    title: "fr migrate artifacts reads the old switch before its mover scope opens"
+    body: |
+      `migrate_cmd.py:203` calls `require_migrated_layout` (`common.py:94` -> `quiet._read`) outside
+      `transition.moving()`, so past the gate a repo whose switch is only the old one is refused and told
+      to run the command it is running. The other movers (`fr repair`, `fr repos sync`) had the same shape.
+  - kind: finding
+    id: p1-r2
+    review_scope: in
+    phase: 1
+    title: "past the gate the settings-location stamp stays 1, so every command is refused"
+    body: |
+      `config/migrate.py:216-226` stamps the old switch 2 only while its bytes equal the fr-config copy. Past
+      the gate the old copy is never rewritten, so after the first fr-config change the stamp stays 1,
+      `_create_space` refuses (`config_migration.py:215-222`) and `trigger.py:757-770` refuses every command.
+  - kind: finding
+    id: p1-r3
+    review_scope: in
+    phase: 1
+    title: "docstrings still promise the old settings copy without 'before fr 9.2'"
+    body: |
+      `space.py:279-282`, `settings_cmd.py:63-66, 122-126, 249-253` and the user-facing
+      `config_migration.py:231-232` description promise the old copy is kept in step with no qualifier (R4).
+  - kind: review
+    id: p1-review-1
+    phase: 1
+    title: "phase 1 review: three in-scope findings (p1-r1, p1-r2, p1-r3), all fixed"
+    body: |
+      Reviewer ab27c72758b4ecafc (feature-dev:code-reviewer, claude-opus-5-5) reviewed the phase 1 diff
+      044bc18ee..0ad25840b against R1-R6 and R10. Findings p1-r1, p1-r2, p1-r3, all in scope. It suggested
+      the errors lens, already on the feature. The open implement-phase finding
+      p1-old-form-fixtures-red-at-9-2 was fixed in the same round.
+resolves:
+  - id: p1-r1
+    state: fixed
+    body: |
+      9f66412c9: `fr migrate artifacts`, `fr repair` and `fr repos sync` open the mover scope at their CLI
+      entry; `ensure_space` is a mover (421b9b5a6). CliRunner tests on the ended side in
+      tests/unit/test_config_space_transition.py.
+  - id: p1-r2
+    state: fixed
+    body: |
+      421b9b5a6: past the gate `settings_stamp` counts the old switch as current once fr-config holds a
+      settings file. Test in tests/unit/test_settings_old_copy_transition.py, red with the fix stashed.
+  - id: p1-r3
+    state: fixed
+    body: |
+      421b9b5a6: the docstrings and the settings-location description say "before fr 9.2", with a test.
+  - id: p1-old-form-fixtures-red-at-9-2
+    state: fixed
+    body: |
+      c99c4a13d, 3270370a6, e94edc898: fixtures moved to the new forms, old-form behaviour tests marked
+      s1_open / s1_open_subprocess, and `pytest --fr-ended` (tests/conftest.py) runs the suite past the gate.
+      The --fr-ended run found 139 red in 23 files; those files then passed on both sides (discovery
+      p1-fr-ended-option). CI on 1da6bd65c: all seven test shards green (docs-check red until phase 4).
+evidence:
+  review: p1-review-1
+  reviewer: ab27c72758b4ecafc
+  model: claude-opus-5-5
