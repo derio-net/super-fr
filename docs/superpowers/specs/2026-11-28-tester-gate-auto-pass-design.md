@@ -151,3 +151,7 @@ row is proven by the CI tests named on its line. None needs a released build, so
 no Test Plan.
 
 ## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-28-tester-gate-auto-pass | `derio-net/super-fr` | `2026-11-28-tester-gate-auto-pass` | — |

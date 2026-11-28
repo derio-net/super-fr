@@ -1,0 +1,145 @@
+schema_version: 2
+phase:
+  number: 1
+  title: The drive pass passes a walked gate on loose gated PRs (R1-R9)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - loose-gated-pr-rows-walked-pass
+  - loose-gated-pr-awaiting-live
+  - loose-gated-pr-no-pass-without-evidence
+  - loose-gated-pr-batch-guards
+  - closed-out-batch-gated-pr-pass
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/batch_drive_types.py
+  - packages/fr/src/fr/triage/batch_drive.py
+  - packages/fr/src/fr/triage/pr_gates.py
+  - packages/fr/src/fr/triage/ledger.py
+  - packages/fr/src/fr/commands/triage_batch_cmd.py
+  - packages/fr/src/fr/commands/triage_drive_loose.py
+  - tests/unit/test_triage_pr_gates.py
+  - tests/unit/test_triage_exit_gates_drive.py
+  - tests/unit/test_triage_ledger*.py
+  - tests/unit/test_triage_drive_loose.py
+  - tests/unit/test_tripwire_module_budget.py
+  - tests/unit/test_import_direction.py
+  - docs/**/*.md
+  - .changes/feat-batch-tester-gate-auto-pass.yaml
+  - docs/acceptance/features/2026-11-28-tester-gate-auto-pass.yaml
+  estimate_lines: 650
+tasks:
+- number: 1
+  title: Types move and the pure planner (spec Design · Types, Planning; R1-R3, R8)
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add tests/unit/test_triage_pr_gates.py. Import `GateLedger`/`GatedRow`/`LooseLedger` from `fr.triage.batch_drive_types` (they do not live there yet, so collection fails). Test `pr_gates.gate_actions(owner, repo, ledger, awaiting_unlabelled, labelled)`: (a) owner "" + repo "o/r", one held tester gate whose rows all read walked → one `gate-pass` Action with batch "", repo "o/r", pr and gate "tester"; (b) a row not walked → no gate-pass; (c) R2 guards: a run gate no row inherits, devops with ops_promoted, a held gate with no rows → no gate-pass for each; (d) a row citing an issue in awaiting_unlabelled → one `awaiting-live` action, and a second call sharing the same `labelled` set plans none for it; (e) ledger.rows None → []. Test `pr_gates.loose_prs(facts, batches)`: a gated PR no batch delivered is returned; a batch PR whose batch has no close-out event is not; a batch PR whose batch HAS a close-out event is (R8). Build Facts/Batch with the helpers tests/unit/test_triage_exit_gates_drive.py already uses. Run `uv run pytest tests/unit/test_triage_pr_gates.py -q --no-cov` and confirm it fails.
+  - id: P1.T1.S2
+    text: |-
+      GREEN: move `GatedRow` and `GateLedger` from packages/fr/src/fr/triage/batch_drive.py into batch_drive_types.py (stdlib only) and import them back into batch_drive so `fr.triage.batch_drive.GatedRow` / `.GateLedger` still resolve. Add a frozen `LooseLedger(repo, number, head_ref, ledger)` there and `repo: str = ""` on `Action`. Create packages/fr/src/fr/triage/pr_gates.py importing only batch_drive_types, fr.labels and fr.triage.batch / fr.triage.model (never fr.triage.batch_drive): `gate_actions` holds the body of `_gate_actions` (setting `repo` on each action when owner is ""), and `loose_prs` returns a LooseLedger (rows None) per `facts.gated_prs` entry that is not `batch_pr` of a batch with no close-out event (read the close-out from the batch's events the way `closeout_event` does, without importing batch_drive). Make `batch_drive._gate_actions` delegate to `gate_actions(batch.id, "", snap.ledgers[batch.id], snap.awaiting_unlabelled, labelled)`. Run the new test file and tests/unit/test_triage_exit_gates_drive.py: green.
+  - id: P1.T1.S3
+    text: |-
+      REFACTOR: drop now-unused imports in batch_drive.py; run `uv run ruff check packages/fr/src/fr/triage tests/unit/test_triage_pr_gates.py` and `uv run pytest tests/unit/test_import_direction.py tests/unit/test_tripwire_module_budget.py -q --no-cov`: green.
+- number: 2
+  title: drive_pass plans for loose ledgers (spec Design · Planning; R1, R3, R8)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: add drive_pass tests (in test_triage_pr_gates.py) with a Snapshot carrying `loose_ledgers=(LooseLedger(...),)`: (a) rows all walked → a gate-pass action with batch "" and repo set; (b) a loose PR and a gated batch citing the same open issue → exactly one awaiting-live action for it; (c) a loose ledger with rows None → no action; (d) a closed-out batch's PR given as a loose ledger → gate-pass. Build the Snapshot the way tests/unit/test_triage_exit_gates_drive.py does. Run and confirm failure (Snapshot has no loose_ledgers).
+  - id: P1.T2.S2
+    text: |-
+      GREEN: add `loose_ledgers: tuple[LooseLedger, ...] = ()` to `Snapshot` in batch_drive.py; after the batches loop in `drive_pass`, sharing that loop's `labelled` set, extend actions with `gate_actions("", l.repo, l.ledger, snap.awaiting_unlabelled, labelled)` per loose ledger. Keep batch_drive.py under its 1900-line budget. Tests green.
+- number: 3
+  title: The cursor must name the PR (spec Design · Reads; R5, R6)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: beside the existing gated_rows_at tests (`grep -ln gated_rows_at tests/unit`), test `gated_rows_at(checkout, ref, branch, pr=N)`: (a) one cursor on the branch whose `pr` url ends in `/N` → its rows; (b) its `pr` ends in another number → NO_RUN; (c) `pr` unset on the one cursor → its rows; (d) two cursors (live and archived, or two live) naming the branch → TriageError; (e) no cursor → NO_RUN; (f) pr=None keeps today's first-match behaviour. Run, confirm failure.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/triage/ledger.py add keyword `pr: int | None = None` to `gated_rows_at` and `_run_text`. With pr set, collect every cursor document whose `branch` is the branch: more than one raises TriageError naming the branch and the run ids; a cursor whose `pr` is a string not ending in `/<pr>` (trailing slash stripped) makes `gated_rows_at` return NO_RUN. Without pr, unchanged. Tests green.
+- number: 4
+  title: Driver reads and executes loose PRs (spec Design · Reads, Execution; R4,
+    R6, R7)
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: add tests/unit/test_triage_drive_loose.py driving the real driver the way tests/unit/test_triage_exit_gates_drive.py does (its fake forge and fixture default branch, with a cursor whose `branch` is the PR's head ref and whose gated rows read walked): (a) a whole-scope `--once --yes` drive over a merged gated PR in facts.gated_prs that no batch delivered swaps gate:tester for gate:tester-passed on that PR, comments, and labels the rows' open issue fr:awaiting-live; (b) the same drive with `--batch <a batch>` writes nothing for it; (c) the fixture cursor's `pr` names another PR → nothing written; (d) the row read raising TriageError → one warning naming `PR #<n>` and nothing written, and a second pass of the same driver prints no second warning; (e) the forge's label write raising → the pass reports it and `--once` exits 1. Run, confirm failure.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: in packages/fr/src/fr/commands/triage_batch_cmd.py change `_gated_rows(self, repo, batch)` to `_gated_rows(self, repo, branch, label, pr=None)`, keying the cache on `(repo, tip, branch, pr)` and naming *label* in the warning; `_ledgers` passes `recorded_branch(batch), batch.id`. Create packages/fr/src/fr/commands/triage_drive_loose.py with `loose_ledgers(driver, facts, judgements, unread) -> tuple[LooseLedger, ...]`: for each `pr_gates.loose_prs(facts, judgements.batches)` entry whose repo is not in unread, call `driver._gated_rows(repo, head_ref, f"PR #{n}", pr=n)` and, when not None, replace the ledger's rows/run_gate/run_gate_inherited/ops_promoted. In the Snapshot build pass `loose_ledgers=` that result only when the drive has no `--batch` selection (find how the driver tells, near `selected=frozenset(ids)`), else `()`. In `_act`, before the batch lookup, send `awaiting-live` / `gate-pass` actions with `batch == ""` to `_label_awaiting(action, facts)` / `_pass_gate(action, facts, action.repo)`. Keep triage_batch_cmd.py within its 8320 budget (move code into triage_drive_loose.py); only if impossible, raise the budget in tests/unit/test_tripwire_module_budget.py with a one-line reason. Tests green.
+  - id: P1.T4.S3
+    text: |-
+      REFACTOR: run `uv run ruff format packages/ tests/`, `uv run ruff check packages/ tests/` and `uv run mypy packages/fr/src`; fix what they name.
+- number: 5
+  title: Rows, docs, change fragment, fast tier
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      Move each of the five acceptance rows to `ci` with its new test refs through the phase step record's `acceptance:` entries (or `uv run fr acceptance set-status --id <row> --status ci --notes "<why>" --level unit=super-fr:<path>#<test>`), never by hand.
+  - id: P1.T5.S2
+    text: |-
+      Add .changes/feat-batch-tester-gate-auto-pass.yaml (`bump: minor`, one-line summary). Run `uv run fr docs check --base origin/main`; for each page it names, update the text where the driver's gate pass is described (a gated PR outside a batch is now passed too), else bump its `reviewed` stamp with a note.
+  - id: P1.T5.S3
+    text: |-
+      After the last code commit, run the repo's fast tier from the brief (`uv run pytest --fr-scope origin/main -n 2 -q --no-cov`) and report its pass/fail line.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
