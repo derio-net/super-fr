@@ -144,3 +144,8 @@ redact's token shapes predate this change; adding Gitea and header shapes is a r
 ### l-security-r2-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1765] · resolves l-security-r2: CONTROL misses U+061C, zero-width U+200B-200D/U+2060/U+FEFF and U+2028/2029
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1765.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved-2 created=2026-11-28T10:34:41+00:00 state=open resolves=l-security-r3 tracked_by=https://github.com/derio-net/super-fr/issues/1766 -->
+### l-security-r3-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1766] · resolves l-security-r3: redact covers only GitHub/GitLab token shapes and URL credentials; Gitea tokens and Authorization header values pass through
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1766.
