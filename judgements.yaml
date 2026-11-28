@@ -13325,6 +13325,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-28T14:14:38.900394Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -14689,6 +14696,12 @@ batches:
   - super-fr#1632
   - super-fr#1631
   wave: 26
+  events:
+  - kind: dispatch
+    at: '2026-11-28T14:14:46.193624Z'
+    runner: herdr
+    handle: w3X:pC
+    branch: feat/batch-triage-privacy
 - id: ops-gate-truth
   title: 'Ops gate truth: no stale ops workspace; every gate walks the rows it verifies'
   ids:
@@ -14737,6 +14750,11 @@ batches:
     patch_id: f2caee1439d68ecefd1cfdad303ce7b815fc6dcf
   - kind: post_merge
     at: '2026-11-28T14:01:44.048702Z'
+  - kind: claims_released
+    at: '2026-11-28T14:15:51.304853Z'
+    keys:
+    - super-fr#1617
+    - super-fr#1621
 - id: silent-failures
   title: 'Silent failures: errors that report success or lose their reason'
   ids:

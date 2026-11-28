@@ -1,16 +1,6 @@
 {
   "schema": 1,
   "batches": {
-    "triage-privacy": {
-      "column": "proposed",
-      "column_since": "2026-11-28T13:42:47.572419Z",
-      "column_first_seen": true,
-      "wait": "queue",
-      "wait_since": "2026-11-28T13:42:47.572419Z",
-      "wait_first_seen": true,
-      "intervals": [],
-      "truncated": false
-    },
     "arch-plan-ops-record": {
       "column": "proposed",
       "column_since": "2026-11-28T13:42:47.572419Z",
@@ -41,6 +31,24 @@
       "intervals": [],
       "truncated": false
     },
+    "tester-gate-walker": {
+      "column": "proposed",
+      "column_since": "2026-11-28T14:15:55.466701Z",
+      "column_first_seen": false,
+      "wait": "queue",
+      "wait_since": "2026-11-28T14:15:55.466701Z",
+      "wait_first_seen": false,
+      "intervals": [
+        {
+          "column": "waiting",
+          "wait": "dependency",
+          "start": "2026-11-28T13:42:47.572419Z",
+          "end": "2026-11-28T14:15:55.466701Z",
+          "first_seen": true
+        }
+      ],
+      "truncated": false
+    },
     "arch-triage-ports": {
       "column": "waiting",
       "column_since": "2026-11-28T13:42:47.572419Z",
@@ -51,14 +59,22 @@
       "intervals": [],
       "truncated": false
     },
-    "tester-gate-walker": {
-      "column": "waiting",
-      "column_since": "2026-11-28T13:42:47.572419Z",
-      "column_first_seen": true,
-      "wait": "dependency",
-      "wait_since": "2026-11-28T13:42:47.572419Z",
-      "wait_first_seen": true,
-      "intervals": [],
+    "triage-privacy": {
+      "column": "running",
+      "column_since": "2026-11-28T14:15:55.466701Z",
+      "column_first_seen": false,
+      "wait": "agent",
+      "wait_since": "2026-11-28T14:15:55.466701Z",
+      "wait_first_seen": false,
+      "intervals": [
+        {
+          "column": "proposed",
+          "wait": "queue",
+          "start": "2026-11-28T13:42:47.572419Z",
+          "end": "2026-11-28T14:15:55.466701Z",
+          "first_seen": true
+        }
+      ],
       "truncated": false
     },
     "s1-followups": {
@@ -66,16 +82,6 @@
       "column_since": "2026-11-28T13:42:47.572419Z",
       "column_first_seen": true,
       "wait": "agent",
-      "wait_since": "2026-11-28T13:42:47.572419Z",
-      "wait_first_seen": true,
-      "intervals": [],
-      "truncated": false
-    },
-    "ops-gate-truth": {
-      "column": "needs-reviewer",
-      "column_since": "2026-11-28T13:42:47.572419Z",
-      "column_first_seen": true,
-      "wait": "you",
       "wait_since": "2026-11-28T13:42:47.572419Z",
       "wait_first_seen": true,
       "intervals": [],
@@ -149,6 +155,24 @@
       "wait_since": "2026-11-28T13:42:47.572419Z",
       "wait_first_seen": true,
       "intervals": [],
+      "truncated": false
+    },
+    "ops-gate-truth": {
+      "column": "closing-out",
+      "column_since": "2026-11-28T14:15:55.466701Z",
+      "column_first_seen": false,
+      "wait": "agent",
+      "wait_since": "2026-11-28T14:15:55.466701Z",
+      "wait_first_seen": false,
+      "intervals": [
+        {
+          "column": "needs-reviewer",
+          "wait": "you",
+          "start": "2026-11-28T13:42:47.572419Z",
+          "end": "2026-11-28T14:15:55.466701Z",
+          "first_seen": true
+        }
+      ],
       "truncated": false
     },
     "silent-failures": {
