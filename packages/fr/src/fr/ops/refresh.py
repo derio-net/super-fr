@@ -137,6 +137,19 @@ def _merge_by_hand(gate: Gate, tree: OpsTree, ref: str, paths: tuple[str, ...]) 
     )
 
 
+def _runbook_rel(root: Path) -> list[str]:
+    """The runbook `.fr/ops.yaml` names under *root*, as a path to materialise: a runbook
+    op a plan op `needs` is part of the ops either side loads (l-tests-r4). An unreadable
+    config names nothing here; `drift` reports it when it loads the ops."""
+    from fr.ops.load import OpsLoadError, load_ops_config
+
+    try:
+        runbook = load_ops_config(root).runbook
+    except OpsLoadError, OSError:
+        return []
+    return [runbook] if runbook else []
+
+
 def _settle_pending_merge(gate: Gate, tree: OpsTree) -> None:
     """A refresh whose merge failed left the pinned commit for the operator to merge by
     hand (l-errors-r3). Whatever that commit's plan journal holds is the default branch's,
@@ -179,8 +192,13 @@ def refresh(gate: Gate, tree: OpsTree, stage: int) -> None:
     sha = valid_sha(gate.host.rev_parse(tip) or "", f"{tip}'s tip")
     ref = f"{tip} at {sha[:12]}"
     spec_rel = run_spec(t.run)
-    scratch = gate.host.materialise(sha, _head_paths(t, spec_rel or f"{KIND_DIRS['spec']}/"))
+    paths = _head_paths(t, spec_rel or f"{KIND_DIRS['spec']}/")
+    scratch = gate.host.materialise(sha, [*paths, *_runbook_rel(tree.path)])
     try:
+        if (more := _runbook_rel(scratch)) and not (scratch / more[0]).is_file():
+            # the default branch names a runbook the workspace does not (l-tests-r4)
+            shutil.rmtree(scratch, ignore_errors=True)
+            scratch = gate.host.materialise(sha, [*paths, *more])
         d = drift(tree.path, scratch, t.plan_rel, spec_rel)
     finally:
         shutil.rmtree(scratch, ignore_errors=True)

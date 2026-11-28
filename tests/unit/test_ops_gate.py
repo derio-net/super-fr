@@ -2532,3 +2532,27 @@ def test_l_tests_r7_stage_6_refuses_an_unreadable_setting(
         gate_mod.stage_6(gate)
     assert "cannot be read" in exc.value.why and "settings" in exc.value.why
     assert not _gate_passes(tree)
+
+
+def test_l_tests_r4_the_refresh_reads_a_runbook_outside_the_head_paths(ops_root: Path) -> None:
+    """A plan op that `needs` a runbook op: the default branch's runbook file is part of the
+    scratch tree, wherever `.fr/ops.yaml` puts it, so drift loads the same ops on both sides."""
+    from fr.ops.refresh import refresh
+
+    (ops_root / ".fr").mkdir(exist_ok=True)
+    (ops_root / ".fr/ops.yaml").write_text("runbook: ops/book.yaml\n")
+    (ops_root / "ops").mkdir()
+    (ops_root / "ops/book.yaml").write_text(
+        "- id: rb\n  summary: rb\n  phase: post-merge\n  commands: [x]\n"
+    )
+    ops = (ops_root / PLAN / "ops.yaml").read_text().replace(
+        "phase: post-merge, check:", "phase: post-merge, needs: [rb], check:"
+    )
+    (ops_root / PLAN / "ops.yaml").write_text(ops)
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, ops=None)
+
+    refresh(gate, tree, 4)  # nothing moved: no question, no merge, no refusal
+
+    assert _refresh_q(prompt) == [] and not [c for c in tree.calls if c[0] == "merge"]
+    (paths,) = [a[2:] for a, _ in host.calls if a[:1] == ["materialise"]][-1:]
+    assert "ops/book.yaml" in paths
