@@ -70,9 +70,15 @@ REF_FILES: tuple[str, ...] = (
     "sessions.yaml",
     "rehomes.yaml",
     "drive-pages.json",
+    "dwell.json",
 )
 """THE list of what the state ref carries: a name ending in `/` is a directory, taken
 whole (every regular file under it, never through a symlink)."""
+
+OBSERVED_FILES: tuple[str, ...] = ("dwell.json",)
+"""`REF_FILES` entries that are observation, not authored state (spec
+2026-11-27-board-session-state R5): `fetch_state` never counts one as a clash, so a moved
+ref's copy overwrites the local one. Every other entry keeps the clash check."""
 
 REF_PREFIX = "refs/heads/fr-triage/"
 LEGACY_REF_PREFIX = "refs/fr/triage/"
@@ -265,7 +271,8 @@ def fetch_state(
     Changes not yet pushed are never overwritten (p3-r4): when the ref moved past this
     directory's base and the directory differs from that base, `StateRefConflict`, and
     nothing is written, unless *discard_local*. When the ref has not moved, local changes
-    are kept and nothing is written."""
+    are kept and nothing is written. An `OBSERVED_FILES` entry is never a clash: the moved
+    ref's copy (or its absence) wins over the local one."""
     cwd = _repo(state_dir, repo)
     ref = ref_name(scope_id)
     sha = gitseam.fetch_ref(cwd, remote_repo, ref)
@@ -291,7 +298,9 @@ def fetch_state(
         clashes = sorted(
             rel
             for rel in mine.keys() | theirs.keys()
-            if mine.get(rel) != theirs.get(rel) and mine.get(rel) != was.get(rel)
+            if mine.get(rel) != theirs.get(rel)
+            and mine.get(rel) != was.get(rel)
+            and rel not in OBSERVED_FILES
         )
         if clashes and not discard_local:
             raise StateRefConflict(

@@ -211,6 +211,42 @@ class HerdrRunner:
         tabs = _list_tabs()
         return {item.id: _status_of(_tabs_labelled(tabs, item.id)) for item in items}
 
+    def session_background(self, items: Sequence[WorkItem]) -> frozenset[str]:
+        """The items whose idle or done Claude session has background work (spec
+        2026-11-27-board-session-state R3): one `tab list` and one `agent list`, then one
+        `pane read` per Claude agent pane of an idle tab, asked of
+        `restart.has_background_work`. A working or blocked tab is never read, and neither
+        is another agent kind. A pane with no id, or one that cannot be read, is skipped."""
+        tabs = _list_tabs()
+        idle = [i for i in items if _status_of(_tabs_labelled(tabs, i.id)) in ("idle", "done")]
+        if not idle:
+            return frozenset()
+        agents = _list_agents()
+        found: set[str] = set()
+        for item in idle:
+            panes = {str(t.get("tab_id")) for t in _tabs_labelled(tabs, item.id)}
+            for agent in agents:
+                if (
+                    str(agent.get("tab_id")) not in panes
+                    or _HARNESSES.get(str(agent.get("agent"))) != "claude"
+                ):
+                    continue
+                pane = agent.get("pane_id")
+                if not pane:
+                    continue
+                try:  # one unreadable pane never loses the marks already found (r1)
+                    screen = str(
+                        _run_herdr(
+                            ["pane", "read", str(pane), "--source", "visible", "--ansi"]
+                        ).get("raw", "")
+                    )
+                except Exception:  # noqa: BLE001
+                    continue
+                if restart.has_background_work(screen):
+                    found.add(item.id)
+                    break
+        return frozenset(found)
+
     def focus(self, item: WorkItem) -> bool:
         """Select the item's workspace, then its tab; False when it has no tab (spec §B)."""
         mine = _tabs_labelled(_list_tabs(), item.id)

@@ -15,6 +15,7 @@ import pytest
 from fr.triage import state_sync
 from fr.triage.model import Scope
 from fr.triage.state_ref import (
+    OBSERVED_FILES,
     REF_FILES,
     StateRefConflict,
     StateRefPushRefused,
@@ -93,6 +94,7 @@ EVERY = {
     "requests.yaml": b"requests: []\n",
     "sessions.yaml": b"sessions: []\n",
     "rehomes.yaml": b"rehomes: []\n",
+    "dwell.json": b'{"schema": 1, "batches": {}}\n',
 }
 NEVER = {
     "facts.json": b"{}\n",
@@ -134,7 +136,10 @@ def test_ref_files_is_the_one_list_and_names_the_durable_export_set() -> None:
         "sessions.yaml",
         "rehomes.yaml",
         "drive-pages.json",
+        "dwell.json",
     )
+    assert OBSERVED_FILES == ("dwell.json",)
+    assert set(OBSERVED_FILES) <= set(REF_FILES)
     files = {e for e in REF_FILES if not e.endswith("/")}
     dirs = tuple(e.rstrip("/") for e in REF_FILES if e.endswith("/"))
     assert set(state_sync.DURABLE_FILES) <= files
@@ -375,6 +380,69 @@ def test_a_fetch_over_unpushed_local_changes_refuses_and_writes_nothing(
 
     assert (state_b / "judgements.yaml").read_bytes() == b"mine, unpushed\n"
     assert read_base(state_b, remote=str(origin), ref=ref_name(SCOPE_ID)) == v1
+
+
+def _moved(tmp_path: Path, origin: Path) -> tuple[Path, Path, str]:
+    """A ref that moved past host b's base: a pushes v1, b fetches it, a pushes v2 (a new
+    `dwell.json` and a new `judgements.yaml`). Returns a's and b's state and v2."""
+    a = _clone(tmp_path, "a", origin)
+    state_a = _state(a)
+    _fill(state_a, {"judgements.yaml": b"v1\n", "dwell.json": b"theirs v1\n"})
+    v1 = push_state(state_a, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
+    b = _clone(tmp_path, "b", origin)
+    state_b = b / ".fr" / "triage-state" / "scope"
+    fetch_state(state_b, str(origin), SCOPE_ID)
+    _fill(state_a, {"judgements.yaml": b"v2\n", "dwell.json": b"theirs v2\n"})
+    v2 = push_state(state_a, str(origin), SCOPE_ID, expected_old=v1, **PRIVATE)
+    return state_a, state_b, v2
+
+
+def test_a_moved_ref_overwrites_a_locally_changed_dwell_ledger_without_a_conflict(
+    tmp_path: Path, origin: Path
+) -> None:
+    """dwell.json is observation, not authored state (spec 2026-11-27-board-session-state
+    R5): a local copy the ref has moved past never refuses the fetch; the ref's wins."""
+    _, state_b, v2 = _moved(tmp_path, origin)
+    (state_b / "dwell.json").write_bytes(b"mine, observed here\n")
+
+    assert fetch_state(state_b, str(origin), SCOPE_ID) == v2
+
+    assert (state_b / "dwell.json").read_bytes() == b"theirs v2\n"
+    assert (state_b / "judgements.yaml").read_bytes() == b"v2\n"
+    assert read_base(state_b, remote=str(origin), ref=ref_name(SCOPE_ID)) == v2
+
+
+def test_a_locally_changed_judgements_still_refuses_beside_a_changed_dwell_ledger(
+    tmp_path: Path, origin: Path
+) -> None:
+    _, state_b, _ = _moved(tmp_path, origin)
+    (state_b / "dwell.json").write_bytes(b"mine, observed here\n")
+    (state_b / "judgements.yaml").write_bytes(b"mine, unpushed\n")
+
+    with pytest.raises(StateRefConflict, match="judgements.yaml") as caught:
+        fetch_state(state_b, str(origin), SCOPE_ID)
+
+    assert "dwell.json" not in str(caught.value)
+    assert (state_b / "dwell.json").read_bytes() == b"mine, observed here\n"  # nothing written
+    assert (state_b / "judgements.yaml").read_bytes() == b"mine, unpushed\n"
+
+
+def test_a_ref_without_the_ledger_adopts_its_absence(tmp_path: Path, origin: Path) -> None:
+    """The other direction: a ref that moved and carries no dwell.json removes a local one
+    (the ref's copy, here none, wins) and still raises no conflict."""
+    a = _clone(tmp_path, "a", origin)
+    state_a = _state(a)
+    _fill(state_a, {"judgements.yaml": b"v1\n"})
+    v1 = push_state(state_a, str(origin), SCOPE_ID, expected_old=None, **PRIVATE)
+    b = _clone(tmp_path, "b", origin)
+    state_b = b / ".fr" / "triage-state" / "scope"
+    fetch_state(state_b, str(origin), SCOPE_ID)
+    _fill(state_a, {"judgements.yaml": b"v2\n"})
+    v2 = push_state(state_a, str(origin), SCOPE_ID, expected_old=v1, **PRIVATE)
+    (state_b / "dwell.json").write_bytes(b"mine\n")
+
+    assert fetch_state(state_b, str(origin), SCOPE_ID) == v2
+    assert not (state_b / "dwell.json").exists()
 
 
 def test_discard_local_lets_a_fetch_overwrite_unpushed_changes(
