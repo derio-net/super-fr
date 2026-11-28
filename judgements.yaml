@@ -1,5 +1,5 @@
 schema: 14
-ranked_at: 2026-11-27
+ranked_at: 2026-11-28
 tiers:
 - n: 1
   title: Work can be lost
@@ -14,6 +14,15 @@ tiers:
   title: Improve or investigate
   description: Friction, observability, compatibility, or work needing new live evidence.
 issues:
+  "super-fr#1764":
+    tier: 2
+    theme: "tester-gate"
+    cx: "S"
+    severity: "med"
+    kind: "defect"
+    verified: true
+    detail: "A merged `gate:tester` PR outside any batch reaches the board through `gated_pr_lane` (`lanes.py:68`), which reads labels only; the rows-walked auto-pass (`_gate_actions`, `batch_drive.py:1222`) runs only over a batch's ledger. So walked rows never move the card, and the hint (`lanes.py:83`) names a remedy that cannot work for it."
+    note: "Operator priority 2026-11-28: clears the Needs you · Tester column."
   super-fr#1468:
     tier: 3
     theme: test-isolation
@@ -12971,6 +12980,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-28T10:40:34.727962Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -14626,6 +14642,14 @@ batches:
     runner: herdr
     handle: w3X:p7
     branch: feat/batch-s1-followups
+- id: tester-gate-auto-pass
+  title: Pass a tester gate whose rows are walked, for PRs outside a batch
+  ids:
+  - super-fr#1764
+  rationale: 'Operator priority: most Needs you · Tester cards are non-batch PRs whose rows are already
+    walked.'
+  order: 1
+  wave: 26
 features:
 - rank: 1
   title: Guards that switch off or trust the wrong binary
