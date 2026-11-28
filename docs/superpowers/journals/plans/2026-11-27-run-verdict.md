@@ -208,3 +208,38 @@ a verbatim move that must keep its bytes; the only cleanup (imports left unused 
 ### review-p4-1 · review · phase 4 reviewed by an independent reviewer; no findings (phase 4)
 
 Reviewer compared every moved function and constant in fr/run/brief.py with the pre-move run_cmd by an AST script: differences are only the underscore renames, docstring names, repo_root for resolve_repo_root(), a threaded warn, and RunRefusal for typer.Exit(2). Every Say keeps text and kwargs; lens_set_or_refuse keeps its cause; brief dicts identical in key order and values; every repo_root caller passes a root it held; every refusing call sits in _refusals(); the binding guard and its helpers and _print_member_dispatch stay; layering clean; no stale old names in packages, tests, plugins, scripts, docs, AGENTS.md or the mirrors; capture test has no pre-move driver or alias shim; budget +20; docs current; 34 focused tests pass. No findings raised.
+
+<!-- fr:journal kind=decision scope=plan id=p5-evidence-modules created=2026-11-28T00:46:33+00:00 phase=5 -->
+### p5-evidence-modules · decision · the evidence cluster split into emitted, target, journals, review, lenses, walk, suite, ci and owed; derived gained visual and single-phase (phase 5)
+
+fr/run/evidence/: emitted.py (parse_emitted), target.py (the obligation sets, EvidenceTarget, evidence_hint, parse_evidence), journals.py (journal readers, verify_review_entry, closed_findings_witness), review.py (historical bound, verify_reviewer, check_returned_findings, dispatches_since, return_unobserved/return_refusal), lenses.py (+ owed_on, verify_lens_reviewers, lenses_witness, check_lens_returns), walk.py, suite.py (tests logs, reuse, local stamps; named suite, not tests, so it never reads as a test module), ci.py (exit 75 kept), owed.py. Largest is suite.py at 557 lines. `DERIVED_EVIDENCE` stays only in fr.workflow.artifacts (run_cmd's `_DERIVED_EVIDENCE` was a pure alias); the tests that read it import it from there. `fr.run.evidence.refusal(text)` builds the one-line soft-wrapped refusal most verifiers print. review.py imports PHASE_EXECUTOR_AGENT inside verify_reviewer, because fr.run.brief imports the lens checks, which import review.py.
+
+<!-- fr:journal kind=decision scope=plan id=p5-verified-evidence-wiring created=2026-11-28T00:46:33+00:00 phase=5 -->
+### p5-verified-evidence-wiring · decision · _verified_evidence settles each witness verdict with _settle or the new _witness, and runs each raising check inside _refusals() (phase 5)
+
+`_witness` is `_settle` with the witness asserted present, for the tests and walk witnesses the resolve stores directly. derive's lambdas settle single-phase, visual and lenses; the findings closure runs check_returned_findings inside `_refusals()` and settles closed_findings_witness. Every warning-printing callee takes `warn=_say`. Verifiers that call a raising check (verify_tests_log, verify_phase_tests_log, lenses_witness) catch its RunRefusal into their refusal with the warnings gathered first. `_derived_refusal` is gone.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-evidence-capture created=2026-11-28T00:46:33+00:00 phase=5 -->
+### p5-evidence-capture · discovery · the evidence capture drives one 146-case table through run_cmd's old functions once and now through fr.run.evidence, plus one fr run resolve pinning gh#768's summary line (phase 5)
+
+tests/unit/test_run_verdict_evidence.py holds the cases; fixtures in tests/fixtures/run_verdict/evidence/ (stderr at width 80 with colour, exit code, returned value and noted unobserved gates as JSON, tmp paths normalised to <ROOT>) were taken by a throwaway driver (not committed) in commit 7a001a30f, before the move. `_patch` fakes an input at its source module and follows it, by identity, into every fr.run.evidence module that imported it. resolve-two-derived-refusals.txt is a real `fr run resolve --step deliver` with no base for proportionality or docs. The test drives only fr.run.evidence and run_cmd's adapters.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-historical-prose-kept created=2026-11-28T00:46:33+00:00 phase=5 -->
+### p5-historical-prose-kept · discovery · dated observations naming `_verify_tests_log` were left as written (phase 5)
+
+parity.yaml's 2026-10-23 live-verification note, the acceptance legacy fragment's RE-OBSERVED note and docs/triage's judgement records name `_verify_tests_log` or `_ci_tests_witness` as they stood when observed; they record history, not the current module layout, so they were not edited. Code comments and docstrings naming moved names (settle/read.py, run/ci_evidence.py, run/deliver.py, AGENTS.md's lens-review sentence) were re-pointed.
+
+<!-- fr:journal kind=discovery scope=plan id=p5-test-runs created=2026-11-28T00:46:33+00:00 phase=5 -->
+### p5-test-runs · discovery · the fast tier ran 10378 passed, 118 skipped after the last code commit; the plan's focused set ran green as that tier plus its 21 unselected files (phase 5)
+
+`uv run pytest --fr-scope origin/main -n 2 -q --no-cov` on 0ae5c3815: 10378 passed, 118 skipped, exit 0 (63 min on a loaded host). The P5.T2.S2 glob (test_run_*, test_deliver*, test_record_*, test_verification*) is 87 files; 66 were in the fast tier, and the other 21 ran on their own at the same commit: 417 passed. The whole suite collects with `-m ""` (20422 tests, no error). ruff format/check and mypy are clean; `fr docs check` reports every page current.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t1 created=2026-11-28T00:46:33+00:00 phase=5 -->
+### no-refactor-p5-t1 · discovery · no-refactor-because P5.T1 (phase 5)
+
+a capture task: fixtures and a test, nothing pre-existing to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p5-t2 created=2026-11-28T00:46:33+00:00 phase=5 -->
+### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
+
+a move that must keep its bytes; the only cleanup (run_cmd imports left unused, the re-pointed tests, the stale prose names) was done in the green steps
