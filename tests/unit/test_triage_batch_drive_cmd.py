@@ -497,6 +497,12 @@ class _Worktree:
     def abort_merge(self) -> None:
         pass
 
+    def unmerged_stages(self) -> dict[str, dict[int, str]]:
+        return {p: {2: "100644", 3: "100644"} for p in self.checkout.conflicts}
+
+    def read(self, file: str) -> str | None:
+        return None  # no marked-up text: every conflict is real
+
     def commit_all(self, message: str, version_files: list[str]) -> str | None:
         return "sha-updated"
 
@@ -1100,6 +1106,57 @@ def test_no_closeout_before_the_release_commit(
     code, out = _drive(tmp_path, "--once", "--yes")
     assert code == 3, out
     assert runner.dispatched == []
+
+
+@pytest.mark.parametrize("live", [False, True])
+def test_a_queue_landed_batch_is_closed_out_without_the_release_or_the_fallback(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner, live: bool
+) -> None:
+    """R5 of spec 2026-11-27-queue-followups: the command's due list reads `queue_landed`,
+    so a live close-out tab of a queue-landed batch is asked about and recorded."""
+    from fr.triage.model import Scope
+    from fr.triage.scope_config import scope_id
+
+    _merged(world, tmp_path)
+    if live:
+        runner.live.add(f"{REPO}/run/closeout-b1")
+    _at_14(tmp_path)
+    land = {"kind": "queue_land", "at": (NOW - timedelta(minutes=2)).isoformat(),
+            "entries": [{"batch": "b1"}], "main": "m" * 40}  # fmt: skip
+    queue = {"repo": REPO, "wave": None, "base": "m" * 40,
+             "scope": scope_id(Scope(kind="repo", target=REPO)), "events": [land]}  # fmt: skip
+    path = tmp_path / "judgements.yaml"
+    path.write_text(path.read_text("utf-8") + yaml.safe_dump({"queues": [queue]}), "utf-8")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    if live:
+        assert runner.dispatched == [], out
+        assert _events(tmp_path, "b1") == ["dispatch", "closeout"]
+    else:
+        assert [i.id for i in runner.dispatched] == [COLLECTED], out
+
+
+def test_another_repo_s_queue_landing_does_not_make_a_batch_due(
+    tmp_path: Path, world: World, checkout: DriveCheckout, runner: FakeRunner
+) -> None:
+    """R5, review p1-r4: the command's due list reads `queue_landed_by_repo`, so a
+    `queue_land` of another repo naming the batch's id does not make it due: its close-out
+    item is not probed, and nothing is recorded or started before the release or fallback."""
+    from fr.triage.model import Scope
+    from fr.triage.scope_config import scope_id
+
+    _merged(world, tmp_path)
+    runner.live.add(f"{REPO}/run/closeout-b1")
+    _at_14(tmp_path)
+    land = {"kind": "queue_land", "at": (NOW - timedelta(minutes=2)).isoformat(),
+            "entries": [{"batch": "b1"}], "main": "m" * 40}  # fmt: skip
+    queue = {"repo": "derio-net/other", "wave": None, "base": "m" * 40,
+             "scope": scope_id(Scope(kind="repo", target=REPO)), "events": [land]}  # fmt: skip
+    path = tmp_path / "judgements.yaml"
+    path.write_text(path.read_text("utf-8") + yaml.safe_dump({"queues": [queue]}), "utf-8")
+    code, out = _drive(tmp_path, "--once", "--yes")
+    assert runner.dispatched == [], out
+    assert _events(tmp_path, "b1") == ["dispatch"], out
+    assert not any(p and p[0].id.endswith("closeout-b1") for p in runner.preflighted), out
 
 
 def test_post_merge_then_one_closeout_through_the_runner(
@@ -3532,6 +3589,7 @@ def test_export_commits_only_the_scope_dir_force_pushes_and_records_the_pr(
     assert sorted(changed) == [
         f"{SCOPE_DIR}/board/manifest.yaml",
         f"{SCOPE_DIR}/exported-by",  # the scope id that exported it (gh#1101)
+        f"{SCOPE_DIR}/exported-files",  # what it wrote (spec 2026-11-27-export-drift R1)
         f"{SCOPE_DIR}/judgements.yaml",
     ]
     assert not (state / "export" / "1").exists()  # the scratch worktree is gone
@@ -3583,6 +3641,89 @@ def test_an_export_that_changes_nothing_records_no_pr_and_opens_none(
     assert not any(c.startswith("pr_create") for c in world.calls)
     _git(clone, "fetch", "--quiet", "origin")
     assert _head() not in _git(clone, "branch", "-r")
+
+
+@pytest.mark.parametrize("how", ["edit", "delete", "bad-record"])
+def test_an_export_over_a_repo_side_edit_stops_with_a_need_and_pushes_nothing(
+    tmp_path: Path, world: World, git_checkout: GitDriveCheckout, how: str
+) -> None:
+    """spec 2026-11-27-export-drift R4: the driver never forces. On drift (or a record it
+    cannot read) it commits, pushes and opens nothing, records an `export-drift:<repo>`
+    stop whose reason is the whole operator text, and that stop is one Need row; the next
+    export that finds no drift clears it."""
+    import shlex
+
+    from fr.triage.model import load_facts
+    from fr.triage.render import _needs_section
+    from fr.triage.state_sync import RECORD_FILE, export_state, import_state
+    from fr.triage.views import NEED_LABELS, needs_you
+
+    state = _finished_wave(tmp_path, world)
+    clone = git_checkout.path
+    export_state(state, clone, SCOPE_DIR, owner=_sid())
+    if how == "edit":
+        (clone / SCOPE_DIR / "board" / "manifest.yaml").write_text("edited\n", encoding="utf-8")
+        (clone / SCOPE_DIR / "board" / "fragment it's.html").write_text("f\n", encoding="utf-8")
+    elif how == "delete":
+        (clone / SCOPE_DIR / "board" / "manifest.yaml").unlink()
+    else:
+        (clone / SCOPE_DIR / RECORD_FILE).write_text("not json\n", encoding="utf-8")
+    _git(clone, "add", ".")
+    _git(clone, "commit", "--quiet", "-m", "a direct edit in the repo")
+    _git(clone, "push", "--quiet", "origin", "main")
+    main = _git(clone, "rev-parse", "HEAD").strip()
+    (state / "judgements.yaml").write_text(
+        (state / "judgements.yaml").read_text(encoding="utf-8") + "# newer\n", encoding="utf-8"
+    )
+
+    code, out = _export_drive(state, "--once", "--yes")
+
+    assert "refused, nothing committed or pushed" in out, out
+    assert _exports(state) == []
+    assert not any(c.startswith("pr_create") for c in world.calls)
+    _git(clone, "fetch", "--quiet", "origin")
+    assert _head() not in _git(clone, "branch", "-r")
+    stop = load_stops(state)[f"export-drift:{REPO}"]
+    assert stop.head == main and main in stop.reason
+    assert "--force" in stop.reason
+    if how == "edit":
+        only = ["--only", "board/fragment it's.html", "--only", "board/manifest.yaml"]
+        command = shlex.join(
+            ["fr", "triage", "state", "import", "--repo", REPO, "--dir", str(state.resolve()),
+             "--from", "docs/triage", *only]
+        )  # fmt: skip
+        assert command in stop.reason, stop.reason
+        assert "changed board/manifest.yaml" in stop.reason
+    elif how == "delete":
+        assert "deleted board/manifest.yaml" in stop.reason
+        assert "--only board/manifest.yaml" in stop.reason
+    else:
+        assert RECORD_FILE in stop.reason
+    facts = load_facts(state / "facts.json")
+    rows = needs_you(facts, load_judgements(state / "judgements.yaml"), stops=load_stops(state))
+    (need,) = [r for r in rows if r.kind == "export-drift"]
+    assert (need.ref, need.text) == (REPO, stop.reason)
+    assert NEED_LABELS["export-drift"] == "Triage export drifted from the repo"
+    page = _needs_section(
+        facts, load_judgements(state / "judgements.yaml"), stops=load_stops(state)
+    )
+    assert 'data-need="export-drift"' in page and "Triage export drifted from the repo" in page
+
+    # the remedy the stop prints: the repo's edit reaches the state by `import --only` (or
+    # the record is mended by a forced export), and the next export clears the stop (p1-r7)
+    if how == "bad-record":
+        export_state(state, clone, SCOPE_DIR, owner=_sid(), force=True)
+        _git(clone, "add", ".")
+        _git(clone, "commit", "--quiet", "-m", "mended")
+        _git(clone, "push", "--quiet", "origin", "main")
+    else:
+        only = [a for a in shlex.split(stop.reason.split("`")[1]) if a != "--only"][-2:]
+        paths = only if how == "edit" else ["board/manifest.yaml"]
+        import_state(clone, SCOPE_DIR, state, force=False, only=paths)
+    code, out = _export_drive(state, "--once", "--yes")
+    assert f"export-drift:{REPO}" not in load_stops(state), out
+    if how == "delete":
+        assert not (state / "board" / "manifest.yaml").exists()
 
 
 def test_an_orphan_is_reused_with_the_drivers_own_commit_never_its_foreign_one(
@@ -5295,13 +5436,16 @@ def test_a_working_session_is_waited_on_with_one_trial_merge_across_passes(
     assert event.delivered == "session"
 
 
-@pytest.mark.parametrize("moves", ["base", "head"])
+@pytest.mark.parametrize("moves", ["base", "head", "generated", "mirrors"])
 def test_a_new_base_or_head_between_passes_is_trial_merged_again(
     tmp_path: Path, world: World, checkout: DriveCheckout, messenger: MessengerRunner,
     monkeypatch: pytest.MonkeyPatch, moves: str,
 ) -> None:  # fmt: skip
-    """R17: a trial merge per (PR, head, default-branch sha) per process: one that moves is a
-    new key, so the next pass trial-merges again; the unchanged pass after it does not."""
+    """R17: a trial merge per (PR, head, default-branch sha, generated globs, mirrors) per
+    process: one that moves is a new key, so the next pass trial-merges again; the unchanged
+    pass after it does not."""
+    from fr.triage.model import Facts, TriageConfig
+
     _dirty_draft(world, tmp_path, checkout)
     messenger.status[BATCH_ITEM_B1] = "working"  # waited on: nothing recorded, probed again
     trials: list[int] = []
@@ -5310,6 +5454,12 @@ def test_a_new_base_or_head_between_passes_is_trial_merged_again(
         trials.append(checkout.trials)
         if len(trials) == 1 and moves == "base":
             monkeypatch.setattr(checkout, "rev_parse", lambda ref: f"{ref}@moved")
+        elif len(trials) == 1 and moves in ("generated", "mirrors"):
+            # R4 (review p1-r5): the repo's generated globs and mirrors are in the key too
+            config = TriageConfig.model_validate(
+                {"generated": ["gen/*"]} if moves == "generated" else {"mirrors": [["make"]]}
+            )
+            monkeypatch.setattr(Facts, "config_for", lambda self, repo: config)
         elif len(trials) == 1:
             world.prs[101]["head_oid"] = "sha-101b"
         elif len(trials) == 3:

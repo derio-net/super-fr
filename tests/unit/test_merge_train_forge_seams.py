@@ -56,6 +56,18 @@ def test_gh_pr_view_asks_for_and_returns_labels(monkeypatch: pytest.MonkeyPatch)
     assert "labels" in call[call.index("--json") + 1].split(",")
 
 
+@pytest.mark.parametrize(("payload", "want"), [({}, None), ({"labels": []}, [])],
+                         ids=["no-labels-key", "empty-labels"])  # fmt: skip
+def test_gh_pr_view_reads_a_missing_labels_key_as_unread(
+    monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any], want: list[str] | None
+) -> None:
+    """queue-followups R1 (l-errors-r2): a payload with no `labels` key is an unread label
+    set (None), never "no labels", which would end a live approval."""
+    view = json.dumps({"state": "OPEN", "headRefOid": "abc", **payload})
+    monkeypatch.setattr(_gh, "_run_gh", _Recorder({("pr", "view"): view}))
+    assert RealGhClient().pr_view(REPO, 7)["labels"] == want
+
+
 def test_gh_pr_ready_issues_gh_pr_ready(monkeypatch: pytest.MonkeyPatch) -> None:
     fake = _Recorder()
     monkeypatch.setattr(_gh, "_run_gh", fake)
@@ -88,6 +100,26 @@ def test_gh_label_exists_raises_any_other_error(monkeypatch: pytest.MonkeyPatch)
 def test_rest_pr_view_returns_the_pulls_labels() -> None:
     got = RealGhRestClient(run=FixtureGh()).pr_view(REPO, 1080)
     assert got["labels"] == []  # the captured draft #1080 carries none
+
+
+@pytest.mark.parametrize(("drop", "want"), [(True, None), (False, [])],
+                         ids=["no-labels-key", "empty-labels"])  # fmt: skip
+def test_rest_pr_view_reads_a_missing_labels_key_as_unread(drop: bool, want: Any) -> None:
+    """queue-followups R1 (l-errors-r2): the REST client, as the gh one above."""
+    inner = FixtureGh()
+
+    def run(argv: list[str]) -> str:
+        out = inner(argv)
+        if parse_api(argv)[2] != f"{R}/pulls/1080":
+            return out
+        pull = json.loads(out)
+        if drop:
+            pull.pop("labels", None)
+        else:
+            pull["labels"] = []
+        return json.dumps(pull)
+
+    assert RealGhRestClient(run=run).pr_view(REPO, 1080)["labels"] == want
 
 
 def test_rest_pr_ready_posts_the_ccr_ready_route() -> None:

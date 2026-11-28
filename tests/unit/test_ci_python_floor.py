@@ -107,3 +107,17 @@ def test_pr_gating_workflows_run_once_per_pr_push() -> None:
         assert (on.get("push") or {}).get("branches") == ["main", "fr-queue/**"], (
             f"{name}: push must be scoped to main and fr-queue/**, or every PR push runs it twice"
         )
+
+
+def test_every_uv_workflow_pins_uv_python_to_the_floor() -> None:
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        doc = _workflow(path.name)
+        uses = [
+            str(step.get("uses", ""))
+            for job in (doc.get("jobs") or {}).values()
+            for step in (job.get("steps") or [])
+        ]
+        if any(u.startswith("astral-sh/setup-uv") for u in uses):
+            assert (doc.get("env") or {}).get("UV_PYTHON") == _floor(), (
+                f"{path.name} uses setup-uv but does not pin UV_PYTHON to the floor"
+            )

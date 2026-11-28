@@ -62,6 +62,13 @@ class LabelForge:
         self.prs = prs
         self.label_edits: list[tuple[int, frozenset[str], frozenset[str]]] = []
         self.files: dict[str, str] = {}  # the default branch's files (contents API, R9)
+        self.posted: list[tuple[int, str]] = []  # queue-followups R3: the void comment
+
+    def list_issue_comments(self, repo: str, number: int) -> list[dict[str, Any]]:
+        return []
+
+    def comment_pr(self, repo: str, pr: int, body: str) -> None:
+        self.posted.append((pr, body))
 
     def read_file(self, repo: str, path: str) -> str:
         from fr.gh import GhError
@@ -112,6 +119,17 @@ def test_settle_voids_a_head_the_chain_does_not_reach_and_removes_the_label() ->
     assert (event.head, event.voided_at) == ("h1", "h9")
     assert got == {"a": Unlabelled()}
     assert said == ["approval of PR #7 at h1 voided: head moved to h9"]
+    ((pr, body),) = forge.posted
+    assert pr == 7 and body.startswith("<!-- fr-queue:approval-voided head=h9 -->")
+
+
+def test_a_void_under_forge_comments_off_removes_the_label_and_posts_nothing() -> None:
+    """queue-followups R3, read through the repo's real policy."""
+    forge = LabelForge({7: {"state": "OPEN", "head_oid": "h9", "labels": [LABEL]}})
+    forge.files[".fr/settings.yaml"] = "forge:\n  comments: 'off'\n"
+    got, written, _ = _settle(forge, [(_batch("a", _approval(7, "h1")), 7)])
+    assert forge.label_edits and len(written) == 1 and forge.posted == []
+    assert got == {"a": Unlabelled()}
 
 
 def test_p3_r2_labels_off_leaves_the_label_and_records_no_void() -> None:

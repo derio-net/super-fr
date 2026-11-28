@@ -23,7 +23,16 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from fr.labels import APPROVED_FR
-from fr.triage.approval import ApprovalVerdict, Void, approval_verdict, is_approved, voided_at
+from fr.triage.approval import (
+    ApprovalVerdict,
+    Void,
+    Waiting,
+    approval_verdict,
+    conflict_waits,
+    ended_by_label,
+    is_approved,
+    voided_at,
+)
 from fr.triage.batch import (
     QueueEntry,
     batch_item_id,
@@ -42,25 +51,23 @@ from fr.triage.batch_drive import (
     DEFAULT_MAX_INFLIGHT,
     IN_FLIGHT,
     LANDED,
-    LivePr,
     Snapshot,
     checks_verdict,
     closeout_event,
     closeout_item_id,
-    conflict_at,
     drive_pass,
     fact_ledger_unknown,
     fact_ledgers,
-    held_archive_conflict,
 )
 from fr.triage.batch_drive import _dispatch_key as dispatch_key
 from fr.triage.batch_drive import (
     finished_waves as finished_waves,
 )
+from fr.triage.batch_drive_types import LivePr
 from fr.triage.check import batch_awaits_live, classify, stale_dispatches
 from fr.triage.driver_record import DriverRecord, stopped, stopped_line
 from fr.triage.errors import TriageError
-from fr.triage.handback_rules import held_conflict
+from fr.triage.handback_rules import conflict_at, held_archive_conflict, held_conflict
 from fr.triage.intake import rejected_by_batch
 from fr.triage.lanes import gated_pr_lane, lane_of, live_stops, unlisted_gated_prs
 from fr.triage.merge_stops import MergeStop
@@ -221,9 +228,16 @@ def drive_snapshot(
 def fact_approvals(queue: Iterable[QueueEntry]) -> dict[str, ApprovalVerdict]:
     """Each queued batch's approval verdict from the collected labels and its events
     (merge-train-safety §A "The walk"): the board and `drive --plan` read no forge. A
-    PR whose labels were never read (facts before schema 9) is unlabelled."""
+    PR whose labels were never read (facts before schema 9) is unlabelled. A first label on
+    a head with a real conflict waits (queue-followups R2)."""
     return {
-        e.batch.id: approval_verdict(e.batch.events, e.pr.number, e.pr.head_oid, e.pr.labels)
+        e.batch.id: approval_verdict(
+            e.batch.events,
+            e.pr.number,
+            e.pr.head_oid,
+            e.pr.labels,
+            waits=conflict_waits(e.batch.events, e.pr.head_oid, e.pr.mergeable, e.pr.merge_state),
+        )  # fmt: skip
         for e in queue
     }
 
@@ -246,6 +260,8 @@ class Need:
     # | queue-unconfigured (a repo with open batch PRs and no `queue.ci`: nothing merges)
     # | queue-need (the wave merge queue's own: a halt, a hold, a stall, a barrier, R28)
     # | cursor-unread (a batch PR's run cursor: no clone, or a read failed with a cause)
+    # | export-drift (the driver's state export refused a file changed in the repo, R4 of
+    #   spec 2026-11-27-export-drift)
     kind: str
     ref: str  # the batch id, `<owner/repo>#<n>` (a gated PR), or issue key the row names
     text: str
@@ -266,6 +282,7 @@ NEED_LABELS = {
     "unplaced": "Unplaced issue",
     "merge-conflict": "Merge conflict",
     "archive-conflict": "Archive PR conflict",
+    "export-drift": "Triage export drifted from the repo",
     "driver-stopped": "Driver stopped",
     "session-blocked": "Session blocked",
     "ledger-unread": "Gate labels unread",
@@ -348,6 +365,8 @@ def needs_you(
         approval = snap.approvals.get(entry.batch.id)
         if verdict != "green" or (approval is not None and is_approved(approval)):
             continue
+        if isinstance(approval, Waiting):
+            continue  # queue-followups R2: labelled; its conflict Need speaks for it
         if conflict_at(entry.batch, live.head if live is not None else pr.head_oid) is not None:
             continue  # R18: conflicting at its head: handed back, or the merge-conflict need
         if not delivered.ok:  # readiness R3, R4: never ask for an approval deliver would void
@@ -361,7 +380,9 @@ def needs_you(
             else voided_at(entry.batch.events, pr.number)
         )
         text = (
-            f"PR #{pr.number} changed since you approved it at {was[:12]}: re-label to merge"
+            f"PR #{pr.number}: approval ended (label removed): label it {APPROVED_FR.name} to merge"
+            if was is not None and ended_by_label(entry.batch.events, pr.number)
+            else f"PR #{pr.number} changed since you approved it at {was[:12]}: re-label to merge"
             if was is not None
             else f"PR #{pr.number} is green: label it {APPROVED_FR.name} to merge"
         )
@@ -468,6 +489,7 @@ def needs_you(
         )  # fmt: skip
 
     out.extend(archive_conflict_needs(facts, judgements, snap.repos, stops or {}))
+    out.extend(export_drift_needs(stops or {}))
 
     # The four Needs-you lanes (exit-gates R17): one Need per card the board puts in one,
     # from the same `lane_of`, so "Needs you now" and the columns agree.
@@ -521,6 +543,18 @@ def needs_you(
                          f"#batch-{b.id}")
                 )  # fmt: skip
     return out
+
+
+def export_drift_needs(stops: Mapping[str, MergeStop]) -> list[Need]:
+    """One `export-drift` Need per repo whose state export the driver refused because the
+    repo changed a file since the last export (spec 2026-11-27-export-drift R4); the stop's
+    reason is the whole operator text. It holds until a clean export clears it."""
+    prefix = "export-drift:"
+    return [
+        Need("export-drift", key.removeprefix(prefix), stop.reason, None)
+        for key, stop in sorted(stops.items())
+        if key.startswith(prefix)
+    ]
 
 
 def archive_conflict_needs(

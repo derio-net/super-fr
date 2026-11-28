@@ -34,6 +34,9 @@ on:
 permissions:
   contents: read
 
+env:
+  UV_PYTHON: "3.14"
+
 jobs:
   matrix:
     runs-on: ubuntu-latest

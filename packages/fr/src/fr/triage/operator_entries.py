@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any, Final
 
 from fr.checkstate import bucket_verdict
+from fr.triage.approval import _comments_off as _comments_off  # queue-followups R3: moved
 from fr.triage.approval import is_approved, settle_entry_approval
 from fr.triage.batch import (
     allowed_authors,
@@ -26,12 +27,11 @@ from fr.triage.batch import (
 from fr.triage.batch_drive import (
     ARCHIVE_PREFIXES,
     COLLECTED_PREFIX,
-    EXPORT_PREFIX,
     HOUSEKEEPING_PREFIX,
-    Action,
-    LivePr,
     checks_verdict,
 )
+from fr.triage.batch_drive_export import EXPORT_PREFIX
+from fr.triage.batch_drive_types import Action, LivePr
 from fr.triage.errors import TriageError
 from fr.triage.model import (
     ConflictEvent,
@@ -304,17 +304,6 @@ def _queue_conflict_at(records: Iterable[Any], key: str, head: str) -> bool:
 
     return any(isinstance(e, QueueEjectEvent) and e.reason == "conflict" and e.head == head
                and entry_key(e.entry) == key for r in records for e in r.events)  # fmt: skip
-
-
-def _comments_off(client: Any, repo: str) -> str | None:
-    """Why fr writes no comment on *repo* (R9), or why that policy is unknown; None when it may."""
-    from fr.settings import SettingsError
-    from fr.settings.remote import client_policy
-
-    try:
-        return client_policy(client, repo).block("comments")
-    except SettingsError as exc:
-        return str(exc)
 
 
 def _preapprove(

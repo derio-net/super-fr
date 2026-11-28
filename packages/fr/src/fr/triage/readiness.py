@@ -51,17 +51,17 @@ from fr.triage.approval import (
     First,
     Held,
     Void,
+    Waiting,
+    ended_by_label,
     is_approved,
 )
 from fr.triage.batch import QueueEntry
 from fr.triage.batch_drive import (
-    Action,
-    Admitted,
-    LivePr,
     Pass,
     Snapshot,
     queue_snapshot,
 )
+from fr.triage.batch_drive_types import Action, Admitted, LivePr
 from fr.triage.mergeability import conflicting
 from fr.triage.model import (
     ApprovalEvent,
@@ -212,10 +212,14 @@ def _voided_sha(batch: Batch, pr: LivePr, verdict: ApprovalVerdict | None) -> st
     """R3: the push that voided the approval, None when none did. Before settlement
     (`Void`) the live head; after it, the last approval event's `voided_at` (never
     `approval.voided_at()`, which returns the approved head). A `Held` verdict (the label
-    is on, its patch-id unreadable) is no void: an older event's push does not speak for it."""
+    is on, its patch-id unreadable) is no void: an older event's push does not speak for it,
+    and neither does a `Waiting` one or an approval its removed label ended (queue-followups
+    R1, R2)."""
     if isinstance(verdict, Void):
         return pr.head
-    if isinstance(verdict, Held) or (verdict is not None and is_approved(verdict)):
+    if isinstance(verdict, Held | Waiting) or (verdict is not None and is_approved(verdict)):
+        return None
+    if ended_by_label(batch.events, pr.number):
         return None
     last = [e for e in batch.events if isinstance(e, ApprovalEvent) and e.pr == pr.number]
     return last[-1].voided_at if last else None
@@ -248,13 +252,17 @@ def _merge_fact(batch: Batch, pr: LivePr, qs: QueueSnapshot) -> str:
     return "clean" if pr.mergeable == "MERGEABLE" else "unknown"
 
 
-def _approval_fact(verdict: ApprovalVerdict | None, voided: str | None) -> str:
+def _approval_fact(verdict: ApprovalVerdict | None, voided: str | None, ended: bool) -> str:
     if isinstance(verdict, Approved):
         return f"recorded at {_short(verdict.approved_head)}"
     if isinstance(verdict, First):
         return f"recorded at {_short(verdict.head)}"
     if isinstance(verdict, Held):
         return f"held unreadable: {verdict.why}"
+    if isinstance(verdict, Waiting):
+        return f"approved, {verdict.why}"
+    if ended:
+        return "ended: label removed"
     if voided is not None:
         return f"voided by a push at {_short(voided)}"
     return "none"
@@ -368,7 +376,9 @@ def batch_readiness(batch: Batch, qs: QueueSnapshot) -> Readiness:
         delivered="yes" if d.ok else d.reason,
         ci=_ci_fact(pr),
         merge=_merge_fact(batch, pr, qs),
-        approval=_approval_fact(verdict, voided),
+        approval=_approval_fact(
+            verdict, voided, voided is None and ended_by_label(batch.events, pr.number)
+        ),
         whose_move=_whose_move(mover, batch, qs),
         next_action=action,
         link=link,

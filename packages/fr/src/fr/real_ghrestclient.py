@@ -40,6 +40,7 @@ from fr.ghclient import (
     CommandRunner,
     HostRefusedError,
     filter_issues_by_body,
+    pr_label_names,
     run_cli,
 )
 from fr.labels import LabelDef
@@ -780,7 +781,9 @@ class RealGhRestClient:
             "merge_commit": (pull.get("merge_commit_sha") or "") if pull.get("merged_at") else "",
             "title": pull.get("title") or "",
             "body": pull.get("body") or "",
-            "labels": [lb.get("name") or "" for lb in pull.get("labels") or []],
+            # a payload with no `labels` key is an unread label set, never "no labels"
+            # (queue-followups R1: unread labels end no approval)
+            "labels": pr_label_names(pull.get("labels")) if "labels" in pull else None,
         }
 
     def pr_ready(self, repo: str, number: int) -> None:

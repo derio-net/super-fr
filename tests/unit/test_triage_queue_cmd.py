@@ -74,17 +74,26 @@ class FakeClient:
         return "main"
 
 
-def _facts() -> Facts:
+def _facts(linked: list[PullRequest] | None = None) -> Facts:
+    """The scope's facts. *linked* are PRs whose Closes lines name issue 1: collect files
+    them under that issue's `prs`, never in the unlinked `facts.prs` (gh#1741)."""
+    linked = linked or []
+    numbers = {p.number for p in linked}
     return Facts(
         viewer="operator", schema=3, scope=FACTS_SCOPE, kind="repo",
         collected_at="2026-11-20T12:00:00+00:00", repos=[REPO],
         issues=[Issue(repo=REPO, number=1, title="issue 1", state="open",
-                      url=f"https://github.com/{REPO}/issues/1", author_association="OWNER")],
-        prs=PRS, config={},
+                      url=f"https://github.com/{REPO}/issues/1", author_association="OWNER",
+                      prs=linked)],
+        prs=[p for p in PRS if p.number not in numbers], config={},
     )  # fmt: skip
 
 
-def _state(tmp_path: Path, requests: list[dict[str, Any]] | None = None) -> Path:
+def _state(
+    tmp_path: Path,
+    requests: list[dict[str, Any]] | None = None,
+    linked: list[PullRequest] | None = None,
+) -> Path:
     doc: dict[str, Any] = {
         "schema": 14,
         "tiers": [{"n": 1, "title": "Now"}],
@@ -98,7 +107,7 @@ def _state(tmp_path: Path, requests: list[dict[str, Any]] | None = None) -> Path
     if requests:
         doc["queue_requests"] = requests
     (tmp_path / "judgements.yaml").write_text(yaml.safe_dump(doc, sort_keys=False), "utf-8")
-    (tmp_path / "facts.json").write_text(json.dumps(_facts().to_json()), "utf-8")
+    (tmp_path / "facts.json").write_text(json.dumps(_facts(linked).to_json()), "utf-8")
     return tmp_path
 
 
@@ -221,6 +230,58 @@ def test_a_batch_pr_with_preapproved_records_the_preapproval_alone(
     (event,) = _requests(tmp_path)
     assert isinstance(event, QueueAddEvent) and event.preapproved and event.pr == 17
     assert "batch a" in out
+
+
+def test_a_batch_pr_known_only_through_its_member_issue_is_preapproved(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    """gh#1741: a batch PR whose Closes lines name its members is collected under those
+    issues' `prs`, not the unlinked `facts.prs`; its trust is the batch's own verdict."""
+    _state(tmp_path, linked=[_pr(17, "feat/batch-a")])
+
+    code, out = _run(monkeypatch, tmp_path, FakeClient(), "add", "--pr", "17", "--preapproved")
+
+    assert code == 0, out
+    (event,) = _requests(tmp_path)
+    assert isinstance(event, QueueAddEvent) and event.preapproved and event.pr == 17
+    assert "batch a" in out
+
+
+def test_a_linked_pr_that_is_no_batch_s_is_added(monkeypatch: Any, tmp_path: Path) -> None:
+    """A PR known only through an issue's `prs`, on no batch's branch, is trusted on the
+    same read as an unlinked one."""
+    _state(tmp_path, linked=[_pr(10, "fix/typo")])
+
+    code, out = _run(monkeypatch, tmp_path, FakeClient(), "add", "--pr", "10")
+
+    assert code == 0, out
+    (event,) = _requests(tmp_path)
+    assert isinstance(event, QueueAddEvent) and event.pr == 10
+
+
+@pytest.mark.parametrize(
+    ("pr", "why"),
+    [
+        (_pr(17, "feat/batch-a", cross=True), "fork"),
+        (_pr(17, "feat/batch-a", author="mallory"), "not an allowed author"),
+        (_pr(11, "fix/fork", cross=True), "fork"),
+        (_pr(12, "fix/stranger", author="mallory"), "not an allowed author"),
+    ],
+)
+def test_a_linked_fork_or_foreign_pr_is_still_refused(
+    monkeypatch: Any, tmp_path: Path, pr: PullRequest, why: str
+) -> None:
+    """Searching the member-linked PRs widens what is READ, never what is trusted: a fork
+    or foreign PR on a batch branch is not the batch's, and is refused as itself."""
+    _state(tmp_path, linked=[pr])
+    before = (tmp_path / "judgements.yaml").read_bytes()
+
+    code, out = _run(
+        monkeypatch, tmp_path, FakeClient(), "add", "--pr", str(pr.number), "--preapproved"
+    )
+
+    assert code == 2 and why in out, out
+    assert (tmp_path / "judgements.yaml").read_bytes() == before
 
 
 def test_remove_refuses_a_pr_not_added(monkeypatch: Any, tmp_path: Path) -> None:

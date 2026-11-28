@@ -25,6 +25,7 @@ from fr.cli import app
 from fr.commands import isolation_cmd
 from fr.isolation import preserve
 from fr.isolation.external import ExternalTarget
+from fr.isolation.gc import GcSweeper
 from fr.isolation.hostworktree import HostWorktreeTarget
 from fr.isolation.reap import ReapRefused, _hazard_detail
 from fr.isolation.types import IsolationError, IsolationState, load_state
@@ -418,7 +419,7 @@ def test_gc_reap_preserves_into_the_workspaces_own_repo(tmp_path: Path) -> None:
     repo_a = make_repo(tmp_path)
     sweeper = HostWorktreeTarget(repo_a, runner=runner)
 
-    action = sweeper._reap_or_classify(str(st.worktree), st, "merged", dry_run=False)
+    action = GcSweeper(sweeper)._reap_or_classify(str(st.worktree), st, "merged", dry_run=False)
 
     assert action.action == "reaped", action
     assert not st.worktree.exists()
@@ -437,7 +438,7 @@ def test_gc_preservation_error_is_that_workspaces_reap_failure(
 
     monkeypatch.setattr(preserve, "stage", boom)
     sweeper = HostWorktreeTarget(repo, runner=runner)
-    action = sweeper._reap_or_classify(str(st.worktree), st, "merged", dry_run=False)
+    action = GcSweeper(sweeper)._reap_or_classify(str(st.worktree), st, "merged", dry_run=False)
     assert action.action == "reap-failed" and "could not preserve" in action.detail
     assert st.worktree.is_dir()
 

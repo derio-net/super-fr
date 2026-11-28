@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Concatenate, Literal, cast
 
 from fr import gh as _gh
-from fr.ghclient import MERGE_METHODS, BaseRules, CommandRunner, run_cli
+from fr.ghclient import MERGE_METHODS, BaseRules, CommandRunner, pr_label_names, run_cli
 from fr.labels import LabelDef
 
 # Re-exported for `fr.triage.collect`, which reads the forge only through the
@@ -434,7 +434,9 @@ class RealGhClient:
             "merge_commit": (raw.get("mergeCommit") or {}).get("oid", ""),
             "title": raw.get("title", ""),
             "body": raw.get("body", ""),
-            "labels": [lb.get("name") or "" for lb in raw.get("labels") or []],
+            # a payload with no `labels` key is an unread label set, never "no labels"
+            # (queue-followups R1: unread labels end no approval)
+            "labels": pr_label_names(raw.get("labels")) if "labels" in raw else None,
         }
 
     @_hosted

@@ -103,3 +103,31 @@ def test_the_planned_pass_records_its_summary_digest_and_quota_hold(tmp_path: Pa
     )
     pacer.record_summary(SUMMARY, digest="d-now", held=False)
     assert pacing_state.load(tmp_path)[0].held_for_quota is False
+
+
+def test_the_planned_pass_stamps_planned_at(tmp_path: Path) -> None:
+    """R7 of spec 2026-11-27-queue-followups: the next pass's deadlines count from here."""
+    pacer = _pacer(tmp_path, PacingState())
+    pacer.record_summary(SUMMARY, digest="d-now", held=False)
+    assert pacing_state.load(tmp_path)[0].planned_at == NOW
+
+
+def test_the_board_watch_plans_no_closeout_deadline(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """R7 of spec 2026-11-27-queue-followups, review p1-r1: the board starts no close-out and
+    never stamps `planned_at`, so a passed deadline must not make every watch pass partial; a
+    drive's plan over the same state still reads the deadline's repo."""
+    from fr.triage import probe
+
+    monkeypatch.setattr(probe, "probe_set", lambda *a, **k: {})
+    monkeypatch.setattr(probe, "run_probes", lambda *a, **k: (set(), {}))
+    monkeypatch.setattr(probe, "live_repos", lambda *a, **k: set())
+    monkeypatch.setattr(probe, "closing_repos", lambda *a, **k: set())
+    monkeypatch.setattr(probe, "deadline_repos", lambda *a, **k: {A})
+    state = PacingState(full_at=NOW - timedelta(minutes=1), summary=dict(SUMMARY),
+                        judgements_digest="d")  # fmt: skip
+    pacer = _pacer(tmp_path, state)
+    kw: dict[str, object] = {"repos": [A, B], "facts": _facts(), "judgements": object(),
+                             "digest": "d", "essential": False}  # fmt: skip
+    assert pacer.plan(lambda: None, board=True, **kw).kind == "quiet"  # type: ignore[arg-type]
+    drive = pacer.plan(lambda: None, **kw)  # type: ignore[arg-type]
+    assert (drive.kind, drive.only) == ("partial", frozenset({A}))

@@ -19,12 +19,17 @@ from fr.triage.state_sync import (
     DURABLE_DIRS,
     DURABLE_FILES,
     OWNER_FILE,
+    RECORD_FILE,
     SYMLINK,
     SYMLINK_DEST,
+    BadRecord,
+    Drift,
+    ExportDrift,
     SyncReport,
     contained,
     export_state,
     import_state,
+    read_record,
 )
 from typer.testing import CliRunner
 
@@ -78,7 +83,8 @@ DURABLE = sorted(
         "authored-src/build.py",
     ]
 )
-EXPORTED = sorted([*DURABLE, OWNER_FILE])  # a repo-side root also holds the scope id stamp
+# a repo-side root also holds the scope id stamp and the record of what the export wrote
+EXPORTED = sorted([*DURABLE, OWNER_FILE, RECORD_FILE])
 
 
 def _at(root: Path) -> tuple[Path, str]:
@@ -641,3 +647,539 @@ def test_the_export_verb_refuses_another_scopes_directory_until_take_over(
     assert taken.exit_code == 0, taken.output  # type: ignore[attr-defined]
     stamp = (out / SCOPE_NAME / OWNER_FILE).read_text(encoding="utf-8")
     assert stamp == f"{scope_id(SCOPE_NAME)}\n"
+
+
+# ------------------------------------------------ the export record (spec 2026-11-27 R1)
+
+
+def _sha(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_an_export_records_every_durable_file_the_root_holds(tmp_path: Path) -> None:
+    import json
+
+    state = _state(tmp_path / "state")
+    odd = "board/we\nird\\name.html"  # a newline and a backslash in one file name
+    (state / odd).write_text("odd\n", encoding="utf-8")
+    dest = tmp_path / "dest"
+    (dest / "origins.yaml").parent.mkdir(parents=True)
+    (dest / "origins.yaml").write_text("schema: 2\n", encoding="utf-8")  # skipped: identical
+
+    report = export_state(state, *_at(dest), owner=HOST)
+
+    body = json.loads((dest / RECORD_FILE).read_text(encoding="utf-8"))
+    assert body["schema"] == 1
+    assert sorted(body["files"]) == sorted([*DURABLE, odd])
+    assert body["files"]["origins.yaml"] == _sha(dest / "origins.yaml")
+    assert body["files"][odd] == _sha(dest / odd)
+    assert read_record(dest) == body["files"]
+    assert RECORD_FILE in report.copied and "origins.yaml" not in report.copied
+
+
+def test_an_unchanged_record_is_not_copied_again(tmp_path: Path) -> None:
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "dest"
+    export_state(state, *_at(dest), owner=HOST)
+
+    again = export_state(state, *_at(dest), owner=HOST)
+
+    assert again.copied == ()  # nothing new: the driver records no PR
+    (state / "origins.yaml").write_text("schema: 2\n# more\n", encoding="utf-8")
+    third = export_state(state, *_at(dest), owner=HOST)
+    assert sorted(third.copied) == sorted(["origins.yaml", RECORD_FILE])
+
+
+def test_import_never_carries_the_record_into_the_state(tmp_path: Path) -> None:
+    src = tmp_path / "repo-copy"
+    export_state(_state(tmp_path / "old"), *_at(src), owner=HOST)
+    state = tmp_path / "new"
+
+    report = import_state(*_at(src), state, force=True)
+
+    assert not (state / RECORD_FILE).exists()
+    assert RECORD_FILE not in report.copied
+    assert read_record(tmp_path / "nowhere") is None
+
+
+# ------------------------------------------- drift: refuse a repo-side edit (R2, R3)
+
+
+def _bytes(root: Path) -> dict[str, bytes]:
+    return {
+        p.relative_to(root).as_posix(): p.read_bytes()
+        for p in sorted(root.rglob("*"))
+        if p.is_file() and not p.is_symlink()
+    }
+
+
+def _drifted(tmp_path: Path) -> tuple[Path, Path]:
+    """A state exported once, then the repo copy edited in each of R2's ways."""
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "repo" / SCOPE_NAME
+    export_state(state, *_at(dest), owner=HOST)
+    (state / "judgements.yaml").write_text("schema: 3\n# newer\n", encoding="utf-8")
+    (dest / "board" / "manifest.yaml").write_text("edited in the repo\n", encoding="utf-8")
+    (dest / "origins" / "manifest.yaml").unlink()
+    (state / "architecture" / "both.html").write_text("state\n", encoding="utf-8")
+    (dest / "architecture" / "both.html").write_text("repo\n", encoding="utf-8")
+    (dest / "history" / "repo-only.html").write_text("repo\n", encoding="utf-8")
+    return state, dest
+
+
+def test_an_export_over_a_repo_side_edit_is_refused_and_writes_nothing(tmp_path: Path) -> None:
+    state, dest = _drifted(tmp_path)
+    before = _bytes(dest)
+
+    with pytest.raises(ExportDrift) as caught:
+        export_state(state, *_at(dest), owner=HOST)
+
+    assert caught.value.drift == (
+        Drift("architecture/both.html", "added"),
+        Drift("board/manifest.yaml", "changed"),
+        Drift("history/repo-only.html", "added"),
+        Drift("origins/manifest.yaml", "deleted"),
+    )
+    text = str(caught.value)
+    for d in caught.value.drift:
+        assert f"{d.kind} {d.path}" in text
+    assert f"fr triage state import --from {dest.parent} --only architecture/both.html" in text
+    assert "--only origins/manifest.yaml" in text
+    assert "fr triage state export" in text and "--force" in text
+    assert _bytes(dest) == before  # no file, no stamp, no record
+
+
+def test_force_overwrites_the_drifted_files_and_rewrites_the_record(tmp_path: Path) -> None:
+    state, dest = _drifted(tmp_path)
+
+    report = export_state(state, *_at(dest), owner=HOST, force=True)
+
+    assert (dest / "board" / "manifest.yaml").read_text(encoding="utf-8") == "sections: []\n"
+    assert (dest / "origins" / "manifest.yaml").exists()
+    assert (dest / "architecture" / "both.html").read_text(encoding="utf-8") == "state\n"
+    record = read_record(dest)
+    assert record is not None
+    assert record["board/manifest.yaml"] == _sha(dest / "board" / "manifest.yaml")
+    # the state has no copy of it: kept as the repo has it, and recorded so
+    assert record["history/repo-only.html"] == _sha(dest / "history" / "repo-only.html")
+    assert RECORD_FILE in report.copied
+    export_state(state, *_at(dest), owner=HOST)  # the forced export settled it: no drift
+
+
+def test_a_repo_only_file_at_the_first_export_is_recorded_not_drift_forever(
+    tmp_path: Path,
+) -> None:
+    """p1-bootstrap-repo-only-files-drift-forever: a durable file the repo copy holds and
+    the state never had, present at the no-record export, is recorded as it stands; only
+    a later repo edit of it is drift."""
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "repo" / SCOPE_NAME
+    (dest / "architecture").mkdir(parents=True)
+    (dest / "architecture" / "closing-order.html").write_text("repo\n", encoding="utf-8")
+
+    export_state(state, *_at(dest), owner=HOST)  # bootstrap: no record yet
+
+    record = read_record(dest)
+    assert record is not None and "architecture/closing-order.html" in record
+    export_state(state, *_at(dest), owner=HOST)  # unchanged since: no drift
+    (dest / "architecture" / "closing-order.html").write_text("edited\n", encoding="utf-8")
+    with pytest.raises(ExportDrift) as caught:
+        export_state(state, *_at(dest), owner=HOST)
+    assert caught.value.drift == (Drift("architecture/closing-order.html", "changed"),)
+
+
+def test_a_repo_file_equal_to_the_states_copy_is_not_drift(tmp_path: Path) -> None:
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "dest"
+    export_state(state, *_at(dest), owner=HOST)
+    for root in (state, dest):  # added on both sides, the same bytes
+        (root / "architecture" / "same.html").write_text("same\n", encoding="utf-8")
+    (state / "board" / "manifest.yaml").write_text("state moved on\n", encoding="utf-8")
+
+    report = export_state(state, *_at(dest), owner=HOST)
+
+    assert "board/manifest.yaml" in report.copied  # the state's own change is no drift
+    assert read_record(dest) is not None and "architecture/same.html" in (read_record(dest) or {})
+
+
+def test_with_no_record_nothing_is_drift(tmp_path: Path) -> None:
+    state, dest = _drifted(tmp_path)
+    (dest / RECORD_FILE).unlink()
+
+    report = export_state(state, *_at(dest), owner=HOST)
+
+    assert "board/manifest.yaml" in report.copied
+    assert (dest / "board" / "manifest.yaml").read_text(encoding="utf-8") == "sections: []\n"
+    assert read_record(dest) is not None  # the first record is written
+
+
+def test_a_repo_side_symlink_at_a_durable_path_is_skipped_not_drift(tmp_path: Path) -> None:
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "dest"
+    export_state(state, *_at(dest), owner=HOST)
+    victim = tmp_path / "victim"
+    victim.write_text("ORIGINAL\n", encoding="utf-8")
+    (dest / "board" / "manifest.yaml").unlink()
+    (dest / "board" / "manifest.yaml").symlink_to(victim)
+
+    report = export_state(state, *_at(dest), owner=HOST)
+
+    assert _skipped(report)["board/manifest.yaml"] == SYMLINK_DEST
+    assert victim.read_text(encoding="utf-8") == "ORIGINAL\n"
+
+
+@pytest.mark.parametrize("bad", ["not json\n", '{"schema": 2, "files": {}}\n', "link"])
+def test_a_bad_record_is_refused_and_force_rewrites_it(tmp_path: Path, bad: str) -> None:
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "dest"
+    export_state(state, *_at(dest), owner=HOST)
+    outside = tmp_path / "outside"
+    outside.write_text("{}\n", encoding="utf-8")
+    (dest / RECORD_FILE).unlink()
+    if bad == "link":
+        (dest / RECORD_FILE).symlink_to(outside)
+    else:
+        (dest / RECORD_FILE).write_text(bad, encoding="utf-8")
+
+    with pytest.raises(BadRecord, match=RECORD_FILE):
+        export_state(state, *_at(dest), owner=HOST)
+
+    export_state(state, *_at(dest), owner=HOST, force=True)
+    assert not (dest / RECORD_FILE).is_symlink()
+    assert read_record(dest) is not None
+    assert outside.read_text(encoding="utf-8") == "{}\n"  # never written through
+
+
+def test_the_export_verb_refuses_drift_with_exit_2_until_force(tmp_path: Path) -> None:
+    state = _state(tmp_path / "state")
+    out = tmp_path / "docs" / "triage"
+    args = ("export", "--to", str(out), "--repo", SCOPE, "--dir", str(state))
+    assert _invoke(*args).exit_code == 0  # type: ignore[attr-defined]
+    edited = out / SCOPE_NAME / "board" / "manifest.yaml"
+    edited.write_text("edited in the repo\n", encoding="utf-8")
+
+    refused = CliRunner().invoke(app, ["triage", "state", *args])
+    assert refused.exit_code == 2, refused.output
+    assert "changed board/manifest.yaml" in refused.output
+    assert edited.read_text(encoding="utf-8") == "edited in the repo\n"
+
+    forced = _invoke(*args, "--force")
+    assert forced.exit_code == 0, forced.output  # type: ignore[attr-defined]
+    assert edited.read_text(encoding="utf-8") == "sections: []\n"
+
+
+# ------------------------------------------------- the targeted import (R5)
+
+
+def _imported(tmp_path: Path) -> tuple[Path, Path]:
+    """A repo copy and a state imported from it, the state's copies then made newer."""
+    src = tmp_path / "repo" / SCOPE_NAME
+    export_state(_state(tmp_path / "old"), *_at(src), owner=HOST)
+    state = tmp_path / "state"
+    import_state(*_at(src), state, force=False)
+    for rel in DURABLE:
+        _age(src / rel, 60)  # every repo copy older than the state's
+    return src, state
+
+
+def _stats(root: Path) -> dict[str, tuple[bytes, int]]:
+    return {
+        rel: (p.read_bytes(), p.stat().st_mtime_ns)
+        for rel in _files(root)
+        if (p := root / rel).is_file()
+    }
+
+
+def test_only_copies_a_named_file_over_a_newer_state_copy_and_nothing_else(
+    tmp_path: Path,
+) -> None:
+    src, state = _imported(tmp_path)
+    (src / "board" / "manifest.yaml").write_text("repo edit\n", encoding="utf-8")
+    _age(src / "board" / "manifest.yaml", 120)
+    (src / "judgements.yaml").write_text("schema: 3\n# repo\n", encoding="utf-8")  # unnamed
+    before = _stats(state)
+
+    report = import_state(*_at(src), state, force=False, only=["board/manifest.yaml"])
+
+    assert report.copied == ("board/manifest.yaml",)
+    assert (state / "board" / "manifest.yaml").read_text(encoding="utf-8") == "repo edit\n"
+    after = _stats(state)
+    del before["board/manifest.yaml"], after["board/manifest.yaml"]
+    assert after == before  # unnamed state files: bytes and mtime untouched
+
+
+def test_only_a_directory_takes_every_durable_file_under_it(tmp_path: Path) -> None:
+    src, state = _imported(tmp_path)
+    (src / "architecture" / "hurts.html").write_text("new\n", encoding="utf-8")
+    (src / "architecture" / "fresh.html").write_text("fresh\n", encoding="utf-8")
+
+    report = import_state(*_at(src), state, force=False, only=["architecture"])
+
+    assert sorted(report.copied) == ["architecture/fresh.html", "architecture/hurts.html"]
+    assert (state / "architecture" / "fresh.html").read_text(encoding="utf-8") == "fresh\n"
+
+
+def test_only_removes_a_named_path_the_repo_lacks(tmp_path: Path) -> None:
+    src, state = _imported(tmp_path)
+    (src / "origins" / "manifest.yaml").unlink()
+
+    report = import_state(*_at(src), state, force=False, only=["origins/manifest.yaml"])
+
+    assert report.removed == ("origins/manifest.yaml",)
+    assert not (state / "origins" / "manifest.yaml").exists()
+
+
+def test_only_skips_a_named_symlink_on_either_side(tmp_path: Path) -> None:
+    src, state = _imported(tmp_path)
+    secret = tmp_path / "secret"
+    secret.write_text("PRIVATE\n", encoding="utf-8")
+    (src / "board" / "planted.html").symlink_to(secret)  # repo side
+    (state / "origins" / "kept.html").symlink_to(secret)  # state side, repo lacks it
+
+    report = import_state(
+        *_at(src), state, force=False, only=["board/planted.html", "origins/kept.html"]
+    )
+
+    assert report.copied == () and report.removed == ()
+    assert _skipped(report) == {"board/planted.html": SYMLINK, "origins/kept.html": SYMLINK_DEST}
+    assert (state / "origins" / "kept.html").is_symlink()
+    assert secret.read_text(encoding="utf-8") == "PRIVATE\n"
+
+
+@pytest.mark.parametrize("bad", ["../x", "/abs", "board/../judgements.yaml", "nothing/here"])
+def test_only_refuses_a_bad_or_unmatched_path_before_any_write(tmp_path: Path, bad: str) -> None:
+    src, state = _imported(tmp_path)
+    (src / "board" / "manifest.yaml").write_text("repo edit\n", encoding="utf-8")
+    before = _stats(state)
+
+    with pytest.raises(TriageError):
+        import_state(*_at(src), state, force=False, only=["board/manifest.yaml", bad])
+
+    assert _stats(state) == before
+
+
+def test_the_import_verb_takes_only_and_prints_removed(tmp_path: Path) -> None:
+    out = tmp_path / "docs" / "triage"
+    src, state = _imported(tmp_path / "w")
+    shutil.copytree(src, out / SCOPE_NAME)
+    (out / SCOPE_NAME / "origins" / "manifest.yaml").unlink()
+    (out / SCOPE_NAME / "board" / "manifest.yaml").write_text("repo edit\n", encoding="utf-8")
+    args = ("import", "--from", str(out), "--repo", SCOPE, "--dir", str(state))
+
+    result = _invoke(*args, "--only", "origins/manifest.yaml", "--only", "board/manifest.yaml")
+
+    text = result.output  # type: ignore[attr-defined]
+    assert result.exit_code == 0, text  # type: ignore[attr-defined]
+    assert "removed origins/manifest.yaml" in text and "copied board/manifest.yaml" in text
+    refused = CliRunner().invoke(app, ["triage", "state", *args, "--only", "../x"])
+    assert refused.exit_code == 2, refused.output
+
+
+# ------------------------------------- phase 1 review: hostile records and recovery
+
+
+@pytest.mark.parametrize(
+    "key", ["history/a\0b", "../judgements.yaml", "/abs/judgements.yaml", "facts.json"]
+)
+def test_a_hostile_record_key_is_a_bad_record_never_a_path(tmp_path: Path, key: str) -> None:
+    """p1-r1: a record key from a cloned repo is validated before it reaches a descriptor
+    open; a NUL, a `..`, an absolute or a non-durable key is a refusal, not a traceback."""
+    import json
+
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "repo" / SCOPE_NAME
+    export_state(state, *_at(dest), owner=HOST)
+    (dest / RECORD_FILE).write_text(
+        json.dumps({"schema": 1, "files": {key: "0" * 64}}), encoding="utf-8"
+    )
+    before = _bytes(dest)
+
+    with pytest.raises(BadRecord):
+        export_state(state, *_at(dest), owner=HOST)
+    assert _bytes(dest) == before
+
+
+def test_a_record_named_path_that_is_a_repo_side_symlink_is_not_drift(tmp_path: Path) -> None:
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "repo" / SCOPE_NAME
+    export_state(state, *_at(dest), owner=HOST)
+    secret = tmp_path / "secret"
+    secret.write_text("PRIVATE\n", encoding="utf-8")
+    (dest / "board" / "manifest.yaml").unlink()
+    (dest / "board" / "manifest.yaml").symlink_to(secret)  # recorded path, now a link
+
+    report = export_state(state, *_at(dest), owner=HOST)
+
+    assert _skipped(report)["board/manifest.yaml"] == SYMLINK_DEST
+    assert secret.read_text(encoding="utf-8") == "PRIVATE\n"
+
+
+def test_a_directory_record_is_refused_and_force_names_the_hand_fix(tmp_path: Path) -> None:
+    """p1-r2: `--force` writes only a regular file, so a directory at the record is named
+    with the hand fix, in both the refusal and the forced run; nothing is written."""
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "repo" / SCOPE_NAME
+    export_state(state, *_at(dest), owner=HOST)
+    (dest / RECORD_FILE).unlink()
+    (dest / RECORD_FILE).mkdir()
+    (state / "judgements.yaml").write_text("schema: 3\n# newer\n", encoding="utf-8")
+    before = _bytes(dest)
+
+    with pytest.raises(BadRecord) as caught:
+        export_state(state, *_at(dest), owner=HOST)
+    assert not caught.value.forceable and "remove it by hand" in str(caught.value)
+    with pytest.raises(TriageError, match="not a regular file; remove it by hand"):
+        export_state(state, *_at(dest), owner=HOST, force=True)
+    assert (dest / RECORD_FILE).is_dir()
+    assert (dest / "judgements.yaml").read_text(encoding="utf-8") == "schema: 3\n"
+    assert {k: v for k, v in _bytes(dest).items() if k != "judgements.yaml"} == {
+        k: v for k, v in before.items() if k != "judgements.yaml"
+    }
+
+
+def test_only_reports_a_state_only_path_under_a_repo_side_symlinked_dir(tmp_path: Path) -> None:
+    """p1-r4: a named path the repo cannot be judged on (it lies under a repo-side
+    symlink) is skipped and reported, never removed from the state."""
+    src, state = _imported(tmp_path)
+    shutil.rmtree(src / "architecture")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (src / "architecture").symlink_to(elsewhere, target_is_directory=True)
+
+    report = import_state(*_at(src), state, force=False, only=["architecture/hurts.html"])
+
+    assert report.removed == ()
+    assert _skipped(report)["architecture/hurts.html"] == SYMLINK
+    assert (state / "architecture" / "hurts.html").exists()
+
+
+def test_the_remedy_the_refusal_prints_clears_the_drift(tmp_path: Path) -> None:
+    """p1-r7: the recovery R3 advertises, end to end: `import --only` each drifted path
+    (copying the repo's edits and additions, removing what the repo deleted), then export
+    again, which now finds no drift and keeps every repo edit."""
+    state, dest = _drifted(tmp_path)
+    with pytest.raises(ExportDrift) as caught:
+        export_state(state, *_at(dest), owner=HOST)
+
+    report = import_state(*_at(dest), state, force=False, only=[d.path for d in caught.value.drift])
+
+    assert sorted(report.removed) == ["origins/manifest.yaml"]
+    assert "history/repo-only.html" in report.copied  # the state lacked it
+    again = export_state(state, *_at(dest), owner=HOST)
+    assert "board/manifest.yaml" not in again.copied
+    assert (dest / "board" / "manifest.yaml").read_text(encoding="utf-8") == "edited in the repo\n"
+    assert (dest / "architecture" / "both.html").read_text(encoding="utf-8") == "repo\n"
+    assert not (dest / "origins" / "manifest.yaml").exists()
+
+
+def test_the_export_verbs_remedy_carries_its_own_scope_options(tmp_path: Path) -> None:
+    """p1-r3: the hand command's refusal prints commands with the scope options it was
+    given, so they paste as printed."""
+    state = _state(tmp_path / "state")
+    out = tmp_path / "docs" / "triage"
+    args = ("export", "--to", str(out), "--repo", SCOPE, "--dir", str(state))
+    assert _invoke(*args).exit_code == 0  # type: ignore[attr-defined]
+    (out / SCOPE_NAME / "board" / "manifest.yaml").write_text("edited\n", encoding="utf-8")
+
+    refused = CliRunner().invoke(app, ["triage", "state", *args])
+
+    assert refused.exit_code == 2, refused.output
+    flat = " ".join(refused.output.split())
+    scope = f"--repo {SCOPE} --dir {state.resolve()}"
+    assert f"fr triage state import {scope} --from {out}" in flat, flat
+    assert f"fr triage state export {scope} --to {out} --force" in flat, flat
+
+
+# --------------------------------------------- lens review: errors and security
+
+
+def test_a_control_character_in_a_drifted_name_never_reaches_the_text_raw(
+    tmp_path: Path,
+) -> None:
+    """l-security-r1: a repo-supplied file name holding an escape sequence or a line
+    break is printed ANSI-C quoted, which a shell reads back to the same name."""
+    import subprocess
+
+    from fr.triage.state_sync import shown
+
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "repo" / SCOPE_NAME
+    export_state(state, *_at(dest), owner=HOST)
+    hostile = "history/x\x1b]0;pwned\x07\nnext.html"
+    (dest / hostile).write_text("repo\n", encoding="utf-8")
+
+    with pytest.raises(ExportDrift) as caught:
+        export_state(state, *_at(dest), owner=HOST)
+
+    text = str(caught.value)
+    assert "\x1b" not in text and "\x07" not in text and "\n" not in text
+    assert shown(hostile) in text
+    echoed = subprocess.run(
+        ["bash", "-c", f"printf %s {shown(hostile)}"], capture_output=True, check=True
+    ).stdout.decode()
+    assert echoed == hostile
+    assert shown("board/it's.html") == "'board/it'\"'\"'s.html'"  # printable: shlex.quote
+
+
+def test_a_non_regular_record_or_unreadable_file_is_an_export_blocked(tmp_path: Path) -> None:
+    """l-errors-r2: every refusal only the operator can mend in the repo copy is an
+    ExportBlocked, which the driver turns into its stop and Need."""
+    from fr.triage.state_sync import ExportBlocked
+
+    state = _state(tmp_path / "state")
+    dest = tmp_path / "repo" / SCOPE_NAME
+    export_state(state, *_at(dest), owner=HOST)
+    (dest / RECORD_FILE).unlink()
+    (dest / RECORD_FILE).mkdir()
+    with pytest.raises(ExportBlocked):
+        export_state(state, *_at(dest), owner=HOST, force=True)
+    (dest / RECORD_FILE).rmdir()
+    export_state(state, *_at(dest), owner=HOST)
+    unreadable = dest / "board" / "manifest.yaml"
+    unreadable.write_text("edited\n", encoding="utf-8")
+    unreadable.chmod(0)
+    try:
+        if os.access(unreadable, os.R_OK):
+            pytest.skip("running as a user that reads a 000 file")
+        with pytest.raises(ExportBlocked, match="mend it, then export again"):
+            export_state(state, *_at(dest), owner=HOST)
+    finally:
+        unreadable.chmod(0o644)
+
+
+def test_stop_on_records_a_stop_only_for_an_export_blocked(tmp_path: Path) -> None:
+    from fr.triage.merge_stops import load_stops
+    from fr.triage.state_sync import ExportBlocked, clear_drift_stop, stop_on
+
+    target = tmp_path / "state"
+    target.mkdir()
+    plain = stop_on(TriageError("foreign stamp"), target, SCOPE, [], path="docs/triage", at="abc")
+    assert plain == "foreign stamp" and load_stops(target) == {}
+
+    blocked = ExportBlocked("x is not a regular file", root=tmp_path / SCOPE_NAME)
+    text = stop_on(blocked, target, SCOPE, ["--repo", SCOPE], path="docs/triage", at="abc")
+    assert load_stops(target)[f"export-drift:{SCOPE}"].reason == text
+    assert "at or after abc" in text
+    assert clear_drift_stop(target, SCOPE) is None and load_stops(target) == {}
+
+
+def test_a_stop_file_that_cannot_be_written_keeps_the_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """p1-r5, l-errors-r1: an OSError writing or clearing the stop is said, never raised."""
+    from fr.triage import state_sync
+    from fr.triage.state_sync import ExportBlocked, clear_drift_stop, stop_on
+
+    def refuse(*_a: object, **_k: object) -> None:
+        raise OSError(30, "Read-only file system")
+
+    monkeypatch.setattr(state_sync, "record_stop", refuse)
+    monkeypatch.setattr(state_sync, "clear_stop", refuse)
+    blocked = ExportBlocked("broken", root=tmp_path / SCOPE_NAME)
+    text = stop_on(blocked, tmp_path, SCOPE, [], path="docs/triage", at="abc")
+    assert "its Need was not recorded: Read-only file system" in text
+    assert clear_drift_stop(tmp_path, SCOPE) == (
+        "could not clear the export-drift stop: Read-only file system"
+    )

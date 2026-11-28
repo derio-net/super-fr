@@ -5,7 +5,7 @@ Split out of `fr.triage.batch_drive`, which holds its module budget.
 
 from __future__ import annotations
 
-from fr.triage.batch_drive import Action
+from fr.triage.batch_drive_types import Action
 from fr.triage.wave_queue import QueuePlan
 
 QUEUE_REPORT_KEY = "queue"

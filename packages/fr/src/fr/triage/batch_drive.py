@@ -11,6 +11,11 @@ actions; this module only decides.
 It imports nothing from `fr_dispatch`, runs no git, starts no process and
 reads no clock: the time is `Snapshot.now`, so the ten-minute fallback is
 testable. `tests/unit/test_triage_batch_drive.py` pins that.
+
+Its leaves live beside it and are re-exported here by name (spec
+2026-11-27-triage-leaves-split): the value types in `batch_drive_types`, the wave's
+state-export step in `batch_drive_export`, and the hand-back decisions in
+`handback_rules`.
 """
 
 from __future__ import annotations
@@ -21,7 +26,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 from fr.artifacts.paths import KIND_DIRS
 from fr.checkstate import bucket_verdict
@@ -40,28 +45,59 @@ from fr.triage.batch import (
     recorded_branch,
 )
 from fr.triage.batch_dispatch import title_block
+from fr.triage.batch_drive_export import (  # noqa: F401 - re-exported, triage-leaves-split R2
+    EXPORT_PREFIX,
+    ExportCount,
+    ExportTarget,
+    _export_actions,
+    _export_row,
+    _outside,
+    _stale_orphans,
+    _wave_order,
+    export_branch,
+    export_target,
+    export_wave_of,
+)
+from fr.triage.batch_drive_types import (  # noqa: F401 - re-exported, triage-leaves-split R1
+    CONFLICTING,
+    Action,
+    ActionKind,
+    Admitted,
+    ChecksVerdict,
+    LivePr,
+    _wrong_base,
+)
 from fr.triage.claims import Claim, held_line, held_members
 from fr.triage.handback_rules import (  # noqa: F401 - re-exported, wave-queue-gaps §E
+    ARCHIVE_HANDBACKS_PER_CLOSEOUT,
+    CLOSEOUT_HANDBACKS,
     HANDBACKS_PER_DISPATCH,
     RED_HANDBACKS_PER_DISPATCH,
+    ArchiveConflictKind,
+    CloseoutDecisionKind,
     ConflictDecision,
     ConflictKind,
     RedDecisionKind,
+    _held_archive_conflict,
+    archive_conflict_decision,
+    archive_conflict_item_id,
+    closeout_handback_decision,
+    conflict_at,
     conflict_decision,
+    conflict_item_id,
+    fresh_conflicts,
     handbacks_since,
+    held_archive_conflict,
     held_conflict,
     red_decision,
     spends_handback,
 )
 from fr.triage.mergeability import conflicting
 from fr.triage.model import (
-    ArchiveConflictEvent,
     Batch,
     CloseoutEvent,
-    CloseoutHandbackEvent,
     CloseoutHoldEvent,
     CollectedCloseout,
-    ConflictEvent,
     CursorPosition,
     CursorRead,
     DispatchEvent,
@@ -70,7 +106,7 @@ from fr.triage.model import (
     QueueRecord,
 )
 
-if TYPE_CHECKING:  # `fr.triage.wave_queue` imports this module: read at run time lazily
+if TYPE_CHECKING:  # `fr.triage.readiness` imports this module; both read at run time lazily
     from fr.triage.readiness import Refused
     from fr.triage.wave_queue import (
         BuildConflict,
@@ -102,9 +138,6 @@ ARCHIVE_PREFIXES = ("chore/archive-", "chore/closeout-")
 HOUSEKEEPING_PREFIX = "chore/ops-"  # + the plan's slug: the DevOps stage's ops branch (stage 8)
 """The head of a DevOps stage's housekeeping PR (fr-ops stage 8). It is a queue entry (R32)
 only with `approved-fr` recorded on the queue's events; no other rule admits it."""
-EXPORT_PREFIX = "chore/triage-state-"  # + `<scope id>-wave-<N>` (gh#1101)
-"""The head of a wave's state-export PR (pages-goal R13). Not in `ARCHIVE_PREFIXES`, so
-archive attribution can never claim an export PR."""
 RUNS_DIR = KIND_DIRS["run"]
 JOURNAL_DIRS = (f"{KIND_DIRS['journal']}/", f"{KIND_DIRS['journal-archived']}/")
 ARCHIVE_DIRS = (
@@ -118,82 +151,15 @@ RUN_ARTIFACT_DIRS = tuple(f"{d}/" for d in ARCHIVE_DIRS)
 """Where a run's live artifacts sit until its close-out archives them under
 `docs/superpowers/implemented/` (`fr archive --branch`)."""
 
-ChecksVerdict = Literal["green", "pending", "failing"]
-ActionKind = Literal[
-    "closeout",
-    "adopt",
-    "dispatch",
-    "blocked",
-    "held",
-    "warn",
-    "foreign",
-    "close",
-    "dedupe",
-    "claim",
-    "refresh",
-    "release",
-    "settle",
-    "export",
-    "export-reconcile",
-    "export-closed",
-    "conflict-probe",
-    "archive-conflict",
-    "export-conflict",
-    "awaiting-live",
-    "gate-pass",
-    "ledger-unread",
-    "post-merge",
-    "closeout-held",
-    "closeout-handback",
-    "closeout-stuck",
-    "closeout-unrecorded",
-    "closeout-reopened",
-    "closeout-merged",
-    "closeout-pr-closed",
-    "closeout-needs-review",
-    "closeout-abandoned",
-]
 EXPORT_KINDS: frozenset[str] = frozenset({"export", "export-reconcile", "export-closed"})
 
 ARCHIVE_WAIT = "archive PR"
 """How an archive PR's waiting line starts (merge-truth R9): `views.needs_you` reads a warn
 that starts so as a status line, never a `failing-ci` Need."""
 
-CONFLICTING = "CONFLICTING"
-"""The forge's `mergeable` for a PR that cannot merge cleanly (merge-truth R12)."""
-
 ARCHIVED_BY_UNKNOWN_PR = 0
 """`CloseoutEvent.archived` for a close-out found archived on the default branch with
 no PR to name: every reader only asks whether `archived` is set (gh#900)."""
-
-
-@dataclass(frozen=True)
-class LivePr:
-    """A PR as the forge shows it now: a batch PR, or an archive PR candidate."""
-
-    number: int
-    state: str  # OPEN | MERGED | CLOSED
-    draft: bool
-    head: str
-    checks: ChecksVerdict = "green"
-    failing: tuple[str, ...] = ()
-    head_ref: str = ""
-    files: tuple[str, ...] = ()
-    # From the repo itself, by an allowed author (`fr.triage.batch.distrust`). False
-    # unless the command checked it: an archive PR is attributed only when True (gh#936).
-    trusted: bool = False
-    # The branch the PR merges into, as the forge says now; "" when not read. An export
-    # PR is reused or merged only into the default branch (p4-r15).
-    base: str = ""
-    # Its labels as read now; None when not read. `gate:devops` without `-passed` holds
-    # the merge (fr-ops R14): the planner plans no merge or enqueue for it.
-    labels: tuple[str, ...] | None = None
-    # GitHub's `mergeable` (MERGEABLE | CONFLICTING | UNKNOWN) and `mergeStateStatus`, ""
-    # when not read. A CONFLICTING archive or export PR is never merged (merge-truth R12);
-    # a collected close-out's PR merges only once `MERGEABLE` (exit-gates R15).
-    mergeable: str = ""
-    merge_state: str = ""
-    url: str = ""  # the PR's page; "" when not read (batch-merge-readiness R6's links)
 
 
 @dataclass(frozen=True)
@@ -488,52 +454,6 @@ class Snapshot:
 
 
 @dataclass(frozen=True)
-class Admitted:
-    """A non-batch PR its own trust rule admitted to its repo's queue (R32): a collected
-    close-out (`review_reasons` empty), an attributed archive PR (`archive_allowed`), a
-    wave's state-export PR (`_export_row`'s checks) or a housekeeping PR with `approved-fr`
-    recorded on the queue's events. *pr* is the PR at the head the rule judged, which is the
-    head the queue builds; *batch* is the batch it is about, *wave* the wave whose queue it
-    joins (None: between waves) and *at* when it was admitted, which orders it."""
-
-    kind: Literal["closeout", "archive", "export", "housekeeping", "operator"]
-    repo: str
-    pr: LivePr
-    batch: str = ""
-    wave: int | None = None
-    at: datetime | None = None
-
-    @property
-    def key(self) -> str:
-        return f"{self.kind}#{self.pr.number}"
-
-
-@dataclass(frozen=True)
-class Action:
-    kind: ActionKind
-    batch: str
-    detail: str
-    pr: int | None = None
-    head: str = ""
-    recorded: bool = False  # closeout: the runner holds the tab; record the event only
-    archived: int | None = None  # adopt: the close-out event's `archived`
-    # close: the item ids whose sessions to close; closeout, closeout-handback,
-    # closeout-stuck of a collected close-out: its member batch ids
-    items: tuple[str, ...] = ()
-    # export*, and a warn about one: the wave key (`batch` is then the repo); the
-    # highest wave the export PR covers, which names its branch
-    wave: str | None = None
-    covers: tuple[str, ...] = ()  # export: every wave the PR records
-    # claim, refresh, release, settle: the issue key; a collected close-out's actions: its
-    # name, `closeout-<date>-<n>`
-    key: str = ""
-    red: bool = False  # warn: a failing batch PR, which the driver tries to recover (§C)
-    checks: tuple[str, ...] = ()  # warn (red): the failing check names
-    gate: str = ""  # gate-pass: the post-merge gate whose rows all read walked
-    branch: str = ""  # archive-conflict: the archive PR's head branch (merge-truth R12)
-
-
-@dataclass(frozen=True)
 class Summary:
     """The pass's closing line, projected past its own actions."""
 
@@ -741,13 +661,32 @@ def _stale_closeout(batch: Batch, event: CloseoutEvent, snap: Snapshot) -> Actio
     )  # fmt: skip
 
 
-def closeout_due(*, released: bool, merged_at: datetime | None, now: datetime) -> bool:
+def closeout_due(
+    *, released: bool, merged_at: datetime | None, now: datetime, queued: bool = False
+) -> bool:
     """§B step 2: the release commit that follows the merge is on the base branch,
     or ten minutes passed since the merge with none. An unknown merge time is not
-    yet due (review rg-9): the caller supplies when it first saw the merge."""
-    if released:
+    yet due (review rg-9): the caller supplies when it first saw the merge.
+
+    *queued* (a `queue_land` of its repo names the batch) is due at once: the queue's hold
+    blocks any release until the drain, which waits for this close-out, so waiting for
+    one only costs the fallback (R5 of spec 2026-11-27-queue-followups). The same value
+    gates the repo's `post_merge`, which the queue's landing normally ran already."""
+    if released or queued:
         return True
     return merged_at is not None and now - merged_at >= CLOSEOUT_FALLBACK
+
+
+def queue_landed_by_repo(records: Sequence[QueueRecord]) -> dict[str, frozenset[str]]:
+    """Per repo, the batches a `queue_land` record of that repo names
+    (`wave_queue.queue_landed`): due for close-out at once (R5, R7 of spec
+    2026-11-27-queue-followups)."""
+    from fr.triage.wave_queue import queue_landed
+
+    return {
+        repo: queue_landed([r for r in records if r.repo == repo])
+        for repo in {r.repo for r in records}
+    }
 
 
 # ---------------------------------------------------------- close-out (§C)
@@ -916,105 +855,6 @@ def closeout_brief(batch: Batch, *, run: str | None, checkout: Path) -> str:
         f"In {checkout}, run `{pickup}` and follow the brief it prints, in order.\n"
         f"{managed}" + "\n".join(title_block(batch))
     )
-
-
-def conflict_at(batch: Batch, head: str) -> ConflictEvent | None:
-    """The batch's latest `conflict` event at PR head *head*, whatever it delivered
-    (batch-train-truth R18): a PR so recorded is never one to approve."""
-    for event in reversed(batch.events):
-        if isinstance(event, ConflictEvent) and event.head == head:
-            return event
-    return None
-
-
-def fresh_conflicts(batch: Batch, *, since_dispatch: bool) -> int:
-    """How many fresh conflict sessions the batch started: all of them (the next one's
-    number), or only since its latest dispatch (whether one is the message target)."""
-    return handbacks_since(
-        batch.events,
-        lambda e: isinstance(e, ConflictEvent) and e.delivered == "fresh",
-        reset=since_dispatch,
-    )
-
-
-def conflict_item_id(repo: str, batch_id: str, n: int) -> str:
-    """`<OWNER>/<REPO>/run/conflict-<batch-id>-<n>`: the *n*th fresh conflict session."""
-    return f"{repo}/run/conflict-{batch_id}-{n}"
-
-
-# ------------------------------------------ archive conflicts (merge-truth R12, §E)
-
-ARCHIVE_HANDBACKS_PER_CLOSEOUT = 2
-"""R12: hand-backs a conflicting archive PR gets per close-out before it is the operator's."""
-
-ArchiveConflictKind = Literal["skip", "held", "handback"]
-
-
-def archive_conflict_decision(events: Sequence[object], head: str) -> ArchiveConflictKind:
-    """The pure decision on an archive PR conflicting at *head* (R12).
-
-    `skip`: an `archive_conflict` event exists for this head, so a restarted driver
-    does not hand the same head back again (an archive PR has no free re-issue; that is
-    the batch PR's `conflict_decision`). `held`: two `session|fresh` hand-backs were
-    made since the batch's latest close-out event (held ones never count; a batch PR's
-    `conflict` events are another counter). Else `handback`."""
-    if any(isinstance(e, ArchiveConflictEvent) and e.head == head for e in events):
-        return "skip"
-    handed = 0
-    for event in reversed(events):
-        if isinstance(event, CloseoutEvent):
-            break
-        if isinstance(event, ArchiveConflictEvent) and event.delivered != "held":
-            handed += 1
-    return "held" if handed >= ARCHIVE_HANDBACKS_PER_CLOSEOUT else "handback"
-
-
-def held_archive_conflict(batch: Batch) -> ArchiveConflictEvent | None:
-    """The batch's latest `archive_conflict` event when it is `held` and no close-out
-    event came after it (R12): the operator owns that conflict."""
-    for event in reversed(batch.events):
-        if isinstance(event, CloseoutEvent):
-            return None
-        if isinstance(event, ArchiveConflictEvent):
-            return event if event.delivered == "held" else None
-    return None
-
-
-def _held_archive_conflict(batch: Batch, head: str) -> bool:
-    held = held_archive_conflict(batch)
-    return held is not None and held.head == head
-
-
-def archive_conflict_item_id(repo: str, batch_id: str, n: int) -> str:
-    """`<OWNER>/<REPO>/run/archive-conflict-<batch-id>-<n>`: the *n*th fresh session
-    started for the batch's conflicting archive PR."""
-    return f"{repo}/run/archive-conflict-{batch_id}-{n}"
-
-
-# ------------------------------------------- collected close-out hand-back (R27)
-
-CLOSEOUT_HANDBACKS = 1
-"""R27: hand-backs a collected close-out gets, counted per close-out item across its
-members; apart from conflict and red hand-backs, which count per batch dispatch."""
-
-CloseoutDecisionKind = Literal["skip", "handback", "stuck"]
-
-
-def closeout_handback_decision(
-    events: Iterable[object], item: str, head: str, handed: Iterable[str] = ()
-) -> CloseoutDecisionKind:
-    """What the driver does with collected close-out *item*'s PR failing at *head*, from
-    every member's events (R27): `skip`, its session was handed it at this head already;
-    `stuck`, no session could take the hand-back at this head, or the one hand-back went
-    out at an earlier head (a second failure); else `handback`."""
-    mine = [e for e in events if isinstance(e, CloseoutHandbackEvent) and e.item == item]
-    here = [e for e in mine if e.head == head]
-    if here:
-        return "stuck" if all(e.delivered == "none" for e in here) else "skip"
-    heads = {e.head for e in mine} | set(handed)  # the marker's own count (p6b-r10)
-    if head in heads:
-        return "skip"
-    return "stuck" if len(heads) >= CLOSEOUT_HANDBACKS else "handback"
 
 
 def archive_allowed(entry: str) -> bool:
@@ -1261,215 +1101,6 @@ def finished_waves(batches: Iterable[Batch], stages: Mapping[str, str]) -> froze
     return frozenset(k for k, ok in wave_ok.items() if ok)
 
 
-def export_branch(wave: str, scope: str) -> str:
-    """The head a wave's state-export PR is pushed to; the driver of scope id *scope*
-    owns it. The scope id keeps two scopes of one repo (another host's driver) off each
-    other's export PRs (gh#1101)."""
-    return f"{EXPORT_PREFIX}{scope}-wave-{wave}"
-
-
-def _wave_order(wave: str) -> tuple[int, int | str]:
-    return (0, int(wave)) if wave.lstrip("-").isdigit() else (1, wave)
-
-
-ExportCount = Literal["closing", "blocked"] | None
-
-
-def _outside(root: str, files: Sequence[str]) -> str:
-    """Why *files* do not all lie under the export directory *root*, or "". An unknown
-    file list is never "all inside": an export PR always changes something."""
-    if not files:
-        return "its changed files are unknown"
-    prefix = root.rstrip("/") + "/"
-    stray = [f for f in files if not f.startswith(prefix)]
-    return f"it changes {', '.join(stray[:3])}, outside {prefix}" if stray else ""
-
-
-@dataclass(frozen=True)
-class ExportTarget:
-    """What step 3b decides about for one repo (§I, R13): the repo's newest unmerged
-    export PR and the waves recorded with it, or, with none, every finished wave of the
-    repo that has no export entry at all. `wave`, the highest, names the branch."""
-
-    repo: str
-    wave: str
-    covers: tuple[str, ...]
-    recorded: Export | None  # the newest unmerged entry with a PR; None: not exported
-    orphan: LivePr | None = None  # unrecorded: the open PR to reuse, on wave `wave`'s head
-
-
-def export_wave_of(head_ref: str, scope: str) -> str | None:
-    """The wave key a `chore/triage-state-<scope>-wave-<N>` head of scope id *scope*
-    names, or None: another scope's export head is never this scope's."""
-    prefix = f"{EXPORT_PREFIX}{scope}-wave-"
-    wave = head_ref.removeprefix(prefix) if head_ref.startswith(prefix) else ""
-    return wave if wave.isdigit() else None
-
-
-def export_target(
-    repo: str,
-    batches: Iterable[Batch],
-    repos: Mapping[str, str],
-    finished: frozenset[str],
-    exports: Iterable[Export],
-    orphans: Sequence[LivePr] = (),
-    *,
-    scope: str,
-) -> ExportTarget | None:
-    """One export PR per repo covers every unexported finished wave. While one is
-    unmerged, it is the target and a wave that finished since waits for a later pass,
-    so no second PR is opened. With none recorded, an unrecorded open PR on any wave's
-    export head (*orphans*, highest wave first) is reused: the export pushes onto its
-    branch and covers every owed wave (p4-r3, p4-r13). None: nothing is owed."""
-    mine = [e for e in exports if e.repo == repo and not e.closed]  # closed: owed again
-    unmerged = [e for e in mine if e.pr is not None and not e.merged]
-    if unmerged:
-        newest = unmerged[-1]
-        covers = sorted({e.wave for e in unmerged if e.pr == newest.pr}, key=_wave_order)
-        return ExportTarget(repo, covers[-1], tuple(covers), newest)
-    entered = {e.wave for e in mine}
-    waves = {str(b.wave) for b in batches if b.wave is not None and repos.get(b.id) == repo}
-    owed = sorted((waves & finished) - entered, key=_wave_order)
-    if not owed:
-        return None
-    named = [(w, o) for o in orphans if (w := export_wave_of(o.head_ref, scope)) is not None]
-    if named:
-        wave, orphan = max(named, key=lambda pair: _wave_order(pair[0]))
-        return ExportTarget(repo, wave, tuple(owed), None, orphan)
-    return ExportTarget(repo, owed[-1], tuple(owed), None)
-
-
-def _wrong_base(live: LivePr, default: str) -> str:
-    """Why *live* is not based on the default branch, or "" (p4-r15). An unknown base
-    is never the default."""
-    if default and live.base == default:
-        return ""
-    return f"is based on {live.base or 'an unknown branch'}, not {default or 'the default branch'}"
-
-
-def _export_row(
-    repo: str,
-    wave: str,
-    done: Export | None,
-    live: LivePr | None,
-    root: str,
-    default: str = "",
-    *,
-    scope: str,
-) -> tuple[Action | Admitted | None, ExportCount]:
-    """One row of §I's table: the action for *repo*'s finished *wave*, given its
-    recorded export (*done*), the live PR and the export directory *root*
-    (`<path>/<scope>`), and how the summary counts it. The driver auto-merges this
-    PR unreviewed, so it adopts or merges one only when every file it changes is under
-    *root*, and merges only at the head it recorded (p4-sec-unpinned-merge)."""
-    head = export_branch(wave, scope)
-    if done is not None and (done.merged or done.pr is None):
-        return None, None  # merged, or the export changed nothing
-    if done is None:
-        if live is None or live.state != "OPEN":
-            return Action("export", repo, f"to {root} on {head}", wave=wave), "closing"
-        why = "" if live.trusted else "is not trusted (not from this repo by an allowed author)"
-        why = why or _wrong_base(live, default)
-        if why:
-            return Action("warn", repo, f"PR #{live.number} on {head} {why}; it is never "
-                          "reused or merged", pr=live.number, wave=wave), "blocked"  # fmt: skip
-        # Reused, never adopted (p4-r12): the export pushes the driver's own commit onto
-        # this PR's branch, and the merge pins to that commit. Nothing of the PR's is kept.
-        reuse = f"to {root} on {head}, reusing open PR #{live.number}"
-        return Action("export", repo, reuse, pr=live.number, wave=wave), "closing"
-    if live is None:
-        return None, "closing"  # not read this pass: still owed
-    if live.state == "MERGED":  # merged by hand, or a pass died before recording (p4-r1)
-        merged = f"export PR #{live.number} was merged outside the driver; recording it"
-        return Action("export-reconcile", repo, merged, pr=live.number, wave=wave), "closing"
-    if live.state != "OPEN":  # closed unmerged: recorded once, its waves owed again (p4-r6)
-        return Action("export-closed", repo, f"export PR #{live.number} was closed without "
-                      "a merge; its waves are owed again and re-exported next pass",
-                      pr=live.number, wave=wave), "closing"  # fmt: skip
-    why = ""
-    if not live.trusted:
-        why = "is not trusted (not from this repo by an allowed author)"
-    elif live.head != done.head or not done.head:
-        why = (f"head is {live.head[:12] or 'unknown'}, not the recorded "
-               f"{(done.head or 'none')[:12]}: a commit the driver did not push")  # fmt: skip
-    elif outside := _outside(root, live.files):
-        why = outside
-    elif wrong := _wrong_base(live, default):
-        why = wrong
-    elif live.mergeable == CONFLICTING:
-        # No session owns it: straight to the operator, with a recorded stop (R12).
-        return Action("export-conflict", repo, f"export PR #{live.number} conflicts with "
-                      "the default branch; the operator must act", pr=live.number,
-                      head=live.head, wave=wave), "blocked"  # fmt: skip
-    elif live.draft:
-        why = "is a draft"
-    elif live.checks == "failing":
-        why = f"has failing checks: {', '.join(live.failing) or 'unknown'}"
-    if why:
-        return Action("warn", repo, f"export PR #{live.number} {why}; the operator must act",
-                      pr=live.number, wave=wave), "blocked"  # fmt: skip
-    if live.checks != "green":
-        return None, "closing"  # checks pending: wait
-    # Admitted at the RECORDED head, never a later one: they are equal here, and the queue
-    # builds exactly this head (p4-sec-unpinned-merge, R32).
-    return Admitted("export", repo, live, wave=None, at=done.at), "closing"
-
-
-def _export_actions(snap: Snapshot) -> tuple[list[Action], list[Admitted], int, int]:
-    """§I step 3b: a group or org scope that opts in is warned once; then, for each
-    opted-in repo, `_export_row` on its `export_target`: one PR per repo, never one per
-    wave. Returns the actions, the export PRs admitted to a queue (R32), and how many owed
-    export PRs are closing (acting or waiting) and blocked (warned)."""
-    actions = [
-        Action("warn", repo, f"export is per repo scope; run drive with --repo {repo}")
-        for repo in sorted(snap.export_refused)
-    ]
-    counts = {"closing": 0, "blocked": 0}
-    admitted: list[Admitted] = []
-    for repo in sorted(snap.export_path):
-        target = export_target(
-            repo, snap.batches, snap.repos, snap.finished, snap.exports,
-            snap.export_orphans.get(repo, ()), scope=snap.scope_id,
-        )  # fmt: skip
-        if target is None:
-            continue
-        live = (
-            target.orphan if target.recorded is None else snap.export_prs.get((repo, target.wave))
-        )
-        action, count = _export_row(
-            repo, target.wave, target.recorded, live, snap.export_path[repo],
-            snap.default_branch.get(repo, ""), scope=snap.scope_id,
-        )  # fmt: skip
-        if isinstance(action, Admitted):
-            admitted.append(action)
-        elif action is not None:
-            if action.kind == "export":
-                action = replace(action, covers=target.covers)
-                if len(target.covers) > 1:
-                    action = replace(action, detail=f"{action.detail} (covers waves "
-                                     f"{', '.join(target.covers)})")  # fmt: skip
-            actions.append(action)
-        if count is not None:
-            counts[count] += 1
-        if isinstance(action, Action) and action.kind == "export" and target.orphan is not None:
-            actions.extend(_stale_orphans(repo, snap, target.orphan))
-    return actions, admitted, counts["closing"], counts["blocked"]
-
-
-def _stale_orphans(repo: str, snap: Snapshot, reused: LivePr) -> list[Action]:
-    """p4-r16: every other unrecorded export PR, named once per drive as stale. They
-    block nothing: the reused PR carries the state."""
-    out = []
-    for o in sorted(snap.export_orphans.get(repo, ()), key=lambda o: o.number):
-        key = f"stale-export\0{repo}\0{o.number}"
-        if o.number == reused.number or key in snap.warned:
-            continue
-        out.append(Action("warn", repo, f"export PR #{o.number} on {o.head_ref} is stale: "
-                          f"PR #{reused.number} carries the export; it is safe to close",
-                          pr=o.number, head=key))  # fmt: skip
-    return out
-
-
 def is_finished(batch: Batch, stage: BatchStage, archives: Sequence[LivePr]) -> bool:
     """Whether *batch* is finished: landed, with a close-out event whose `archived`
     is set (the driver merged its archive PR), or an attributed archive PR in
@@ -1674,6 +1305,21 @@ def wave_landings_done(snap: Snapshot, repo: str, wave: int | None) -> bool:
     )
 
 
+def _can_hold_wave(batch: Batch, snap: Snapshot) -> bool:
+    """R6 of spec 2026-11-27-queue-followups: whether *batch* may hold its wave's collected
+    close-out. A batch with no wave stands alone (`wave_landings_done`); one held by the
+    verb (`closeout_hold`), gated, or with a close-out of its own (a hand-opened PR, a live
+    per-batch tab) never holds the rest (review p1-r2, p1-r5)."""
+    item = closeout_item_id(snap.repos.get(batch.id, ""), batch.id)
+    return (
+        _wave_of(batch) is not None
+        and closeout_hold(batch) is None
+        and not is_gated(batch, snap)
+        and batch.id not in snap.adopted
+        and item not in snap.existing
+    )
+
+
 def queue_snapshot(
     snap: Snapshot,
     repo: str,
@@ -1827,15 +1473,22 @@ def drive_pass(snap: Snapshot) -> Pass:
     post_planned: set[str] = set()
     # (repo, wave) -> the batches its collected close-out takes (R15: one per wave)
     collecting: dict[tuple[str, int | None], list[str]] = {}
+    # (repo, wave) -> the members that hold its close-out back, and why (R6 of spec
+    # 2026-11-27-queue-followups): not due, unverified or ledger-unread
+    blocking: dict[tuple[str, int | None], list[tuple[str, str]]] = {}
     labelled: set[str] = set()  # issues an awaiting-live action already names this pass
+    queued = queue_landed_by_repo(snap.queue_records)
     for batch in snap.batches:
         if stages.get(batch.id) not in LANDED or batch.id in held_ids:
             continue
         if closeout_of(batch, snap.closeouts) is not None:
             continue
         driven_now = snap.selected is None or batch.id in snap.selected
+        wave_key = (snap.repos.get(batch.id, ""), _wave_of(batch))
         if batch.id in snap.unverified:
             closing += driven_now
+            if driven_now and _can_hold_wave(batch, snap):
+                blocking.setdefault(wave_key, []).append((batch.id, "unverified"))
             continue
         # A close-out the driver did not start is recorded once, as an event: every
         # later pass, the board and `batch list` read it (gh#899, gh#900, gh#912).
@@ -1854,6 +1507,7 @@ def drive_pass(snap: Snapshot) -> Pass:
             released=batch.id in snap.released,
             merged_at=snap.merged_at.get(batch.id),
             now=snap.now,
+            queued=batch.id in queued.get(snap.repos.get(batch.id, ""), frozenset()),
         )
         owed = not any(e.kind == "post_merge" for e in batch.events)
         item = closeout_item_id(snap.repos.get(batch.id, ""), batch.id)
@@ -1870,6 +1524,8 @@ def drive_pass(snap: Snapshot) -> Pass:
             post_planned.add(batch.id)
         if batch.id in snap.ledger_unknown:  # p4-r1: unknown is not ungated
             closing += 1
+            if _can_hold_wave(batch, snap):
+                blocking.setdefault(wave_key, []).append((batch.id, "ledger unread"))
             actions.append(Action("ledger-unread", batch.id, "its merged PR's labels were not "
                                   "read, so whether a gate holds it is unknown; no close-out "
                                   "until they are"))  # fmt: skip
@@ -1898,6 +1554,8 @@ def drive_pass(snap: Snapshot) -> Pass:
                                   pr=hand.number))  # fmt: skip
             continue
         if not due:
+            if _can_hold_wave(batch, snap):
+                blocking.setdefault(wave_key, []).append((batch.id, "not due"))
             continue
         if item in snap.existing:  # a per-batch close-out started before R15: recorded
             actions.append(Action("closeout", batch.id, f"record the live {item}", recorded=True))
@@ -1916,6 +1574,10 @@ def drive_pass(snap: Snapshot) -> Pass:
     # R15: one collected close-out per wave, at most one per repo, none while one is under way.
     started: set[str] = set()
     for repo, group in sorted(collecting, key=lambda k: (k[0], k[1] is None, k[1] or 0)):
+        if blockers := blocking.get((repo, group)):
+            said = ", ".join(f"{bid} ({why})" for bid, why in blockers)
+            actions.append(Action("held", blockers[0][0], f"the wave's close-out waits for {said}"))
+            continue
         if waiting := post_owed.get((repo, group)):
             # R15: held until every landed member's post_merge succeeded, never started
             # with the rest; the post-merge action retries it every pass

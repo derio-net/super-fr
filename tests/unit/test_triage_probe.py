@@ -267,3 +267,60 @@ def test_the_judgements_digest_is_of_the_bytes(tmp_path: Path) -> None:
     first = judgements_digest(path)
     path.write_text("a: 1 \n")
     assert judgements_digest(path) != first
+
+
+# ------------------------- close-out deadlines wake a quiet pass (2026-11-27-queue-followups R7)
+
+
+def _landed(
+    tmp_path: Path, *, merged_at: str | None, queued: bool = False
+) -> tuple[object, object]:
+    """REPO with batch b1 merged at *merged_at* and no close-out event; *queued*: a
+    `queue_land` of REPO names it."""
+    import yaml
+    from fr.triage.model import Scope
+    from fr.triage.scope_config import scope_id
+
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    world = World()
+    world.issues[1] = "closed"
+    kw = {"merged_at": merged_at} if merged_at is not None else {}
+    world.pr(101, "feat/batch-b1", [1], state="MERGED", **kw)
+    path = (
+        _state(tmp_path, world, _batch("b1", 1, events=_dispatch_event("b1"))) / "judgements.yaml"
+    )
+    if queued:
+        text = path.read_text("utf-8").replace("schema: 3\n", "schema: 14\n")
+        land = {"kind": "queue_land", "at": NOW.isoformat(), "main": "m" * 40,
+                "entries": [{"batch": "b1"}]}  # fmt: skip
+        queue = {"repo": REPO, "wave": None, "base": "m" * 40, "events": [land],
+                 "scope": scope_id(Scope(kind="repo", target=REPO))}  # fmt: skip
+        path.write_text(text + yaml.safe_dump({"queues": [queue]}), "utf-8")
+    return world.facts(), load_judgements(path)
+
+
+def test_deadline_repos_reads_a_repo_whose_closeout_fallback_passed(tmp_path: Path) -> None:
+    from fr.triage.probe import deadline_repos
+
+    merged = (NOW - timedelta(minutes=10, seconds=30)).isoformat()
+    facts, judgements = _landed(tmp_path, merged_at=merged)
+    assert deadline_repos(facts, judgements, NOW - timedelta(minutes=1), NOW) == {REPO}
+    assert deadline_repos(facts, judgements, NOW - timedelta(seconds=20), NOW) == set()
+    assert deadline_repos(facts, judgements, None, NOW) == {REPO}  # unknown: fail open
+
+
+def test_deadline_repos_fails_open_on_no_merged_at_and_skips_queue_landed(tmp_path: Path) -> None:
+    from fr.triage.probe import deadline_repos
+
+    facts, judgements = _landed(tmp_path / "a", merged_at=None)
+    assert deadline_repos(facts, judgements, NOW - timedelta(seconds=20), NOW) == {REPO}
+    merged = (NOW - timedelta(minutes=10, seconds=30)).isoformat()
+    facts, judgements = _landed(tmp_path / "b", merged_at=merged, queued=True)
+    assert deadline_repos(facts, judgements, NOW - timedelta(minutes=1), NOW) == set()
+    assert deadline_repos(facts, judgements, None, NOW) == set()
+
+
+def test_a_quiet_pass_with_a_deadline_repo_reads_only_it() -> None:
+    p = plan_pass(_FRESH, NOW, repos=["A", "B", "C"], changed=set(), digest="d",
+                  below_floor=False, live={"A"}, pending={}, probes=3, deadline={"B"})  # fmt: skip
+    assert (p.kind, p.only) == ("partial", frozenset({"B"}))

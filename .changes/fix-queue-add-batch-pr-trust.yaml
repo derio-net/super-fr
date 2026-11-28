@@ -1,0 +1,2 @@
+bump: patch
+summary: "`fr triage queue add --preapproved` accepts a batch PR whose Closes lines name its member issues, instead of refusing it as never read (gh#1741)."

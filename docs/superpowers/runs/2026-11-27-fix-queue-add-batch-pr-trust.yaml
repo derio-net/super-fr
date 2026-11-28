@@ -1,0 +1,57 @@
+schema_version: 12
+run: 2026-11-27-fix-queue-add-batch-pr-trust
+workflow: fr-debugging@1
+branch: fix/queue-add-batch-pr-trust
+started: '2026-11-27T20:01:35+00:00'
+cursor: deliver
+steps:
+  debug:
+    state: done
+    at: '2026-11-27T20:08:14+00:00'
+    emitted:
+      debug: docs/superpowers/journals/debug/2026-11-27-queue-add-batch-pr-trust.md
+    units:
+      step/debug:
+        attempts:
+        - dispatched: '2026-11-27T20:08:05+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 73a20abc-81a8-48e9-93b3-322956e3669f
+          returned: '2026-11-27T20:08:14+00:00'
+          outcome: done
+  review:
+    state: done
+    at: '2026-11-27T20:09:11+00:00'
+    units:
+      step/review:
+        attempts:
+        - dispatched: '2026-11-27T20:08:15+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 73a20abc-81a8-48e9-93b3-322956e3669f
+          returned: '2026-11-27T20:09:11+00:00'
+          outcome: done
+        evidence:
+          review: d-review-1
+          reviewer: aacf187ff2e64198d
+          findings: d-fix-1
+  deliver:
+    state: done
+    at: '2026-11-27T20:36:08+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1750
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-27T20:09:13+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 73a20abc-81a8-48e9-93b3-322956e3669f
+          returned: '2026-11-27T20:35:20+00:00'
+          outcome: done
+        evidence:
+          tests: ci:c59de8591e3e937947fdae8d1904d513f860b165+e110425d6254eb5a4f6460bb3f902ac6b23bbdde;tree=4c4167b37cd5fbaf654ae51a66d8234b51bb52757e0948075ba42371881a80a6
+          docs: e110425d6254eb5a4f6460bb3f902ac6b23bbdde:a9401e2b831c9833b858b4e18e9ff9230d31862ca989a2754589e5f6f0569214
+          settle: fix/fix:clean/green@c59de8591e3e937947fdae8d1904d513f860b165
+fr_version: 9.1.0rc10
+pr: https://github.com/derio-net/super-fr/pull/1750
