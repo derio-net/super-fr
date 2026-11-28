@@ -279,7 +279,7 @@ def _servable(settings: Settings, source: str) -> Settings:
 
 def _repo_file(settings: Settings) -> Settings:
     """`.fr/settings.yaml` is the `repo` placement's file, so it says `repo` (§3.A: the
-    placement must match where the file lives). Quiet is switched on by the `fr` branch."""
+    placement must match where the file lives). Quiet is switched on by `fr-config`."""
     if settings.placement == "stealth":
         raise SettingsError(
             f"{SETTINGS_PATH}: placement: stealth cannot be set in repo settings: stealth is "
@@ -289,8 +289,8 @@ def _repo_file(settings: Settings) -> Settings:
     if settings.placement != "repo":
         raise SettingsError(
             f"{SETTINGS_PATH}: placement: {settings.placement} is not set here: this file is "
-            "the `repo` placement's. Quiet is switched on by the `fr` branch's root "
-            "settings.yaml (`fr settings init --quiet`)"
+            "the `repo` placement's. Quiet is switched on by .fr/settings.yaml on the "
+            "orphan `fr-config` branch (`fr settings init --quiet`)"
         )
     return settings
 

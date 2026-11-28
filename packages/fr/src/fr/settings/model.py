@@ -314,10 +314,11 @@ class Settings(_Closed):
     placement: PlacementType = _choice(
         "repo",
         PLACEMENTS,
-        description="Default: artifacts live on the feature branch.\n"
-        "Quiet keeps them on the orphan `fr` branch, switched on by that branch's own\n"
-        "settings.yaml (`fr settings init --quiet`), never by this key in .fr/settings.yaml;\n"
-        "stealth is not yet served.",
+        description="Default: artifacts live on the feature branch; .fr/settings.yaml says only repo.\n"
+        "Quiet keeps them off the feature branch, switched on by .fr/settings.yaml on the\n"
+        "orphan `fr-config` branch (`fr settings init --quiet`), never by this key here.\n"
+        "Stealth is chosen per run and reads <target-dir>/.fr/settings.yaml on the\n"
+        "tracking repo's `<branch>-config`.",
     )
     artifacts: Artifacts = Field(
         default_factory=Artifacts,

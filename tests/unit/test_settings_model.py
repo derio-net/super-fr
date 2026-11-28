@@ -134,3 +134,13 @@ def test_schema_4_is_still_newer_than_this_fr() -> None:
 def test_a_bare_yaml_off_reads_as_off_in_pr_sections() -> None:
     s = parse_settings({"schema": 3, "forge": {"pr_sections": {"settle": False}}}, source="t")
     assert s.forge.pr_sections.settle == "off"
+
+
+def test_the_placement_description_says_what_is_true() -> None:
+    """Quiet's switch is on `fr-config`, stealth reads `<branch>-config` (R6)."""
+    from fr.settings.model import Settings
+
+    text = Settings.model_fields["placement"].description or ""
+    assert "not yet served" not in text
+    assert "fr-config" in text
+    assert "<branch>-config" in text
