@@ -236,3 +236,11 @@ amendments:
       is blocked until updated; the app''s direct release pushes to main still land
       through the bypass (v9.0.0 0cffe531 on 2026-11-25, v9.1.0-rc.10 25718a99 on 2026-11-27,
       pushed by super-fr-release[bot]).'
+  - row: release-pushes-as-app
+    op: reword
+    base: 0
+    acceptance: With the app configured, super-fr's release commit and tag are pushed
+      as the super-fr-release app, CI runs on the release commit, and the follow-up
+      release run is a no-op.
+    why: spec 2026-11-21-release-app-hardening replaced derio-fr-automation with the
+      repo-only super-fr-release app; the promise is unchanged, only the app's name
