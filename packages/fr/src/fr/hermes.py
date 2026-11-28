@@ -28,9 +28,12 @@ from typing import Any
 
 import yaml
 
+import fr
+
 SOUL_BLOCK_START = "<!-- super-fr:rules START -->"
 SOUL_BLOCK_END = "<!-- super-fr:rules END -->"
 HOOKS_SUBDIR = "super-fr-hooks"
+VERSION_FILENAME = "VERSION"
 ALLOWLIST_FILENAME = "shell-hooks-allowlist.json"
 CONFIG_FILENAME = "config.yaml"
 LEGACY_CONFIG_FILENAME = "cli-config.yaml"
@@ -358,6 +361,9 @@ def install(source_root: Path, home: Path) -> None:
         raise HermesError(f"{allowlist_path}: `approvals` must be a list")
 
     shutil.copytree(src_hooks, hooks_install_dir, dirs_exist_ok=True)
+    # The tree carries no plugin.json, so its edit gate reads its release here, at
+    # `lib/../VERSION` (spec 2026-11-28-s1-followups R7).
+    (hooks_install_dir / VERSION_FILENAME).write_text(f"{fr.__version__}\n")
 
     # super-fr 3.15.0 through 3.17.0 targeted an obsolete filename and registered
     # the nag on an unusable lifecycle event. Converge upgrades by

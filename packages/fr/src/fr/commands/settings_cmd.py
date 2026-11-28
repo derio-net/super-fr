@@ -364,8 +364,9 @@ def _toplevel() -> Path | None:
 
 def paths_answers(toplevel: Path | None, *, create: bool = True) -> dict[str, str]:
     """The resolver's answers as `FR_*` variables: the placement, its root, the feature,
-    then one per `fr.artifacts.paths.KIND_DIRS` entry. `FR_PLACEMENT=none` alone
-    outside a git repo. Raises `SettingsError` for a placement this fr cannot serve."""
+    whether S1's transition has ended, then one per `fr.artifacts.paths.KIND_DIRS` entry.
+    `FR_PLACEMENT=none` alone outside a git repo. Raises `SettingsError` for a placement
+    this fr cannot serve."""
     from fr.artifacts.paths import (
         CONFIG_KINDS,
         KIND_DIRS,
@@ -374,6 +375,7 @@ def paths_answers(toplevel: Path | None, *, create: bool = True) -> dict[str, st
         shell_name,
         space_for,
     )
+    from fr.config import transition
 
     if toplevel is None:
         return {"FR_PLACEMENT": "none"}
@@ -382,6 +384,9 @@ def paths_answers(toplevel: Path | None, *, create: bool = True) -> dict[str, st
         "FR_PLACEMENT": space.placement,
         "FR_ARTIFACT_ROOT": str(space.root),
         "FR_FEATURE": space.feature or "",
+        # Whether S1's transition has ended (spec 2026-11-28-s1-followups R7): the shell
+        # readers (`validate-plans.sh`) take R1's answer from here.
+        "FR_OLD_PATHS_ENDED": "1" if transition.refusing() else "0",
     }
     # The configuration kinds name the configuration space under every placement (S1 R9).
     out.update(
