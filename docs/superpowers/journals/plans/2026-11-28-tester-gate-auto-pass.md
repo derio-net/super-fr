@@ -208,3 +208,8 @@ test_r4_a_loose_gate_pass_closes_the_prs_trackers and test_r4_labels_off_writes_
 ### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: The once-only report key named 'PR #n' without the repo
 
 Per-PR label is <owner>/<repo>#<n>; repo failures keyed by repo; covered by test_a_repo_failure_is_reported_once_per_repo_and_a_pr_failure_names_its_repo.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved-2 created=2026-11-28T13:13:26+00:00 state=open resolves=l-errors-r3 tracked_by=https://github.com/derio-net/super-fr/issues/1775 -->
+### l-errors-r3-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1775] · resolves l-errors-r3: read_cursors drops malformed run cursors silently, and R5's two-run check now depends on it
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1775.
