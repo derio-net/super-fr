@@ -1,3 +1,6 @@
+---
+fr_schema: 2
+---
 # Spec requirements as a table
 
 ## Background
@@ -49,14 +52,16 @@ of scope here; it gets its own brainstorm on its own branch.
 
 ## Requirements
 
-R1. A spec's `## Requirements` section may be a two-column GFM table whose header row is `| ID | Requirement |` (case-insensitive), followed by the delimiter row and one row per requirement: the id in the first cell, the text in the second. Every row starts and ends with `|`, and `\|` inside a cell is a literal `|`.
-R2. `fr.requirements` reads that table to the same ids and text as the equivalent `R<n>.` list, and raises `RequirementsError` naming the line for a table row that does not hold exactly two cells. It still reads the pre-5.0 three-column table and the `R<n>.` list, so archived and unmigrated specs keep their meaning.
-R3. In the `R<n>.` list, the non-blank lines that directly follow a requirement line, up to the next requirement line or blank line, are continuation lines: they are part of that requirement, joined to its text with single spaces. A line that starts like a requirement id (an optional `-`/`*` bullet, then `R`, then non-space characters, then `. `) but whose id is malformed raises `RequirementsError` naming the line. A blank line between two requirements is not prose; a non-blank line that follows a blank line and precedes a later requirement line is prose between requirements.
-R4. The `spec` kind moves from version 1 to 2. Its 1 → 2 migration rewrites a live spec's `R<n>.` list into the R1 table, one row per requirement with continuation lines joined and each `|` escaped as `\|`. It keeps every line outside the requirement and continuation lines as it was, adds one blank line before and after the table where none is, keeps the file's line endings, and the runner adds the front-matter stamp. A spec whose section is already a two-column table, is a pre-5.0 table, holds no requirement line, or has no `## Requirements` section is only stamped.
-R5. The rewrite round-trips: the requirements parsed from the rewritten spec equal, id for id and text for text, those parsed from the original. A spec the rewrite cannot convert under that rule (prose between requirements, a `RequirementsError`, or a failed round trip) is left byte-identical and unstamped, and its failure names the file, the line and the cause, and gives the hand fix: move the prose out of the list, fix the id, or join the lines. Every other spec still migrates.
-R6. Archived specs are never located, rewritten or stamped.
-R7. `fr validate artifacts` refuses a spec stamped 2 or later whose `## Requirements` section holds an `R<n>.` list line, or whose `| ID | Requirement |` table has a row with other than two cells, naming the line. A pre-5.0 three-column table is not refused.
-R8. The fr-brainstorming skill tells spec authors to write the R1 table, with front matter `fr_schema: 2`, and to escape `|` as `\|`. The fr-acceptance and fr-plan skills, their OpenCode and Hermes mirrors, the `fr-brainstorming-and-plan`, `fr-acceptance` and `01-fr-goal` explainers, and `fr.requirements`' docstring and error texts describe the table (the errors name both forms).
+| ID | Requirement |
+|----|-------------|
+| R1 | A spec's `## Requirements` section may be a two-column GFM table whose header row is `\| ID \| Requirement \|` (case-insensitive), followed by the delimiter row and one row per requirement: the id in the first cell, the text in the second. Every row starts and ends with `\|`, and `\\|` inside a cell is a literal `\|`. |
+| R2 | `fr.requirements` reads that table to the same ids and text as the equivalent `R<n>.` list, and raises `RequirementsError` naming the line for a table row that does not hold exactly two cells. It still reads the pre-5.0 three-column table and the `R<n>.` list, so archived and unmigrated specs keep their meaning. |
+| R3 | In the `R<n>.` list, the non-blank lines that directly follow a requirement line, up to the next requirement line or blank line, are continuation lines: they are part of that requirement, joined to its text with single spaces. A line that starts like a requirement id (an optional `-`/`*` bullet, then `R`, then non-space characters, then `. `) but whose id is malformed raises `RequirementsError` naming the line. A blank line between two requirements is not prose; a non-blank line that follows a blank line and precedes a later requirement line is prose between requirements. |
+| R4 | The `spec` kind moves from version 1 to 2. Its 1 → 2 migration rewrites a live spec's `R<n>.` list into the R1 table, one row per requirement with continuation lines joined and each `\|` escaped as `\\|`. It keeps every line outside the requirement and continuation lines as it was, adds one blank line before and after the table where none is, keeps the file's line endings, and the runner adds the front-matter stamp. A spec whose section is already a two-column table, is a pre-5.0 table, holds no requirement line, or has no `## Requirements` section is only stamped. |
+| R5 | The rewrite round-trips: the requirements parsed from the rewritten spec equal, id for id and text for text, those parsed from the original. A spec the rewrite cannot convert under that rule (prose between requirements, a `RequirementsError`, or a failed round trip) is left byte-identical and unstamped, and its failure names the file, the line and the cause, and gives the hand fix: move the prose out of the list, fix the id, or join the lines. Every other spec still migrates. |
+| R6 | Archived specs are never located, rewritten or stamped. |
+| R7 | `fr validate artifacts` refuses a spec stamped 2 or later whose `## Requirements` section holds an `R<n>.` list line, or whose `\| ID \| Requirement \|` table has a row with other than two cells, naming the line. A pre-5.0 three-column table is not refused. |
+| R8 | The fr-brainstorming skill tells spec authors to write the R1 table, with front matter `fr_schema: 2`, and to escape `\|` as `\\|`. The fr-acceptance and fr-plan skills, their OpenCode and Hermes mirrors, the `fr-brainstorming-and-plan`, `fr-acceptance` and `01-fr-goal` explainers, and `fr.requirements`' docstring and error texts describe the table (the errors name both forms). |
 
 ## Design
 

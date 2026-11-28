@@ -1,3 +1,6 @@
+---
+fr_schema: 2
+---
 # Bridge dispatch hardening — observability, retry-safety, robustness
 
 **Date:** 2026-06-11

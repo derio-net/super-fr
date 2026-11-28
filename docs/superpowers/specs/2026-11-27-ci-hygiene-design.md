@@ -1,3 +1,6 @@
+---
+fr_schema: 2
+---
 # CI hygiene sweep: retire spec-status, one Python everywhere, least-privilege ci.yml
 
 Issues: derio-net/super-fr#1594, derio-net/super-fr#1595, derio-net/super-fr#1596,
@@ -38,18 +41,13 @@ location below was checked on `main` at `e110425d6`.
 
 ## Requirements
 
-R1. `fr-spec-status.yml` and `_pr_spec_status.yml` are deleted, and every live mention of
-them (budget config, budget watch list, the fr-progress skill and its mirrors, the
-fr-progress explainer, the `states.py` docstring) is removed or reworded; `fr spec status`
-is unchanged.
-R2. `scripts/floors.py` keeps no Python 3.11 prose and no `getattr` fallback for
-`tokenize.FSTRING_MIDDLE`; its behaviour is unchanged.
-R3. `tests/unit/test_ci_shards.py` describes the 7-shard matrix, and its partition test
-splits into the matrix's own shard count instead of a literal.
-R4. Every workflow that uses `astral-sh/setup-uv` sets a workflow-level `UV_PYTHON` equal to
-the `requires-python` floor, and a test fails when one does not.
-R5. `ci.yml` declares a workflow-level `permissions: {contents: read}`, every workflow file
-declares a workflow-level `permissions:` block, and a test fails when either stops holding.
+| ID | Requirement |
+|----|-------------|
+| R1 | `fr-spec-status.yml` and `_pr_spec_status.yml` are deleted, and every live mention of them (budget config, budget watch list, the fr-progress skill and its mirrors, the fr-progress explainer, the `states.py` docstring) is removed or reworded; `fr spec status` is unchanged. |
+| R2 | `scripts/floors.py` keeps no Python 3.11 prose and no `getattr` fallback for `tokenize.FSTRING_MIDDLE`; its behaviour is unchanged. |
+| R3 | `tests/unit/test_ci_shards.py` describes the 7-shard matrix, and its partition test splits into the matrix's own shard count instead of a literal. |
+| R4 | Every workflow that uses `astral-sh/setup-uv` sets a workflow-level `UV_PYTHON` equal to the `requires-python` floor, and a test fails when one does not. |
+| R5 | `ci.yml` declares a workflow-level `permissions: {contents: read}`, every workflow file declares a workflow-level `permissions:` block, and a test fails when either stops holding. |
 
 ## Design
 
