@@ -54,9 +54,9 @@ rows:
       path is refused before it runs, and a repo shape or strategy comes from the fetched
       tip when enforced or the shipped one when not
     origin:
-    - spec:2026-11-28-s1-followups#R10
     - spec:2026-11-28-s1-followups#R11
     - spec:2026-11-28-s1-followups#R12
+    - spec:2026-11-28-s1-followups#R13
     levels: {}
     status: not-implemented
     notes: ''
