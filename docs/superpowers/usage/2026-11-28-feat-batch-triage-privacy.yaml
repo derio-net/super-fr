@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-28-feat-batch-triage-privacy
+captures:
+- host: h-d11287e0
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-28T14:29:54+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: 801d27fb-7199-425c-a6fc-89e3dd21e1b9
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 84
+        cache_write: 194450
+        cache_read: 6929279
+        output: 31459
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 18
+      other:
+        usd: null
+        turns: 9
+      paperwork:
+        usd: null
+        turns: 13
+    steps:
+      (outside run):
+        usd: null
+        turns: 3
+        input: 8
+        cache_write: 107432
+        cache_read: 272071
+        output: 788
+      brainstorm:
+        usd: null
+        turns: 37
+        input: 76
+        cache_write: 87018
+        cache_read: 6657208
+        output: 30671
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 3
+          input: 8
+          cache_write: 107432
+          cache_read: 272071
+          output: 788
+        brainstorm:
+          usd: null
+          turns: 37
+          input: 76
+          cache_write: 87018
+          cache_read: 6657208
+          output: 30671
