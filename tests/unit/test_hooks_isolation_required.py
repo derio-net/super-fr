@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.unit.hooks_tree import open_hooks
+
 pytestmark = [
     pytest.mark.skipif(
         shutil.which("jq") is None or shutil.which("git") is None,
@@ -29,7 +31,15 @@ pytestmark = [
 ]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "plugins" / "super-fr" / "hooks" / "fr-isolation-required.sh"
+SCRIPT = open_hooks() / "fr-isolation-required.sh"
+
+
+@pytest.fixture(autouse=True)
+def _open_side(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests pin the pre-9.2 side of S1's transition (spec 2026-11-28-s1-followups
+    R10): they drive a copy of the hook tree whose plugin.json names 9.1.0, and no
+    `FR_OLD_PATHS=refuse` (set by `pytest --fr-ended`) reaches their subprocesses."""
+    monkeypatch.delenv("FR_OLD_PATHS", raising=False)
 
 
 def _git(repo: Path, *args: str) -> None:

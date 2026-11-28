@@ -11,7 +11,8 @@
 #     returns 1  -> BLOCK (edit is outside a valid fr-isolation workspace)
 #
 # Honors FR_BASE_OK=1 and a `.fr/isolation-allow` globlist in the repo's working tree
-# (`.fr-isolation-allow` at the root is its fallback; spec 2026-11-19 S1 R8, R13).
+# (`.fr-isolation-allow` at the root is its fallback before fr 9.2; spec 2026-11-19 S1 R8,
+# R13; spec 2026-11-28-s1-followups R7).
 # Shared by the Claude Code PreToolUse hook (plugins/super-fr/hooks/
 # fr-isolation-required.sh) and the Hermes pre_tool_call hook
 # (plugins/super-fr/hooks/hermes/fr-isolation-required.sh) so the marker /
@@ -378,6 +379,50 @@ _fr_common_dir_of() {
   printf '%s\n' "$_fr_gd"
 }
 
+# --- the end of S1's transition (spec 2026-11-28-s1-followups R7-R9) ---------------
+#
+# From fr 9.2 on (every 9.2 pre-release included) the old forms are no longer read: the
+# old allowlist `.fr-isolation-allow`, a placement from the old switch
+# `origin/fr:settings.yaml`, the note about two differing switches. The library decides
+# the end from ITS OWN release, read from the version source beside it in every delivered
+# location: the plugin's `.claude-plugin/plugin.json` (Claude Code, `$lib/../..`), else the
+# `VERSION` that `fr hermes install` writes at the hook tree's root (Hermes, `$lib/..`).
+# Neither readable counts as ended; `FR_OLD_PATHS=refuse` ends it early, and nothing keeps
+# it open. `FR_REFUSE_FROM` is the same line as `fr.config.transition.REFUSE_FROM` and
+# marker.ts `REFUSE_FROM` (tests/unit/test_transition_gate.py keeps the three equal).
+FR_REFUSE_FROM=9.2 # fr-refuse-from
+FR_DECISION_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd) || FR_DECISION_LIB_DIR=""
+
+# _fr_version_line <file> <key-prefix-regex> — sets _fr_vmajor/_fr_vminor from the first
+# line of <file> that matches `<prefix><major>.<minor>`; non-zero when none does. A plain
+# read loop: no parser and no subprocess, so a stripped PATH cannot change the answer.
+_fr_version_line() {
+  [ -f "$1" ] || return 1
+  while IFS= read -r _fr_vl || [ -n "$_fr_vl" ]; do
+    if [[ "$_fr_vl" =~ $2([0-9]+)\.([0-9]+) ]]; then
+      _fr_vmajor=${BASH_REMATCH[1]}
+      _fr_vminor=${BASH_REMATCH[2]}
+      return 0
+    fi
+  done <"$1"
+  return 1
+}
+
+# _fr_transition_ended — 0 when S1's transition has ended for this library's release.
+_fr_transition_ended() {
+  [ "${FR_OLD_PATHS:-}" = refuse ] && return 0
+  [ -n "$FR_DECISION_LIB_DIR" ] || return 0
+  _fr_version_line "$FR_DECISION_LIB_DIR/../../.claude-plugin/plugin.json" \
+    '^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"' ||
+    _fr_version_line "$FR_DECISION_LIB_DIR/../VERSION" '^[[:space:]]*' ||
+    return 0
+  _fr_rmajor=${FR_REFUSE_FROM%%.*}
+  _fr_rminor=${FR_REFUSE_FROM#*.}
+  [ $((10#$_fr_vmajor)) -gt "$_fr_rmajor" ] && return 0
+  [ $((10#$_fr_vmajor)) -eq "$_fr_rmajor" ] && [ $((10#$_fr_vminor)) -ge "$_fr_rminor" ] && return 0
+  return 1
+}
+
 # The quiet switch's locations, newest first (spec 2026-11-19-event-driven-a-la-carte
 # S1 R5, R13): `.fr/settings.yaml` on `fr-config`, then the old root `settings.yaml` on
 # `fr`. The OpenCode plugin's `SWITCH_LOCATIONS` (marker.ts) is the same list, and
@@ -407,7 +452,7 @@ fr_switch_ref_maybe() {
 }
 
 # _fr_read_switch <toplevel> — sets `_fr_switch` to the switch's text: the file at
-# `FR_SWITCH_NEW`, else the one at `FR_SWITCH_OLD` (R13). Non-zero when neither can be
+# `FR_SWITCH_NEW`, else (before fr 9.2 only) the one at `FR_SWITCH_OLD` (R13). Non-zero when neither can be
 # read. Two files that are both there and differ (by blob, so byte for byte, as fr
 # compares them, R6) set a text `_fr_switch_enabled` reads as fr-enabled and never as
 # canonical quiet: the repo is gated and no quiet worktree is a write target (fail
@@ -415,6 +460,16 @@ fr_switch_ref_maybe() {
 _fr_read_switch() {
   _fr_snew=$("$FR_GIT_BIN" -C "$1" rev-parse --verify --quiet "$FR_SWITCH_NEW" 2>/dev/null) || _fr_snew=""
   _fr_sold=$("$FR_GIT_BIN" -C "$1" rev-parse --verify --quiet "$FR_SWITCH_OLD" 2>/dev/null) || _fr_sold=""
+  if _fr_transition_ended; then
+    # Past the end only the new switch is read (R7). An old one alone still makes the repo
+    # fr-enabled, but never quiet, so its worktrees are no write targets (R8, fail closed).
+    if [ -z "$_fr_snew" ]; then
+      [ -n "$_fr_sold" ] || return 1
+      _fr_switch='placement: only the old switch'
+      return 0
+    fi
+    _fr_sold=""
+  fi
   if [ -n "$_fr_snew" ] && [ -n "$_fr_sold" ] && [ "$_fr_snew" != "$_fr_sold" ]; then
     _fr_switch='placement: two switches that differ'
     return 0
@@ -762,6 +817,7 @@ fr_switch_differ_note() {
   while [ ! -d "$_fr_dir" ] && [ "$_fr_dir" != "/" ] && [ "$_fr_dir" != "." ]; do
     _fr_dir=$(dirname "$_fr_dir")
   done
+  _fr_transition_ended && return 0 # no old copy is kept in step past fr 9.2 (R7)
   _fr_rtop=$(_fr_toplevel_of "$_fr_dir") || return 0
   fr_switch_ref_maybe "$_fr_rtop" || return 0
   fr_git_resolve || return 0
@@ -967,9 +1023,12 @@ fr_isolation_decide_edit() {
   if (_fr_placement_write_target "$_fr_rtop"); then return 0; fi
 
   # `.fr/isolation-allow` can exempt specific paths (S1 R8), read from the working tree
-  # only, never a ref; `.fr-isolation-allow` is the fallback while it is absent (R13).
+  # only, never a ref; `.fr-isolation-allow` is the fallback while it is absent (R13),
+  # before fr 9.2 only (spec 2026-11-28-s1-followups R7).
   _fr_allow="$_fr_rtop/.fr/isolation-allow"
-  [ -f "$_fr_allow" ] || _fr_allow="$_fr_rtop/.fr-isolation-allow"
+  if [ ! -f "$_fr_allow" ] && ! _fr_transition_ended; then
+    _fr_allow="$_fr_rtop/.fr-isolation-allow"
+  fi
   if [ -f "$_fr_allow" ]; then
     _fr_rdir=$(cd "$_fr_dir" 2>/dev/null && pwd -P) || _fr_rdir="$_fr_dir"
     _fr_rfile="$_fr_rdir${_fr_file#"$_fr_dir"}"
