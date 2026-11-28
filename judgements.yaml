@@ -14492,6 +14492,8 @@ batches:
     pr: 1762
     head: f0df0c3641018589748ae302a16b386b2976dafe
     patch_id: 781ed53a261b72e229dd4b380e3a965e5a085bcf
+  - kind: post_merge
+    at: '2026-11-28T11:28:31.693889Z'
 - id: ci-hygiene
   title: CI hygiene sweep
   ids:
@@ -16377,6 +16379,11 @@ queues:
     patch_id: 781ed53a261b72e229dd4b380e3a965e5a085bcf
     base: c4e69ecd007fb9f1e1f6cb942dc05e3bc8179e69
     parent: c4e69ecd007fb9f1e1f6cb942dc05e3bc8179e69
+  - kind: queue_land
+    at: '2026-11-28T11:27:35.413982Z'
+    main: 9aefd594f5428890eb36037d26e5caa92fb54ef3
+    entries:
+    - batch: silent-failures
 queue_requests:
 - kind: queue_add
   at: '2026-11-27T15:25:05.595235Z'
@@ -16437,5 +16444,12 @@ queue_requests:
   repo: derio-net/super-fr
   scope: s-f7ea4061
   pr: 1762
+  by: YiannisDermitzakis
+  preapproved: true
+- kind: queue_add
+  at: '2026-11-28T11:28:37.821661Z'
+  repo: derio-net/super-fr
+  scope: s-f7ea4061
+  pr: 1760
   by: YiannisDermitzakis
   preapproved: true
