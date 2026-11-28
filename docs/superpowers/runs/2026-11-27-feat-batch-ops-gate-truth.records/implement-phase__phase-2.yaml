@@ -81,5 +81,15 @@ journal:
       Six pages beyond the four the plan names cover touched paths (fr-acceptance, fr-triage,
       index, gate-backfill, fr-brainstorming-and-plan, and the reference page); each was
       stamped after checking its claims still hold.
+  - kind: discovery
+    id: p2-fast-tier-skill-length
+    phase: 2
+    title: the fast tier caught fr-devops-gate SKILL.md over its 120-line budget
+    body: |
+      The fast tier (9696 passed, 1 failed, 57 min on a loaded host) failed only
+      test_skill_validation::test_under_120_lines[fr-devops-gate]: the new rows section
+      took the skill to 131 lines. The section was folded into one paragraph (115 lines),
+      the mirrors re-synced, and the skill's tests (validation, settings, both mirror
+      tripwires, tool neutrality, README sync, CLI smoke) re-ran green: 202 passed.
 resolves: []
 evidence: {}
