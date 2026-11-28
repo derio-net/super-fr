@@ -382,3 +382,73 @@ dod.py reuses gate_items, run_exit, the plan parser and the owed fold; the only 
 ### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
 
 dod_cmd is one command over definition_of_done and dod_lines, loading the run through run_cmd's own _load_or_exit; nothing repeated to fold
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1 created=2026-11-28T07:05:41+00:00 phase=3 state=open review_scope=in -->
+### p3-r1 · finding [open] (reviewer: in scope) · The stage's final line let PR-head owed resolutions and manual-phase ticks discharge the owed and manual groups (phase 3)
+
+R12's head exclusion reached only gate_items (dod.py:119-143,161-193; gate.py _say_done).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2 created=2026-11-28T07:05:41+00:00 phase=3 state=open review_scope=in -->
+### p3-r2 · finding [open] (reviewer: in scope) · fr run dod was documented as changing nothing, but run is not a read-only command (phase 3)
+
+trigger.py:93-105: the entry gate may migrate first; the run group's host-side refusal applies.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3 created=2026-11-28T07:05:41+00:00 phase=3 state=open review_scope=in -->
+### p3-r3 · finding [open] (reviewer: in scope) · A recorded but missing plan silently dropped manual phases and plan-journal owed entries (phase 3)
+
+dod.py:138-142: run_plan_dir None gave an empty group, a fail-open complete.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4 created=2026-11-28T07:05:41+00:00 phase=3 state=open review_scope=out -->
+### p3-r4 · finding [open] (reviewer: out of scope) · _say_done catches only DodError and StageFailed (phase 3)
+
+gate.py ~1441: an unexpected exception would crash after all stages ran; no concrete case traced.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5 created=2026-11-28T07:05:41+00:00 phase=3 state=open review_scope=in -->
+### p3-r5 · finding [open] (reviewer: in scope) · No tests for head-carried resolutions or ticks inside the stage, nor for a recorded but missing plan (phase 3)
+
+Both would have caught p3-r1 and p3-r3.
+
+<!-- fr:journal kind=finding scope=plan id=p3-sec-r1 created=2026-11-28T07:05:41+00:00 phase=3 state=open review_scope=in -->
+### p3-sec-r1 · finding [open] (reviewer: in scope) · The head's manual-tick lookup checked only the live plan location (phase 3)
+
+Automated security review of gate.py: run_plan_dir can resolve the archived location too, so a head carrying the plan there escaped the exclusion.
+
+<!-- fr:journal kind=decision scope=plan id=p3-head-manual-tick-rule created=2026-11-28T07:05:41+00:00 phase=3 -->
+### p3-head-manual-tick-rule · decision · A manual phase counts as ticked by the PR head when the head's copy is ticked with the same state block (phase 3)
+
+The plan does not exist on the base, so ticks cannot be compared with it. A tick or re-tick on the ops branch changes the state block and counts; one identical to the head's copy proves nothing inside the stage.
+
+<!-- fr:journal kind=review scope=plan id=review-phase-3 created=2026-11-28T07:05:41+00:00 phase=3 -->
+### review-phase-3 · review · Phase 3 review (Definition of Done): four in-scope findings and one security finding fixed, one out of scope (phase 3)
+
+Independent review of the phase-3 diff (80a2995..HEAD) against spec R17-R20, plus an automated security review of gate.py.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r1-resolved created=2026-11-28T07:05:41+00:00 phase=3 state=fixed resolves=p3-r1 -->
+### p3-r1-resolved · finding [fixed] · resolves p3-r1: The stage's final line let PR-head owed resolutions and manual-phase ticks discharge the owed and manual groups (phase 3)
+
+4368956ba: definition_of_done takes exclude_entries and exclude_manual_ticks; _say_done passes head_entry_ids and head_manual_ticks.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved created=2026-11-28T07:05:41+00:00 phase=3 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved · finding [fixed] · resolves p3-r2: fr run dod was documented as changing nothing, but run is not a read-only command (phase 3)
+
+16c397225: docstring and docs say it writes no artifact itself, may migrate first and runs host-side; a test pins the devcontainer refusal.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r3-resolved created=2026-11-28T07:05:41+00:00 phase=3 state=fixed resolves=p3-r3 -->
+### p3-r3-resolved · finding [fixed] · resolves p3-r3: A recorded but missing plan silently dropped manual phases and plan-journal owed entries (phase 3)
+
+4368956ba: a recorded plan neither live nor archived raises DodError (exit 2, cannot be read).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r5-resolved created=2026-11-28T07:05:41+00:00 phase=3 state=fixed resolves=p3-r5 -->
+### p3-r5-resolved · finding [fixed] · resolves p3-r5: No tests for head-carried resolutions or ticks inside the stage, nor for a recorded but missing plan (phase 3)
+
+4368956ba + 45b6cf3a3: tests in test_run_dod.py, test_dod_cmd.py and test_ops_gate.py.
+
+<!-- fr:journal kind=finding scope=plan id=p3-sec-r1-resolved created=2026-11-28T07:05:41+00:00 phase=3 state=fixed resolves=p3-sec-r1 -->
+### p3-sec-r1-resolved · finding [fixed] · resolves p3-sec-r1: The head's manual-tick lookup checked only the live plan location (phase 3)
+
+30c4b4378: the head copy is looked up at the live and archived locations; an unreadable phase file is StageFailed.
+
+<!-- fr:journal kind=finding scope=plan id=p3-r4-resolved created=2026-11-28T07:05:41+00:00 phase=3 state=open resolves=p3-r4 out_of_scope=true -->
+### p3-r4-resolved · finding [out-of-scope] · resolves p3-r4: _say_done catches only DodError and StageFailed (phase 3)
+
+A robustness note with no traced exception; the caught set matches _owed_items.
