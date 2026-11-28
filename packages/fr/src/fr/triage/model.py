@@ -105,7 +105,12 @@ from fr.triage.stage import Stage, derive_stage
 # 21 adds (2026-11-27-board-session-state R4) per-config `lane_owners`, the logins that own each
 # Needs-you lane: `to_json` dumps it, which a closed-world schema-20 reader rejects; a file below
 # 21 reads it as empty, so every lane shows `owner: unassigned` until the next collect.
-FACTS_SCHEMA: Final[int] = 21
+# 22 marks (2026-11-28-triage-privacy R4, R6) two changes of what collect stores, with no new
+# field: an issue's `content_digest` now pins the issue's outside comments with its title and
+# body (admit markers are version 2), and a PR's title is kept only for a trusted author. A file
+# below 22 loads with every issue's admission unread and its ineligible issues' text, and every
+# untrusted PR's title, withheld, so a `ready-fr` issue in it is ineligible until the next collect.
+FACTS_SCHEMA: Final[int] = 22
 FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
 # The version this fr WRITES: every engine write stamps 14 (the `conflict` event's `onto`
 # and `reissue`, 2026-11-24-wave-queue-gaps R16; 13 was the wave merge queue's
@@ -1835,16 +1840,17 @@ def load_facts(path: Path) -> Facts:
         facts = Facts.model_validate(_check_schema(path, data, FACTS_READS, "re-run collect"))
     except ValidationError as exc:
         raise TriageError(f"{path}: invalid facts: {exc}") from exc
-    if facts.schema_ < 17:
+    if facts.schema_ < 22:
         # A file written before the association was read kept an outside author's body
-        # (triage-intake R3), and one written before 16 kept every ineligible issue's title
-        # and the text of issues the label alone admitted (2026-11-22-triage-hardening R1):
-        # judge it as collect does, so no reader sees it.
-        from fr.triage.collect import _withhold_untrusted_text
+        # (triage-intake R3), one written before 16 kept every ineligible issue's title
+        # and the text of issues the label alone admitted (2026-11-22-triage-hardening R1),
+        # and one below 22 holds digests that did not pin comments and PR titles of any
+        # author (2026-11-28-triage-privacy R4, R6): judge it as collect does, with every
+        # admission unread, so no reader sees outsider text.
+        from fr.triage.collect import _withhold_untrusted
 
-        facts = facts.model_copy(
-            update={"issues": _withhold_untrusted_text(facts.issues, facts.config, facts.viewer)}
-        )
+        unread = [i.model_copy(update={"admit_read": False}) for i in facts.issues]
+        facts = _withhold_untrusted(facts.model_copy(update={"issues": unread}))
     return facts
 
 

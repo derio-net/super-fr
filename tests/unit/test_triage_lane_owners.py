@@ -30,8 +30,8 @@ DELIVERED_PR = pr(
 )
 
 
-def test_the_facts_schema_is_21() -> None:
-    assert FACTS_SCHEMA == 21
+def test_the_facts_schema_is_22() -> None:
+    assert FACTS_SCHEMA == 22
 
 
 def test_lane_owners_parse_and_default_to_empty_lists() -> None:

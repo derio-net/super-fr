@@ -30,7 +30,7 @@ from fr.commands.triage_cmd import (
 )
 from fr.triage.errors import TriageError
 from fr.triage.model import Scope
-from fr.triage.privacy import guard_state
+from fr.triage.privacy import durable_files, guard_state
 from fr.triage.scope_config import load_durable, scope_id
 from fr.triage.state_ref import fetch_state, push_state, read_base, ref_name
 from fr.triage.state_sync import (
@@ -107,7 +107,13 @@ def export_command(
         state_repo = load_durable(target).state_repo
         if state_repo is not None:
             client = triage_cmd.make_visibility_client()
-            guard_state(target, scope=scope, state_repo=state_repo, client_for=lambda _r: client)
+            guard_state(
+                target,
+                scope=scope,
+                state_repo=state_repo,
+                client_for=lambda _r: client,
+                carried=durable_files(target),
+            )
         report = export_state(
             target,
             to,

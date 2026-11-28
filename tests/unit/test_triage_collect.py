@@ -1300,12 +1300,21 @@ def test_collect_buckets_a_cancelled_check_as_pending(check: dict[str, Any], buc
 # ------------------------------- withheld titles, pinned admission (2026-11-22 R1, R4, R5, R7)
 
 
-def _admit_comment(title: str, body: str, *, author: str = "operator", at: str) -> dict[str, Any]:
+def _admit_comment(
+    title: str,
+    body: str,
+    *,
+    author: str = "operator",
+    at: str,
+    comments: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     from fr.triage.admit import admit_marker, content_digest
 
+    comments = comments or []
     return {
         "author": author,
-        "body": admit_marker(content_digest(title, body)),
+        "body": admit_marker(content_digest(title, body, comments=comments, pinned_authors=())),
+        "association": "OWNER",  # a maintainer's marker is no pinned comment
         "created_at": at,
         "id": 7,
     }
@@ -1329,7 +1338,9 @@ def test_a_ready_fr_issue_with_a_trusted_marker_over_its_full_content_is_eligibl
     forge = _assoc_forge([raw], comments={(_OUTSIDE, 1): [marker]})
     facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
     (issue,) = facts.issues
-    assert issue.content_digest == content_digest(raw["title"], long_body)
+    assert issue.content_digest == content_digest(
+        raw["title"], long_body, comments=(), pinned_authors=()
+    )
     assert issue.admit_digest == issue.content_digest and issue.admit_read
     assert issue_reason(issue, facts) is None
     assert issue.title == raw["title"] and len(issue.body) == BODY_LIMIT
@@ -1346,6 +1357,117 @@ def test_a_ready_fr_issue_edited_after_its_marker_is_ineligible() -> None:
     reason = issue_reason(issue, facts) or ""
     assert "edited after admission" in reason and "fr triage admit" in reason
     assert (issue.title, issue.body) == ("", "")
+
+
+def _outside_comment(text: str = "hello", *, id: int = 9) -> dict[str, Any]:
+    return {
+        "author": "carol",
+        "association": "NONE",
+        "body": text,
+        "created_at": "2026-09-19T00:00:00Z",
+        "id": id,
+    }
+
+
+def test_a_marker_over_title_body_and_its_outside_comment_is_eligible() -> None:
+    from fr.triage.intake import issue_reason
+
+    raw = _by(1, "eve", labels=["ready-fr"], body="b", authorAssociation="CONTRIBUTOR")
+    note = _outside_comment()
+    marker = _admit_comment(raw["title"], "b", at="2026-09-20T00:00:00Z", comments=[note])
+    forge = _assoc_forge([raw], comments={(_OUTSIDE, 1): [note, marker]})
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    (issue,) = facts.issues
+    assert issue_reason(issue, facts) is None and issue.body == "b"
+
+
+@pytest.mark.parametrize("change", ["second", "edit"])
+def test_a_pinned_comment_added_or_edited_after_admission_voids_it(change: str) -> None:
+    from fr.triage.intake import issue_reason
+
+    raw = _by(1, "eve", labels=["ready-fr"], body="b", authorAssociation="CONTRIBUTOR")
+    note = _outside_comment()
+    marker = _admit_comment(raw["title"], "b", at="2026-09-20T00:00:00Z", comments=[note])
+    live = (
+        [note, _outside_comment("more", id=10)]
+        if change == "second"
+        else [_outside_comment("edited")]
+    )
+    forge = _assoc_forge([raw], comments={(_OUTSIDE, 1): [*live, marker]})
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    (issue,) = facts.issues
+    reason = issue_reason(issue, facts) or ""
+    assert "edited after admission: run fr triage admit" in reason and "again" in reason
+    assert (issue.title, issue.body) == ("", "")
+
+
+def test_a_trusted_v1_marker_alone_is_no_trusted_marker() -> None:
+    from fr.triage.intake import issue_reason
+
+    raw = _by(1, "eve", labels=["ready-fr"], body="b", authorAssociation="CONTRIBUTOR")
+    v1 = {
+        "author": "operator",
+        "association": "OWNER",
+        "body": f'<!-- fr-admit:{{"v":1,"digest":"sha256:{"a" * 64}"}} -->',
+        "created_at": "2026-09-20T00:00:00Z",
+        "id": 7,
+    }
+    forge = _assoc_forge([raw], comments={(_OUTSIDE, 1): [v1]})
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    reason = issue_reason(facts.issues[0], facts) or ""
+    assert "fr triage admit" in reason and "edited after admission" not in reason
+
+
+def test_an_issue_no_clause_reads_comments_for_has_no_content_digest() -> None:
+    forge = _assoc_forge(
+        [_by(1, "eve", body="x", authorAssociation="CONTRIBUTOR"), _by(2, "operator")]
+    )
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    assert [i.content_digest for i in facts.issues] == [None, None]
+    assert forge.called("list_issue_comments") == []
+
+
+def test_a_viewed_issue_gets_the_comment_pinned_digest_too() -> None:
+    from fr.triage.admit import content_digest
+
+    viewed = {**_viewed(5, "eve"), "labels": [{"name": "ready-fr"}]}
+    note = _outside_comment()
+    forge = _assoc_forge(
+        [_by(1, "operator")],
+        associations={_OUTSIDE: {5: "CONTRIBUTOR"}},
+        comments={(_OUTSIDE, 5): [note]},
+    )
+    forge.closed = {(_OUTSIDE, 5): viewed}
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW, judged=["outside#5"])
+    issue = next(i for i in facts.issues if i.number == 5)
+    assert issue.content_digest == content_digest(
+        viewed["title"], "text", comments=[note], pinned_authors=()
+    )
+
+
+def test_a_schema_21_ready_fr_issue_loads_unread_and_withheld(tmp_path: Path) -> None:
+    from fr.triage.admit import content_digest
+    from fr.triage.intake import issue_reason
+    from fr.triage.model import load_facts
+
+    raw = _by(1, "eve", labels=["ready-fr"], body="b", authorAssociation="CONTRIBUTOR")
+    marker = _admit_comment(raw["title"], "b", at="2026-09-20T00:00:00Z")
+    forge = _assoc_forge([raw], comments={(_OUTSIDE, 1): [marker]})
+    doc = collect_facts(forge, _ASSOC_SCOPE, now=NOW).to_json()
+    doc["schema"] = 21
+    (issue,) = doc["issues"]
+    digest = content_digest(
+        raw["title"], "b", comments=(), pinned_authors=()
+    )  # what a schema-21 writer stored
+    issue.update(content_digest=digest, admit_digest=digest, admit_read=True)
+    issue.update(title=raw["title"], body="b")
+    path = tmp_path / "facts.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    loaded = load_facts(path)
+    (got,) = loaded.issues
+    assert got.admit_read is False
+    assert (got.title, got.body) == ("", "")
+    assert issue_reason(got, loaded) is not None
 
 
 def test_a_member_authored_ready_fr_issue_reads_its_association_and_no_comments() -> None:
@@ -1517,3 +1639,91 @@ def test_a_viewed_ineligible_issue_keeps_no_title() -> None:
     facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW, judged=["outside#5"])
     issue = next(i for i in facts.issues if i.number == 5)
     assert (issue.title, issue.body) == ("", "")
+
+
+# ------------------------------- PR titles withheld (2026-11-28-triage-privacy R6)
+
+
+def _pr_by(
+    number: int, author: str | None, *, closes: int | None = None, state: str = "OPEN"
+) -> dict[str, Any]:
+    raw = _pr_closing(owner="example-org", name="outside", number=closes or 1, pr_number=number)
+    raw["title"] = f"title of #{number}"
+    raw["state"] = state
+    raw["author"] = {"login": author} if author else None
+    if closes is None:
+        raw["closingIssuesReferences"] = []
+    return raw
+
+
+def test_an_outside_authors_pr_is_stored_with_no_title_in_every_list() -> None:
+    forge = _assoc_forge([_by(1, "operator")])
+    forge.prs[_OUTSIDE] = [
+        _pr_by(10, "eve"),  # unlinked, open: `prs`
+        _pr_by(11, "eve", closes=1),  # an issue's linked PR
+        _pr_by(12, "operator"),  # the viewer keeps its title
+        _pr_by(13, None),  # an author that was not read
+    ]
+    forge.gated = {
+        _OUTSIDE: [{**_pr_by(14, "eve", state="MERGED"), "labels": [{"name": "gate:tester"}]}]
+    }
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW)
+    by = {p.number: p.title for p in facts.prs}
+    assert by == {10: "", 12: "title of #12", 13: ""}
+    assert [(p.number, p.title) for p in facts.issues[0].prs] == [(11, "")]
+    assert [(p.number, p.title) for p in facts.gated_prs] == [(14, "")]
+
+
+def test_a_judged_pr_past_the_list_is_withheld_unless_its_author_is_trusted() -> None:
+    def pull(number: int, author: str) -> dict[str, Any]:
+        return {
+            **_viewed(number, author),
+            "title": "outsider text",
+            "url": f"https://github.com/{_OUTSIDE}/pull/{number}",
+        }
+
+    forge = _assoc_forge([_by(1, "operator")])
+    forge.closed = {(_OUTSIDE, 5): pull(5, "eve"), (_OUTSIDE, 6): pull(6, "operator")}
+    forge.pr_views = {(_OUTSIDE, n): {"state": "MERGED", "draft": False} for n in (5, 6)}
+    facts = collect_facts(forge, _ASSOC_SCOPE, now=NOW, judged=["outside#5", "outside#6"])
+    assert {p.number: p.title for p in facts.judged_prs} == {5: "", 6: "outsider text"}
+
+
+def test_the_withholding_pass_covers_batch_prs_and_compares_logins_case_insensitively() -> None:
+    from fr.triage.collect import _withhold_untrusted
+    from fr.triage.model import PullRequest, TriageConfig
+
+    def pr(n: int, author: str | None) -> PullRequest:
+        return PullRequest(
+            repo=_OUTSIDE, number=n, title="t", state="OPEN", is_draft=False, url="u", author=author
+        )
+
+    facts = Facts(
+        schema=FACTS_SCHEMA,
+        scope="s",
+        kind="repo",
+        collected_at="2026-11-01T00:00:00+00:00",
+        repos=[_OUTSIDE],
+        issues=[],
+        viewer="Operator",
+        config={_OUTSIDE: TriageConfig(pr_authors=["Release-Bot"])},
+        batch_prs=[pr(1, "eve"), pr(2, "RELEASE-bot"), pr(3, "operator")],
+    )
+    got = _withhold_untrusted(facts)
+    assert [p.title for p in got.batch_prs] == ["", "t", "t"]
+
+
+def test_a_schema_21_file_loads_with_outside_pr_titles_withheld(tmp_path: Path) -> None:
+    from fr.triage.model import load_facts
+
+    forge = _assoc_forge([_by(1, "operator")])
+    forge.prs[_OUTSIDE] = [_pr_by(10, "eve"), _pr_by(11, "operator")]
+    doc = collect_facts(forge, _ASSOC_SCOPE, now=NOW).to_json()
+    doc["schema"] = 21
+    for pr in doc["prs"]:
+        pr["title"] = f"what a schema-21 writer kept for #{pr['number']}"
+    path = tmp_path / "facts.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    titles = {p.number: p.title for p in load_facts(path).prs}
+    # The outsider's title is withheld; the viewer's (a trusted author) survives the load.
+    assert titles == {10: "", 11: "what a schema-21 writer kept for #11"}

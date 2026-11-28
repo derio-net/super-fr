@@ -13,7 +13,7 @@ implementing the reads, not an edit to the collector (spec
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -491,8 +491,6 @@ def _issue(repo: str, raw: dict[str, Any], prs: list[PullRequest], *, state: Iss
         prs=prs,
         author=_login(raw),
         author_association=str(raw.get("authorAssociation") or "").upper() or None,
-        # Over the forge's full record, before `_body` cuts it (2026-11-22 R3, R5).
-        content_digest=content_digest(raw["title"], body),
     )
 
 
@@ -584,6 +582,42 @@ def _withhold_untrusted_text(
         withheld = reason and (issue.body or issue.title)
         out.append(issue.model_copy(update={"title": "", "body": ""}) if withheld else issue)
     return out
+
+
+def _withhold_untrusted_pr_titles(facts: Facts) -> Facts:
+    """*facts* with every PR's title cleared unless its author is in the claim-trust set of
+    the PR's repo (the user collect ran as, and `pr_authors`), compared case-insensitively;
+    a PR whose author was not read keeps none (2026-11-28-triage-privacy R6). Covers every
+    PR facts hold: the top-level lists and each issue's linked PRs."""
+
+    def keep(pr: PullRequest) -> PullRequest:
+        trusted = claim_trusted(facts.config_for(pr.repo), facts.viewer)
+        if not pr.title or (pr.author is not None and pr.author.lower() in trusted):
+            return pr
+        return pr.model_copy(update={"title": ""})
+
+    return facts.model_copy(
+        update={
+            "prs": [keep(p) for p in facts.prs],
+            "gated_prs": [keep(p) for p in facts.gated_prs],
+            "batch_prs": [keep(p) for p in facts.batch_prs],
+            "judged_prs": [keep(p) for p in facts.judged_prs],
+            "issues": [
+                i.model_copy(update={"prs": [keep(p) for p in i.prs]}) if i.prs else i
+                for i in facts.issues
+            ],
+        }
+    )
+
+
+def _withhold_untrusted(facts: Facts) -> Facts:
+    """*facts* with every outsider's text withheld: issue titles and bodies, and PR titles.
+    The one pass collect writes through and `load_facts` of an older schema runs
+    (2026-11-28-triage-privacy R4, R6)."""
+    facts = facts.model_copy(
+        update={"issues": _withhold_untrusted_text(facts.issues, facts.config, facts.viewer)}
+    )
+    return _withhold_untrusted_pr_titles(facts)
 
 
 def _judged_elsewhere(
@@ -756,6 +790,7 @@ def collect_facts_counted(
     associations: Associations = {}
     ignored: dict[str, tuple[str, ...]] = {}
     comment_facts: dict[tuple[str, int], CommentFacts] = {}
+    open_cut: set[str] = set()  # repos whose open-PR list returned `pr_limit` records
     closed_hits: list[StaleInProgress] = []
     gated: list[PullRequest] = []
     gated_unread: list[GatedUnread] = []
@@ -766,6 +801,8 @@ def collect_facts_counted(
             issues = forge.list_issues(repo=repo, state="open", limit=issue_limit)
             prs = forge.list_prs(repo=repo, state="all", limit=pr_limit)
             current = forge.list_open_prs(repo=repo, limit=pr_limit)
+            if len(current) >= pr_limit:
+                open_cut.add(repo)  # a reopened PR may sit past the cut (R10)
             repo_config, dropped = read_config_lenient(forge, repo)
             trusted = claim_trusted(repo_config or TriageConfig(), viewer)
             issues = _with_associations(
@@ -779,7 +816,14 @@ def collect_facts_counted(
             # Kept local until the repo succeeds: a later claim-read failure skips the repo,
             # and none of its issues may then reach facts (review p1-r2).
             repo_comments = {
-                (repo, raw["number"]): _comment_facts(forge, repo, raw, trusted) for raw in issues
+                (repo, raw["number"]): _comment_facts(
+                    forge,
+                    repo,
+                    raw,
+                    trusted,
+                    pr_authors=(repo_config or TriageConfig()).pr_authors,
+                )
+                for raw in issues
             }
         except TriageError as exc:
             # A forge failure, or a config the repo's owner broke (review r2p-f4):
@@ -860,7 +904,8 @@ def collect_facts_counted(
     finished_prs = {
         (p.repo.lower(), p.number): p
         for p in (previous.judged_prs if previous else [])
-        if p.state != "OPEN"
+        # A CLOSED PR may have been reopened past a cut open-PR list: view it again (R10).
+        if p.state == "MERGED" or (p.state == "CLOSED" and p.repo not in open_cut)
     }
     for repo, number in _judged_elsewhere(judged, open_keys, [*collected, *sorted(keep)]):
         if prior is not None and repo in keep:
@@ -911,6 +956,7 @@ def collect_facts_counted(
                     is_draft=bool(view.get("draft")),
                     url=str(raw["url"]),
                     head_ref=str(view.get("head_ref") or ""),
+                    author=_login(raw),
                 )
             )
             continue
@@ -924,13 +970,21 @@ def collect_facts_counted(
             associations,
         )
         trusted_here = intake_trusted(config.get(repo, TriageConfig()), viewer)
-        admission = _comment_facts(forge, repo, raw, trusted_here, claims=False)
+        admission = _comment_facts(
+            forge,
+            repo,
+            raw,
+            trusted_here,
+            claims=False,
+            pr_authors=config.get(repo, TriageConfig()).pr_authors,
+        )
         out.append(
             _issue(repo, raw, linked(repo, number), state=state).model_copy(
                 update={
                     "admit_read": admission.admit_read,
                     "admit_digest": admission.admit_digest,
                     "admit_unread": admission.admit_unread,
+                    "content_digest": admission.content_digest,
                 }
             )
         )
@@ -973,7 +1027,7 @@ def collect_facts_counted(
         kind=scope.kind,
         collected_at=now.isoformat(timespec="seconds"),
         repos=repos,
-        issues=_withhold_untrusted_text(out, config, viewer),
+        issues=out,
         prs=unlinked,
         skipped=skipped,
         unviewed=unviewed,
@@ -991,7 +1045,7 @@ def collect_facts_counted(
         gated_unread=gated_unread,
         ignored_claims=ignored_claims,
     )
-    return facts, CollectStats(
+    return _withhold_untrusted(facts), CollectStats(
         viewed=viewed, carried=carried_n, ignored=ignored, carried_repos=keep
     )
 
@@ -1259,6 +1313,9 @@ class CommentFacts:
     admit_read: bool = False
     admit_digest: str | None = None
     admit_unread: str | None = None
+    # The digest over the forge's full title and body and the issue's pinned comments
+    # (2026-11-28-triage-privacy R4); None when the comments were not read for admission.
+    content_digest: str | None = None
 
     def issue_update(self) -> dict[str, Any]:
         """The `Issue` fields this read sets."""
@@ -1268,6 +1325,7 @@ class CommentFacts:
             "admit_read": self.admit_read,
             "admit_digest": self.admit_digest,
             "admit_unread": self.admit_unread,
+            "content_digest": self.content_digest,
         }
 
 
@@ -1300,6 +1358,7 @@ def _comment_facts(
     trusted: frozenset[str],
     *,
     claims: bool = True,
+    pr_authors: Collection[str] = (),
 ) -> CommentFacts:
     """One comment read per issue that needs it (`_comment_needs`), none for the rest.
 
@@ -1320,7 +1379,20 @@ def _comment_facts(
             raise
         return CommentFacts(admit_unread=_unread(exc))
     admission: dict[str, Any] = (
-        {"admit_read": True, "admit_digest": latest_admit(comments, trusted)} if admit else {}
+        {
+            "admit_read": True,
+            "admit_digest": latest_admit(comments, trusted),
+            # Over the forge's full record, before `_body` cuts it, with the comments an
+            # admission pins (2026-11-28-triage-privacy R1, R4).
+            "content_digest": content_digest(
+                str(raw["title"]),
+                str(raw.get("body") or ""),
+                comments=comments,
+                pinned_authors=pr_authors,
+            ),
+        }
+        if admit
+        else {}
     )
     if not claim:
         return CommentFacts(**admission)

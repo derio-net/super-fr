@@ -1,0 +1,99 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The privacy guard scans every carried state file for non-public repo names
+    (R8, R9)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - triage-state-scan-guard
+  tier: standard
+  files:
+  - packages/fr/src/fr/triage/privacy.py
+  - packages/fr/src/fr/triage/state_ref.py
+  - packages/fr/src/fr/triage/state_sync.py
+  - packages/fr/src/fr/commands/triage_state_cmd.py
+  - tests/unit/test_triage_privacy.py
+  - tests/unit/test_triage_state*.py
+  - docs/explainers/*.md
+  - docs/*.md
+  - docs/reference/*.md
+  - plugins/super-fr/skills/fr-triage/SKILL.md
+  - .opencode/**
+  - .hermes/**
+  - docs/acceptance/features/2026-11-28-triage-privacy.yaml
+  estimate_lines: 400
+tasks:
+- number: 1
+  title: carried_text_leaks matches non-public repo names in carried files (R8)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: in tests/unit/test_triage_privacy.py add `carried_text_leaks(files, look_for, visibility)` tests over a tmp state dir: (a) `merge-stops.json` whose reason names `acme/secret#4`, a `history/x.md` naming `https://github.com/acme/secret.git`, a `requests.yaml` prompt naming `secret#12`, and a sentence ending `acme/secret.` each yield `(path, "acme/secret")` when `acme/secret` is private; (b) `acme/secretive`, `xacme/secret`, `acme/secret-two` and `secret#` with no digits do not match; (c) with `acme/docs` public and `bob/docs` private in the look-for set, `docs#3` does not match bob's pattern but `bob/docs` does; (d) matching is case-insensitive; (e) a file that cannot be read raises with its path. Run: fail.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: in privacy.py add `carried_text_leaks` (one compiled pattern per non-public repo: `owner/name` and, unless a public look-for repo shares the name, `name#\d+`, bounded by `(?<![\w.-])` and `(?![\w-])(?!\.\w)`, `re.IGNORECASE`; files read as bytes, decoded UTF-8 with `errors="replace"`) and a `refusal` branch for a carried file: `<file> in the state directory names <repo>, which is not public, and this scope's state repo <state_repo> is public: ... Move the scope's state to a private repo, or remove that mention (cloud-triage R8)`, never quoting the matched text. Run: green.
+  - id: P2.T1.S3
+    text: |-
+      REFACTOR: keep the pattern builder a small pure function the tests can call directly; re-run the privacy tests.
+- number: 2
+  title: guard_state scans what the write carries, with the short circuits (R8, R9)
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: in tests/unit/test_triage_privacy.py add `guard_state` tests with a fake client: (a) a public state repo and a private scope repo named only in `merge-stops.json` refuses with PrivacyError naming the file and repo; the same for a fragment file and `requests.yaml`; (b) a clean directory passes; (c) a scope whose look-for repos are all public reads no carried file (patch the reader or count opens) and passes; (d) a private state repo returns before any scan; (e) an org scope with no facts.json raises VisibilityUnreadable naming `fr triage collect`; (f) a repo whose visibility the client cannot read and which a file names raises VisibilityUnreadable; (g) an export (`carried=` the durable set) does not refuse over a mention in `merge-stops.json` but does over one in `judgements.yaml` or `history/`. In tests/unit/test_triage_state*.py confirm a push through `state_ref.push_state` refuses with nothing pushed when a carried file names a private repo. Run: fail.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: in privacy.py extend `guard_state` with a `carried` argument (the list of relative file paths the write carries; default: the `REF_FILES` walk from state_ref's own entry-listing function, never following symlinks). After the existing key check, build the look-for set (facts' `repos` when facts load, else `scope.target`/`scope.repos`; an org scope with no usable facts raises VisibilityUnreadable), fill visibility as `_fill` does, return when all are public, else run `carried_text_leaks` and raise. In commands/triage_state_cmd.py pass export's carried set (the `state_sync.DURABLE_FILES`/`DURABLE_DIRS` walk). Update the privacy module docstring. Run the privacy and state test files: green.
+  - id: P2.T2.S3
+    text: |-
+      REFACTOR: one walk function lists carried files for both REF_FILES and the durable set (reuse state_ref's if it exists). Re-run tests/unit/test_triage_privacy.py tests/unit/test_triage_state*.py.
+- number: 3
+  title: Docs and rows
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      Run `uv run fr docs check --base origin/main`; for each page it names (the fr-triage explainer and any guide covering admit, the privacy guard or facts), describe the changed behaviour: an admission pins outside comments, v1 admissions need re-admitting, outside PR titles are withheld, the guard scans every carried file. If the fr-triage skill text names the admission as title-and-body only, update `plugins/super-fr/skills/fr-triage/SKILL.md` and run `scripts/sync-opencode.py` and `scripts/sync-hermes.py`. Re-run `fr docs check` until clean.
+  - id: P2.T3.S2
+    text: |-
+      Set `triage-state-scan-guard` to `ci` with its test refs through the step record's `acceptance:` section. Run the fast tier last.
+state:
+  steps:
+    P2.T1.S1:
+      state: x
+      ticked_at: '2026-11-28T16:10:09+00:00'
+      note: null
+    P2.T1.S2:
+      state: x
+      ticked_at: '2026-11-28T16:10:09+00:00'
+      note: null
+    P2.T1.S3:
+      state: x
+      ticked_at: '2026-11-28T16:10:09+00:00'
+      note: null
+    P2.T2.S1:
+      state: x
+      ticked_at: '2026-11-28T16:10:09+00:00'
+      note: null
+    P2.T2.S2:
+      state: x
+      ticked_at: '2026-11-28T16:10:09+00:00'
+      note: null
+    P2.T2.S3:
+      state: x
+      ticked_at: '2026-11-28T16:10:09+00:00'
+      note: null
+    P2.T3.S1:
+      state: x
+      ticked_at: '2026-11-28T16:10:09+00:00'
+      note: null
+    P2.T3.S2:
+      state: x
+      ticked_at: '2026-11-28T16:10:09+00:00'
+      note: null
+  completion:
+    at: '2026-11-28T16:10:09+00:00'
+    note: null
+    observed_prs: []
