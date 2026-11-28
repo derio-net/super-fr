@@ -1,0 +1,55 @@
+schema_version: 12
+run: 2026-11-28-feat-batch-tester-gate-auto-pass
+step: brainstorm
+outcome: done
+questions: {rounds: 1}
+journal:
+  - kind: discovery
+    input: true
+    id: operator-brief
+    title: "Batch tester-gate-auto-pass brief (super-fr#1764)"
+    body: |
+      Batch title: Pass a tester gate whose rows are walked, for PRs outside a batch
+
+      super-fr#1764 — triage: a gate-labelled PR outside a batch stays in Needs you · Tester after its rows are walked.
+      A merged `gate:tester` PR outside any batch reaches the board through `gated_pr_lane` (`lanes.py:68`), which reads labels only; the rows-walked auto-pass (`_gate_actions`, `batch_drive.py:1222`) runs only over a batch's ledger. So walked rows never move the card, and the hint (`lanes.py:83`) names a remedy that cannot work for it.
+      Note: Operator priority 2026-11-28: clears the Needs you · Tester column.
+      Why these belong together: Operator priority: most Needs you · Tester cards are non-batch PRs whose rows are already walked.
+  - kind: decision
+    id: q1-pass-route
+    title: "The wave driver's pass is the route for non-batch PRs"
+    body: "Operator chose: each drive pass reads the rows of every non-batch gated PR via gated_rows_at keyed on head_ref and plans the same gate-pass. Not set-status --walk."
+  - kind: decision
+    id: q2-selection
+    title: "Whole-scope drives only"
+    body: "Operator chose: a drive narrowed with --batch plans nothing for non-batch PRs."
+  - kind: decision
+    id: q3-awaiting-live
+    title: "Label row issues fr:awaiting-live, same as batches"
+    body: "Operator chose: share _gate_actions so a non-batch PR's row issues get fr:awaiting-live too."
+  - kind: decision
+    id: q4-verification
+    title: "candidate strategy, gate developer, no Test Plan"
+    body: "Operator chose: candidate walk plus CI unit tests per row; gate developer so the merge holds nothing."
+acceptance:
+  - id: loose-gated-pr-rows-walked-pass
+    capability: Triage driver
+    acceptance: A whole-scope drive pass passes each held post-merge gate of a merged PR outside any batch once every row that gate holds reads walked on the default branch, swapping its label, commenting why and closing its owed trackers, under the same rules as a batch
+    origin: [spec:2026-11-28-tester-gate-auto-pass#R1, spec:2026-11-28-tester-gate-auto-pass#R2, spec:2026-11-28-tester-gate-auto-pass#R4]
+    status: not-implemented
+    verify: none
+  - id: loose-gated-pr-awaiting-live
+    capability: Triage driver
+    acceptance: A whole-scope drive pass labels each open issue cited by a non-batch gated PR's held rows fr:awaiting-live, at most once per issue per pass across batches and such PRs
+    origin: [spec:2026-11-28-tester-gate-auto-pass#R3]
+    status: not-implemented
+    verify: none
+  - id: loose-gated-pr-no-pass-without-evidence
+    capability: Triage driver
+    acceptance: The driver passes nothing for a non-batch gated PR whose branch no run cursor names, whose rows cannot be read (reported once), or in a drive narrowed with --batch; a failed write is reported and retried next pass
+    origin: [spec:2026-11-28-tester-gate-auto-pass#R5, spec:2026-11-28-tester-gate-auto-pass#R6, spec:2026-11-28-tester-gate-auto-pass#R7]
+    status: not-implemented
+    verify: none
+emitted:
+  spec: docs/superpowers/specs/2026-11-28-tester-gate-auto-pass-design.md
+evidence: {}
