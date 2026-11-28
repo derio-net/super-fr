@@ -14,6 +14,14 @@ for a state repo that is public. Two guards call it:
   and whether or not `facts.json` exists, and an unreadable answer refuses: a repo whose
   visibility changed, or a hand-edited file, is caught before it leaves the workspace.
 
+Both guards also scan every file the write carries (R8, R9): with a public state repo and
+some look-for repo not public, a carried file (the `state_ref.REF_FILES` walk for a push, the
+`state_sync` durable set for an export) that names such a repo, as `owner/name` or as
+`name#<digits>` (the latter unless a public look-for repo shares the name), refuses, naming
+the file and the repo and never the matched text. An unreadable carried file refuses. The
+look-for set is the facts' repos (else the scope's), plus the keys' and debt repos'; an org
+scope with no usable facts cannot be listed and raises `VisibilityUnreadable`.
+
 A looping drive skips the pass on an unreadable answer and retries, nothing written.
 
 A key's repo whose visibility cannot be read never reaches a public state repo either:
@@ -24,7 +32,8 @@ state stays in the workspace.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
+import re
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +75,15 @@ def refusal(issue: str, repo: str, state_repo: str) -> str:
         f"{issue} is an issue of {repo}, which is not public, and this scope's state repo "
         f"{state_repo} is public: its state ref and exports would leak it. Keep {issue} out, "
         "or move the scope's state to a private repo (cloud-triage R8)"
+    )
+
+
+def refusal_file(file: str, repo: str, state_repo: str) -> str:
+    """THE refusal line for a carried file; it never quotes the matched text (R8)."""
+    return (
+        f"{file} in the state directory names {repo}, which is not public, and this scope's "
+        f"state repo {state_repo} is public: its state ref and exports would leak it. Move "
+        f"the scope's state to a private repo, or remove that mention (cloud-triage R8)"
     )
 
 
@@ -246,11 +264,20 @@ def state_repos(state_dir: Path) -> list[str]:
     return sorted(repos)
 
 
-def guard_state(state_dir: Path, *, scope: Scope, state_repo: str, client_for: ClientFor) -> None:
+def guard_state(
+    state_dir: Path,
+    *,
+    scope: Scope,
+    state_repo: str,
+    client_for: ClientFor,
+    carried: Sequence[str] | None = None,
+) -> None:
     """Refuse to push or export *state_dir* to *state_repo* when that would leak (R8). The
     state repo's visibility is read live first, and unreadable refuses; only when it is
     public are the keys read, their repos' visibility taken from facts (when present and
-    for this scope) or read live."""
+    for this scope) or read live. Then every file the write *carries* (default: the
+    `REF_FILES` walk; an export passes its durable set) is scanned for a mention of a repo
+    that is not public (R8, R9); nothing is read when every look-for repo is public."""
     now = live_visibility(client_for(state_repo), state_repo)
     if now is None:
         raise VisibilityUnreadable(unreadable(state_repo))
@@ -270,3 +297,97 @@ def guard_state(state_dir: Path, *, scope: Scope, state_repo: str, client_for: C
     vis[state_repo] = now
     _fill(vis, repos.values(), client_for)
     check_or_refuse(repos, state_repo, vis)
+    look_for = _look_for(scope, facts, repos)
+    _fill(vis, look_for, client_for)
+    if all(is_public(vis.get(r)) for r in look_for):
+        return
+    files = carried_files(state_dir) if carried is None else list(carried)
+    found = carried_text_leaks(files, look_for, vis, root=state_dir)
+    certain = [(f, r) for f, r in found if vis.get(r) is not None or _unnamed(r)]
+    if certain:
+        raise PrivacyError("; ".join(refusal_file(f, r, state_repo) for f, r in certain))
+    if found:
+        raise VisibilityUnreadable(unreadable_members(sorted({r for _, r in found}), state_repo))
+
+
+_BEFORE = r"(?<![\w.-])"
+_AFTER = r"(?![\w-])(?!\.\w)"
+
+
+def repo_patterns(
+    look_for: Iterable[str], visibility: Mapping[str, str | None]
+) -> dict[str, re.Pattern[str]]:
+    """repo -> the pattern that names it in text, for each look-for repo that is not public:
+    `owner/name`, and `name#<digits>` unless a public look-for repo shares the name (an
+    issue ref of that name is then the public one's). Case-insensitive, bounded so that
+    `acme/secretive`, `xacme/secret` and `acme/secret-two` do not match."""
+    repos = sorted(set(look_for))
+    public_names = {
+        r.split("/", 1)[1].lower() for r in repos if "/" in r and is_public(visibility.get(r))
+    }
+    out: dict[str, re.Pattern[str]] = {}
+    for repo in repos:
+        if is_public(visibility.get(repo)):
+            continue
+        owner, _, name = repo.partition("/")
+        alts = [] if _unnamed(repo) else [re.escape(repo) + r"(?:\.git)?"]
+        if name and name.lower() not in public_names:
+            alts.append(rf"{re.escape(name)}#\d+")
+        if alts:
+            out[repo] = re.compile(f"{_BEFORE}(?:{'|'.join(alts)}){_AFTER}", re.IGNORECASE)
+    return out
+
+
+def carried_text_leaks(
+    files: Iterable[str | Path],
+    look_for: Iterable[str],
+    visibility: Mapping[str, str | None],
+    *,
+    root: Path | None = None,
+) -> list[tuple[str, str]]:
+    """`(file, repo)` for each carried file naming a look-for repo that is not public
+    (R8), files as given, repos as the look-for set spells them. A file that cannot be read
+    is a `PrivacyError` naming it: what cannot be read cannot be shown safe."""
+    patterns = repo_patterns(look_for, visibility)
+    found: list[tuple[str, str]] = []
+    if not patterns:
+        return found
+    for file in files:
+        path = root / file if root is not None else Path(file)
+        try:
+            text = path.read_bytes().decode("utf-8", errors="replace")
+        except OSError as exc:
+            raise PrivacyError(
+                f"{file} in the state directory cannot be read ({exc.strerror or 'error'}); "
+                "refusing to write state that may name a non-public repo (cloud-triage R8)"
+            ) from exc
+        found += [(str(file), repo) for repo, pat in patterns.items() if pat.search(text)]
+    return found
+
+
+def carried_files(state_dir: Path) -> list[str]:
+    """What a state ref push carries: the `REF_FILES` walk (regular files, no symlinks)."""
+    from fr.triage.state_ref import ref_entries
+
+    return ref_entries(state_dir)
+
+
+def durable_files(state_dir: Path) -> list[str]:
+    """What a state export carries: the `state_sync` durable set, symlinks left out."""
+    from fr.triage.state_sync import durable_entries
+
+    return sorted(rel for rel, link in durable_entries(state_dir) if not link)
+
+
+def _look_for(scope: Scope, facts: Facts | None, repos: Mapping[str, str]) -> set[str]:
+    if facts is not None:
+        base = list(facts.repos)
+    elif scope.kind == "org":
+        raise VisibilityUnreadable(
+            f"cannot list the repos of the org scope {scope.name} without usable facts, and "
+            "this scope's state repo is public; run `fr triage collect` for this scope and "
+            "retry (cloud-triage R8)"
+        )
+    else:
+        base = [scope.target] if scope.kind == "repo" else list(scope.repos)
+    return {*base, *repos.values()}

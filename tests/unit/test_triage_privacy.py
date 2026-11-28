@@ -726,3 +726,181 @@ def test_a_private_state_repo_passes_a_snapshot_naming_private_repos(
     assert gh.visibility[REFS] == "private"
 
     guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda _r: gh)  # no raise
+
+
+# ------------------------------------------- carried files (cloud-triage R8, R9)
+
+PUBLIC_ONLY = 'schema: 6\ntiers: [{n: 1, title: Now}]\nissues:\n  "super-fr#1": {tier: 1}\n'
+
+
+def _clean_state(
+    tmp_path: Path, facts: Facts | None = None, with_facts: bool = True, **files: str
+) -> Path:
+    """A state dir whose judgements name only the public repo, plus *files* (name -> text)."""
+    state = tmp_path / "carried-state"
+    state.mkdir()
+    (state / "judgements.yaml").write_text(PUBLIC_ONLY, encoding="utf-8")
+    if with_facts:
+        (state / "facts.json").write_text(json.dumps((facts or _facts()).to_json()), "utf-8")
+    for name, text in files.items():
+        path = state / name.replace("__", "/")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    return state
+
+
+def _leaks(tmp_path: Path, text: str, look_for: list[str], vis: dict[str, str | None]) -> list:
+    from fr.triage.privacy import carried_text_leaks
+
+    (tmp_path / "f.txt").write_text(text, encoding="utf-8")
+    return carried_text_leaks(["f.txt"], look_for, vis, root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "stopped on example-org/secret#4",
+        "see https://github.com/example-org/secret.git",
+        "please look at secret#12 now",
+        "it is in example-org/secret.",
+        "EXAMPLE-ORG/SECRET",
+    ],
+)
+def test_carried_text_naming_a_private_repo_is_a_leak(tmp_path: Path, text: str) -> None:
+    got = _leaks(tmp_path, text, [SECRET], {SECRET: "private"})
+    assert got == [("f.txt", SECRET)]
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["example-org/secretive", "xexample-org/secret", "example-org/secret-two", "secret# none"],
+)
+def test_text_beside_a_private_repo_name_is_not_a_leak(tmp_path: Path, text: str) -> None:
+    assert _leaks(tmp_path, text, [SECRET], {SECRET: "private"}) == []
+
+
+def test_a_public_repo_sharing_the_name_keeps_its_issue_refs_out_of_the_private_pattern(
+    tmp_path: Path,
+) -> None:
+    vis = {"acme/docs": "public", "bob/docs": "private"}
+    assert _leaks(tmp_path, "docs#3", ["acme/docs", "bob/docs"], vis) == []
+    assert _leaks(tmp_path, "see bob/docs", ["acme/docs", "bob/docs"], vis) == [
+        ("f.txt", "bob/docs")
+    ]
+
+
+def test_an_unreadable_carried_file_raises_naming_it(tmp_path: Path) -> None:
+    from fr.triage.privacy import carried_text_leaks
+
+    with pytest.raises(PrivacyError, match="gone.txt"):
+        carried_text_leaks(["gone.txt"], [SECRET], {SECRET: "private"}, root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "name", ["merge-stops.json", "requests.yaml", "history__x.md", "backlog__page.md"]
+)
+def test_guard_state_refuses_a_carried_file_naming_a_private_repo(
+    tmp_path: Path, gh: FakeGhClient, name: str
+) -> None:
+    from fr.triage.privacy import guard_state
+
+    gh.visibility[REFS] = "public"
+    state = _clean_state(tmp_path, **{name: "blocked on example-org/secret#4"})
+
+    with pytest.raises(PrivacyError) as caught:
+        guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda _r: gh)
+    message = str(caught.value)
+    assert name.replace("__", "/") in message and SECRET in message
+    assert "#4" not in message  # never the matched text
+
+
+def test_guard_state_passes_a_clean_directory(tmp_path: Path, gh: FakeGhClient) -> None:
+    from fr.triage.privacy import guard_state
+
+    gh.visibility[REFS] = "public"
+    state = _clean_state(tmp_path, **{"merge-stops.json": "super-fr#1 stopped"})
+    guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda _r: gh)
+
+
+def test_all_public_look_for_repos_read_no_carried_file(
+    tmp_path: Path, gh: FakeGhClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.triage import privacy
+
+    gh.visibility.update({REFS: "public", SECRET: "public"})
+    facts = _facts({OPEN_REPO: "public", SECRET: "public"})
+    state = _clean_state(tmp_path, facts, **{"merge-stops.json": "example-org/secret#4"})
+    opened: list[object] = []
+    real = Path.read_bytes
+    monkeypatch.setattr(Path, "read_bytes", lambda self: opened.append(self) or real(self))
+    privacy.guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda _r: gh)
+    assert [p for p in opened if p.name == "merge-stops.json"] == []
+
+
+def test_a_private_state_repo_returns_before_any_scan(tmp_path: Path, gh: FakeGhClient) -> None:
+    from fr.triage.privacy import guard_state
+
+    state = _clean_state(tmp_path, **{"merge-stops.json": "example-org/secret#4"})
+    guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda _r: gh)
+
+
+def test_an_org_scope_with_no_facts_is_unreadable_naming_collect(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    from fr.triage.privacy import guard_state
+
+    gh.visibility[REFS] = "public"
+    state = tmp_path / "org-state"
+    state.mkdir()
+    with pytest.raises(VisibilityUnreadable, match="fr triage collect"):
+        guard_state(
+            state, scope=Scope("org", "example-org"), state_repo=REFS, client_for=lambda _r: gh
+        )
+
+
+def test_a_repo_whose_visibility_cannot_be_read_and_which_a_file_names_is_unreadable(
+    tmp_path: Path, gh: FakeGhClient
+) -> None:
+    from fr.triage.privacy import guard_state
+
+    gh.visibility[REFS] = "public"
+    del gh.visibility[SECRET]
+    state = _clean_state(tmp_path, with_facts=False, **{"merge-stops.json": "example-org/secret#4"})
+    with pytest.raises(VisibilityUnreadable):
+        guard_state(state, scope=SCOPE, state_repo=REFS, client_for=lambda _r: gh)
+
+
+def test_an_export_scans_the_durable_set_only(tmp_path: Path, gh: FakeGhClient) -> None:
+    from fr.triage.privacy import durable_files, guard_state
+
+    gh.visibility[REFS] = "public"
+    state = _clean_state(tmp_path, **{"merge-stops.json": "example-org/secret#4"})
+    guard_state(
+        state, scope=SCOPE, state_repo=REFS, client_for=lambda _r: gh, carried=durable_files(state)
+    )
+    (state / "history").mkdir()
+    (state / "history" / "x.md").write_text("example-org/secret", encoding="utf-8")
+    with pytest.raises(PrivacyError, match="history/x.md"):
+        guard_state(
+            state,
+            scope=SCOPE,
+            state_repo=REFS,
+            client_for=lambda _r: gh,
+            carried=durable_files(state),
+        )
+
+
+def test_a_push_naming_a_private_repo_in_a_carried_file_pushes_nothing(
+    tmp_path: Path, origin: Path, gh: FakeGhClient
+) -> None:
+    state = _workspace(tmp_path, origin)
+    state.mkdir(parents=True, exist_ok=True)
+    (state / "judgements.yaml").write_text(PUBLIC_ONLY, encoding="utf-8")
+    (state / "facts.json").write_text(json.dumps(_facts().to_json()), "utf-8")
+    write_durable(state, ScopeDurable(state_repo=OPEN_REPO))
+    (state / "merge-stops.json").write_text("example-org/secret#4", encoding="utf-8")
+
+    with pytest.raises(PrivacyError, match="merge-stops.json"):
+        _push(state, origin, OPEN_REPO, gh)
+
+    assert _ref(origin) == ""
