@@ -12949,6 +12949,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-28T10:29:08.896898Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -14347,6 +14354,13 @@ batches:
     checks:
     - ci-ok
     delivered: session
+  - kind: red_handback
+    at: '2026-11-28T10:28:59.520383Z'
+    pr: 1755
+    head: 1f72cc3208a3214016245fcdddd97ed1eb4fd378
+    checks:
+    - 2 failing check(s)
+    delivered: none
 - id: silent-failures
   title: 'Silent failures: errors that report success or lose their reason'
   ids:
