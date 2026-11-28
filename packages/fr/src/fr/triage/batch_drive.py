@@ -64,7 +64,10 @@ from fr.triage.batch_drive_types import (  # noqa: F401 - re-exported, triage-le
     ActionKind,
     Admitted,
     ChecksVerdict,
+    GatedRow,
+    GateLedger,
     LivePr,
+    LooseLedger,
     _wrong_base,
 )
 from fr.triage.claims import Claim, held_line, held_members
@@ -105,6 +108,7 @@ from fr.triage.model import (
     Facts,
     QueueRecord,
 )
+from fr.triage.pr_gates import gate_actions
 
 if TYPE_CHECKING:  # `fr.triage.readiness` imports this module; both read at run time lazily
     from fr.triage.readiness import Refused
@@ -160,35 +164,6 @@ that starts so as a status line, never a `failing-ci` Need."""
 ARCHIVED_BY_UNKNOWN_PR = 0
 """`CloseoutEvent.archived` for a close-out found archived on the default branch with
 no PR to name: every reader only asks whether `archived` is set (gh#900)."""
-
-
-@dataclass(frozen=True)
-class GatedRow:
-    """A matrix row a post-merge gate gates, as the default branch reads it (exit-gates
-    R13, R14): whether it reads `walked` there, and the issues (`owner/repo#n`) it cites."""
-
-    id: str
-    gate: str
-    walked: bool
-    issues: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class GateLedger:
-    """A landed batch's merged PR as the gate ledger (R14): its number and labels, and the
-    rows its post-merge gates gate. `rows` is None when they were not read (the board,
-    which reads no clone; an unreadable default branch): no label and no pass is planned
-    from an unknown."""
-
-    pr: int
-    labels: frozenset[str]
-    rows: tuple[GatedRow, ...] | None = None
-    # The run-level gate, and whether any row inherits it (p4-r3): a run gate no row
-    # inherits is never passed by walked rows, only by `fr gate pass`.
-    run_gate: str = "none"
-    run_gate_inherited: bool = False
-    # fr-ops R13: `devops` holds because the run's plan has ops, so walked rows never pass it.
-    ops_promoted: bool = False
 
 
 def is_gated(batch: Batch, snap: Snapshot) -> bool:
@@ -364,6 +339,8 @@ class Snapshot:
     # rows, from facts (the labels) and the default branch (the rows, driver only); and
     # the issues (`owner/repo#n`) that are open in facts without `fr:awaiting-live`.
     ledgers: Mapping[str, GateLedger] = field(default_factory=dict)
+    # Merged gated PRs no open batch delivered (2026-11-28-tester-gate-auto-pass R1)
+    loose_ledgers: tuple[LooseLedger, ...] = ()
     awaiting_unlabelled: frozenset[str] = frozenset()
     # Landed batches whose merged PR's labels could not be read (p4-r1): never closed out
     # until the ledger is known.
@@ -1220,34 +1197,8 @@ def _claim_actions(snap: Snapshot) -> list[Action]:
 
 
 def _gate_actions(batch: Batch, snap: Snapshot, labelled: set[str]) -> list[Action]:
-    """R13, R14 for one gated batch: `fr:awaiting-live` on each open issue its held gates'
-    rows cite that lacks it (once per issue per pass), then a `gate-pass` for each held
-    gate whose rows ALL read walked. A gate with no row (a run-level gate) passes only
-    explicitly, through `fr gate pass`; rows never read plan nothing."""
-    ledger = snap.ledgers[batch.id]
-    if ledger.rows is None:
-        return []
-    out: list[Action] = []
-    held = held_gates(ledger.labels)
-    rows = [r for r in ledger.rows if r.gate in held]
-    for ref in sorted({i for r in rows for i in r.issues}):
-        if ref in snap.awaiting_unlabelled and ref not in labelled:
-            labelled.add(ref)
-            out.append(Action("awaiting-live", batch.id, f"label {ref} fr:awaiting-live",
-                              pr=ledger.pr, key=ref))  # fmt: skip
-    for gate in sorted(held):
-        if gate == ledger.run_gate and not ledger.run_gate_inherited:
-            continue  # p4-r3: no row stands for the run gate, so no walk passes it
-        if gate == "devops" and ledger.ops_promoted:
-            continue  # fr-ops R13: the ops' evidence passes it, through `fr gate pass`
-        mine = [r for r in rows if r.gate == gate]
-        if mine and all(r.walked for r in mine):
-            ids = ", ".join(r.id for r in mine)
-            why = f"every row the {gate} gate gates reads walked ({ids})"
-            out.append(
-                Action("gate-pass", batch.id, f"PR #{ledger.pr}: {why}", pr=ledger.pr, gate=gate)
-            )
-    return out
+    """R13, R14 for one gated batch: `pr_gates.gate_actions` over its ledger."""
+    return gate_actions(batch.id, "", snap.ledgers[batch.id], snap.awaiting_unlabelled, labelled)
 
 
 def wave_closeout_landed(
@@ -1571,6 +1522,10 @@ def drive_pass(snap: Snapshot) -> Pass:
         if not wave_landings_done(snap, snap.repos.get(batch.id, ""), group):
             continue  # R15: the wave's one close-out starts after its last landing's post_merge
         collecting.setdefault((snap.repos.get(batch.id, ""), group), []).append(batch.id)
+    for loose in snap.loose_ledgers:  # 2026-11-28-tester-gate-auto-pass R1, R3: no batch owns it
+        actions.extend(
+            gate_actions("", loose.repo, loose.ledger, snap.awaiting_unlabelled, labelled)
+        )
     # R15: one collected close-out per wave, at most one per repo, none while one is under way.
     started: set[str] = set()
     for repo, group in sorted(collecting, key=lambda k: (k[0], k[1] is None, k[1] or 0)):
@@ -1863,6 +1818,8 @@ def action_line(action: Action, outcome: str | None = None) -> str:
         return f"{action.kind} {action.key}{where}: {outcome or action.detail}"
     if action.wave is not None:
         return f"{action.kind} wave {action.wave} {action.batch}: {outcome or action.detail}"
+    if not action.batch and action.repo:  # a merged PR outside every batch
+        return f"{action.kind} {action.repo}: {outcome or action.detail}"
     return f"{action.kind} {action.batch}: {outcome or action.detail}"
 
 
