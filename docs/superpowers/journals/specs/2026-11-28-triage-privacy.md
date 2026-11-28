@@ -222,3 +222,8 @@ Phase 2 serves R8-R9 (#1634), independent of phase 1's facts changes.
 ### s-r12-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1786] · resolves s-r12: Origins collect stores outside authors' PR titles too, and they ride the state ref
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1786.
+
+<!-- fr:journal kind=finding scope=spec id=s-r13-resolved-2 created=2026-11-28T16:47:48+00:00 state=open resolves=s-r13 tracked_by=https://github.com/derio-net/super-fr/issues/1787 -->
+### s-r13-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1787] · resolves s-r13: state export checks the state repo's visibility, not the visibility of the repo it exports into
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1787.
