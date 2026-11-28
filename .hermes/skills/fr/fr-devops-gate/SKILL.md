@@ -98,31 +98,15 @@ naming the label; add it by hand, then re-run.
 
 ## Devops steps and the tester hand-off
 
-Stage 5 runs the probe of each step that points at an op (`(op: <id>)`). A passing check
-records `ran` with the check's evidence lines and asks nothing. A probe that fails (OPEN,
-UNVERIFIABLE, CANNOT-VERIFY, ESCALATE) shows its reason and asks `retry`, `na <reason>` or
-`owed <why>`; `ran` is refused. A step with no pointer, an N/A op or one closed without a
-check is walked by you, then answered `ran <evidence>`, `na <reason>` or `owed <why>` (`ran: x`
-works too; an answer that does not match is asked again). Committed evidence is only a few
-status lines, so a probe should end with a plain summary line: no colon, quote, `=`,
-bracket, list marker or long token, and a bracket anywhere records nothing. An `owed` answer is recorded but does not close the step,
-so stage 6 refuses and prints the `fr closeout outcome` command that records it once you
-have walked it (a later `ran`/`na` supersedes the owed one); then re-run the stage. Steps the Tester gate
-owns are listed in the gate-pass comment and keep `gate:tester` on the PR; they are not
-this stage's to walk. Its unwalked rows, and a spec that declares `gate: tester`, keep it too.
-When the Tester gate owns nothing, stage 7 passes `gate:tester` itself with a generated note:
-never pass it by hand with a note you made up.
+Stage 5 runs the probe of each step that points at an op (`(op: <id>)`). A passing check records `ran` with the check's evidence lines and asks nothing. A probe that fails (OPEN, UNVERIFIABLE,
+CANNOT-VERIFY, ESCALATE) shows its reason and asks `retry`, `na <reason>` or `owed <why>`; `ran` is refused. A step with no pointer, an N/A op or one closed without a check is walked by you, then
+answered `ran <evidence>`, `na <reason>` or `owed <why>` (`ran: x` works too; an answer that does not match is asked again). Committed evidence is only a few status lines, so a probe should end with a
+plain summary line: no colon, quote, `=`, bracket, list marker or long token, and a bracket anywhere records nothing. An `owed` answer is recorded but does not close the step, so stage 6 refuses and
+prints the `fr closeout outcome` command that records it once you have walked it (a later `ran`/`na` supersedes the owed one); then re-run the stage. Steps the Tester gate owns are listed in the
+gate-pass comment and keep `gate:tester` on the PR; they are not this stage's to walk. Its unwalked rows, and a spec that declares `gate: tester`, keep it too. When the Tester gate owns nothing, stage
+7 passes `gate:tester` itself with a generated note: never pass it by hand with a note you made up.
 
-## Rows the gate owns
-
-The devops gate owns acceptance rows too, and `fr gate pass` refuses while one is not walked
-(status `walked` and a passing latest walk). A step names the rows it proves with
-`(rows: <id>, …)` after its `(op: <id>)` pointer; recording it `ran` walks them in the same
-commit (harness `operator`, model `human`; a passing probe walks as `fr-ops-probe`,
-`op:<id>`). After the steps, stage 5 asks about every devops row still not walked that no
-`ran` step names: `ran <evidence>` records your walk with `fr acceptance set-status --walk`,
-`owed <why>` sets it `walk-owed`. A walk the PR head carries never counts. A refused stage 6
-prints the `set-status --walk` command for each row still owed.
+The devops gate owns acceptance rows too, and `fr gate pass` refuses while one is not walked (status `walked` and a passing latest walk). A step names the rows it proves with `(rows: <id>, …)` after its `(op: <id>)` pointer; recording it `ran` walks them in the same commit (harness `operator`, model `human`; a passing probe walks as `fr-ops-probe`, `op:<id>`). After the steps, stage 5 asks about every devops row still not walked that no `ran` step names: `ran <evidence>` records your walk with `fr acceptance set-status --walk`, `owed <why>` sets it `walk-owed`. A walk the PR head carries never counts. A refused stage 6 prints the `set-status --walk` command for each row still owed.
 
 ## What the stage never does
 
