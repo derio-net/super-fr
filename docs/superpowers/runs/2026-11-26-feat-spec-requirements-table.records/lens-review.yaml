@@ -3,6 +3,16 @@ run: 2026-11-26-feat-spec-requirements-table
 step: lens-review
 outcome: done
 journal:
+  - kind: review
+    id: review-lens-1
+    global: true
+    title: "lens review (docs-accuracy, errors, tests): 7 in-scope findings fixed, 1 out of scope"
+    body: |
+      One reviewer per lens over the whole feature diff (merge base c4e69ecd0). errors: the
+      migration's one-size "fix the requirement id" hint and a malformed stamp-1 table refusing
+      instead of being stamped. docs-accuracy: a stale R9a docstring example and an explainer
+      overstating the rewrite. tests: three surviving mutations (sort-key tie, first prose line,
+      stamp >= 2) and unpinned migration edge cases. All fixed in 96e189712 with tests.
   - kind: finding
     id: l-errors-r1
     global: true
@@ -142,4 +152,6 @@ resolves:
   - id: l-tests-r5
     state: out-of-scope
     body: "true of the R8 prose test by design: a prose requirement can only be checked by presence"
-evidence: {}
+evidence:
+  review: review-lens-1
+  reviewer: "docs-accuracy=a184d03e75ec4d7d6,errors=ad4fcf47adb6b99cf,tests=a08a09f0ae694d2f5"
