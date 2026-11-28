@@ -17,9 +17,15 @@ rows:
     - spec:2026-11-28-alacarte-settings#R1
     - spec:2026-11-28-alacarte-settings#R2
     - spec:2026-11-28-alacarte-settings#R3
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_workflow_available.py
+      - super-fr:tests/unit/test_settings_check.py#test_a_disabled_name_no_shape_carries_is_refused
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_alacarte_settings
+    status: ci
+    notes: unit tests pin schema 3, the refusal at start, rebind and adopt and the two
+      settings checks; the candidate scenario walks it
     verify: candidate
     scenario: tests/scenarios/alacarte-settings.sh
   - id: s2-pr-sections
