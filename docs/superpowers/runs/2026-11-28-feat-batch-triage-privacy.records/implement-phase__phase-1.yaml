@@ -5,23 +5,30 @@ schema_version: 12
 run: 2026-11-28-feat-batch-triage-privacy
 step: implement-phase
 item: phase/1
-outcome: done            # done | failed | blocked
-ticks: []                # step ids you completed, e.g. [P1.T1.S1]
-#   this phase: P1.T1.S1, P1.T1.S2, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T6.S1, P1.T6.S2, P1.T6.S3
-refactor: {}             # P<n>.T<m>: "why there was nothing to clean"
-#   owed by tasks with no refactor step: P1.T1
-journal: []
-#   - {kind: decision|discovery|finding, id: <id>, title: <line>, body: <md>}
-#     a finding also takes review_scope: in|out (state defaults to open)
-#     a plan-journal entry also takes phase: <n> or global: true
-#     a spec-journal discovery holding the operator's brief takes input: true
-#   - {kind: lens, lens: <id>, title: <why, one line>}
-#     adds a review lens to the feature (`fr lenses list`); fr assigns its id
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T3.S3, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T6.S1, P1.T6.S2, P1.T6.S3]
+refactor:
+  P1.T1: "smoke task: one fixed-shape digest function, nothing to clean"
+journal:
+  - kind: decision
+    id: p1-digest-json-frame
+    title: v2 digest is a JSON frame, not text with delimiters
+    body: Per the coordinator's spec amendment, content_digest(title, body, *, comments, pinned_authors) hashes a sorted-key compact JSON frame with both keyword arguments required, so body text cannot imitate a comment and no caller falls back to a title-and-body digest.
+    phase: 1
+  - kind: discovery
+    id: p1-marker-comment-is-pinned-unless-trusted
+    title: an admit marker comment by a login with no OWNER/MEMBER/COLLABORATOR association and not in pr_authors is itself pinned
+    body: The marker embeds its own digest, so such a marker can never match. The spec's pinning rule is association or pr_authors; fixtures that post markers now carry association OWNER. The driving account is expected in pr_authors (triage-hardening R7).
+    phase: 1
+  - kind: discovery
+    id: p1-pr-title-readers
+    title: PullRequest.title readers after the withholding pass
+    body: "Display readers now route an empty title to the withheld note - render.py (_pr_row, _pr_cell), kanban_render.py (_gated_card), commands/triage_cmd.py (unranked and settled PR lines), and the queue subject (triage_batch_cmd._queue_entry uses pr.title or batch.title). check.py JSON keeps the empty title with key and url. Left unchanged: render.py data-search (an empty title is harmless) and origins.py (out of scope per the spec, filed as a follow-up). The judged-PR view path now records the PR's author from the issue view so a trusted author keeps its title."
+    phase: 1
+  - kind: discovery
+    id: p1-old-schema-fixtures
+    title: tests that wrote facts with schema 3 now load as older than 22
+    body: load_facts withholds and marks admission unread below schema 22, so the batch-dispatch test facts helper now writes schema 22.
+    phase: 1
 resolves: []
-#   - {id: <finding>, state: fixed|refuted|deferred|out-of-scope, body: <why>}
 evidence: {}
-# visual:              # one entry per owed `visual` acceptance row
-#   - row: <row-id>
-#     script: <capture script, optional — re-run it this unit>
-#     shots:           # git-ignored or outside the repo; opened this unit
-#       - {path: <image>, shows: [<state or interaction>, ...]}
