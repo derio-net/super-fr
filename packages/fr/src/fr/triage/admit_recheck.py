@@ -13,18 +13,42 @@ trusted login or association is not re-read: its admission does not depend on it
 
 from __future__ import annotations
 
+from collections.abc import Collection, Mapping
+from typing import Any
+
 from fr.ghclient import GhClient
-from fr.triage.admit import content_digest
+from fr.triage.admit import content_digest, pinned
 from fr.triage.collect import ClientForge
 from fr.triage.errors import TriageError
 from fr.triage.intake import admit_pinned
 from fr.triage.model import Batch, Facts
 
 
+def live_admission(
+    forge: ClientForge,
+    repo: str,
+    number: int,
+    raw: Mapping[str, Any],
+    pr_authors: Collection[str],
+) -> tuple[str, list[dict[str, Any]]]:
+    """`(digest, pinned comments)` of the issue *raw* is the forge's record of: its comments
+    are read here, so a failed read raises `TriageError` and no caller digests the title and
+    body alone (2026-11-28-triage-privacy R3, R5). The one read `fr triage admit` and the
+    dispatch re-read share."""
+    comments = forge.list_issue_comments(repo=repo, number=number)
+    digest = content_digest(
+        str(raw.get("title") or ""),
+        str(raw.get("body") or ""),
+        comments=comments,
+        pinned_authors=pr_authors,
+    )
+    return digest, [c for c in comments if pinned(c, pr_authors)]
+
+
 def recheck_admitted(batch: Batch, facts: Facts, client: GhClient) -> None:
-    """Raise `TriageError` naming each admit-pinned member of *batch* whose live title and
-    body no longer match its admit marker's digest, or which could not be read; return when
-    every one still matches. Reads only."""
+    """Raise `TriageError` naming each admit-pinned member of *batch* whose live title,
+    body and outside comments no longer match its admit marker's digest, or which could not
+    be read; return when every one still matches. Reads only."""
     by_key = {issue.key: issue for issue in facts.issues}
     forge = ClientForge(client)
     failed: list[str] = []
@@ -35,10 +59,12 @@ def recheck_admitted(batch: Batch, facts: Facts, client: GhClient) -> None:
         again = f"run fr triage admit {issue.repo}#{issue.number}"
         try:
             raw = forge.view_issue(repo=issue.repo, number=issue.number)
+            live, _ = live_admission(
+                forge, issue.repo, issue.number, raw, facts.config_for(issue.repo).pr_authors
+            )
         except TriageError as exc:
             failed.append(f"{key}: could not be read again ({exc}); {again} once it reads")
             continue
-        live = content_digest(str(raw.get("title") or ""), str(raw.get("body") or ""))
         if live != issue.admit_digest:
             failed.append(f"{key}: edited since its admission; {again} again")
     if failed:

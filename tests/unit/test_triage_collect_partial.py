@@ -288,9 +288,17 @@ def test_a_label_with_a_matching_admit_marker_admits_and_keeps_the_body() -> Non
     forge = _intake_forge()
     raw = forge.issues[A][0]
     raw["labels"] = [{"name": "ready-fr"}]
-    marker = admit_marker(content_digest(raw["title"], raw.get("body") or ""))
+    marker = admit_marker(
+        content_digest(raw["title"], raw.get("body") or "", comments=(), pinned_authors=())
+    )
     forge.comments[(A, raw["number"])] = [
-        {"author": "operator", "body": marker, "created_at": "2026-09-20T00:00:00Z", "id": 1}
+        {
+            "author": "operator",
+            "association": "OWNER",
+            "body": marker,
+            "created_at": "2026-09-20T00:00:00Z",
+            "id": 1,
+        }
     ]
     facts = collect_facts_counted(forge, ORG, now=NOW)[0]
     assert _body(facts, "alpha#1") == _TEXT

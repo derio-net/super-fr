@@ -34,9 +34,6 @@ _SUFFIX = " -->"
 _DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
-_DIGEST_VERSION_LINE = "fr-admit-v2"
-
-
 def canonical_comment(comment: Mapping[str, object]) -> tuple[str, str, int, str]:
     """`(login, time, id, body)` of *comment* in the one form both forge adapters agree on
     (R1): the login lowercased with a trailing `[bot]` removed (`ghost` when empty), the time
@@ -66,20 +63,28 @@ def pinned(comment: Mapping[str, object], pinned_authors: Collection[str]) -> bo
 def content_digest(
     title: str,
     body: str,
-    comments: Iterable[Mapping[str, object]] = (),
-    pinned_authors: Collection[str] = (),
+    *,
+    comments: Iterable[Mapping[str, object]],
+    pinned_authors: Collection[str],
 ) -> str:
-    """`sha256:<hex>` over `fr-admit-v2`, the full *title*, a blank line, the full *body* and
-    each pinned comment (R1), with `\\r\\n` read as `\\n` throughout. Callers pass the forge's
-    record, never a truncated body. The ONE function `fr triage admit`, collect and the
-    dispatch re-read all call."""
-    text = f"{_DIGEST_VERSION_LINE}\n{title}\n\n{body}".replace("\r\n", "\n")
+    """`sha256:<hex>` over the JSON framing `{"v":2,"title":...,"body":...,"comments":[[login,
+    time, id, body], ...]}` (sorted keys, compact, not ASCII-escaped) of the full *title* and
+    *body* and each pinned comment, with `\\r\\n` read as `\\n` in every text field (R1).
+    JSON framing means body text that imitates a comment can never hash like one. Callers pass
+    the forge's record, never a truncated body, and both keyword arguments are required, so no
+    caller silently digests the title and body alone. The ONE function `fr triage admit`,
+    collect and the dispatch re-read all call."""
     rows = sorted(
         (canonical_comment(c) for c in comments if pinned(c, pinned_authors)),
         key=lambda r: (r[1], r[2], r[0], r[3]),
     )
-    for login, stamp, _cid, text_body in rows:
-        text += f"\n\n--- comment {login} {stamp}\n{text_body}"
+    doc = {
+        "v": 2,
+        "title": title.replace("\r\n", "\n"),
+        "body": body.replace("\r\n", "\n"),
+        "comments": [[login, stamp, cid, text] for login, stamp, cid, text in rows],
+    }
+    text = json.dumps(doc, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 

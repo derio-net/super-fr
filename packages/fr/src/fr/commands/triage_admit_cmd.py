@@ -31,7 +31,8 @@ from fr.commands.triage_cmd import console, err_console, triage_app
 from fr.ghclient import GhClient, UnsupportedBatchOps
 from fr.hostclient import client_for_url
 from fr.labels import READY_FR
-from fr.triage.admit import admit_marker, content_digest
+from fr.triage.admit import admit_marker
+from fr.triage.admit_recheck import live_admission
 from fr.triage.batch_dispatch import (
     UNTRUSTED_CLOSE,
     UNTRUSTED_OPEN,
@@ -130,7 +131,11 @@ def admit_command(
         )
         return
     title, body = str(raw.get("title") or ""), str(raw.get("body") or "")
-    digest = content_digest(title, body)
+    pr_authors = (config or TriageConfig()).pr_authors
+    try:  # the comments are read before anything is written, preview or not (R3)
+        digest, pins = live_admission(forge, repo, number, raw, pr_authors)
+    except TriageError as exc:
+        _fail(f"{repo}#{number}: comments could not be read, so nothing was written: {exc}")
     comment = admit_marker(digest, key=again)
     if not yes:
         console.print(f"forge host {host}", soft_wrap=True, markup=False)
@@ -138,20 +143,27 @@ def admit_command(
         console.print("would post this comment:", soft_wrap=True)
         for line in comment.splitlines():
             console.print(f"  {line}", soft_wrap=True, markup=False)
-        console.print("it pins this title and body:", soft_wrap=True)
-        quoted = [
-            UNTRUSTED_RULE,
-            UNTRUSTED_OPEN,
-            *quote_untrusted([visible(title), "", visible(body)]),
-            UNTRUSTED_CLOSE,
-        ]
+        console.print("it pins this title, body and outside comments:", soft_wrap=True)
+        from fr.triage.admit import canonical_comment
+
+        shown: list[str] = [visible(title), "", visible(body)]
+        hidden = visible(title) != title or visible(body) != body
+        for c in pins:
+            login, stamp, _cid, text = canonical_comment(c)
+            shown += [
+                "",
+                f"comment by {visible(login)} at {stamp or 'unknown time'}:",
+                visible(text),
+            ]
+            hidden = hidden or visible(login) != login or visible(text) != text
+        quoted = [UNTRUSTED_RULE, UNTRUSTED_OPEN, *quote_untrusted(shown), UNTRUSTED_CLOSE]
         for line in quoted:
             console.print(line, soft_wrap=True, markup=False, highlight=False)
-        if visible(title) != title or visible(body) != body:
+        if hidden:
             console.print(
-                "warning: the title or body holds hidden characters (controls, bidi overrides "
-                "or zero-width characters), shown above as escapes; the digest is over the raw "
-                "text",
+                "warning: the title, body or a comment holds hidden characters (controls, "
+                "bidi overrides or zero-width characters), shown above as escapes; the digest "
+                "is over the raw text",
                 soft_wrap=True,
                 markup=False,
             )
@@ -166,9 +178,9 @@ def admit_command(
         _fail(f"--yes needs --digest: the current digest of {key} is {digest}; preview it first")
     try:  # read again just before the write: an edit since the preview is never pinned
         live = forge.view_issue(repo=repo, number=number)
+        current, _ = live_admission(forge, repo, number, live, pr_authors)
     except TriageError as exc:
         _fail(f"{repo}#{number}: {exc}")
-    current = content_digest(str(live.get("title") or ""), str(live.get("body") or ""))
     if digest_opt != current:
         _fail(
             f"{key} does not match --digest {digest_opt}: its current digest is {current}; "
