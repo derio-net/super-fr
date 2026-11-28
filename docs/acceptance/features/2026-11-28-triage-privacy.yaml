@@ -18,9 +18,13 @@ rows:
     - spec:2026-11-28-triage-privacy#R3
     - spec:2026-11-28-triage-privacy#R4
     - spec:2026-11-28-triage-privacy#R5
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_admit.py#test_an_outside_comment_changes_the_digest_and_so_does_editing_it
+      - super-fr:tests/unit/test_triage_collect.py#test_a_marker_over_title_body_and_its_outside_comment_is_eligible
+      - super-fr:tests/unit/test_triage_batch_dispatch.py#test_dispatch_yes_refuses_a_member_that_gained_an_outside_comment
+    status: ci
+    notes: 'unit tests: digest, markers, collect, admit command, dispatch recheck'
     verify: none
   - id: triage-pr-title-withheld
     capability: triage-intake
