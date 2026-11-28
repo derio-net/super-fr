@@ -37,9 +37,14 @@ rows:
     - spec:2026-11-26-spec-requirements-table#R4
     - spec:2026-11-26-spec-requirements-table#R5
     - spec:2026-11-26-spec-requirements-table#R6
-    levels: {}
-    status: not-implemented
-    notes: scenario named at brainstorm; written in the implementation phase
+    levels:
+      unit:
+      - super-fr:tests/unit/test_spec_requirements_table_migration.py#test_a_list_spec_is_rewritten_to_the_table_and_stamped
+      - super-fr:tests/unit/test_spec_requirements_table_migration.py#test_an_unconvertible_spec_is_left_byte_identical_and_named
+      - super-fr:tests/unit/test_spec_requirements_table_migration.py#test_the_kind_is_at_two_and_reaches_it_from_one_hop_by_hop
+    status: ci
+    notes: unit tests run the 1 -> 2 rewrite over list, CRLF, table, legacy, prose-only
+      and unconvertible specs; the candidate walk is recorded at deliver
     verify: candidate
     scenario: tests/scenarios/spec-requirements-table.sh
   - id: spec-requirements-table-valid
