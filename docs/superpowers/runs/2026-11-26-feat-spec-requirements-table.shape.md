@@ -16,8 +16,9 @@ tests/scenarios/spec-requirements-table.sh  + # candidate walk: migrate, refuse,
 _rewrite(spec):
   text = read(spec)
   if section already a 2-column table / pre-5.0 table / no requirement line: return   # stamp only
-  layout = list_layout(text)              # raises on a bad id; prose between items refuses
-  new = build(text)                       # rows with continuations joined, `|` -> `\|`, endings kept
+  layout = list_layout(text)              # raises on a bad id; a heading or a code fence in the list refuses
+  new = build(text)                       # one row per requirement: continuations joined, paragraphs and
+                                          #   bullets folded with <br>, `|` -> `\|`, endings kept
   refuse unless parse(new) == parse(text) # file:line, cause, hand fix; file left byte-identical
   write_text_atomic(spec, new)            # once; the runner then writes fr_schema: 2
 ```
