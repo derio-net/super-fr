@@ -208,3 +208,9 @@ gate: developer
 - `fr placement move` pushing product-side branches without reading `git.push`: an operator-typed
   move, outside D7's `fr push` and `fr pr create` (review s-r1-13).
 - S3 and S4 of epic #1652.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-28-alacarte-settings | `derio-net/super-fr` | `2026-11-28-alacarte-settings` | — |
