@@ -1,0 +1,14 @@
+schema_version: 12
+run: 2026-11-26-feat-spec-requirements-table
+step: plan
+outcome: done
+journal:
+  - kind: decision
+    id: plan-one-phase
+    title: One agentic phase, by operator decision
+    body: Operator chose "One phase" over the recommended two-phase split. The phase is tier hard (decision tier-2026-11-26-spec-requirements-table-p1 in the spec journal).
+resolves: []
+acceptance: []
+emitted:
+  plan: docs/superpowers/plans/2026-11-26-spec-requirements-table
+evidence: {}
