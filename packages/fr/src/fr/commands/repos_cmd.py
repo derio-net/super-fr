@@ -20,6 +20,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from fr.artifacts.paths import LEGACY_CONFIG, REPO, config_kind_path
+from fr.config.movers import mover
 from fr.repos import (
     DEFAULT_MANIFEST,
     ManifestError,
@@ -128,6 +129,7 @@ def _propose(repo: str, root: Path, *, yes: bool) -> None:
 
 
 @repos_app.command()
+@mover  # a mover of the old plan-config at every version (spec 2026-11-28-s1-followups R3)
 def sync(
     repos: list[str] = typer.Argument(None, help="owner/repo to instrument (repeatable)."),
     manifest: Path = typer.Option(

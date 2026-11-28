@@ -207,3 +207,55 @@ def test_under_quiet_the_migration_still_moves_from_the_old_switch(tmp_path: Pat
     assert ".fr/models.yaml" in tree and ".fr/settings.yaml" in tree
     for kind in ("models-config", "trackers-config"):
         assert not (root / FILES[kind][0]).exists()
+
+
+# --- review p1-r1: the movers' CLI entry points read the old switch too ------------------
+
+
+def _cli(root: Path, *argv: str):  # type: ignore[no-untyped-def]
+    import os
+
+    return runner.invoke(app, list(argv), env={**os.environ, "FR_REPO_ROOT": str(root)})
+
+
+@pytest.mark.usefixtures("ended")
+def test_migrate_artifacts_through_the_cli_reads_the_old_switch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.settings_repo import git
+
+    root = _quiet(tmp_path)
+    _put(root, MODELS, "opencode:\n  hard: m\n")
+    monkeypatch.chdir(root)
+    res = _cli(root, "migrate", "artifacts", "--yes")
+    assert res.exit_code == 0, res.output
+    tree = git(tmp_path / "origin.git", "ls-tree", "-r", "--name-only", "fr-config").split()
+    assert ".fr/models.yaml" in tree
+
+
+@pytest.mark.usefixtures("ended")
+def test_repair_through_the_cli_reads_the_old_switch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _quiet(tmp_path)
+    monkeypatch.chdir(root)
+    res = _cli(root, "repair")
+    assert res.exit_code == 0, res.output
+
+
+@pytest.mark.usefixtures("ended")
+def test_repos_sync_through_the_cli_reads_the_old_switch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+
+    root = _quiet(tmp_path)
+    repos = tmp_path / "repos"
+    repos.mkdir()
+    named = repos / "super-fr"
+    shutil.move(str(root), str(named))
+    monkeypatch.setenv("FR_REPOS_DIR", str(repos))
+    monkeypatch.setenv("FR_REPOS_MANIFEST", str(tmp_path / "repos.yaml"))
+    res = runner.invoke(app, ["repos", "sync", "derio-net/super-fr", "--yes", "--no-save"])
+    assert res.exit_code == 0, res.output
+    assert "REFUSED" in res.output and "fr migrate artifacts --yes" in res.output
