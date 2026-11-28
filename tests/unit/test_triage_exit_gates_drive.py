@@ -381,7 +381,8 @@ def _git(cwd: Path, *args: str) -> str:
 
 
 def _ledger_repo(tmp_path: Path, *, walked: bool, section: str | None = None,
-                 other: bool = True, ops: bool | None = None) -> Any:  # fmt: skip
+                 other: bool = True, ops: bool | None = None,
+                 later_fail: bool = False) -> Any:  # fmt: skip
     """A clone whose `origin/main` holds a run on feat/batch-b1, its spec and the matrix."""
     from fr.run.model import RunState, StepRecord, dump_run_state, run_path
     from fr.triage.gitseam import Checkout
@@ -403,6 +404,10 @@ def _ledger_repo(tmp_path: Path, *, walked: bool, section: str | None = None,
     if walked:
         live["walks"] = [{"strategy": "live", "harness": "claude-code", "model": "m",
                           "outcome": "pass", "at": "2026-10-02", "evidence": "log"}]  # fmt: skip
+        if later_fail:
+            live["walks"].append({"strategy": "live", "harness": "claude-code", "model": "m",
+                                  "outcome": "fail", "at": "2026-10-03",
+                                  "evidence": "log"})  # fmt: skip
     write_matrix(clone, [live, *([row(spec, rid="r-other")] if other else [])])
     brainstorm = StepRecord(state="done", emitted={"spec": spec})
     steps = {"brainstorm": brainstorm}
@@ -444,6 +449,17 @@ def test_the_gated_rows_are_read_on_the_default_branch_through_gitseam(
     assert read.rows == (GatedRow("r-live", "tester", walked=walked, issues=(ISSUE,)),)
     assert (read.run_gate, read.run_gate_inherited) == ("none", True)
     assert _git(checkout.path, "worktree", "list").count("\n") == 0  # the scratch tree is gone
+
+
+def test_a_walked_row_whose_latest_walk_failed_reads_not_walked(tmp_path: Path) -> None:
+    """ops-gate-truth R10: the ledger reads `row_walked`, not the bare status."""
+    from fr.triage.ledger import gated_rows_at
+
+    checkout = _ledger_repo(tmp_path, walked=True, later_fail=True)
+
+    read = gated_rows_at(checkout, "origin/main", "feat/batch-b1")
+
+    assert read.rows == (GatedRow("r-live", "tester", walked=False, issues=(ISSUE,)),)
 
 
 def test_gh1399_an_archived_run_keeps_its_gated_rows(tmp_path: Path) -> None:

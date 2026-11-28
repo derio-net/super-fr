@@ -89,8 +89,18 @@ def ops_root(tmp_path: Path) -> Path:
     write_matrix(root, [row(SPEC, rid="r1")])
     (root / PLAN).mkdir(parents=True)
     (root / PLAN / "ops.yaml").write_text(OPS)
+    _plan_folder(root)
     save_run_state(root, _state())
     return root
+
+
+def _plan_folder(root: Path) -> None:
+    """The plan as a real folder: `_meta.yaml` and a ticked agentic phase 1."""
+    fixture = Path(__file__).parent / "fixtures" / "v2_plan_minimal"
+    for name in ("_meta.yaml", "01.yaml"):
+        shutil.copy(fixture / name, root / PLAN / name)
+    phase = root / PLAN / "01.yaml"
+    phase.write_text(phase.read_text().replace('state: " "', "state: x"))
 
 
 class FakeTree:
@@ -102,6 +112,12 @@ class FakeTree:
         self.push_error: str | None = None
         self.leases: list[str | None] = []
         self.head_files: dict[str, str] = {}  # what the PR head carries, by path
+        self.merge_conflict: tuple[str, ...] = ()  # paths a merge_commit conflicts on
+        self.on_merge: Any = None  # called on a clean merge: what the merge brings in
+        self.contains: set[str] = set()  # commits the ops branch already holds
+        self.tip_files: dict[str, str] = {}  # what the default branch's tip carries, by path
+        self.head_sha = HEAD  # the ops branch's own head
+        self.merged_head: str | None = None  # the head a clean merge_commit leaves
 
     def snapshot_head(self) -> None:
         """Freeze the tree's current journals as what the PR head carries (p4-r2)."""
@@ -110,10 +126,19 @@ class FakeTree:
 
     def show(self, ref: str, path: str) -> str | None:
         assert ref in (HEAD, TIP)  # the cut: the PR head, or main's tip after the merge
+        if ref == TIP and path in self.tip_files:
+            return self.tip_files[path]
         return self.head_files.get(path)
 
+    def list_files(self, ref: str, folder: str) -> list[str]:
+        assert ref in (HEAD, TIP)
+        prefix = folder.rstrip("/") + "/"
+        return sorted(
+            p for p in self.head_files if p.startswith(prefix) and "/" not in p[len(prefix) :]
+        )
+
     def head(self) -> str:
-        return HEAD
+        return self.head_sha
 
     def fr(self, args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
         args = list(args)
@@ -127,15 +152,18 @@ class FakeTree:
             while f"id={sid} " in taken:
                 k += 1
                 sid = f"test-plan-step-{n}-{k}"
+            said = "owed" if kind == "owed" else "n/a" if "--na" in args else "ran"
             entry = JournalEntry(
                 kind=kind,
                 scope="spec",
                 id=sid,
                 created="2026-10-22T10:00:00+00:00",
-                title=f"step {n}",
+                title=f"Test Plan step {n}: {said}",  # as `fr closeout outcome` titles it
                 body="x" if kind == "discovery" else "why: later\nhow: later",
             )
             append_journal_entry(journal_path(self.path, "spec", SPEC_SLUG), SPEC_SLUG, entry)
+            if "--ran" in args:
+                self._walk_named_rows(n, args)
         if args[:2] == ["gate", "pass"]:
             from fr.ops.holds import devops_blockers
 
@@ -155,6 +183,45 @@ class FakeTree:
                 shutil.move(str(live), arch)
         return 0, ""
 
+    def _walk_named_rows(self, n: int, args: list[str]) -> None:
+        """What the real `fr closeout outcome --ran` writes (R9, `_row_walks`): a passing
+        walk on each row step *n* names, with the row's effective strategy, `walked` once
+        `walk_verified` holds over the walks `--pr-head` does not carry (R12). Merged-row
+        amendments are not modelled: every fixture row is pending in the fragment."""
+        import yaml
+        from fr.acceptance.model import Row, Walk
+        from fr.acceptance.walks import walk_verified
+        from fr.spec import test_plan_steps
+        from fr.verification.exit import run_exit
+
+        steps = test_plan_steps((self.path / SPEC).read_text())
+        named = set(steps[n - 1].rows) if n <= len(steps) else set()
+        if not named:
+            return
+        harness = args[args.index("--harness") + 1] if "--harness" in args else "operator"
+        model = args[args.index("--model") + 1] if "--model" in args else "human"
+        head = (
+            gate_mod.head_walks(self, args[args.index("--pr-head") + 1])
+            if "--pr-head" in args
+            else {}
+        )
+        kinds = run_exit(self.path, _state()).row_kinds
+        for frag in (self.path / "docs/acceptance/features").glob("*.yaml"):
+            data = yaml.safe_load(frag.read_text())
+            for r in data.get("rows") or []:
+                if r["id"] not in named:
+                    continue
+                walk = {"strategy": kinds.get(r["id"], "live"), "harness": harness,
+                        "model": model, "outcome": "pass", "at": "2026-10-22T10:00:00Z",
+                        "evidence": f"Test Plan step {n}"}  # fmt: skip
+                r["walks"] = [*(r.get("walks") or []), walk]
+                mine = [
+                    w for w in r["walks"] if Walk.model_validate(w) not in head.get(r["id"], set())
+                ]
+                if walk_verified(Row.model_validate({**r, "walks": mine})):
+                    r["status"] = "walked"
+            frag.write_text(yaml.safe_dump(data, sort_keys=False))
+
     def commit_paths(self, paths: list[str], message: str) -> str | None:
         self.calls.append(("commit", message))
         return "c" * 40
@@ -164,11 +231,37 @@ class FakeTree:
         if self.rebase_error:
             raise RuntimeError(self.rebase_error)
 
+    def is_ancestor(self, sha: str) -> bool:
+        return sha in self.contains
+
+    def merge_commit(self, ref: str, message: str) -> str:
+        self.calls.append(("merge", (ref, message)))
+        if self.merge_conflict:
+            raise gate_mod.MergeConflict(self.merge_conflict)
+        if self.on_merge is not None:
+            self.on_merge()
+        if self.merged_head is not None:
+            self.head_sha = self.merged_head
+        return self.head_sha
+
     def push(self, branch: str, lease: str | None = None) -> None:
         self.calls.append(("push", branch))
         self.leases.append(lease)
         if self.push_error:
             raise RuntimeError(self.push_error)
+
+
+def _write_edits(root: Path, edits: dict[str, str | None]) -> None:
+    for rel, text in edits.items():
+        target = root / rel
+        if text is None:
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink(missing_ok=True)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
 
 
 class FakeHost:
@@ -190,6 +283,9 @@ class FakeHost:
         self.materialised: list[Path] = []
         # `fr ops status <id> --json`, scripted per op: each call pops (exit, rows | text)
         self.by_id: dict[str, list[tuple[int, Any]]] = {}
+        # what origin/<default> carries beyond the ops workspace: path -> text (None: absent)
+        self.default_edits: dict[str, str | None] = {}
+        self.fetch_error: str | None = None  # a strict fetch of the default branch fails
 
     def materialise(self, ref: str, paths: Sequence[str]) -> Path:
         """*paths* as the PR head carries them: copied from the fake's own tree."""
@@ -205,6 +301,7 @@ class FakeHost:
             elif src.is_file():
                 (out / rel).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, out / rel)
+        _write_edits(out, self.default_edits)
         return out
 
     def changed_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
@@ -228,8 +325,10 @@ class FakeHost:
     def queue_configured(self, default: str) -> bool:
         return self.queue
 
-    def fetch(self, ref: str) -> None:
+    def fetch(self, ref: str, *, strict: bool = False) -> None:
         self.calls.append((["fetch", ref], False))
+        if strict and self.fetch_error:
+            raise RuntimeError(self.fetch_error)
 
     def workspace(self, branch: str) -> FakeTree | None:
         assert branch == "chore/ops-p"
@@ -407,6 +506,13 @@ def _record_stages(root: Path, *ns: int, head: str = HEAD) -> None:
         _host(root).mark(n, head=head if n == 1 else None)
 
 
+def _pre_merge_closed(root: Path) -> None:
+    """Stage 1's evidence, for a test that records stage 1 without running it: stage 6
+    folds every op before it runs the pass (ops-gate-truth R14)."""
+    for op in ("pre", "mut"):
+        record_op(root, "p", op=op, result="done", phase="pre-merge")
+
+
 def _exec(*inner: str) -> list[str]:
     return ["isolation", "exec", "--repo", str(PRIMARY), "--branch", "chore/ops-p", "--", "fr",
             *inner]  # fmt: skip
@@ -576,6 +682,7 @@ def test_a_forge_that_cannot_label_names_the_manual_label(ops_root: Path) -> Non
 
 def test_a_forge_merged_pr_counts_as_stage_2_done(ops_root: Path) -> None:
     _record_stages(ops_root, 1)
+    _pre_merge_closed(ops_root)
     gate, host, tree, forge, prompt, _ = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
     result = run(gate)
     assert result.ok and 2 not in result.ran and result.ran[0] == 3
@@ -738,6 +845,7 @@ def test_a_recorded_stage_2_no_longer_skips_the_wait(ops_root: Path) -> None:
 
 def test_a_rerun_resumes_at_the_first_unrecorded_stage(ops_root: Path) -> None:
     _record_stages(ops_root, 1, 2, 3)
+    _pre_merge_closed(ops_root)
     gate, host, tree, forge, *_ = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
     result = run(gate)
     assert result.ran == (4, 5, 6, 7, 8)
@@ -1380,3 +1488,1088 @@ def test_a_forge_error_on_the_default_branch_read_is_a_refusal_naming_it(
     assert exc.value.code == 2
     assert "cannot read the default branch from the forge" in exc.value.why
     assert "SSO or forward-auth login page" in exc.value.why
+
+
+# ------------------------------------- ops-gate-truth R6: ops a refresh reopened
+
+
+def test_the_host_state_keeps_reopened_ops_and_the_entries_before_them(ops_root: Path) -> None:
+    state = _host(ops_root)
+    assert state.reopened() == (frozenset(), frozenset())
+    state.set_reopened({"post", "new"}, {"e1", "e2"})
+    assert state.reopened() == (frozenset({"post", "new"}), frozenset({"e1", "e2"}))
+    state.clear_reopened()
+    assert state.reopened() == (frozenset(), frozenset())
+
+
+def test_forget_drops_the_stages_from_n_and_keeps_the_rest(ops_root: Path) -> None:
+    state = _host(ops_root)
+    for n in (1, 3, 4, 5, 6):
+        state.mark(n, head=HEAD if n == 1 else None)
+    state.set_cut(HEAD)
+    state.set_pushed(TIP)
+    state.set_reopened({"post"}, {"e1"})
+    state.forget(4)
+    assert state.stages() == {1, 3}
+    assert (state.head(), state.cut(), state.pushed()) == (HEAD, HEAD, TIP)
+    assert state.reopened() == (frozenset({"post"}), frozenset({"e1"}))
+
+
+def _post_applies(host: FakeHost) -> list[list[str]]:
+    applies = [a for a, _ in host.calls if a[:2] == ["isolation", "exec"] and "apply" in a]
+    return [a[a.index("--") + 1 :] for a in applies]
+
+
+def test_a_reopened_op_whose_old_evidence_closes_it_is_applied_again(ops_root: Path) -> None:
+    gate, host, tree, _, prompt, _ = _gate(ops_root, up=True)
+    old = record_op(ops_root, "p", op="post", result="done", phase="post-merge")
+    host.live["post"] = "DONE"
+    gate_mod.apply_phase(gate, "post-merge")
+    assert _post_applies(host) == []  # recorded and live: nothing to do
+
+    _host(ops_root).set_reopened({"post"}, {old.id})
+    host.calls.clear()
+    gate_mod.apply_phase(gate, "post-merge")
+    assert _post_applies(host) == [["fr", "ops", "apply", "post", "--plan", PLAN, "--yes"]]
+    assert prompt.asked == []  # live DONE: it records, runs nothing
+
+    host.live["post"] = "OPEN"
+    host.calls.clear()
+    _host(ops_root).set_reopened({"post"}, {old.id, *_entry_ids(ops_root)})
+    gate_mod.apply_phase(gate, "post-merge")
+    assert _post_applies(host) == [["fr", "ops", "apply", "post", "--plan", PLAN, "--yes"]]
+    assert len(prompt.asked) == 1 and "post" in prompt.asked[0]  # it runs: confirmed
+
+
+def _entry_ids(root: Path) -> set[str]:
+    from fr.journal.model import parse_journal
+
+    return {e.id for e in parse_journal(journal_path(root, "plan", "p").read_text())}
+
+
+def test_a_closure_from_before_the_refresh_does_not_close_a_reopened_op(ops_root: Path) -> None:
+    gate, host, tree, *_ = _gate(ops_root, up=True)
+    host.live["post"] = "DONE"
+    host.how["post"] = "attested"  # closed by its journal entry, not by a live check
+    old = record_op(ops_root, "p", op="post", result="done", phase="post-merge")
+    ops = gate_mod._ops(tree, PLAN, "post-merge")
+    rows = gate_mod._status_rows(gate, "post-merge")
+    assert gate_mod._unclosed(gate, tree, ops, rows) == []
+
+    _host(ops_root).set_reopened({"post"}, {old.id})
+    assert gate_mod._unclosed(gate, tree, ops, rows) == ["post: DONE"]
+    record_op(ops_root, "p", op="post", result="done", phase="post-merge")  # after the refresh
+    assert gate_mod._unclosed(gate, tree, ops, rows) == []
+
+
+def test_stage_4_clears_the_reopened_ops(ops_root: Path) -> None:
+    _record_stages(ops_root, 1, 3)
+    gate, *_ = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _host(ops_root).set_reopened({"post"}, set())
+    gate_mod.stage_4(gate)
+    assert 4 in _host(ops_root).stages()
+    assert _host(ops_root).reopened() == (frozenset(), frozenset())
+
+
+# -------------------------- ops-gate-truth R1–R6: stages 4–7 refresh the ops workspace
+
+FIXED_OPS = OPS.replace("phase: post-merge, check: 'false', apply: 'true',",
+                        "phase: post-merge, check: 'false', apply: 'echo fixed',")  # fmt: skip
+NEW_OP = "  - {id: extra, summary: n, phase: pre-merge, check: 'false', apply: 'true'}\n"
+
+
+def _drifted(
+    ops_root: Path,
+    *stages: int,
+    ops: str | None = FIXED_OPS,
+    spec: str | None = None,
+    confirms: Sequence[bool] = (),
+) -> tuple[Gate, FakeHost, FakeTree, FakePrompt]:
+    """A run with *stages* recorded whose default branch moved since stage 3: its ops
+    (*ops*) and/or its Test Plan (*spec*). A clean merge brings the change in."""
+    _record_stages(ops_root, *stages)
+    gate, host, tree, _, prompt, _ = _gate(
+        ops_root, up=True, forge=FakeForge(state="MERGED"), prompt=FakePrompt(confirms)
+    )
+    edits: dict[str, str | None] = {}
+    if ops is not None:
+        edits[f"{PLAN}/ops.yaml"] = ops
+    if spec is not None:
+        edits[SPEC] = spec
+    host.default_edits = edits
+    tree.on_merge = lambda: _write_edits(ops_root, edits)
+    return gate, host, tree, prompt
+
+
+def _refresh_q(prompt: FakePrompt) -> list[str]:
+    return [a for a in prompt.asked if a.startswith("REFRESH")]
+
+
+def test_no_drift_asks_nothing_merges_nothing_and_the_stage_acts(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, ops=None)
+    gate_mod.stage_4(gate)
+    assert _refresh_q(prompt) == [] and not [c for c in tree.calls if c[0] == "merge"]
+    assert ["fetch", "main"] in [a for a, _ in host.calls]
+    assert 4 in _host(ops_root).stages()
+    assert host.materialised and not any(p.exists() for p in host.materialised)
+
+
+def test_a_declined_refresh_fails_the_stage_and_changes_nothing(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, confirms=[False])
+    before = _host(ops_root).path.read_text()
+    with pytest.raises(gate_mod.StageFailed, match="declined"):
+        gate_mod.stage_4(gate)
+    assert [c[0] for c in tree.calls] == []  # no commit, no merge, no push
+    assert _host(ops_root).path.read_text() == before
+    assert not _post_applies(host)
+
+
+def test_a_confirmed_refresh_commits_merges_pushes_then_trusts_before_any_apply(
+    ops_root: Path,
+) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    order: list[str] = []
+    tree_fr, host_fr = tree.fr, host.fr
+
+    def tfr(args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
+        order.append(" ".join(args[:2]))
+        return tree_fr(args, terminal=terminal)
+
+    def hfr(args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
+        if "apply" in args:
+            order.append("ops apply")
+        return host_fr(args, terminal=terminal)
+
+    tree.fr, host.fr = tfr, hfr  # type: ignore[method-assign]
+    gate_mod.stage_4(gate)
+    kinds = [k for k, _ in tree.calls if k in ("commit", "merge", "push")]
+    assert kinds[:3] == ["commit", "merge", "push"]
+    assert tree.calls[[k for k, _ in tree.calls].index("merge")][1][0] == TIP
+    assert order.index("ops trust") < order.index("ops apply")
+    assert _host(ops_root).pushed() == HEAD
+    (q,) = _refresh_q(prompt)
+    assert "changed: post" in q and "Test Plan" not in q
+
+
+def test_the_confirmation_names_every_op_and_a_changed_test_plan(ops_root: Path) -> None:
+    spec = (ops_root / SPEC).read_text().replace("walk the stage", "walk it twice")
+    ops = FIXED_OPS.replace("  - id: mut\n", NEW_OP + "  - id: mut\n").replace(
+        "  - {id: pre, summary: create the thing, phase: pre-merge, check: 'false', "
+        "apply: 'true'}\n",
+        "",
+    )
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, ops=ops, spec=spec)
+    gate_mod.stage_4(gate)
+    (q,) = _refresh_q(prompt)
+    for part in ("added: extra", "removed: pre", "changed: post", "Test Plan changed",
+                 "origin/main"):  # fmt: skip
+        assert part in q, q
+
+
+def test_a_conflicting_refresh_names_the_paths_and_the_manual_merge(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    tree.merge_conflict = (f"{PLAN}/ops.yaml", "docs/x.md")
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_4(gate)
+    why = exc.value.why
+    assert f"{PLAN}/ops.yaml" in why and "docs/x.md" in why
+    assert f"git -C {ops_root} merge {TIP}" in why
+    assert not [c for c in tree.calls if c[0] == "push"]
+    assert 4 not in _host(ops_root).stages()
+
+
+def test_a_refresh_at_stage_5_goes_back_to_stage_4_and_reapplies(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4)
+    _pre_merge_closed(ops_root)
+    record_op(ops_root, "p", op="post", result="done", phase="post-merge")
+    host.live["post"] = "DONE"
+    result = run(gate)
+    assert result.ok, result.why
+    assert result.ran == (4, 5, 6, 7, 8)
+    assert _post_applies(host) == [["fr", "ops", "apply", "post", "--plan", PLAN, "--yes"]]
+    assert _host(ops_root).reopened() == (frozenset(), frozenset())
+    assert len(_refresh_q(prompt)) == 1
+
+
+def test_a_test_plan_only_refresh_at_stage_5_reopens_and_forgets_nothing(ops_root: Path) -> None:
+    spec = (ops_root / SPEC).read_text().replace("click the page", "click it twice")
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4, ops=None, spec=spec)
+    gate_mod.stage_5(gate)
+    assert len(_refresh_q(prompt)) == 1 and [k for k, _ in tree.calls if k == "merge"]
+    assert _host(ops_root).reopened() == (frozenset(), frozenset())
+    assert {1, 3, 4, 5} <= _host(ops_root).stages()
+
+
+@pytest.mark.parametrize("at", [6, 7])
+def test_a_test_plan_only_refresh_at_stage_6_or_7_goes_back_to_stage_5(
+    ops_root: Path, at: int
+) -> None:
+    """p1-r3: stage 5 walks the Test Plan, so a changed one is walked again."""
+    spec = (ops_root / SPEC).read_text().replace("walk the stage", "walk it twice")
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4, 5, *range(6, at), ops=None, spec=spec)
+    _pre_merge_closed(ops_root)
+    record_op(ops_root, "p", op="post", result="done", phase="post-merge")  # stage 4's
+    result = run(gate)
+    assert result.ok, result.why
+    assert result.ran == (5, 6, 7, 8)
+    assert _host(ops_root).reopened() == (frozenset(), frozenset())
+    assert not _post_applies(host)  # stage 4 is not forgotten: no op changed
+    assert any("walk it twice" in a for a in prompt.asked)  # stage 5 asked the new step
+
+
+def test_a_default_branch_without_the_plan_dir_is_refused(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, ops=None)
+    host.default_edits = {PLAN: None}
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_4(gate)
+    assert PLAN in exc.value.why and exc.value.code == 2
+    assert _refresh_q(prompt) == [] and not tree.calls
+
+
+def test_the_refresh_merges_the_sha_it_diffed_though_the_default_branch_moved(
+    ops_root: Path,
+) -> None:
+    """Review p1-sec-r1: the drift, the question and the merge name one pinned commit."""
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    materialise = host.materialise
+
+    def then_move(ref: str, paths: Sequence[str]) -> Path:
+        out = materialise(ref, paths)
+        host.tip = "d" * 40  # origin/main moves while the operator reads the question
+        return out
+
+    host.materialise = then_move  # type: ignore[method-assign]
+    gate_mod.stage_4(gate)
+    assert ["materialise", TIP] == [a for a, _ in host.calls if a[0] == "materialise"][0][:2]
+    assert [v[0] for k, v in tree.calls if k == "merge"] == [TIP]
+    (q,) = _refresh_q(prompt)
+    assert TIP[:12] in q
+
+
+def test_a_default_tip_that_is_no_sha_is_refused_before_any_diff(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    host.tip = "origin/main"
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_4(gate)
+    assert exc.value.code == 2 and not tree.calls and _refresh_q(prompt) == []
+
+
+# ------------------------------------------------------ phase 1 review (p1-r1 … p1-r5)
+
+
+def _close_pre_merge(ops_root: Path) -> None:
+    for op in ("pre", "mut"):
+        record_op(ops_root, "p", op=op, result="done", phase="pre-merge")
+
+
+def _passed_label(gate: Gate) -> None:
+    gate.forge.pr["labels"] = [*gate.forge.pr["labels"], "gate:devops-passed"]  # type: ignore[attr-defined]
+
+
+def test_after_a_restart_an_existing_pass_holds_when_nothing_blocks_it(ops_root: Path) -> None:
+    """p1-r1: the label is trusted again only once the refreshed tree has no blocker."""
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4, 5, 6)
+    _passed_label(gate)
+    _close_pre_merge(ops_root)
+    record_op(ops_root, "p", op="post", result="done", phase="post-merge")
+    host.live["post"] = "DONE"
+    said: list[str] = []
+    gate.say = said.append
+    result = run(gate)
+    assert result.ok, result.why
+    assert result.ran == (4, 5, 6, 7, 8)
+    assert any("the existing pass still holds after the refresh" in line for line in said)
+    assert not [a for a in _gate_passes(tree) if a[a.index("--gate") + 1] == "devops"]
+
+
+def test_after_a_restart_an_existing_pass_with_a_blocker_fails_stage_6(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4, 5, 6)
+    _passed_label(gate)
+    record_op(ops_root, "p", op="post", result="done", phase="post-merge")
+    host.live["post"] = "DONE"
+    result = run(gate)
+    assert not result.ok and result.failed == 6
+    assert "op pre" in result.why and "predates the refresh" in result.why
+    assert "gate:devops-passed" in gate.forge.pr["labels"]  # type: ignore[attr-defined]
+    assert not [c for c in gate.forge.calls if c[0] == "labels" and c[1][2]]  # type: ignore[attr-defined]
+
+
+def test_an_entry_the_merge_brings_in_does_not_close_a_reopened_op(ops_root: Path) -> None:
+    """p1-r2: the default branch's own journal entries are not evidence recorded here."""
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    host.live["post"] = "DONE"
+    merge = tree.on_merge
+
+    def merge_with_an_entry() -> None:
+        merge()
+        record_op(ops_root, "p", op="post", result="done", phase="post-merge")
+
+    tree.on_merge = merge_with_an_entry
+    gate_mod.stage_4(gate)
+    assert _post_applies(host) == [["fr", "ops", "apply", "post", "--plan", PLAN, "--yes"]]
+
+
+def test_a_no_op_merge_that_still_differs_is_refused(ops_root: Path) -> None:
+    """p1-r5: the pinned commit is already in the ops branch, yet the ops differ."""
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4)
+    tree.contains = {TIP}
+    before = _host(ops_root).path.read_text()
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_5(gate)
+    assert f"still differs from main at {TIP[:12]} after merging it" in exc.value.why
+    assert "post" in exc.value.why and "resolve by hand" in exc.value.why
+    assert not tree.calls and _refresh_q(prompt) == []
+    assert _host(ops_root).path.read_text() == before
+
+
+def test_a_refresh_that_reopens_on_every_pass_stops_at_the_bound(ops_root: Path) -> None:
+    """p1-r4: MAX_RESTARTS bounds a default branch that never settles."""
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4)
+    tree.on_merge = None  # the merge never brings the change in: it drifts on every pass
+    result = run(gate)
+    assert not result.ok and result.failed == 5
+    assert "keeps moving" in result.why
+
+
+def test_a_push_that_fails_after_the_merge_is_retried_by_a_rerun(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    tree.push_error = "rejected"
+    with pytest.raises(gate_mod.StageFailed, match="cannot push"):
+        gate_mod.stage_4(gate)
+    assert 4 not in _host(ops_root).stages() and _host(ops_root).pushed() is None
+    tree.push_error = None
+    gate_mod.stage_4(gate)
+    assert [k for k, _ in tree.calls].count("push") == 2
+    assert 4 in _host(ops_root).stages() and _host(ops_root).pushed() == HEAD
+
+
+@pytest.mark.parametrize("at", [6, 7])
+def test_an_ops_refresh_at_stage_6_or_7_goes_back_to_stage_4(ops_root: Path, at: int) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, 4, 5, *range(6, at))
+    _pre_merge_closed(ops_root)
+    record_op(ops_root, "p", op="post", result="done", phase="post-merge")
+    host.live["post"] = "DONE"
+    result = run(gate)
+    assert result.ok, result.why
+    assert result.ran == (4, 5, 6, 7, 8)
+    assert _post_applies(host) == [["fr", "ops", "apply", "post", "--plan", PLAN, "--yes"]]
+
+
+# ------------------------- ops-gate-truth R9, R12–R15: the stage walks its own rows
+
+
+ROW_SPEC = (
+    "# S\n\n## Verification\n\nstrategy: none\ngate: developer\n"
+    "- rd: live — the devops stage walks it\ngate: rd=devops\n\n## Test Plan\n\n"
+    "{step}\n- [tester] click the page\n"
+)
+FRAGMENT = f"docs/acceptance/features/{SPEC_SLUG}.yaml"
+A_WALK = {"strategy": "live", "harness": "operator", "model": "human", "outcome": "pass",
+          "at": "2026-10-22T09:00:00Z", "evidence": "e"}  # fmt: skip
+
+
+def _row_spec(ops_root: Path, step: str = "- [devops] walk the stage", **rd: Any) -> None:
+    (ops_root / SPEC).write_text(ROW_SPEC.format(step=step))
+    write_matrix(ops_root, [{**row(SPEC, rid="rd", status="walk-owed"), **rd}])
+
+
+def _fr_calls(tree: FakeTree, *verb: str) -> list[list[str]]:
+    return [c[1][0] for c in tree.calls if c[0] == "fr" and c[1][0][: len(verb)] == list(verb)]
+
+
+def _stage5(ops_root: Path, answers: list[str]) -> tuple[FakeTree, FakePrompt, list[str]]:
+    _record_stages(ops_root, 1, 2, 3, 4)
+    gate, host, tree, forge, prompt, said = _gate(
+        ops_root, up=True, forge=FakeForge(state="MERGED"), prompt=FakePrompt(answers=answers)
+    )
+    gate_mod.stage_5(gate)
+    return tree, prompt, said
+
+
+def test_a_passing_probe_on_a_step_naming_rows_records_the_probe_identity(ops_root: Path) -> None:
+    _row_spec(ops_root, "- [devops] (op: post) (rows: rd) walk the stage")
+    _record_stages(ops_root, 1, 2, 3, 4)
+    gate, host, tree, *_ = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    host.by_id["post"] = [(0, [_row("post", "DONE", "checked", evidence="ok")])]
+
+    gate_mod.stage_5(gate)
+
+    (args,) = _outcome_args(tree)
+    assert args[args.index("--harness") + 1] == "fr-ops-probe"
+    assert args[args.index("--model") + 1] == "op:post"
+
+
+def test_stage_5_asks_about_an_unwalked_devops_row_no_ran_step_names(ops_root: Path) -> None:
+    _row_spec(ops_root)
+    tree, prompt, _ = _stage5(ops_root, ["ran walked the step", "ran walked the row"])
+
+    assert any("rd" in q for q in prompt.asked[1:])
+    (args,) = _fr_calls(tree, "acceptance", "set-status")
+    flags = dict(zip(args[2::2], args[3::2], strict=False))
+    assert flags["--id"] == "rd" and flags["--status"] == "walked"
+    assert flags["--walk"] == "walked the row"
+    assert (flags["--harness"], flags["--model"], flags["--strategy"]) == (
+        "operator", "human", "live"
+    )  # fmt: skip
+    assert flags["--feature"] == SPEC_SLUG and "run-1" in flags["--notes"]
+
+
+def test_an_owed_row_answer_sets_walk_owed_with_the_reason(ops_root: Path) -> None:
+    _row_spec(ops_root)
+    tree, *_ = _stage5(ops_root, ["ran walked the step", "owed needs the vendor"])
+
+    (args,) = _fr_calls(tree, "acceptance", "set-status")
+    flags = dict(zip(args[2::2], args[3::2], strict=False))
+    assert (flags["--status"], flags["--notes"]) == ("walk-owed", "needs the vendor")
+    assert "--walk" not in args and flags["--feature"] == SPEC_SLUG
+
+
+def test_a_row_whose_only_step_was_na_is_asked_about(ops_root: Path) -> None:
+    _row_spec(ops_root, "- [devops] (rows: rd) walk the stage")
+    tree, prompt, _ = _stage5(ops_root, ["na not this time", "owed later"])
+
+    assert len(_fr_calls(tree, "acceptance", "set-status")) == 1
+
+
+def test_a_row_a_ran_step_names_is_not_asked_about(ops_root: Path) -> None:
+    _row_spec(ops_root, "- [devops] (rows: rd) walk the stage")
+    tree, prompt, _ = _stage5(ops_root, ["ran walked it"])
+
+    assert _fr_calls(tree, "acceptance", "set-status") == []
+    assert len(prompt.asked) == 1
+
+
+def test_a_walk_the_pr_head_carries_does_not_count(ops_root: Path) -> None:
+    _row_spec(ops_root, status="walked", walks=[A_WALK])
+    _record_stages(ops_root, 1, 2, 3, 4)
+    gate, host, tree, forge, prompt, _ = _gate(
+        ops_root, up=True, forge=FakeForge(state="MERGED"),
+        prompt=FakePrompt(answers=["ran the step", "ran the row"]),
+    )  # fmt: skip
+    tree.head_files[FRAGMENT] = (ops_root / FRAGMENT).read_text()
+
+    gate_mod.stage_5(gate)
+
+    assert len(_fr_calls(tree, "acceptance", "set-status")) == 1
+
+
+def test_a_walk_the_ops_branch_recorded_closes_the_row(ops_root: Path) -> None:
+    _row_spec(ops_root, status="walked", walks=[A_WALK])
+    tree, prompt, _ = _stage5(ops_root, ["ran the step"])
+
+    assert _fr_calls(tree, "acceptance", "set-status") == []
+
+
+def test_stage_6_lists_what_the_devops_gate_owes_and_the_row_recovery(ops_root: Path) -> None:
+    _row_spec(ops_root)
+    _record_stages(ops_root, 1, 2, 3, 4, 5)
+    for op in ("pre", "mut", "post"):
+        record_op(ops_root, "p", op=op, result="done",
+                  phase="post-merge" if op == "post" else "pre-merge")  # fmt: skip
+    gate, host, tree, forge, prompt, said = _gate(
+        ops_root, up=True, forge=FakeForge(state="MERGED")
+    )
+    tree.gate_pass_code = 2
+
+    with pytest.raises(gate_mod.StageFailed) as failed:
+        gate_mod.stage_6(gate)
+
+    assert any("row rd (devops)" in line for line in said)
+    why = str(failed.value)
+    assert "acceptance set-status --id rd --status walked --walk" in why
+    assert f"--feature {SPEC_SLUG}" in why and "--strategy live" in why
+
+
+def test_stage_7_reports_the_tester_gates_rows_and_steps(ops_root: Path) -> None:
+    _row_spec(ops_root)
+    write_matrix(
+        ops_root,
+        [row(SPEC, rid="rd", status="walk-owed"), row(SPEC, rid="rt", status="walk-owed")],
+    )
+    (ops_root / SPEC).write_text(
+        (ops_root / SPEC)
+        .read_text()
+        .replace("gate: rd=devops\n", "gate: rd=devops\n- rt: live — the tester walks it\n")
+    )
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+
+    gate_mod.stage_7(gate)
+
+    assert any("row rt (tester)" in line for line in said)
+    assert any("Test Plan step 2 (tester)" in line for line in said)
+    assert not any("row rd" in line for line in said)
+
+
+def test_stage_8_reports_a_held_archive_and_still_publishes(ops_root: Path) -> None:
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    real = tree.fr
+
+    def held_archive(args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
+        if list(args)[:1] == ["archive"]:
+            tree.calls.append(("fr", (list(args), terminal)))
+            return 0, "  held: docs/superpowers/plans/p — phase 3 [manual] is unticked\n"
+        return real(args, terminal=terminal)
+
+    tree.fr = held_archive  # type: ignore[method-assign]
+    audits: list[tuple[int, str]] = []
+    real_finish = gate.finish
+    gate.finish = lambda t, n, body, **k: (audits.append((n, body)), real_finish(t, n, body, **k))  # type: ignore[method-assign]
+
+    gate_mod.stage_8(gate)
+
+    assert any("archive held" in line for line in said)
+    assert any("phase 3 [manual] is unticked" in line for line in said)
+    ((n, body),) = audits
+    assert n == 8 and "archive held" in body and "archived;" not in body
+    assert ("pr_create", {"head": "chore/ops-p", "base": "main"}) in forge.calls
+
+
+# ------------------------------------- phase 2 review: head-free row judgement (R12-R14)
+
+
+B_WALK = {**A_WALK, "harness": "b", "at": "2026-10-22T09:30:00Z", "evidence": "head"}
+
+
+def _head_fragment(ops_root: Path, rows: list[dict[str, Any]], rel: str = FRAGMENT) -> str:
+    import yaml
+
+    data = yaml.safe_load((ops_root / rel).read_text())
+    data["rows"] = rows
+    return yaml.safe_dump(data, sort_keys=False)
+
+
+def test_p2_r1_a_head_written_walk_and_status_never_close_a_row(ops_root: Path) -> None:
+    """The reviewer's case: a merged row owes b and has an old passing walk on a; the PR
+    head adds a walk on b and sets `walked`. The stage still asks about it."""
+    a_walk = {**A_WALK, "harness": "a"}
+    _row_spec(ops_root, status="walked", harnesses=["a", "b"], walks=[a_walk, B_WALK])
+    _record_stages(ops_root, 1, 2, 3, 4)
+    gate, host, tree, forge, prompt, _ = _gate(
+        ops_root, up=True, forge=FakeForge(state="MERGED"),
+        prompt=FakePrompt(answers=["ran the step", "owed b is down"]),
+    )  # fmt: skip
+    head_row = {**row(SPEC, rid="rd", status="walked"), "harnesses": ["a", "b"],
+                "walks": [B_WALK]}  # fmt: skip
+    tree.head_files[FRAGMENT] = _head_fragment(ops_root, [head_row])
+
+    gate_mod.stage_5(gate)
+
+    assert any("rd" in q for q in prompt.asked[1:])
+    assert len(_fr_calls(tree, "acceptance", "set-status")) == 1
+
+
+def test_p2_r2_a_row_walked_only_by_the_head_is_asked_and_blocks_stage_6(
+    ops_root: Path,
+) -> None:
+    """A row walked only by the PR head, named by an owed outcome later resolved fixed:
+    stage 5 asks about it, and stage 6 refuses without running `fr gate pass`."""
+    _row_spec(ops_root, "- [devops] (rows: rd) walk the stage", status="walked", walks=[A_WALK])
+    jp = journal_path(ops_root, "spec", SPEC_SLUG)
+    for e in (
+        JournalEntry(kind="owed", scope="spec", id="test-plan-step-1",
+                     created="2026-10-22T09:00:00+00:00", title="Test Plan step 1 owed",
+                     body="why: later\nhow: later"),
+        JournalEntry(kind="finding", scope="spec", id="test-plan-step-1-resolved",
+                     created="2026-10-22T09:10:00+00:00", title="resolves", state="fixed",
+                     resolves="test-plan-step-1", body="walked"),
+    ):  # fmt: skip
+        append_journal_entry(jp, SPEC_SLUG, e)
+    for op in ("pre", "mut", "post"):
+        record_op(ops_root, "p", op=op, result="done",
+                  phase="post-merge" if op == "post" else "pre-merge")  # fmt: skip
+    _record_stages(ops_root, 1, 2, 3, 4)
+    gate, host, tree, forge, prompt, _ = _gate(
+        ops_root, up=True, forge=FakeForge(state="MERGED"),
+        prompt=FakePrompt(answers=["owed later"]),
+    )  # fmt: skip
+    tree.head_files[FRAGMENT] = (ops_root / FRAGMENT).read_text()
+
+    gate_mod.stage_5(gate)
+    assert any("rd" in q for q in prompt.asked)
+
+    with pytest.raises(gate_mod.StageFailed) as failed:
+        gate_mod.stage_6(gate)
+    assert _gate_passes(tree) == []
+    assert "row rd (devops)" in str(failed.value)
+    assert "acceptance set-status --id rd" in str(failed.value)
+
+
+def _second_fragment(ops_root: Path) -> str:
+    """Move rd's fragment to another feature's file: rows citing the spec may live there."""
+    import yaml
+
+    rel = "docs/acceptance/features/2026-01-01-other.yaml"
+    data = yaml.safe_load((ops_root / FRAGMENT).read_text())
+    data["feature"] = "2026-01-01-other"
+    (ops_root / rel).write_text(yaml.safe_dump(data, sort_keys=False))
+    (ops_root / FRAGMENT).unlink()
+    return rel
+
+
+def test_p2_r3_head_walks_are_read_from_every_fragment_holding_a_judged_row(
+    ops_root: Path,
+) -> None:
+    _row_spec(ops_root, status="walked", walks=[A_WALK])
+    rel = _second_fragment(ops_root)
+    _record_stages(ops_root, 1, 2, 3, 4)
+    gate, host, tree, forge, prompt, _ = _gate(
+        ops_root, up=True, forge=FakeForge(state="MERGED"),
+        prompt=FakePrompt(answers=["ran the step", "ran the row"]),
+    )  # fmt: skip
+    tree.head_files[rel] = (ops_root / rel).read_text()
+
+    gate_mod.stage_5(gate)
+
+    assert len(_fr_calls(tree, "acceptance", "set-status")) == 1
+
+
+def test_p2_r3_an_unreadable_head_fragment_is_a_refusal(ops_root: Path) -> None:
+    _row_spec(ops_root)
+    rel = _second_fragment(ops_root)
+    _record_stages(ops_root, 1, 2, 3, 4)
+    gate, host, tree, *_ = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    tree.head_files[rel] = "rows: [\n"
+
+    with pytest.raises(gate_mod.StageFailed) as failed:
+        gate_mod.stage_5(gate)
+    assert failed.value.code == 2 and rel in str(failed.value)
+
+
+def test_p2_r4_an_unreadable_section_fails_stage_6_with_its_message(ops_root: Path) -> None:
+    _row_spec(ops_root)
+    text = (ops_root / SPEC).read_text().replace("gate: developer", "gate: developer\ngate: tester")
+    (ops_root / SPEC).write_text(text)
+    _record_stages(ops_root, 1, 2, 3, 4, 5)
+    gate, host, tree, *_ = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+
+    with pytest.raises(gate_mod.StageFailed) as failed:
+        gate_mod.stage_6(gate)
+    assert "cannot be read" in str(failed.value)
+
+
+def test_p2_r5_the_recovery_names_every_harness_a_row_still_owes(ops_root: Path) -> None:
+    _row_spec(ops_root, harnesses=["a", "b"], walks=[{**A_WALK, "harness": "a"}])
+    _record_stages(ops_root, 1, 2, 3, 4, 5)
+    gate, host, tree, *_ = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+
+    with pytest.raises(gate_mod.StageFailed) as failed:
+        gate_mod.stage_6(gate)
+    why = str(failed.value)
+    assert "--harness b" in why and "--harness a " not in why
+
+
+def test_p2_r6_stage_7s_tester_pass_names_the_run(ops_root: Path) -> None:
+    _devops_only_spec(ops_root)
+    gate, host, tree, *_ = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    tree.fr(["closeout", "outcome", "--run", "run-1", "--step", "1", "--ran"])
+
+    gate_mod.stage_7(gate)
+
+    (gp,) = _gate_passes(tree)
+    assert gp[gp.index("--run") + 1] == "run-1"
+
+
+# ------------------------------------------ ops-gate-truth R20: the final line reads the DoD
+
+
+def _real_plan(ops_root: Path, *, manual: str | None = None) -> None:
+    """The fixture plan as a real folder (`_meta.yaml`, a ticked phase 1, and optionally a
+    `[manual]` phase 2 whose step is *manual*: " " unticked, "x" ticked)."""
+    from tests.unit.test_run_dod import FIXTURE, MANUAL
+
+    for name in ("_meta.yaml", "01.yaml"):
+        shutil.copy(FIXTURE / name, ops_root / PLAN / name)
+    phase = ops_root / PLAN / "01.yaml"
+    phase.write_text(phase.read_text().replace('state: " "', "state: x"))
+    if manual is not None:
+        (ops_root / PLAN / "02.yaml").write_text(MANUAL.format(n=2, tick=manual))
+
+
+def _all_recorded(ops_root: Path, tree: FakeTree) -> None:
+    """Every op closed and both Test Plan steps recorded ran: only the plan can owe."""
+    for op, phase in (("pre", "pre-merge"), ("mut", "pre-merge"), ("post", "post-merge")):
+        record_op(ops_root, "p", op=op, result="done", phase=phase)
+    for n in ("1", "2"):
+        tree.fr(["closeout", "outcome", "--run", "run-1", "--step", n, "--ran"])
+
+
+def test_r20_a_rerun_with_a_discharged_dod_says_the_stage_is_complete(ops_root: Path) -> None:
+    _real_plan(ops_root, manual="x")
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _all_recorded(ops_root, tree)
+
+    result = run(gate)
+
+    assert result.ok and result.ran == ()
+    assert "the DevOps stage is complete" in said, said
+    assert not any("still owed" in line for line in said)
+
+
+def test_r20_a_rerun_with_owed_items_lists_them_and_never_says_complete(ops_root: Path) -> None:
+    _real_plan(ops_root)
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+
+    result = run(gate)
+
+    assert result.ok and result.ran == ()
+    assert "the DevOps stage is complete" not in said
+    assert "every stage ran; still owed:" in said, said
+    assert any(line.startswith("  gate:devops: Test Plan step 1 (devops)") for line in said)
+    assert any(line.startswith("  gate:devops: op post [post-merge]") for line in said)
+
+
+def test_r20_a_held_archive_leaves_its_manual_phase_owed_on_the_ran_path(ops_root: Path) -> None:
+    _real_plan(ops_root, manual=" ")
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _all_recorded(ops_root, tree)
+    real = tree.fr
+
+    def held_archive(args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
+        if list(args)[:1] == ["archive"]:
+            return 0, "  held: docs/superpowers/plans/p — phase 2 [manual] is unticked\n"
+        return real(args, terminal=terminal)
+
+    tree.fr = held_archive  # type: ignore[method-assign]
+
+    result = run(gate)
+
+    assert result.ok and result.ran == (8,)
+    assert "the DevOps stage is complete" not in said
+    assert "every stage ran; still owed:" in said, said
+    assert any(line.startswith("  manual phases: phase 2 [manual]: not ticked") for line in said)
+
+
+def test_r20_an_unreadable_dod_never_says_complete_and_exits_2(ops_root: Path) -> None:
+    (ops_root / PLAN / "_meta.yaml").unlink()  # the plan folder cannot be read
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+
+    result = run(gate)
+
+    assert "the DevOps stage is complete" not in said
+    assert any("Definition of Done cannot be read" in line for line in said), said
+    assert not result.ok and result.code == 2  # l-errors-r4
+
+
+def test_p3_r1_a_head_carried_owed_resolution_never_makes_the_stage_complete(
+    ops_root: Path,
+) -> None:
+    _real_plan(ops_root, manual="x")
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _all_recorded(ops_root, tree)
+    jp = journal_path(ops_root, "plan", "p")
+    for entry in (
+        JournalEntry(kind="owed", scope="plan", id="walk-the-dog",
+                     created="2026-10-22T10:00:00+00:00", title="walk the dog",
+                     body="what: w\nwhy: y\nhow: h\nowed_key: plan:p#p1"),
+        JournalEntry(kind="finding", scope="plan", id="dog-walked", resolves="walk-the-dog",
+                     state="fixed", created="2026-10-22T11:00:00+00:00", title="walked", body="b"),
+    ):  # fmt: skip
+        append_journal_entry(jp, "p", entry)
+    tree.head_files[jp.relative_to(ops_root).as_posix()] = jp.read_text()  # the PR head wrote both
+
+    run(gate)
+
+    assert "the DevOps stage is complete" not in said
+    assert any(line.startswith("  owed: owed walk-the-dog (plan journal)") for line in said), said
+
+
+def test_p3_r1_a_manual_tick_the_head_carries_never_makes_the_stage_complete(
+    ops_root: Path,
+) -> None:
+    _real_plan(ops_root, manual="x")
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _all_recorded(ops_root, tree)
+    rel = f"{PLAN}/02.yaml"
+    tree.head_files[rel] = (ops_root / rel).read_text()  # the tick arrived with the PR head
+
+    run(gate)
+
+    assert "the DevOps stage is complete" not in said
+    assert any(line.startswith("  manual phases: phase 2 [manual]") for line in said), said
+
+
+def test_p3_r1_a_manual_tick_made_on_the_ops_branch_counts(ops_root: Path) -> None:
+    _real_plan(ops_root, manual="x")
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _all_recorded(ops_root, tree)
+    from tests.unit.test_run_dod import MANUAL
+
+    tree.head_files[f"{PLAN}/02.yaml"] = MANUAL.format(n=2, tick=" ")  # unticked on the head
+
+    run(gate)
+
+    assert "the DevOps stage is complete" in said, said
+
+
+def test_p3_r1_a_manual_tick_the_head_carries_at_the_archived_location_is_excluded_too(
+    ops_root: Path,
+) -> None:
+    """Security review: the head's copy is looked up wherever `run_plan_dir` can resolve the
+    plan (live and archived), so carrying it at the other location escapes nothing."""
+    _real_plan(ops_root, manual="x")
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _all_recorded(ops_root, tree)
+    text = (ops_root / PLAN / "02.yaml").read_text()
+    tree.head_files["docs/superpowers/implemented/plans/p/02.yaml"] = text
+
+    run(gate)
+
+    assert "the DevOps stage is complete" not in said
+    assert any(line.startswith("  manual phases: phase 2 [manual]") for line in said), said
+
+
+# ------------------------------------- lens review: head-free judgement everywhere (R12)
+
+
+def _journal_rel(ops_root: Path, scope: str, slug: str) -> str:
+    return journal_path(ops_root, scope, slug).relative_to(ops_root).as_posix()
+
+
+def _head_carries(tree: FakeTree, ops_root: Path, scope: str, slug: str) -> None:
+    """The PR head carries this journal as the workspace holds it now."""
+    path = journal_path(ops_root, scope, slug)
+    tree.head_files[_journal_rel(ops_root, scope, slug)] = path.read_text()
+
+
+def _stage_6_ready(ops_root: Path) -> tuple[Gate, FakeHost, FakeTree, FakeForge, list[str]]:
+    _record_stages(ops_root, 1, 2, 3, 4, 5)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    for op, phase in (("pre", "pre-merge"), ("mut", "pre-merge"), ("post", "post-merge")):
+        record_op(ops_root, "p", op=op, result="done", phase=phase)
+    return gate, host, tree, forge, said
+
+
+def test_l_security_r1_an_existing_pass_is_rejudged_head_free(ops_root: Path) -> None:
+    gate, host, tree, forge, _ = _stage_6_ready(ops_root)
+    tree.fr(["closeout", "outcome", "--run", "run-1", "--step", "1", "--ran"])
+    _head_carries(tree, ops_root, "spec", SPEC_SLUG)  # the only outcome is the head's own
+    forge.pr["labels"] = ["gate:devops-passed"]
+
+    with pytest.raises(gate_mod.StageFailed) as failed:
+        gate_mod.stage_6(gate)
+
+    assert "predates the refresh" in failed.value.why
+    assert "Test Plan step 1 (devops)" in failed.value.why
+
+
+def test_l_docs_accuracy_r2_the_recovery_names_a_step_closed_only_on_the_head(
+    ops_root: Path,
+) -> None:
+    gate, host, tree, forge, _ = _stage_6_ready(ops_root)
+    tree.fr(["closeout", "outcome", "--run", "run-1", "--step", "1", "--ran"])
+    _head_carries(tree, ops_root, "spec", SPEC_SLUG)
+
+    with pytest.raises(gate_mod.StageFailed) as failed:
+        gate_mod.stage_6(gate)
+
+    assert "closeout outcome --run run-1 --step 1 --ran" in failed.value.why
+
+
+def test_l_security_r3_a_head_carried_op_closure_holds_stage_6(ops_root: Path) -> None:
+    gate, host, tree, forge, _ = _stage_6_ready(ops_root)
+    tree.fr(["closeout", "outcome", "--run", "run-1", "--step", "1", "--ran"])
+    _head_carries(tree, ops_root, "plan", "p")  # every op closure came with the PR head
+
+    with pytest.raises(gate_mod.StageFailed) as failed:
+        gate_mod.stage_6(gate)
+
+    assert "op pre [pre-merge]: closed only by evidence the PR head carries" in failed.value.why
+    assert not _gate_passes(tree)
+
+
+def test_l_security_r3_a_head_carried_op_closure_never_makes_the_stage_complete(
+    ops_root: Path,
+) -> None:
+    _real_plan(ops_root, manual="x")
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _all_recorded(ops_root, tree)
+    _head_carries(tree, ops_root, "plan", "p")
+
+    run(gate)
+
+    assert "the DevOps stage is complete" not in said
+    assert any(line.startswith("  gate:devops: op post [post-merge]") for line in said), said
+
+
+def test_l_security_r4_head_walks_reads_a_fragment_only_the_head_carries(ops_root: Path) -> None:
+    import yaml
+
+    gate, host, tree, *_ = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    frag = yaml.safe_load((ops_root / FRAGMENT).read_text())
+    frag["rows"][0]["walks"] = [A_WALK]
+    frag["feature"] = "elsewhere"
+    tree.head_files["docs/acceptance/features/elsewhere.yaml"] = yaml.safe_dump(frag)
+
+    walks = gate_mod.head_walks(tree, HEAD)
+
+    assert walks.get("r1"), walks
+
+
+def test_l_errors_r2_a_git_failure_inside_a_stage_is_a_refusal_never_a_traceback(
+    ops_root: Path,
+) -> None:
+    from fr.triage.gitseam import GitError
+
+    _record_stages(ops_root, 1, 2, 3)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+
+    def broken(ref: str, paths: Sequence[str]) -> Path:
+        raise GitError("`git archive` timed out after 60s")
+
+    host.materialise = broken  # type: ignore[method-assign]
+
+    result = run(gate)
+
+    assert not result.ok and result.failed == 4 and result.code == 2
+    assert "git failed" in result.why and "timed out" in result.why
+
+
+def test_l_errors_r9_a_malformed_head_phase_file_fails_closed(ops_root: Path) -> None:
+    _real_plan(ops_root, manual="x")
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _all_recorded(ops_root, tree)
+    tree.head_files[f"{PLAN}/02.yaml"] = "- just\n- a list\n"
+
+    result = run(gate)
+
+    assert "the DevOps stage is complete" not in said
+    assert result.code == 2 and "is not a plan phase file" in result.why
+
+
+# ------------------------------------------- lens review: the refresh's failure paths
+
+
+def test_l_errors_r1_a_failed_fetch_of_the_default_branch_refuses(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    host.fetch_error = "could not read from remote repository"
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_4(gate)
+    assert exc.value.code == 2 and "cannot fetch origin/main" in exc.value.why
+    assert "could not read from remote" in exc.value.why
+    assert not tree.calls and _refresh_q(prompt) == []
+
+
+def test_l_errors_r3_a_hand_merge_brings_in_nothing_that_closes_a_reopened_op(
+    ops_root: Path,
+) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    tree.merge_conflict = (f"{PLAN}/ops.yaml",)
+    with pytest.raises(gate_mod.StageFailed):
+        gate_mod.stage_4(gate)
+    # l-tests-r7 (R3): the records were committed before the merge; the host state already
+    # holds the reopened op, and the pinned commit waits for the hand merge
+    assert [k for k, _ in tree.calls if k in ("commit", "merge")] == ["commit", "merge"]
+    assert _host(ops_root).reopened()[0] == {"post"}
+    assert _host(ops_root).pending_merge() == TIP
+
+    # the operator merges by hand: the default branch's ops, and its journal entry for post
+    _write_edits(ops_root, host.default_edits)
+    record_op(ops_root, "p", op="post", result="done", phase="post-merge")
+    tree.tip_files[_journal_rel(ops_root, "plan", "p")] = journal_path(
+        ops_root, "plan", "p"
+    ).read_text()
+    host.live["post"] = "DONE"
+    tree.merge_conflict = ()
+    again = Gate(gate.target, host, gate.forge, FakePrompt(), [].append, _host(ops_root))
+
+    gate_mod.stage_4(again)
+
+    assert _post_applies(host) == [["fr", "ops", "apply", "post", "--plan", PLAN, "--yes"]]
+    assert _host(ops_root).pending_merge() is None
+
+
+def test_l_errors_r3_a_failed_merge_commit_names_the_abort(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+
+    def failing(ref: str, message: str) -> str:
+        raise RuntimeError("commit hook rejected")
+
+    tree.merge_commit = failing  # type: ignore[method-assign]
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_4(gate)
+    assert f"git -C {ops_root} merge --abort" in exc.value.why
+    assert _host(ops_root).pending_merge() == TIP
+
+
+def test_l_tests_r1_the_refresh_itself_grants_trust_before_it_returns(ops_root: Path) -> None:
+    from fr.ops.refresh import refresh
+
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    refresh(gate, tree, 4)  # no stage acts afterwards: only the refresh can have asked
+    trusts = [a for a in (c[1][0] for c in tree.calls if c[0] == "fr") if a[:2] == ["ops", "trust"]]
+    assert trusts == [["ops", "trust", "--plan", PLAN]]
+    kinds = [k for k, _ in tree.calls]
+    assert kinds.index("push") < kinds.index("fr")
+
+
+def test_l_tests_r7_the_refresh_push_is_leased_on_the_last_pushed_sha(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    _host(ops_root).set_pushed("e" * 40)
+    tree.merged_head = "d" * 40
+    gate_mod.stage_4(gate)
+    assert tree.leases[0] == "e" * 40
+    assert _host(ops_root).pushed() == "d" * 40
+
+
+def test_l_tests_r7_ran_on_a_row_still_owing_another_harness_keeps_its_status(
+    ops_root: Path,
+) -> None:
+    _row_spec(ops_root, harnesses=["operator", "b"])
+    tree, prompt, _ = _stage5(ops_root, ["ran walked the step", "ran walked the row"])
+    (args,) = _fr_calls(tree, "acceptance", "set-status")
+    flags = dict(zip(args[2::2], args[3::2], strict=False))
+    assert flags["--status"] == "walk-owed" and flags["--harness"] == "operator"
+
+
+def test_l_tests_r7_stage_6_refuses_an_unreadable_setting(
+    ops_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.settings import SettingsError
+
+    gate, host, tree, forge, _ = _stage_6_ready(ops_root)
+
+    def broken(root: Path, feature: str) -> bool:
+        raise SettingsError(".fr/settings.yaml: not a mapping")
+
+    monkeypatch.setattr("fr.settings.disabled", broken)
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_6(gate)
+    assert "cannot be read" in exc.value.why and "settings" in exc.value.why
+    assert not _gate_passes(tree)
+
+
+def test_l_tests_r4_the_refresh_reads_a_runbook_outside_the_head_paths(ops_root: Path) -> None:
+    """A plan op that `needs` a runbook op: the default branch's runbook file is part of the
+    scratch tree, wherever `.fr/ops.yaml` puts it, so drift loads the same ops on both sides."""
+    from fr.ops.refresh import refresh
+
+    (ops_root / ".fr").mkdir(exist_ok=True)
+    (ops_root / ".fr/ops.yaml").write_text("runbook: ops/book.yaml\n")
+    (ops_root / "ops").mkdir()
+    (ops_root / "ops/book.yaml").write_text(
+        "- id: rb\n  summary: rb\n  phase: post-merge\n  commands: [x]\n"
+    )
+    ops = (
+        (ops_root / PLAN / "ops.yaml")
+        .read_text()
+        .replace("phase: post-merge, check:", "phase: post-merge, needs: [rb], check:")
+    )
+    (ops_root / PLAN / "ops.yaml").write_text(ops)
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3, ops=None)
+
+    refresh(gate, tree, 4)  # nothing moved: no question, no merge, no refusal
+
+    assert _refresh_q(prompt) == [] and not [c for c in tree.calls if c[0] == "merge"]
+    (paths,) = [a[2:] for a, _ in host.calls if a[:1] == ["materialise"]][-1:]
+    assert "ops/book.yaml" in paths

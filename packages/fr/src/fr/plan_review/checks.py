@@ -404,6 +404,73 @@ def _ops_floor_issues(plan: Plan) -> list[ReviewIssue]:
     ]
 
 
+def _gated_row_coverage_issues(plan: Plan) -> list[ReviewIssue]:
+    """Spec 2026-11-27-ops-gate-truth R16: a `warn` for each row citing the plan's spec
+    whose effective gate is `devops` or `tester` and that no Test Plan step of the same
+    effective gate names with `(rows: …)`, and one for each `(rows: …)` id naming no row
+    citing the spec. Effective gates include the `devops` a plan with ops adds. Nothing
+    under `acceptance`, `test_plan` or `gates` off, or for a cross-repo spec; an
+    unreadable input skips the check (its own check reports it)."""
+    from fr.acceptance.model import AcceptanceError
+    from fr.ops.load import OpsLoadError, plan_has_ops
+    from fr.ops.testplan import steps_gated
+    from fr.settings import SettingsError, disabled
+    from fr.spec import StepGate, TestPlanHeadingError, test_plan_steps
+    from fr.verification.effective import effective_shape_default
+    from fr.verification.exit import exit_for_spec
+    from fr.workflow.model import WorkflowError
+    from fr.workflow.resolve import workflow_for_plan
+
+    root = plan.repo_root
+    spec_rel = plan.spec_path or plan.meta.spec
+    if root is None or not spec_rel or is_cross_repo_spec(spec_rel):
+        return []
+    try:
+        if any(disabled(root, f) for f in ("acceptance", "test_plan", "gates")):
+            return []
+        spec_file = _plan_spec_file(plan, root)
+        steps = test_plan_steps(spec_file.read_text()) if spec_file.is_file() else []
+        try:
+            shape = effective_shape_default(workflow_for_plan(plan).verification, root)
+        except WorkflowError:
+            shape = None
+        exit_ = exit_for_spec(root, spec_rel, shape)
+        gates = set(exit_.gates) | ({"devops"} if plan_has_ops(root, plan.dir) else set())
+    except (ValueError, OSError, AcceptanceError, OpsLoadError, SettingsError,
+            TestPlanHeadingError):  # fmt: skip
+        return []
+    issues: list[ReviewIssue] = []
+    order: tuple[StepGate, ...] = ("devops", "tester")
+    for gate in order:
+        named = {rid for s in steps_gated(steps, gates, gate) for rid in s.rows}
+        for r in exit_.gated_rows:
+            if exit_.row_gates[r.id] == gate and r.id not in named:
+                issues.append(
+                    ReviewIssue(
+                        severity="warn",
+                        message=(
+                            f"acceptance row `{r.id}` is gated `{gate}`, but no `{gate}` Test "
+                            f"Plan step names it with `(rows: {r.id})`: add the pointer to "
+                            "the step that walks it, so recording that step walks the row"
+                        ),
+                    )
+                )
+    cited = {r.id for r in exit_.rows}
+    for s in steps:
+        for rid in s.rows:
+            if rid not in cited:
+                issues.append(
+                    ReviewIssue(
+                        severity="warn",
+                        message=(
+                            f"Test Plan step {s.n} names `(rows: {rid})`, but `{rid}` is no "
+                            f"acceptance row citing {spec_rel}"
+                        ),
+                    )
+                )
+    return issues
+
+
 def _ops_gap_issues(plan: Plan) -> list[ReviewIssue]:
     """Spec 2026-11-01-ops-gate-probes R3, R7: a `warn` for an ops gap, an `error` per
     Test Plan step pointing at an op the plan does not declare, and one per op whose

@@ -12,10 +12,7 @@ description: >
 **Announce at start:** "I'm using fr-devops-gate to run the DevOps stage of run <id>."
 Check the setting first: if `fr settings show --json` reports `artifacts.gates` as `off`,
 no gate is computed, labelled or held, so `gate:devops` never applies and there is no
-DevOps stage to run. Stop there.
-Under `forge.comments: off` a pass writes no gate-pass comment: `fr gate pass` swaps the
-label alone and closes no tracker (a close is a comment), so record what passed the gate
-in the run's journal instead. Under `forge.labels: off` there is no gate label to pass.
+DevOps stage to run. Stop there. (`forge.labels` and `forge.comments`: the explainer.)
 
 A run whose plan carries ops does not end at `deliver`. Its DevOps stage applies the
 pre-merge ops, releases the PR to the merge queue (which lands it), applies the post-merge ops, records the devops Test Plan
@@ -42,10 +39,10 @@ and land it by its own pull request, not on the feature branch.
 | 2 | Posts a marker comment naming the head and diff it verified, then adds the label `fr-queue:release`, only with no open pre-merge op, green required checks, the head stage 1 verified, and a confirmation naming the PR, its head and the pre-merge state. It merges nothing: the wave merge queue lands the PR as the last entry of its push (a repo with no `queue:` in `.fr/triage.yaml` has none: merge the PR by hand), and the run stops until the forge reads it merged; the driver then names `fr ops gate --run <id>` under Needs you, which resumes at stage 3 |
 | 3 | `fr isolation verify-merge`, rebases the ops branch onto the default branch, runs every `ready:` |
 | 4 | Post-merge status and apply, then a marker comment and the label `fr-queue:postmerge-done`, which together lift the queue's barrier (nothing lands behind the PR until then) |
-| 5 | Probes each `(op: <id>)` step, asks for the others' outcome, and records it (`fr closeout outcome`) |
-| 6 | `fr gate pass --gate devops --run <id>` from the ops workspace |
-| 7 | Keeps `gate:tester` and lists the steps the Tester gate owns |
-| 8 | `fr archive --branch <feature>`, then opens the ops branch as the housekeeping PR |
+| 5 | Probes each `(op: <id>)` step, asks for the others' outcome and records it; then asks about each unwalked devops row |
+| 6 | Stops while the devops gate owes anything (PR-head evidence excluded); else `fr gate pass --gate devops --run <id>` |
+| 7 | Keeps `gate:tester` and lists the steps and rows the Tester gate owns, or passes it with `--run` |
+| 8 | `fr archive --branch <feature>` (or says `archive held`), then opens the ops branch as the housekeeping PR |
 
 Each stage's completion is recorded in your own state outside every checkout
 (`~/.local/state/fr/ops-gate/` by default); before the merge the ops branch is only
@@ -79,13 +76,10 @@ confirming anything:
 
 ## Attest, or write a check?
 
-An op with no `check:` ends UNVERIFIABLE after its apply, and the stage stops asking
-for an attestation. Attesting (`fr isolation exec --branch chore/ops-<slug> -- fr ops
-attest <op> --note "<what you did and saw>" --plan <plan>`, at a terminal) is right
-only when no probe could tell: a click in a UI with no API, a phone call. If any
-command could read the result (an API, a CLI, a file the op wrote), write that `check:`
-instead: a check runs every time and catches drift; an attestation is a statement about
-one moment. An op that has a `check:` cannot be attested.
+Attest an UNVERIFIABLE op at a terminal, from the ops workspace: `fr isolation exec
+--branch chore/ops-<slug> -- fr ops attest <op> --note "<what you did and saw>" --plan
+<plan>` (a runbook op needs `--plan` too). Attest only when no probe could tell; if any
+command could read the result, write that `check:`. An op with a `check:` cannot be attested.
 
 ## Confirming the release
 
@@ -98,20 +92,26 @@ naming the label; add it by hand, then re-run.
 
 ## Devops steps and the tester hand-off
 
-Stage 5 runs the probe of each step that points at an op (`(op: <id>)`). A passing check
-records `ran` with the check's evidence lines and asks nothing. A probe that fails (OPEN,
-UNVERIFIABLE, CANNOT-VERIFY, ESCALATE) shows its reason and asks `retry`, `na <reason>` or
-`owed <why>`; `ran` is refused. A step with no pointer, an N/A op or one closed without a
-check is walked by you, then answered `ran <evidence>`, `na <reason>` or `owed <why>` (`ran: x`
-works too; an answer that does not match is asked again). Committed evidence is only a few
-status lines, so a probe should end with a plain summary line: no colon, quote, `=`,
-bracket, list marker or long token, and a bracket anywhere records nothing. An `owed` answer is recorded but does not close the step,
-so stage 6 refuses and prints the `fr closeout outcome` command that records it once you
-have walked it (a later `ran`/`na` supersedes the owed one); then re-run the stage. Steps the Tester gate
-owns are listed in the gate-pass comment and keep `gate:tester` on the PR; they are not
-this stage's to walk. Its unwalked rows, and a spec that declares `gate: tester`, keep it too.
-When the Tester gate owns nothing, stage 7 passes `gate:tester` itself with a generated note:
+Stage 5 runs the probe of each step that points at an op (`(op: <id>)`). A passing check records
+`ran` with the check's evidence lines and asks nothing. A probe that fails (OPEN, UNVERIFIABLE,
+CANNOT-VERIFY, ESCALATE) shows its reason and asks `retry`, `na <reason>` or `owed <why>`; `ran` is
+refused. A step with no pointer, an N/A op or one closed without a check is walked by you, then
+answered `ran <evidence>`, `na <reason>` or `owed <why>` (`ran: x` works too; an answer that does
+not match is asked again). End a probe with a plain summary line (the fr ops guide's evidence
+bound). An `owed` answer is recorded but does not close the step, so stage 6 stops and prints the
+`fr closeout outcome` command that records it once you have walked it (a later `ran`/`na` supersedes
+the owed one); then re-run the stage. Steps the Tester gate owns keep `gate:tester` on the PR; they
+are not this stage's to walk. Its unwalked rows, and a spec that declares `gate: tester`, keep it
+too. When the Tester gate owns nothing, stage 7 passes `gate:tester` itself with a generated note:
 never pass it by hand with a note you made up.
+
+A step names the rows it proves with `(rows: <id>, …)` after its op pointer; recording it
+`ran` walks them. Inside the stage a walk or status the PR head carries never discharges a row:
+it is walked only when each harness it owes has a latest passing walk the head does not carry.
+Stage 5 asks about every devops row still not walked (`ran <evidence>` or `owed <why>`); stage 6
+stops before `fr gate pass` while anything is owed, printing one `fr acceptance set-status --walk`
+per owed harness. Run by hand, `fr gate pass` judges the checkout as it is
+(fr ops guide, rows a gate owns).
 
 ## What the stage never does
 

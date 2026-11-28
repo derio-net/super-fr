@@ -269,3 +269,382 @@ def test_an_owed_entry_written_to_an_old_stamp_journal_restamps_it(repo: Path) -
     assert res.exit_code == 0, res.output
     assert ARTIFACT_KINDS["journal"].read_version(path) == ARTIFACT_KINDS["journal"].current_version
     assert [e.id for e in _entries(repo)] == ["d1", "test-plan-step-4"]
+
+
+# --- a step that names rows walks them (spec 2026-11-27-ops-gate-truth R8, R9) ---------
+
+W_SLUG = "2026-11-27-gizmo"
+W_SPEC = f"docs/superpowers/specs/{W_SLUG}-design.md"
+W_FRAGMENT = f"docs/acceptance/features/{W_SLUG}.yaml"
+W_TEXT = """# Gizmo
+
+R1. it works.
+
+## Verification
+
+strategy: live
+gate: devops
+- r1: live — needs the merged build
+- r2: live — two harnesses
+- r3: none — unit tests
+
+## Test Plan
+
+1. [devops] (rows: r1) Run it live.
+2. [devops] (rows: r2) Run it on both.
+3. (rows: r3) Check the unit.
+4. (rows: zz) Unknown row.
+5. (rows: r1, r2) Both.
+"""
+
+
+def _w_row(rid: str, **extra: object) -> dict[str, object]:
+    return {
+        "id": rid,
+        "capability": "Gizmo",
+        "acceptance": f"{rid} works",
+        "origin": [f"spec:{W_SLUG}#R1"],
+        "status": "walk-owed",
+        "notes": "owed",
+        **extra,
+    }
+
+
+def _w_fragment(rows: list[dict[str, object]]) -> str:
+    return yaml.safe_dump(
+        {"schema_version": 1, "feature": W_SLUG, "repo": "acme/gizmo", "rows": rows},
+        sort_keys=False,
+    )
+
+
+def _git(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=root, capture_output=True, text=True, check=True
+    ).stdout
+
+
+def _walk_repo(tmp_path: Path, *, merged: bool = False, settings: str | None = None) -> Path:
+    """A repo on `feat/gizmo` whose origin's `main` holds the spec (and, when *merged*, the
+    rows' fragment); otherwise the fragment is pending on the branch."""
+    from fr.acceptance.fold import clear_fold_cache
+
+    bare = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(bare)], check=True)
+    root = tmp_path / "gizmo"
+    (root / "docs/superpowers/specs").mkdir(parents=True)
+    (root / W_SPEC).write_text(W_TEXT)
+    (root / ".github/workflows").mkdir(parents=True)
+    (root / ".github/workflows/ci.yml").write_text("on: push\n")
+    if settings is not None:
+        (root / ".fr").mkdir()
+        (root / ".fr/settings.yaml").write_text(settings)
+    rows = [
+        _w_row("r1", issues=["acme/gizmo#7"]),
+        _w_row("r2", harnesses=["a", "b"]),
+        _w_row("r3"),
+    ]
+    (root / "docs/acceptance/features").mkdir(parents=True)
+    _git(tmp_path, "init", "-q", "-b", "main", str(root))
+    for k, v in (("user.email", "t@example.com"), ("user.name", "T"), ("commit.gpgsign", "false")):
+        _git(root, "config", k, v)
+    _git(root, "remote", "add", "origin", str(bare))
+    if merged:
+        (root / W_FRAGMENT).write_text(_w_fragment(rows))
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "feat: gizmo spec")
+    _git(root, "push", "-q", "-u", "origin", "main")
+    _git(root, "fetch", "-q", "origin")
+    _git(root, "checkout", "-q", "-b", "feat/gizmo")
+    if not merged:
+        (root / W_FRAGMENT).write_text(_w_fragment(rows))
+        _git(root, "add", "-A")
+        _git(root, "commit", "-qm", "rows")
+    clear_fold_cache()
+    return root
+
+
+def _w(root: Path, monkeypatch: pytest.MonkeyPatch, *args: str):  # noqa: ANN202
+    from fr.acceptance.fold import clear_fold_cache
+
+    monkeypatch.chdir(root)
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
+    clear_fold_cache()
+    return runner.invoke(app, ["closeout", "outcome", "--spec", W_SPEC, *args])
+
+
+def _w_rows(root: Path) -> dict[str, object]:
+    from fr.acceptance.fold import clear_fold_cache, load_effective
+
+    clear_fold_cache()
+    return {r.id: r for r in load_effective(root).rows}
+
+
+def _commits(root: Path) -> int:
+    return int(_git(root, "rev-list", "--count", "HEAD").strip())
+
+
+def test_ran_on_a_step_naming_a_row_walks_it_in_the_same_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _walk_repo(tmp_path)
+    before = _commits(root)
+
+    res = _w(root, monkeypatch, "--step", "1", "--ran", "--evidence", "E")
+
+    assert res.exit_code == 0, res.output
+    assert _commits(root) == before + 1
+    changed = _git(root, "show", "--name-only", "--format=", "HEAD").split()
+    assert W_FRAGMENT in changed and any("journals" in p for p in changed)
+    r1 = _w_rows(root)["r1"]
+    assert r1.status == "walked"  # type: ignore[attr-defined]
+    (walk,) = r1.walks  # type: ignore[attr-defined]
+    assert (walk.strategy, walk.harness, walk.model, walk.outcome) == (
+        "live", "operator", "human", "pass"
+    )  # fmt: skip
+    assert walk.evidence == "Test Plan step 1: E"
+    assert "r1: walked" in res.output
+
+
+def test_harness_and_model_override_the_walk_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _walk_repo(tmp_path)
+
+    res = _w(root, monkeypatch, "--step", "1", "--ran", "--evidence", "E",
+             "--harness", "h", "--model", "m")  # fmt: skip
+
+    assert res.exit_code == 0, res.output
+    (walk,) = _w_rows(root)["r1"].walks  # type: ignore[attr-defined]
+    assert (walk.harness, walk.model) == ("h", "m")
+
+
+def test_a_row_naming_two_harnesses_keeps_its_status_and_names_the_one_owed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _walk_repo(tmp_path)
+
+    res = _w(root, monkeypatch, "--step", "2", "--ran", "--evidence", "E", "--harness", "a")
+
+    assert res.exit_code == 0, res.output
+    r2 = _w_rows(root)["r2"]
+    assert r2.status == "walk-owed" and len(r2.walks) == 1  # type: ignore[attr-defined]
+    assert "r2:" in res.output and "still owed: b" in res.output
+
+
+@pytest.mark.parametrize("args", [["--na", "--reason", "x"], ["--owed", "--why", "y"]])
+def test_na_and_owed_write_no_walk(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, args: list[str]
+) -> None:
+    root = _walk_repo(tmp_path)
+
+    res = _w(root, monkeypatch, "--step", "1", *args)
+
+    assert res.exit_code == 0, res.output
+    assert _w_rows(root)["r1"].walks == ()  # type: ignore[attr-defined]
+
+
+def test_supersede_ran_adds_a_second_walk(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _walk_repo(tmp_path)
+    assert _w(root, monkeypatch, "--step", "1", "--ran", "--evidence", "E").exit_code == 0
+
+    res = _w(root, monkeypatch, "--step", "1", "--ran", "--evidence", "F", "--supersede")
+
+    assert res.exit_code == 0, res.output
+    walks = _w_rows(root)["r1"].walks  # type: ignore[attr-defined]
+    assert [w.evidence for w in walks] == ["Test Plan step 1: E", "Test Plan step 1: F"]
+
+
+@pytest.mark.parametrize("step", ["3", "4"])
+def test_an_unknown_row_or_a_row_on_strategy_none_refuses_and_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, step: str
+) -> None:
+    root = _walk_repo(tmp_path)
+    head = _git(root, "rev-parse", "HEAD")
+
+    res = _w(root, monkeypatch, "--step", step, "--ran", "--evidence", "E")
+
+    assert res.exit_code == 2, res.output
+    assert "nothing written" in res.output
+    assert _git(root, "rev-parse", "HEAD") == head
+    assert _git(root, "status", "--porcelain") == ""
+
+
+def test_under_acceptance_off_the_pointer_is_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _walk_repo(tmp_path, settings="artifacts:\n  acceptance: off\n")
+
+    res = _w(root, monkeypatch, "--step", "4", "--ran", "--evidence", "E")
+
+    assert res.exit_code == 0, res.output
+    changed = _git(root, "show", "--name-only", "--format=", "HEAD").split()
+    assert W_FRAGMENT not in changed
+    assert _w_rows(root)["r1"].walks == ()  # type: ignore[attr-defined]
+
+
+def test_a_merged_row_is_amended_into_the_specs_fragment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _walk_repo(tmp_path, merged=True)
+
+    res = _w(root, monkeypatch, "--step", "1", "--ran", "--evidence", "E")
+
+    assert res.exit_code == 0, res.output
+    fragment = yaml.safe_load((root / W_FRAGMENT).read_text())
+    assert fragment.get("amendments"), fragment
+    assert _w_rows(root)["r1"].status == "walked"  # type: ignore[attr-defined]
+
+
+def test_the_freed_issue_gets_its_close_commands(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _walk_repo(tmp_path)
+
+    res = _w(root, monkeypatch, "--step", "1", "--ran", "--evidence", "E")
+
+    assert res.exit_code == 0, res.output
+    assert "acme/gizmo#7: every row citing it is walk-verified" in res.output
+    assert "gh issue close 7 --repo acme/gizmo" in res.output
+
+
+def test_a_run_spec_takes_the_run_and_walks_its_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _walk_repo(tmp_path)
+    cursor = root / "docs/superpowers/runs/2026-11-27-feat-gizmo.yaml"
+    cursor.parent.mkdir(parents=True)
+    cursor.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 10,
+                "run": "2026-11-27-feat-gizmo",
+                "workflow": "fr-goal@1",
+                "branch": "feat/gizmo",
+                "started": "2026-11-27T09:00:00Z",
+                "cursor": "deliver",
+                "steps": {
+                    "spec": {"state": "done", "emitted": {"spec": W_SPEC}},
+                    "deliver": {"state": "done"},
+                },
+            }
+        )
+    )
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "run")
+    monkeypatch.chdir(root)
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
+    res = runner.invoke(
+        app, ["closeout", "outcome", "--run", "2026-11-27-feat-gizmo", "--step", "1",
+              "--ran", "--evidence", "E"],
+    )  # fmt: skip
+
+    assert res.exit_code == 0, res.output
+    assert _w_rows(root)["r1"].status == "walked"  # type: ignore[attr-defined]
+
+
+def test_p2_r1_a_walk_the_pr_head_carries_does_not_discharge_a_harness(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Stage-written walks count owed harnesses over the walks the PR head does not carry
+    (R12): `--pr-head <sha>` names that head."""
+    root = _walk_repo(tmp_path)
+    head_walk = {"strategy": "live", "harness": "b", "model": "m", "outcome": "pass",
+                 "at": "2026-11-27T08:00:00Z", "evidence": "head"}  # fmt: skip
+    rows = [_w_row("r1", issues=["acme/gizmo#7"]),
+            _w_row("r2", harnesses=["a", "b"], walks=[head_walk]), _w_row("r3")]  # fmt: skip
+    (root / W_FRAGMENT).write_text(_w_fragment(rows))
+    _git(root, "commit", "-qam", "the PR head walks b")
+    head = _git(root, "rev-parse", "HEAD").strip()
+
+    res = _w(root, monkeypatch, "--step", "2", "--ran", "--evidence", "E", "--harness", "a",
+             "--pr-head", head)  # fmt: skip
+
+    assert res.exit_code == 0, res.output
+    assert _w_rows(root)["r2"].status == "walk-owed"  # type: ignore[attr-defined]
+    assert "still owed: b" in res.output
+
+
+# --- lens review: the PR head is read from its own tree, and failures refuse -----------
+
+
+def test_l_security_r4_a_head_only_fragment_still_counts_as_the_heads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fragment the head carries that the working tree no longer has is still read."""
+    root = _walk_repo(tmp_path)
+    head_walk = {"strategy": "live", "harness": "b", "model": "m", "outcome": "pass",
+                 "at": "2026-11-27T08:00:00Z", "evidence": "head"}  # fmt: skip
+    other = "docs/acceptance/features/elsewhere.yaml"
+    (root / other).write_text(yaml.safe_dump({
+        "schema_version": 1, "feature": "elsewhere", "repo": "acme/gizmo",
+        "rows": [_w_row("r2", harnesses=["a", "b"], walks=[head_walk])],
+    }, sort_keys=False))  # fmt: skip
+    rows = [_w_row("r1", issues=["acme/gizmo#7"]),
+            _w_row("r2", harnesses=["a", "b"], walks=[head_walk]), _w_row("r3")]  # fmt: skip
+    (root / W_FRAGMENT).write_text(_w_fragment([r for r in rows if r["id"] != "r2"]))
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "the PR head walks b, in another fragment")
+    head = _git(root, "rev-parse", "HEAD").strip()
+    _git(root, "rm", "-q", other)  # the row moves back; the head's fragment is gone here
+    (root / W_FRAGMENT).write_text(_w_fragment(rows))
+    _git(root, "commit", "-qam", "row moved back with the head's walk")
+
+    res = _w(root, monkeypatch, "--step", "2", "--ran", "--evidence", "E", "--harness", "a",
+             "--pr-head", head)  # fmt: skip
+
+    assert res.exit_code == 0, res.output
+    assert _w_rows(root)["r2"].status == "walk-owed"  # type: ignore[attr-defined]
+
+
+def test_l_errors_r7_an_unknown_pr_head_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _walk_repo(tmp_path)
+    before = _commits(root)
+
+    res = _w(root, monkeypatch, "--step", "2", "--ran", "--evidence", "E", "--pr-head",
+             "0123456789abcdef0123456789abcdef01234567")  # fmt: skip
+
+    assert res.exit_code == 2, res.output
+    assert "is not a commit in this checkout" in res.output
+    assert _commits(root) == before
+
+
+def test_l_errors_r8_an_unreadable_cursor_named_with_run_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.commands import closeout_cmd
+
+    root = _walk_repo(tmp_path)
+    monkeypatch.setattr(closeout_cmd, "_spec_of_run", lambda r, run_id: root / W_SPEC)
+    cursor = root / "docs/superpowers/runs/r-broken.yaml"
+    cursor.parent.mkdir(parents=True)
+    cursor.write_text("run: [\n")
+    monkeypatch.chdir(root)
+    monkeypatch.setenv("FR_REPO_ROOT", str(root))
+
+    res = runner.invoke(app, ["closeout", "outcome", "--run", "r-broken", "--step", "1",
+                              "--ran", "--evidence", "E"])  # fmt: skip
+
+    assert res.exit_code == 2, res.output
+    assert "cursor of run r-broken cannot be read" in res.output
+
+
+def test_l_errors_r10_a_close_command_failure_is_reported_never_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.acceptance import walks as walks_mod
+    from fr.acceptance.model import AcceptanceError
+
+    root = _walk_repo(tmp_path)
+
+    def broken(*a, **k):  # noqa: ANN002, ANN003, ANN202
+        raise AcceptanceError("the fold cannot be read")
+
+    monkeypatch.setattr(walks_mod, "close_commands", broken)
+
+    res = _w(root, monkeypatch, "--step", "1", "--ran", "--evidence", "E")
+
+    assert res.exit_code == 2, res.output
+    assert "the outcome is recorded, but its close commands cannot be read" in res.output
+    assert "Traceback" not in res.output

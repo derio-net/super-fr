@@ -99,3 +99,74 @@ def test_an_agent_pre_merge_row_without_a_scenario_fails(tmp_path: Path) -> None
 def test_an_unresolvable_strategy_fails_by_name(tmp_path: Path) -> None:
     (msg,) = _setup(tmp_path, "strategy: bogus\n", [_row("c", "    scenario: s.sh\n")])
     assert "bogus" in msg
+
+
+# --- ops-gate-truth R16: a gated row no step of its gate names -------------------------
+
+import pytest  # noqa: E402
+
+
+def _coverage(
+    tmp_path: Path, section: str, test_plan: str, rows: list[str], *, ops: bool = False
+) -> list[tuple[str, str]]:
+    repo = _repo(tmp_path, matrix=True)
+    write_matrix_fragments(
+        repo, "schema_version: 4\norg: derio-net\nrepo: own\nrows:\n" + "".join(rows)
+    )
+    body = "# Toy\n\n## Requirements\n\nR1. x\n\n## Verification\n\n" + section + "\n"
+    body += "## Test Plan\n\n" + test_plan + "\n"
+    body += "## Implementation Plans\n\n| Plan | Repo | File | Depends on |\n|--|--|--|--|\n"
+    (repo / SPEC_REL).write_text(body)
+    plan_dir = _create_plan(repo)
+    if ops:
+        (plan_dir / "ops.yaml").write_text(
+            "schema_version: 1\nops:\n  - id: k\n    summary: s\n    phase: post-merge\n"
+        )
+    return [
+        (i.severity, i.message) for i in self_review(parse_plan(plan_dir)) if "(rows:" in i.message
+    ]
+
+
+DEVOPS = "strategy: live\ngate: devops\n- a: live — walked after the merge\n"
+
+
+def test_a_devops_row_no_devops_step_names_warns(tmp_path: Path) -> None:
+    found = _coverage(tmp_path, DEVOPS, "1. [devops] walk it\n", [_row("a")])
+    assert [s for s, _ in found] == ["warn"]
+    assert "`a`" in found[0][1] and "devops" in found[0][1]
+
+
+def test_a_devops_row_a_devops_step_names_is_quiet(tmp_path: Path) -> None:
+    assert _coverage(tmp_path, DEVOPS, "1. [devops] (rows: a) walk it\n", [_row("a")]) == []
+
+
+def test_a_plan_with_ops_counts_an_untagged_step_as_devops(tmp_path: Path) -> None:
+    tester = "strategy: none\ngate: developer\n- t: live — walked by the tester\n"
+    plan = "1. (rows: t) walk it\n"
+    assert _coverage(tmp_path / "a", tester, plan, [_row("t")]) == []
+    found = _coverage(tmp_path / "b", tester, plan, [_row("t")], ops=True)
+    assert len(found) == 1 and "`t`" in found[0][1] and "tester" in found[0][1]
+
+
+def test_an_unknown_rows_id_warns(tmp_path: Path) -> None:
+    found = _coverage(tmp_path, DEVOPS, "1. [devops] (rows: a, zz) walk it\n", [_row("a")])
+    assert [s for s, _ in found] == ["warn"] and "`zz`" in found[0][1]
+
+
+@pytest.mark.parametrize("off", ["acceptance", "test_plan", "gates"])
+def test_nothing_is_reported_with_a_feature_off(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, off: str
+) -> None:
+    import fr.settings
+
+    real = fr.settings.disabled
+    monkeypatch.setattr(fr.settings, "disabled", lambda r, f: f == off or real(r, f))
+    found = _coverage(tmp_path, DEVOPS, "1. [devops] (rows: zz) walk it\n", [_row("a")])
+    assert found == []
+
+
+def test_nothing_is_reported_for_a_cross_repo_spec(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("fr.plan_review.checks.is_cross_repo_spec", lambda s: True)
+    assert _coverage(tmp_path, DEVOPS, "1. [devops] (rows: zz) walk it\n", [_row("a")]) == []

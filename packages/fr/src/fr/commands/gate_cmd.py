@@ -12,7 +12,10 @@ ledger, so a pass needs no commit: this group touches no registered artifact and
 `--gate devops` also folds the run's recorded op evidence (spec 2026-10-22-fr-ops R14):
 the run is `--run <id>`, else the one whose `branch` is the PR's head ref. It refuses
 while any plan op, or Test Plan step whose effective gate is devops, is not closed by
-what this checkout recorded. It never runs a probe.
+what this checkout recorded. It never runs a probe. Both gates also refuse while a row
+they gate is not walked (`fr.acceptance.walks.row_walked`) or a step they gate has no
+`ran`/`n/a` outcome (spec 2026-11-27-ops-gate-truth R11); with no run resolving, `--gate
+tester` passes as before.
 """
 
 from __future__ import annotations
@@ -39,6 +42,7 @@ from fr.verification.labels import (
 if TYPE_CHECKING:
     from fr.gatebackfill.close import TrackerRead
     from fr.run.model import RunState
+    from fr.spec import StepGate
 
 gate_app = typer.Typer(
     help="Post-merge gates: record that a gate passed on its PR (the gate ledger).",
@@ -102,12 +106,6 @@ def _devops_evidence(run: str | None, head_ref: str, *, no_run_evidence: bool) -
     """R14: refuse (exit 2, listing them) while recorded evidence leaves anything open, and
     whenever no run resolves unless `--no-run-evidence` says the gate is row-only. Returns
     whether the escape was used, for the pass comment."""
-    from fr.acceptance.model import AcceptanceError
-    from fr.ops.holds import devops_blockers
-    from fr.ops.load import OpsLoadError
-    from fr.spec import TestPlanHeadingError
-    from fr.verification.spec_section import SectionError
-
     if no_run_evidence and run is not None:
         _refuse(f"--run and {NO_RUN_EVIDENCE} contradict each other: give one")
     root = _repo_root()
@@ -129,23 +127,58 @@ def _devops_evidence(run: str | None, head_ref: str, *, no_run_evidence: bool) -
         _refuse(
             f"run {state.run} names this branch: its evidence is folded, drop {NO_RUN_EVIDENCE}"
         )
+    _refuse_on_blockers(root, state, "devops")
+    return False
+
+
+def _refuse_on_blockers(root: Path, state: RunState, gate: StepGate) -> None:
+    """R11 (spec 2026-11-27-ops-gate-truth): refuse, listing them, while `gate_blockers`
+    for *state*'s *gate* is not empty."""
+    from fr.acceptance.model import AcceptanceError
+    from fr.ops.holds import gate_blockers
+    from fr.ops.load import OpsLoadError
+    from fr.settings import SettingsError
+    from fr.spec import TestPlanHeadingError
+    from fr.verification.spec_section import SectionError
+
     try:
-        blockers = devops_blockers(root, state)
+        blockers = gate_blockers(root, state, gate)
     except OpsLoadError as exc:
         _refuse(f"run {state.run}: the plan's ops cannot be read: {exc}")
     except TestPlanHeadingError as exc:  # never a traceback, never "nothing held" (#1315)
         _refuse(f"run {state.run}: {exc}")
-    except (SectionError, AcceptanceError, OSError) as exc:
+    except (SectionError, AcceptanceError, SettingsError, OSError) as exc:  # l-errors-r6
         _refuse(f"run {state.run}: its exit cannot be read: {exc}")
     if blockers:
         lines = "\n".join(f"  {b}" for b in blockers)
-        _refuse(
-            f"run {state.run}'s devops gate is still held by its recorded evidence "
-            f"(nothing was probed):\n{lines}\nbring them to DONE/N/A through the "
-            f"DevOps stage (`fr ops gate --run {state.run}`), then pass again"
+        where = (
+            f"through the DevOps stage (`fr ops gate --run {state.run}`)"
+            if gate == "devops"
+            else "(`fr closeout outcome`, `fr acceptance set-status --walk`)"
         )
-    typer.echo(f"run {state.run}: every op and devops step is recorded closed")
-    return False
+        _refuse(
+            f"run {state.run}'s {gate} gate is still held by its recorded evidence "
+            f"(nothing was probed):\n{lines}\nclose them {where}, then pass again"
+        )
+    owns = (
+        "every op, devops step and devops row"
+        if gate == "devops"
+        else ("every tester step and tester row")
+    )
+    typer.echo(f"run {state.run}: {owns} is recorded closed")
+
+
+def _tester_evidence(run: str | None, head_ref: str) -> None:
+    """R11: the tester pass refuses on the run's `gate_blockers`; with no checkout or no
+    run resolving, it behaves as it did before (a row-only pass by hand)."""
+    root = _repo_root()
+    if root is None:
+        if run is not None:
+            _refuse(f"--run {run}: not inside a checkout, so its evidence cannot be read")
+        return
+    state = _run_for(root, run, head_ref)
+    if state is not None:
+        _refuse_on_blockers(root, state, "tester")
 
 
 def _refuse(message: str) -> NoReturn:
@@ -316,8 +349,8 @@ def pass_command(
         str | None,
         typer.Option(
             "--run",
-            help="devops: the run whose recorded op evidence must be closed "
-            "(default: the run whose branch is the PR's head ref).",
+            help="The run whose recorded evidence must be closed: devops ops, steps and "
+            "rows; tester steps and rows (default: the run whose branch is the PR's head ref).",
         ),
     ] = None,
     no_run_evidence: Annotated[
@@ -399,6 +432,8 @@ def pass_command(
         head_ref = str(view.get("head_ref") or "")
         if _devops_evidence(run, head_ref, no_run_evidence=no_run_evidence):
             notes = f"{notes} (passed with {NO_RUN_EVIDENCE}: no run's op evidence was folded)"
+    else:
+        _tester_evidence(run, str(view.get("head_ref") or ""))
     read = _check_keep(client, repo, pr, gate, kept)
     left = sorted(held_gates((labels - {held}) | {passed}))
     typer.echo(f"PR #{pr} ({repo}): {held} -> {passed}")
