@@ -1,16 +1,27 @@
 """The hand-back budget and the conflict and red decisions, moved out of `batch_drive`
-(spec 2026-11-24-wave-queue-gaps §E) and re-exported there by name.
+(spec 2026-11-24-wave-queue-gaps §E) and re-exported there by name; and the batch conflict
+lookups, the archive-conflict decisions (merge-truth R12) and the collected close-out
+hand-back decision (exit-gates R27), moved the same way (spec 2026-11-27-triage-leaves-split
+R3).
 
 Pure: no git, no forge, no clock.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from fr.triage.model import Batch, ConflictEvent, DispatchEvent, RedHandbackEvent
+from fr.triage.model import (
+    ArchiveConflictEvent,
+    Batch,
+    CloseoutEvent,
+    CloseoutHandbackEvent,
+    ConflictEvent,
+    DispatchEvent,
+    RedHandbackEvent,
+)
 from fr.triage.queue_handback import reissue_due
 
 # ------------------------------------------------- conflict hand-back (§G)
@@ -135,3 +146,102 @@ def held_conflict(batch: Batch) -> ConflictEvent | None:
         if isinstance(event, ConflictEvent):
             return event if event.delivered == "held" else None
     return None
+
+
+def conflict_at(batch: Batch, head: str) -> ConflictEvent | None:
+    """The batch's latest `conflict` event at PR head *head*, whatever it delivered
+    (batch-train-truth R18): a PR so recorded is never one to approve."""
+    for event in reversed(batch.events):
+        if isinstance(event, ConflictEvent) and event.head == head:
+            return event
+    return None
+
+
+def fresh_conflicts(batch: Batch, *, since_dispatch: bool) -> int:
+    """How many fresh conflict sessions the batch started: all of them (the next one's
+    number), or only since its latest dispatch (whether one is the message target)."""
+    return handbacks_since(
+        batch.events,
+        lambda e: isinstance(e, ConflictEvent) and e.delivered == "fresh",
+        reset=since_dispatch,
+    )
+
+
+def conflict_item_id(repo: str, batch_id: str, n: int) -> str:
+    """`<OWNER>/<REPO>/run/conflict-<batch-id>-<n>`: the *n*th fresh conflict session."""
+    return f"{repo}/run/conflict-{batch_id}-{n}"
+
+
+# ------------------------------------------ archive conflicts (merge-truth R12, §E)
+
+ARCHIVE_HANDBACKS_PER_CLOSEOUT = 2
+"""R12: hand-backs a conflicting archive PR gets per close-out before it is the operator's."""
+
+ArchiveConflictKind = Literal["skip", "held", "handback"]
+
+
+def archive_conflict_decision(events: Sequence[object], head: str) -> ArchiveConflictKind:
+    """The pure decision on an archive PR conflicting at *head* (R12).
+
+    `skip`: an `archive_conflict` event exists for this head, so a restarted driver
+    does not hand the same head back again (an archive PR has no free re-issue; that is
+    the batch PR's `conflict_decision`). `held`: two `session|fresh` hand-backs were
+    made since the batch's latest close-out event (held ones never count; a batch PR's
+    `conflict` events are another counter). Else `handback`."""
+    if any(isinstance(e, ArchiveConflictEvent) and e.head == head for e in events):
+        return "skip"
+    handed = 0
+    for event in reversed(events):
+        if isinstance(event, CloseoutEvent):
+            break
+        if isinstance(event, ArchiveConflictEvent) and event.delivered != "held":
+            handed += 1
+    return "held" if handed >= ARCHIVE_HANDBACKS_PER_CLOSEOUT else "handback"
+
+
+def held_archive_conflict(batch: Batch) -> ArchiveConflictEvent | None:
+    """The batch's latest `archive_conflict` event when it is `held` and no close-out
+    event came after it (R12): the operator owns that conflict."""
+    for event in reversed(batch.events):
+        if isinstance(event, CloseoutEvent):
+            return None
+        if isinstance(event, ArchiveConflictEvent):
+            return event if event.delivered == "held" else None
+    return None
+
+
+def _held_archive_conflict(batch: Batch, head: str) -> bool:
+    held = held_archive_conflict(batch)
+    return held is not None and held.head == head
+
+
+def archive_conflict_item_id(repo: str, batch_id: str, n: int) -> str:
+    """`<OWNER>/<REPO>/run/archive-conflict-<batch-id>-<n>`: the *n*th fresh session
+    started for the batch's conflicting archive PR."""
+    return f"{repo}/run/archive-conflict-{batch_id}-{n}"
+
+
+# ------------------------------------------- collected close-out hand-back (R27)
+
+CLOSEOUT_HANDBACKS = 1
+"""R27: hand-backs a collected close-out gets, counted per close-out item across its
+members; apart from conflict and red hand-backs, which count per batch dispatch."""
+
+CloseoutDecisionKind = Literal["skip", "handback", "stuck"]
+
+
+def closeout_handback_decision(
+    events: Iterable[object], item: str, head: str, handed: Iterable[str] = ()
+) -> CloseoutDecisionKind:
+    """What the driver does with collected close-out *item*'s PR failing at *head*, from
+    every member's events (R27): `skip`, its session was handed it at this head already;
+    `stuck`, no session could take the hand-back at this head, or the one hand-back went
+    out at an earlier head (a second failure); else `handback`."""
+    mine = [e for e in events if isinstance(e, CloseoutHandbackEvent) and e.item == item]
+    here = [e for e in mine if e.head == head]
+    if here:
+        return "stuck" if all(e.delivered == "none" for e in here) else "skip"
+    heads = {e.head for e in mine} | set(handed)  # the marker's own count (p6b-r10)
+    if head in heads:
+        return "skip"
+    return "stuck" if len(heads) >= CLOSEOUT_HANDBACKS else "handback"
