@@ -12,11 +12,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fr.acceptance.model import Matrix, Row
+from fr.acceptance.model import Matrix, Row, Walk
 from fr.artifacts.paths import KIND_DIRS
 from fr.labels import FR_AWAITING_LIVE
 
-__all__ = ["AWAITING_LIVE_LABEL", "holds_open", "issues_now_closable", "walk_verified"]
+__all__ = [
+    "AWAITING_LIVE_LABEL",
+    "close_commands",
+    "holds_open",
+    "issues_now_closable",
+    "row_walked",
+    "walk_verified",
+]
 
 AWAITING_LIVE_LABEL = FR_AWAITING_LIVE.name
 """The label an issue carries while a post-merge row citing it waits for its
@@ -30,6 +37,16 @@ def walk_verified(row: Row) -> bool:
     if row.harnesses:
         return all(h in passing for h in row.harnesses)
     return bool(passing)
+
+
+def row_walked(row: Row, exclude: frozenset[Walk] | set[Walk] = frozenset()) -> bool:
+    """The one rule for a walked row (spec 2026-11-27-ops-gate-truth R10): its status
+    is `walked` and its latest walk (by `at`) passed. A walk in *exclude* does not
+    count (R12: the DevOps stage ignores the walks the pinned PR head carries)."""
+    if row.status != "walked":
+        return False
+    walks = [w for w in row.walks if w not in exclude]
+    return bool(walks) and max(walks, key=lambda w: w.at).outcome == "pass"
 
 
 def _spec_of(row: Row, repo_root: Path) -> str | None:
@@ -76,3 +93,32 @@ def issues_now_closable(matrix: Matrix, before: Row, after: Row, repo_root: Path
             r.id != after.id and issue in r.issues and holds_open(r, repo_root) for r in matrix.rows
         )
     ]
+
+
+def close_commands(root: Path, before: Row) -> list[str]:
+    """The lines naming each issue the latest walk on *before*'s row freed (R16), with
+    the forge's close and unlabel commands; empty when forge issues are off
+    (`forge.issues: off` or `tracking: none`). Reads the effective matrix in *root*
+    after the write. fr never closes the issues (ops-gate-truth R9: one printer for
+    `set-status --walk` and `closeout outcome`)."""
+    from fr.acceptance.fold import load_effective
+    from fr.hostclient import issue_command
+    from fr.settings import forge_allows
+
+    matrix = load_effective(root)
+    after = next((r for r in matrix.rows if r.id == before.id), None)
+    if after is None or not after.walks:
+        return []
+    freed = issues_now_closable(matrix, before, after, root)
+    if not freed or not forge_allows(root, "issues", lenient=True):
+        return []
+    w = after.walks[-1]
+    comment = f"Walk-verified ({w.strategy}, {w.harness}, {w.model}): {w.evidence}"
+    lines: list[str] = []
+    for ref in freed:
+        lines.append(f"{ref}: every row citing it is walk-verified — close it:")
+        lines.append("  " + issue_command(root, "issue-close", ref=ref, comment=comment))
+        lines.append(
+            "  " + issue_command(root, "issue-unlabel", ref=ref, label=AWAITING_LIVE_LABEL)
+        )
+    return lines
