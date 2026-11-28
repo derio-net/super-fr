@@ -34,8 +34,10 @@ npm, it installs a pinned version. `FR_DEVCONTAINER_CLI_VERSION` sets a differen
 The installer records each warning it prints. When the install ends, it prints the `fr`
 version on your path, then the warnings again under `Warnings (N):`, or `No warnings.`. If
 the install fails, it prints the warnings recorded so far, and the failure line stays last.
-When `fr models apply` refuses, the installer carries on. It prints a warning with the exit
-code, up to 12 lines of what `fr` said and the command to run again.
+When the installer delivers to OpenCode, it runs `fr models apply`. If that command refuses,
+the installer carries on. It prints a warning with the exit code, up to 12 lines of what `fr`
+said and the command to run again. If `fr` is not on your path at that step, it prints a
+warning that the tier models were not applied.
 
 For Claude Code it registers the `derio-net--super-fr` marketplace and enables
 `super-fr@derio-net--super-fr` and `super-fr-dispatch@derio-net--super-fr`.
@@ -85,10 +87,11 @@ Without `--version main`, the script does not install the clone. It gives the ch
 `~/.cache/fr/src/super-fr`. Your clone stays as it is. A clean clone that is detached exactly
 at a release tag installs that tag.
 
-If `bootstrap.sh` cannot list the release tags, or cannot read `scripts/install.sh` at a
-tag, it stops with exit 1 and names the tag and the `git` message. It never drops a tag
-without a message. A tag with no `scripts/install.sh`, or none with the channel marker, is
-skipped. `--version main` lists no tags, so an unreadable tag does not block it.
+If `bootstrap.sh` cannot list the release tags, it stops with exit 1 and shows the `git`
+message. If it cannot read `scripts/install.sh` at a tag, it stops with exit 1 and shows the
+tag and the `git` message. It never drops an unreadable tag without a message. It skips a tag
+with no `scripts/install.sh`, or with no channel marker, and shows no message.
+`--version main` lists no tags, so an unreadable tag does not block it.
 
 A channel switch also removes untracked files from the managed checkout, so the
 installer's preflight does not stop on them. Ignored files, such as a virtual environment, stay.
