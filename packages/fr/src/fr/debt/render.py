@@ -46,11 +46,12 @@ def redact(text: str) -> str:
 # (`<ExceptionName>: <message>`); a test builds the `why` from the real exception, so a
 # change to that message fails there and not here.
 _UNSUPPORTED = re.compile(
-    r"^UnsupportedForgeOperation: `[^`]+` is not supported on the (?P<backend>.+?) backend yet "
-    r"\(tracked in (?P<issue>[^)]+)\)$"
+    r"UnsupportedForgeOperation: `[^`]+` is not supported on the (?P<backend>.+?) backend yet "
+    r"\(tracked in (?P<issue>[^)]+)\)",
+    re.DOTALL,  # a token carrying a newline still matches, and is then refused as not fixed-shape
 )
-_BACKEND = re.compile(r"^[a-z]+$")
-_TRACKER = re.compile(r"^(gh#\d+|[\w.-]+/[\w.-]+#\d+)$")
+_BACKEND = re.compile(r"[a-z]+")
+_TRACKER = re.compile(r"gh#\d+|[\w.-]+/[\w.-]+#\d+")
 
 
 def source_category(name: str, st: SourceStatus) -> str:
@@ -61,10 +62,10 @@ def source_category(name: str, st: SourceStatus) -> str:
     if DISABLED in why:
         return DISABLED
     if st.state == "unavailable":
-        unsupported = _UNSUPPORTED.match(st.why) if name == "forge" else None
+        unsupported = _UNSUPPORTED.fullmatch(st.why) if name == "forge" else None
         if unsupported:  # the backend and issue reach a body only as fixed-shape tokens
             backend, issue = unsupported["backend"], unsupported["issue"]
-            if _BACKEND.match(backend) and _TRACKER.match(issue):
+            if _BACKEND.fullmatch(backend) and _TRACKER.fullmatch(issue):
                 return f"not supported on {backend} ({issue})"
             return "not supported by this forge"
         if "offline" in why:

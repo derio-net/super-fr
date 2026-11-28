@@ -1160,6 +1160,9 @@ if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; 
       warn "WARNING: tier models not applied (fr models apply exit $apply_rc):" \
         ${apply_lines[@]+"${apply_lines[@]}"} \
         "  fix what fr names above, then run: fr models apply --harness opencode"
+    elif [ -s "$FR_INSTALL_STDERR" ]; then
+      # A notice fr prints on a successful run still reaches the operator.
+      cat "$FR_INSTALL_STDERR" >&2
     fi
   fi
   # The plugin behind OpenCode's edit gate and idle adapter (gh#563). Without

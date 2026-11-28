@@ -405,6 +405,19 @@ def test_a_long_refusal_is_cut_to_twelve_lines_and_says_how_many_more(
     assert "… 8 more lines" in result.stderr
 
 
+def test_a_notice_from_a_successful_fr_models_apply_still_reaches_stderr(
+    home_with_opencode_config: Path,
+) -> None:
+    """Review p1-r1: capturing stderr for the warning must not swallow what fr says
+    on a run that succeeds."""
+    _stub_fr(home_with_opencode_config, 0, ("fr: notice: a binding was substituted",))
+
+    result = _run_install(home_with_opencode_config)
+
+    assert "fr: notice: a binding was substituted" in result.stderr
+    assert "tier models not applied" not in result.stderr
+
+
 def test_a_clean_fr_models_apply_leaves_no_warning_and_says_so(
     home_with_opencode_config: Path,
 ) -> None:

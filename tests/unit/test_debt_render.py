@@ -43,7 +43,12 @@ def test_an_unsupported_operation_names_the_backend_and_the_tracking_issue() -> 
 
 @pytest.mark.parametrize(
     ("backend", "tracked_by"),
-    [("Gitea Prod!", "gh#611"), ("gitea", "see https://x.invalid")],
+    [
+        ("Gitea Prod!", "gh#611"),
+        ("gitea", "see https://x.invalid"),
+        ("gitea\n", "gh#611"),  # review p1-r2: a trailing newline is not fixed-shape
+        ("gitea", "gh#611\n"),
+    ],
 )
 def test_a_token_that_is_not_fixed_shape_never_reaches_the_category(
     backend: str, tracked_by: str
