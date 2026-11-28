@@ -222,12 +222,29 @@ def test_a_blank_line_between_requirements_is_not_prose() -> None:
     assert layout is not None and layout.prose == ()
 
 
-def test_prose_between_requirements_is_ignored_by_the_reader_but_named_by_the_layout() -> None:
-    spec = "## Requirements\n\nR1. a\n\nsome prose\n\nR2. b\n\ntrailing prose\n"
+def test_paragraphs_and_bullets_after_a_requirement_fold_into_it() -> None:
+    """R3 as amended (decision fold-multi-paragraph): everything up to the next
+    requirement belongs to it; paragraphs and bullet items are joined with `<br>`."""
+    spec = (
+        "## Requirements\n\nIntro prose is not a requirement.\n\n"
+        "R1. lead\nwrapped\n\n- one\n  more\n* two\n\nclosing paragraph.\n\n"
+        "R2. b\n\ntrailing paragraph\n\n"
+    )
+    assert _pairs(spec) == [
+        ("R1", "lead wrapped<br>- one more<br>* two<br>closing paragraph."),
+        ("R2", "b<br>trailing paragraph"),
+    ]
+    layout = list_layout(spec)
+    assert layout is not None and layout.prose == ()
+    assert (layout.items[0].first, layout.items[0].last) == (3, 10)
+    assert layout.items[1].last == 14, "blank lines after the last text belong to none"
+
+
+def test_a_heading_ends_a_requirement_and_its_text_belongs_to_none() -> None:
+    spec = "## Requirements\n\nR1. a\n\n### Notes\n\nnote\n\nR2. b\n"
     assert _pairs(spec) == [("R1", "a"), ("R2", "b")]
     layout = list_layout(spec)
-    assert layout is not None
-    assert layout.prose == (5,), "only the prose before a later requirement counts"
+    assert layout is not None and layout.prose == (5, 7)
 
 
 @pytest.mark.parametrize(

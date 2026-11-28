@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/skills/fr-execute/SKILL.md
   - packages/fr/src/fr/commands/plan_cmd.py
   - packages/fr/src/fr/commands/pickup_cmd.py
-reviewed: 2026-11-28 a spec's `## Requirements` is now the `| ID | Requirement |` table, and `fr migrate artifacts` rewrites an `R<n>.` list into it (spec kind 2, spec-requirements-table R8), and an id may carry one lowercase letter (R9a); 2026-11-28 still true; fr-plan now asks a step that proves a gated row to name it with a rows pointer, and self-review warns about a gated row no step names (ops-gate-truth R16), neither of which this page details; 2026-11-27 still true; run-verdict slice 2 re-points an import to fr/run/steps.py, no behaviour change (#1519); 2026-11-27 still true, import-only change (plan_ops split); 2026-11-24 the spec carries a `## Design shape`, drawn with fr-show-me (show-me-visuals R7, R14); 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-14 still true after VK support was removed; fr-execute's PR-format note names runners, not VK
+reviewed: 2026-11-28 a spec's `## Requirements` is now the `| ID | Requirement |` table, and `fr migrate artifacts` rewrites an `R<n>.` list into it (spec kind 2, spec-requirements-table R8), and an id may carry one lowercase letter (R9a), and a multi-paragraph requirement folds into one cell with `<br>`; 2026-11-28 still true; fr-plan now asks a step that proves a gated row to name it with a rows pointer, and self-review warns about a gated row no step names (ops-gate-truth R16), neither of which this page details; 2026-11-27 still true; run-verdict slice 2 re-points an import to fr/run/steps.py, no behaviour change (#1519); 2026-11-27 still true, import-only change (plan_ops split); 2026-11-24 the spec carries a `## Design shape`, drawn with fr-show-me (show-me-visuals R7, R14); 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-14 still true after VK support was removed; fr-execute's PR-format note names runners, not VK
 ---
 
 ## Why write the idea down twice?
@@ -123,9 +123,11 @@ It adds five things to a plain brainstorm:
   A literal `|` in the text is written `\|`, and the spec starts with front matter
   `fr_schema: 2`. An id is `R1`, `R2`, ...; a letter after the number (`R9a`) inserts a
   requirement without renumbering the rest. Plans and acceptance rows cite these ids. An older spec's `R1. ...` list
-  is rewritten into the table by `fr migrate artifacts --yes`. If the rewrite cannot convert
-  a spec, for example because prose sits between two requirements or an id is malformed, it
-  leaves that spec unchanged. The error names the line to fix, and you run the command again.
+  is rewritten into the table by `fr migrate artifacts --yes`. A requirement that runs to
+  several paragraphs or a bullet list keeps all of it: each paragraph and each bullet goes into
+  the same cell, split by `<br>`. If the rewrite cannot convert a spec, for example because an
+  id is malformed or a heading sits inside the list, it leaves that spec unchanged. The error
+  names the line to fix, and you run the command again.
 - **A `## Design shape` section**: a small picture of the change, drawn with
   [fr-show-me](fr-show-me.md)'s views, such as the files it touches as an annotated tree.
   When no picture would help, the section is one line, `none — <reason>`. fr refuses a

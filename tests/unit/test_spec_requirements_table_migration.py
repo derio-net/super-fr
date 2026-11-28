@@ -89,12 +89,13 @@ def test_blank_lines_are_added_around_the_table_only_where_none_is(tmp_path: Pat
 def test_blank_lines_between_requirements_and_text_around_the_list_are_kept(
     tmp_path: Path,
 ) -> None:
-    text = "# X\n\n## Requirements\n\nIntro prose.\n\nR1. a\n\nR2. b\n\nAfter prose.\n"
+    text = "# X\n\n## Requirements\n\nIntro prose.\n\nR1. a\n\nR2. b\n\nAfter prose.\n\n## D\n"
     path = _spec(tmp_path, text)
     assert not _migrate(tmp_path).failed
     assert path.read_text() == (
         "---\nfr_schema: 2\n---\n# X\n\n## Requirements\n\nIntro prose.\n\n"
-        "| ID | Requirement |\n|----|-------------|\n| R1 | a |\n| R2 | b |\n\nAfter prose.\n"
+        "| ID | Requirement |\n|----|-------------|\n| R1 | a |\n"
+        "| R2 | b<br>After prose. |\n\n## D\n"
     )
 
 
@@ -137,17 +138,24 @@ def test_a_body_already_a_table_under_an_old_stamp_is_finished_in_place(tmp_path
     assert path.read_text() == TABLE_OUT
 
 
-PROSE_BETWEEN = "# X\n\n## Requirements\n\nR1. a\n\nfirst prose\n\nsecond prose\n\nR2. b\n"
+HEADING_BETWEEN = "# X\n\n## Requirements\n\nR1. a\n\n### Notes\n\nnote\n\nR2. b\n"
+BAD_IDS = "# X\n\n## Requirements\n\nR1. a\nR09. b\nR9ab. c\n"
 BAD_ID = "# X\n\n## Requirements\n\nR1. a\nR9ab. b\n"
 OUT_OF_ORDER = "# X\n\n## Requirements\n\nR2. a\nR1. b\n"
 HEADER_IN_LIST = "# X\n\n## Requirements\n\nR1. a\n| ID | Requirement |\nR2. b\n"
-FENCED = "# X\n\n## Requirements\n\nR1. a\n\n```text\nR2. b\n```\n"
 
 
 @pytest.mark.parametrize(
     ("text", "line", "cause", "fix"),
     [
-        (PROSE_BETWEEN, 7, "prose between requirements", "move the prose out of"),
+        (
+            HEADING_BETWEEN,
+            7,
+            "a heading inside the requirements list",
+            "move the heading and its text out of the requirements list",
+        ),
+        # l-tests-r2, re-pointed: of two malformed lines, the FIRST is named.
+        (BAD_IDS, 6, "malformed requirement id 'R09'", "fix the requirement id"),
         (BAD_ID, 6, "malformed requirement id 'R9ab'", "fix the requirement id"),
         (
             OUT_OF_ORDER,
@@ -161,11 +169,8 @@ FENCED = "# X\n\n## Requirements\n\nR1. a\n\n```text\nR2. b\n```\n"
             "an `| ID | Requirement |` header inside the requirements list",
             "delete the header line, or finish the table by hand",
         ),
-        # A fence inside the section is not special: its opening line is prose
-        # between R1 and the fenced R2, so the spec refuses (pinned behaviour).
-        (FENCED, 7, "prose between requirements", "move the prose out of"),
     ],
-    ids=["prose-between", "R9ab", "out-of-order", "header-in-list", "fenced"],
+    ids=["heading-between", "first-of-two-bad-ids", "R9ab", "out-of-order", "header-in-list"],
 )
 def test_an_unconvertible_spec_is_left_byte_identical_and_named(
     tmp_path: Path, text: str, line: int, cause: str, fix: str
@@ -282,3 +287,77 @@ def test_a_malformed_table_is_only_stamped_and_the_validator_names_the_row(
     assert all(f.path != path or "requirements table" in f.error for f in report.failed)
     issues = validate_artifact(artifact_kind("spec"), path)
     assert any("requirements table" in str(i) and "line " in str(i) for i in issues), issues
+
+
+OPS_GATE_SHAPE = """# X
+
+## Requirements
+
+R10. `row_walked(row)` is the one rule for a walked row: its status is
+`walked` and its latest walk passed. `gate_items(...)` returns one item for
+each thing that gate owns, with a one-line reason:
+
+- each plan op, closed or not (devops only);
+- each Test Plan step whose effective gate is `gate`, with or without a `ran`
+  outcome;
+- each row whose effective gate is `gate`. A row's reason says why: no walk | a failing walk.
+
+A walk named in `exclude_walks` does not count. `devops_blockers` stays.
+
+R11. `fr gate pass` refuses while `gate_blockers` is not empty.
+
+## Design
+"""
+
+TWO_PARAGRAPHS = "# X\n\n## Requirements\n\nR1. a\n\nfirst prose\n\nsecond prose\n\nR2. b\n"
+
+
+@pytest.mark.parametrize(
+    ("text", "rows"),
+    [
+        (
+            OPS_GATE_SHAPE,
+            [
+                "| R10 | `row_walked(row)` is the one rule for a walked row: its status is "
+                "`walked` and its latest walk passed. `gate_items(...)` returns one item for "
+                "each thing that gate owns, with a one-line reason:"
+                "<br>- each plan op, closed or not (devops only);"
+                "<br>- each Test Plan step whose effective gate is `gate`, with or without a "
+                "`ran` outcome;"
+                "<br>- each row whose effective gate is `gate`. A row's reason says why: no "
+                "walk \\| a failing walk."
+                "<br>A walk named in `exclude_walks` does not count. `devops_blockers` stays. |",
+                "| R11 | `fr gate pass` refuses while `gate_blockers` is not empty. |",
+            ],
+        ),
+        (
+            TWO_PARAGRAPHS,
+            ["| R1 | a<br>first prose<br>second prose |", "| R2 | b |"],
+        ),
+    ],
+    ids=["ops-gate-truth-R10", "two-prose-paragraphs"],
+)
+def test_multi_paragraph_requirements_fold_into_one_cell(
+    tmp_path: Path, text: str, rows: list[str]
+) -> None:
+    """Decision fold-multi-paragraph (R3, R5 amended): no refusal; each paragraph
+    and bullet item joins the cell with `<br>`, and the round trip holds."""
+    path = _spec(tmp_path, text)
+    before = parse_requirements(text)
+    assert not _migrate(tmp_path).failed
+    out = path.read_text()
+    table = [line for line in out.splitlines() if line.startswith("| R")]
+    assert table == rows
+    assert parse_requirements(out) == before
+    assert validate_artifact(artifact_kind("spec"), path) == ()
+
+
+def test_a_fenced_block_inside_the_list_is_not_special(tmp_path: Path) -> None:
+    """Pinned: the reader does not track fences, so the fence lines fold into R1
+    and R2 and the fenced `R2.` line is a requirement."""
+    path = _spec(tmp_path, "# X\n\n## Requirements\n\nR1. a\n\n```text\nR2. b\n```\n")
+    assert not _migrate(tmp_path).failed
+    assert [line for line in path.read_text().splitlines() if line.startswith("| R")] == [
+        "| R1 | a<br>```text |",
+        "| R2 | b ``` |",
+    ]

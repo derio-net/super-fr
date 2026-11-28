@@ -18,10 +18,12 @@ renumbering); ids increase down the section.
 Two older forms still read to the same ids and text, so archived and
 unmigrated specs keep their meaning:
 
-- the `R<n>. <text>` list (`R<n>[a-z]`, optionally behind a `-`/`*` bullet), where the
-  non-blank lines directly after a requirement line are its continuation,
-  joined with single spaces, and a line that starts like an id but is
-  malformed (`R9a. ...`) is an error;
+- the `R<n>. <text>` list (`R<n>[a-z]`, optionally behind a `-`/`*` bullet), where
+  everything up to the next requirement line, a heading or the section's end
+  belongs to the requirement: lines directly after it are continuations joined
+  with single spaces, and each further paragraph or `- `/`* ` bullet item is
+  joined with `<br>`, the bullet kept (a table cell holds the same `<br>`). A
+  line that starts like an id but is malformed (`R09. ...`) is an error;
 - the pre-5.0 three-column `| id | requirement | source |` table, whose
   `source` column is ignored.
 
@@ -216,9 +218,9 @@ class ListLayout:
     """The `R<n>.` list of a `## Requirements` section, as one walk sees it.
     `base` is the 0-based file index of the section's first line, so
     `base + item.first` indexes the file's lines. `prose` holds the 1-based line
-    numbers of the prose between requirements. The reader and the spec 1 -> 2
-    rewrite share this walk, so they agree on which lines belong to a
-    requirement."""
+    numbers of text between requirements that belongs to none (after a heading).
+    The reader and the spec 1 -> 2 rewrite share this walk, so they agree on which
+    lines belong to a requirement."""
 
     items: tuple[ListItem, ...]
     prose: tuple[int, ...]
@@ -235,22 +237,36 @@ class ListLayout:
         return self.items[-1].last if self.items else -1
 
 
+_BULLET_RE = re.compile(r"^[-*]\s+\S")
+_HEADING_RE = re.compile(r"^#{1,6}\s")
+PARAGRAPH_BREAK = "<br>"
+"""What joins a requirement's paragraphs and bullet items into one line (R3), in the
+list reader and in a table cell alike: the reader keeps it verbatim, so a list and the
+table it is rewritten to read to the same text."""
+
+
 def _walk_list(lines: list[str], first_line_no: int) -> ListLayout:
-    """Classify the section's lines (R3): a requirement line opens an item, the
-    non-blank lines directly after it continue it, a blank line closes it, and a
-    non-blank line after a blank line is prose: between requirements when a
-    later requirement line follows it."""
+    """Classify the section's lines (R3). A requirement line opens an item, and
+    everything after it up to the next requirement line, a heading or the end of the
+    section belongs to it: lines directly after it continue it (joined with single
+    spaces), a blank line starts a new paragraph, and each `- `/`* ` bullet item starts
+    a new segment with its bullet kept; segments are joined with `<br>`. Blank lines
+    before the first requirement and after the last one's text belong to none; text
+    before the first requirement is prose and ignored. After a heading, the text up to
+    the next requirement belongs to no requirement and is recorded in `prose`."""
     items: list[ListItem] = []
     prose: list[int] = []
     pending: list[int] = []
-    current: tuple[str, list[str], int] | None = None  # (id, text parts, first) while open
+    current: tuple[str, list[list[str]], int] | None = None  # (id, segments, first)
     last_idx = -1
+    gap = False  # a blank line since the item's last text line
 
     def close() -> None:
         nonlocal current
         if current is not None:
-            rid, parts, first = current
-            items.append(ListItem(rid, " ".join(parts), first, last_idx, first_line_no + first))
+            rid, segments, first = current
+            text = PARAGRAPH_BREAK.join(" ".join(seg) for seg in segments)
+            items.append(ListItem(rid, text, first, last_idx, first_line_no + first))
             current = None
 
     for idx, line in enumerate(lines):
@@ -260,8 +276,8 @@ def _walk_list(lines: list[str], first_line_no: int) -> ListLayout:
             close()
             prose.extend(pending)
             pending = []
-            current = (m.group(1), [m.group(2).strip()], idx)
-            last_idx = idx
+            current = (m.group(1), [[m.group(2).strip()]], idx)
+            last_idx, gap = idx, False
             continue
         like = _ID_LIKE_RE.match(stripped)
         if like:
@@ -270,11 +286,16 @@ def _walk_list(lines: list[str], first_line_no: int) -> ListLayout:
                 f"({_ID_EXPECTED})"
             )
         if not stripped:
-            close()
+            gap = True
             continue
+        if _HEADING_RE.match(stripped):
+            close()
         if current is not None:
-            current[1].append(stripped)
-            last_idx = idx
+            if gap or _BULLET_RE.match(stripped):
+                current[1].append([stripped])
+            else:
+                current[1][-1].append(stripped)
+            last_idx, gap = idx, False
         elif items:
             pending.append(first_line_no + idx)
     close()
@@ -357,8 +378,8 @@ def table_form_problems(spec_text: str, stamp: int) -> list[str]:
 
 
 def _list_rows(lines: list[str], first_line_no: int) -> list[tuple[str, str, int]]:
-    """The `R<n>. <text>` requirements, in order, continuation lines joined.
-    Prose between them is left alone."""
+    """The `R<n>. <text>` requirements, in order, each with its continuation lines,
+    paragraphs and bullet items folded in (R3)."""
     return [(i.id, i.text, i.line_no) for i in _walk_list(lines, first_line_no).items]
 
 
