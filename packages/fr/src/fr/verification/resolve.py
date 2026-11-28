@@ -5,7 +5,7 @@ sharing one directory walk in `fr._shipped`:
 
     .fr/verifications/<name>.yaml                          # repo — wins wholesale
     $FR_SHIPPED_DEFAULTS_DIR/verifications/<name>.yaml     # explicit escape (R16)
-    $FR_SHIPPED_VERIFICATIONS_DIR/<name>.yaml              # older escape, with a notice
+    $FR_SHIPPED_VERIFICATIONS_DIR/<name>.yaml              # older escape, before fr 9.2
     fr/defaults/verifications/<name>.yaml                  # inside the `fr` wheel
     ~/.claude/plugins/marketplaces/derio-net--super-fr/
         plugins/super-fr/defaults/verifications/<name>.yaml  # the plugin clone
@@ -48,6 +48,7 @@ def shipped_verification_dirs(shipped_root: Path | None = None) -> list[Path]:
         "verifications",
         packaged=packaged_shipped_verifications_dir(),
         shipped_root=shipped_root,
+        error=StrategyError,
     )
 
 

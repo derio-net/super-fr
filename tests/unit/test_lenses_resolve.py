@@ -68,5 +68,5 @@ def test_no_shipped_lens_set_is_a_broken_install_not_an_empty_one(
         shipped_lenses()
     message = str(raised.value)
     assert "$FR_SHIPPED_DEFAULTS_DIR/lenses" in message
-    assert "$FR_SHIPPED_LENSES_DIR" in message  # still honoured until R14's release
+    assert "FR_SHIPPED_LENSES_DIR" not in message  # no message offers a per-kind variable (R6)
     assert "defaults/lenses/" in message
