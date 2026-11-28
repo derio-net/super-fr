@@ -1,0 +1,1 @@
+[31mstep/deliver: --evidence tests=docs/superpowers/runs/r1.records/suite.log is inside a run's records dir, which holds step records only and is emptied by fr. Write the suite log outside the repo (e.g. $TMPDIR/full-suite.log) and name that path.[0m

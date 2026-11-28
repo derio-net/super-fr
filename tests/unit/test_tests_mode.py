@@ -149,31 +149,31 @@ def _reviewer_step() -> Step:
 
 
 def test_the_briefs_carry_the_declared_mode_and_the_fast_tier(tmp_path: Path) -> None:
-    from fr.commands.run_cmd import _tests_brief
+    from fr.run.brief import tests_brief
 
     root = _with_ci_yaml(tmp_path, "gate_checks: [ci-ok]\ntests: ci\n" + FAST_TIER_DECL)
     want = {"tests": {"mode": "ci", "fast_tier": FAST_TIER}}
-    assert _tests_brief(root, _deliver_step()) == want
-    assert _tests_brief(root, _executor_step()) == want
-    assert _tests_brief(root, _reviewer_step()) == {}
+    assert tests_brief(root, _deliver_step()) == want
+    assert tests_brief(root, _executor_step()) == want
+    assert tests_brief(root, _reviewer_step()) == {}
 
 
 def test_without_a_declared_fast_tier_the_briefs_carry_the_mode_alone(tmp_path: Path) -> None:
     """p3-r1: fr ships no fast tier; the command is the repo's, so a repo that
     names none gets `tests: {mode: ci}` and runs its touched tests its own way."""
-    from fr.commands.run_cmd import _tests_brief
+    from fr.run.brief import tests_brief
 
     root = _with_ci_yaml(tmp_path, "gate_checks: [ci-ok]\ntests: ci\n")
-    assert _tests_brief(root, _deliver_step()) == {"tests": {"mode": "ci"}}
-    assert _tests_brief(root, _executor_step()) == {"tests": {"mode": "ci"}}
+    assert tests_brief(root, _deliver_step()) == {"tests": {"mode": "ci"}}
+    assert tests_brief(root, _executor_step()) == {"tests": {"mode": "ci"}}
 
 
 def test_without_the_key_the_briefs_carry_no_tests_key(tmp_path: Path) -> None:
-    from fr.commands.run_cmd import _tests_brief
+    from fr.run.brief import tests_brief
 
     root = _with_ci_yaml(tmp_path, "gate_checks: [ci-ok]\n")
-    assert _tests_brief(root, _deliver_step()) == {}
-    assert _tests_brief(root, _executor_step()) == {}
+    assert tests_brief(root, _deliver_step()) == {}
+    assert tests_brief(root, _executor_step()) == {}
 
 
 def _member_brief(tmp_path: Path, ci_yaml: str | None) -> dict:
@@ -220,13 +220,11 @@ def test_this_repo_declares_its_own_fast_tier() -> None:
 
 
 @pytest.mark.parametrize("break_it", ["two-remotes", "no-remote"])
-def test_a_fast_tier_with_no_base_refuses_the_brief(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], break_it: str
-) -> None:
+def test_a_fast_tier_with_no_base_refuses_the_brief(tmp_path: Path, break_it: str) -> None:
     """l-errors-r1: a declared `fast_tier` whose `{base}` cannot be resolved refuses
     the brief, with git's reason and the fix, rather than emitting a blank base."""
-    import typer
-    from fr.commands.run_cmd import _tests_brief
+    from fr.run.brief import tests_brief
+    from fr.run.verdict import RunRefusal
 
     root = _with_ci_yaml(tmp_path, "gate_checks: [ci-ok]\ntests: ci\n" + FAST_TIER_DECL)
     if break_it == "two-remotes":
@@ -234,10 +232,10 @@ def test_a_fast_tier_with_no_base_refuses_the_brief(
         _git(root, "remote", "add", "upstream", str(tmp_path / "origin.git"))
     else:
         _git(root, "remote", "remove", "origin")
-    with pytest.raises(typer.Exit) as exited:
-        _tests_brief(root, _executor_step())
+    with pytest.raises(RunRefusal) as exited:
+        tests_brief(root, _executor_step())
     assert exited.value.exit_code == 2
-    err = " ".join(capsys.readouterr().err.split())
+    err = " ".join(" ".join(line.text for line in exited.value.lines).split())
     assert "fast_tier" in err and "{base}" in err
     assert "git remote set-head" in err and "checkout.defaultRemote" in err
     if break_it == "two-remotes":
@@ -245,11 +243,11 @@ def test_a_fast_tier_with_no_base_refuses_the_brief(
 
 
 def test_a_mode_without_a_fast_tier_needs_no_base(tmp_path: Path) -> None:
-    from fr.commands.run_cmd import _tests_brief
+    from fr.run.brief import tests_brief
 
     root = _with_ci_yaml(tmp_path, "gate_checks: [ci-ok]\ntests: ci\n")
     _git(root, "remote", "remove", "origin")
-    assert _tests_brief(root, _executor_step()) == {"tests": {"mode": "ci"}}
+    assert tests_brief(root, _executor_step()) == {"tests": {"mode": "ci"}}
 
 
 def test_an_empty_ci_yaml_declares_nothing(tmp_path: Path) -> None:

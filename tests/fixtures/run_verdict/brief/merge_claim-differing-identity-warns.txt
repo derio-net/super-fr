@@ -1,0 +1,1 @@
+warning: phase/1/implement: a1 is recorded with harness=claude-code; keeping it (this claim said opencode). The first claim's identity stands; resolve records the model the transcript observed. If the executor was really replaced, close it with `fr run claim ... --abandoned` and re-dispatch.

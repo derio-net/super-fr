@@ -2,7 +2,7 @@
 count (spec `2026-09-26-dynamic-brainstorm-question-rounds-design.md` §3.B's
 "Threading the declaration to the gate", §3.C, Test Plan 3, 4 and 7).
 
-Every case runs through BOTH ways a declaration reaches `_gate_provenance`:
+Every case runs through BOTH ways a declaration reaches `gate_provenance`:
 `fr run resolve --record` (the path fr-goal uses — a record's `questions:`
 section) and the flag form (`--question-rounds/--round-two-trigger/
 --round-two-reason`). A test of the flags alone would pass while the record
@@ -233,7 +233,7 @@ def _second_blocked_run(tmp_path: Path, root: Path) -> str:
     `gate-question-rounds-brainstorm`), drop r1 — the recovery `fr run start`
     itself names — and start `r2` on the same branch and spec, blocked on a
     FRESH brainstorm gate, with a two-round transcript after it. No refusal is
-    reachable after `_record_round_two` on the brainstorm step (it declares no
+    reachable after `record_round_two` on the brainstorm step (it declares no
     evidence and emits no PR), so a second run is how a real retry meets the
     entry an earlier resolve wrote."""
     (root / "docs" / "superpowers" / "runs" / f"{RUN}.yaml").unlink()
@@ -612,8 +612,8 @@ def _round(*texts: str) -> Any:
 def test_the_verdict_table(
     observed: list[tuple[str, ...]], declared: dict | None, refusal: str | None
 ) -> None:
-    from fr.commands.run_cmd import question_rounds_refusal
     from fr.record.model import QuestionRounds
+    from fr.run.provenance import question_rounds_refusal
 
     questions = None if declared is None else QuestionRounds(**declared)
     got = question_rounds_refusal([_round(*t) for t in observed], questions)

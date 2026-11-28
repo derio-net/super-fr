@@ -1,0 +1,2 @@
+[31mstep/deliver: --evidence walk=<ROOT>/home/.cache/fr/walks/r1/walk.log is refused:[0m
+  - its bytes were not written by the command of yours that ran it — `fr verification walk --run r1` must run in this session since this unit opened at 2026-01-01T00:00:00+00:00, and write the log you name

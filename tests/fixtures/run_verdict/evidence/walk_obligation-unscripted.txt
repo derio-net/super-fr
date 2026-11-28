@@ -1,0 +1,3 @@
+[31mstep/deliver: refused — row 'r-1' has an agent-driven pre-merge strategy and names no `scenario` (set it with `fr acceptance set-status --scenario`).[0m
+  also unscripted: r-3
+  also unscripted: r-4

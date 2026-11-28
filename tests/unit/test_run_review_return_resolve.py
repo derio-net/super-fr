@@ -362,7 +362,8 @@ def test_every_shipped_review_phase_brief_carries_the_review_findings_rule() -> 
     carries the rule with this phase's N (spec §E)."""
     from types import SimpleNamespace
 
-    from fr.commands.run_cmd import _build_member_brief
+    from fr.commands.common import resolve_repo_root
+    from fr.run.brief import build_member_brief
     from fr.workflow.model import parse_manifest
 
     shipped = Path(__file__).parents[2] / "plugins" / "super-fr" / "defaults" / "workflows"
@@ -372,18 +373,21 @@ def test_every_shipped_review_phase_brief_carries_the_review_findings_rule() -> 
         member = next(m for m in group.steps if m.id == "review-phase")
         state = SimpleNamespace(run="r1", workflow=name, issue=None)
 
-        brief = _build_member_brief(member, group, "phase/3", state, None)  # type: ignore[arg-type]
+        brief = build_member_brief(  # type: ignore[arg-type]
+            member, group, "phase/3", state, None, repo_root=resolve_repo_root()
+        )
 
         rule = brief["review_findings"]
         assert "```review-findings" in rule, name
         assert "p3-r<k>" in rule and "p3a-r<k>" in rule, name
         executor = next(m for m in group.steps if m.id == "implement-phase")
-        assert "review_findings" not in _build_member_brief(
+        assert "review_findings" not in build_member_brief(
             executor,
             group,
             "phase/3",
             state,  # type: ignore[arg-type]
             None,
+            repo_root=resolve_repo_root(),
         ), name
 
 

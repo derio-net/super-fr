@@ -1,0 +1,1 @@
+[33mphase/1/implement: agent a1 ran on claude-opus-5, but the cursor recorded claude-sonnet-5-5. fr records what ran. If the tier's binding was meant, pass that model in the dispatch.[0m

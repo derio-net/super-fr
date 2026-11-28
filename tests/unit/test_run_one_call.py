@@ -481,7 +481,7 @@ def test_r_the_orchestrator_model_notice_prints_once_per_chain(
     repo, shipped = _started(tmp_path, _shape())
     _a_done_by_flag(repo, shipped)
     notice = "warning: orchestrator-model-notice-fixture"
-    monkeypatch.setattr(run_cmd, "_orchestrator_model_notice", lambda _root: notice)
+    monkeypatch.setattr(run_cmd, "orchestrator_model_notice", lambda _root: notice)
 
     out = _invoke(repo, shipped, ["run", "advance", RUN])
 

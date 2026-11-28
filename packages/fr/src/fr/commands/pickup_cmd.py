@@ -21,6 +21,7 @@ from fr.run.closeout import (
     devops_gated,
 )
 from fr.run.model import RunStateError, load_run_state, run_path
+from fr.run.verdict import Say
 
 if TYPE_CHECKING:
     from fr.record.template import RecordBrief
@@ -282,14 +283,22 @@ def _record_section(plan: object, phase: int) -> list[str]:
     return lines
 
 
+def _say(line: Say) -> None:
+    # highlight=False: the drift warning used to print through run_cmd's console, which
+    # never highlights, so a path or number in it stays uncoloured (spec 2026-11-27-run-verdict R9).
+    err_console.print(
+        line.text, markup=line.markup, soft_wrap=line.soft_wrap, style=line.style, highlight=False
+    )
+
+
 def _run_unit_record(plan: object, phase: int) -> RecordBrief | None:
     # The read-only resolver (spec 2026-10-05-run-upgrade-midflight §B): pickup
     # only reads the cursor, so a step drift is one warning naming `fr run
     # reshape`, not a refusal `_record_section` would swallow (gh#988).
     from fr.artifacts.paths import artifact_root, feature_root, space_for
-    from fr.commands.run_cmd import _resolve_manifest_for_read
     from fr.record.template import record_brief
     from fr.run.model import RUNS_REL, parse_run_state
+    from fr.run.steps import resolve_manifest_for_read
 
     repo_root = getattr(plan, "repo_root", None)
     plan_root = getattr(plan, "artifact_root", None)
@@ -321,7 +330,7 @@ def _run_unit_record(plan: object, phase: int) -> RecordBrief | None:
             r.emitted and r.emitted.get("plan", "").rstrip("/") == rel for r in state.steps.values()
         ):
             continue
-        manifest = _resolve_manifest_for_read(repo_root, state)
+        manifest = resolve_manifest_for_read(repo_root, state, warn=_say)
         for group in manifest.steps:
             for member in group.steps:
                 if "plan:ticks" in (member.emits or group.emits):

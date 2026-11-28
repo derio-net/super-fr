@@ -1,0 +1,11 @@
+{
+  "resolve_manifest_for_read-members-drift": 0,
+  "resolve_manifest_for_read-step-list-drift": 0,
+  "unit_key-group-given-item": 2,
+  "unit_key-manual-phase": 2,
+  "unit_key-member-no-item": 2,
+  "unit_key-no-plan-recorded": 2,
+  "unit_key-non-member-given-item": 2,
+  "unit_key-not-a-phase-member": 2,
+  "unit_key-plan-does-not-parse": 2
+}

@@ -1,0 +1,1 @@
+deliver: cannot derive proportionality evidence — no base: no remote default branch, no isolation start commit, and no local default branch. Fetch the remote so its default branch resolves, or create the local default branch.

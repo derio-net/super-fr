@@ -1,0 +1,1 @@
+[31mstep/deliver: --evidence walk=suite.log is not a regular file in <ROOT>/home/.cache/fr/walks/r1 — name the log `fr verification walk --run r1` wrote.[0m

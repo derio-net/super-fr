@@ -664,10 +664,10 @@ def _state_with_code_unit(unit_state: str) -> object:
 
 
 def test_a_witness_on_a_unit_that_is_not_done_is_not_reusable() -> None:
-    from fr.commands.run_cmd import _latest_tests_witness
+    from fr.run.evidence.suite import latest_tests_witness
 
-    assert _latest_tests_witness(_state_with_code_unit("done")) is not None  # type: ignore[arg-type]
-    assert _latest_tests_witness(_state_with_code_unit("failed")) is None  # type: ignore[arg-type]
+    assert latest_tests_witness(_state_with_code_unit("done")) is not None  # type: ignore[arg-type]
+    assert latest_tests_witness(_state_with_code_unit("failed")) is None  # type: ignore[arg-type]
 
 
 # --- Task 3: `deliver` `tests: reuse` -----------------------------------------
@@ -762,7 +762,7 @@ def test_reuse_is_refused_when_no_unit_carries_a_suite_log(tmp_path: Path) -> No
 
 
 def test_reuse_takes_the_most_recently_resolved_witness() -> None:
-    from fr.commands.run_cmd import _latest_tests_witness
+    from fr.run.evidence.suite import latest_tests_witness
     from fr.run.model import RunState
 
     state = RunState.model_validate(
@@ -804,7 +804,7 @@ def test_reuse_takes_the_most_recently_resolved_witness() -> None:
         }
     )
 
-    assert _latest_tests_witness(state) == (
+    assert latest_tests_witness(state) == (
         "phase/1/peer-review",
         "b.log@111111111111;tree=bbb",
     )

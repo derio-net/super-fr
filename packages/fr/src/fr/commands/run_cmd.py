@@ -21,13 +21,9 @@ from __future__ import annotations
 
 import contextlib
 import datetime as _dt
-import functools
 import json
 import os
-import re
-import shlex
-from collections.abc import Callable, Mapping
-from contextvars import ContextVar
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, NoReturn
@@ -39,7 +35,7 @@ from rich.markup import escape
 import fr.bindings
 from fr.bindings.apply import apply_binding, materialize_from
 from fr.bindings.choose import Choice, is_autonomous
-from fr.bindings.health import BindingHealth, check_bindings, propose_for
+from fr.bindings.health import propose_for
 from fr.bindings.probe import default_probe_cache
 from fr.bindings.wording import (
     Substitution,
@@ -50,9 +46,8 @@ from fr.bindings.wording import (
 )
 from fr.commands.common import models_errors_exit, resolve_repo_root
 from fr.git import GitUnavailableError, git_answer
-from fr.harness import HARNESSES, load_matrix
+from fr.harness import HARNESSES
 from fr.harness.detect import detect_harness
-from fr.harness.long_commands import long_command_rule
 from fr.harness.model import HarnessError
 from fr.isolation import sessions as _sessions
 from fr.isolation.types import IsolationError
@@ -61,16 +56,10 @@ from fr.journal.model import (
     JournalParseError,
     JournalScope,
     append_journal_entry,
-    effective_finding_states,
     journal_now,
     journal_path,
-    journal_stamp_as_utc,
     parse_journal,
-    phase_finding_states,
-    resolve_journal_read_path,
-    reviews_phase,
     spec_journal_slug,
-    unauthorized_fixes,
 )
 from fr.models import (
     REPO_MODELS_REL,
@@ -81,16 +70,38 @@ from fr.models import (
     repo_models_path,
     resolved_config,
 )
+from fr.run import deliver, units
 from fr.run import liveness as _liveness
-from fr.run import units
-from fr.run.adopt import MANUAL_ITEM, AdoptError, Superseded, adopt_run, plan_phase_tags
+from fr.run.adopt import MANUAL_ITEM, AdoptError, Superseded, adopt_run
+from fr.run.brief import (
+    PHASE_TIER_SENTINEL,
+    already_running_refusal,
+    binding_health,
+    binding_notice_lines,
+    build_brief,
+    build_member_brief,
+    claimed_identity,
+    close_dispatch,
+    close_on_resolve,
+    dispatch_descriptor_suffix,
+    dispatch_holder_label,
+    dispatch_needs_open,
+    dispatch_tier,
+    effective_tier,
+    held_record,
+    manual_placement_errors,
+    manual_placement_preflight,
+    nothing_running_refusal,
+    open_dispatch,
+    orchestrator_model_notice,
+    render_template,
+    resolve_hint,
+    template_context,
+)
 from fr.run.cli_step import run_step
-from fr.run.debug_journal import debug_slug, require_debug_slug
+from fr.run.debug_journal import debug_slug
 from fr.run.historical import (
-    HISTORICAL_HEADING,
     HISTORICAL_REVIEWER,
-    findings_witness,
-    historical_review_lines,
     historical_reviews,
     historical_sentence,
 )
@@ -98,10 +109,8 @@ from fr.run.liveness import gate_pending as _gate_pending
 from fr.run.liveness import hold_on as _hold_on
 from fr.run.liveness import next_step_id as _next_step_id
 from fr.run.model import (
-    RUN_ID_MAX_LENGTH,
     RUNS_REL,
     AnsweredBy,
-    DispatchOutcome,
     RunState,
     RunStateConflictError,
     RunStateError,
@@ -125,24 +134,78 @@ from fr.run.writes import note_loaded as _note_loaded
 from fr.run.writes import note_record_write as _note_record_write
 from fr.run.writes import note_subject as _note_subject
 from fr.run.writes import now as _now
-from fr.run.writes import remember as _remember
 from fr.shape import shown_path
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    from fr.lenses.accumulate import LensSet
     from fr.record.model import QuestionRounds, VisualEvidence
-    from fr.run.observed import ChildDispatch
-    from fr.run.telemetry import Round
-    from fr.verification.walk import WalkOwed
 from fr.artifacts.paths import KIND_DIRS, artifact_root, emitted_path
-from fr.run.provenance import cleared_gates, gates
+from fr.run.evidence.ci import ci_tests_witness as _ci_tests_witness
+from fr.run.evidence.derived import docs_witness as _docs_witness
+from fr.run.evidence.derived import proportionality_witness as _proportionality_witness
+from fr.run.evidence.derived import single_phase_witness as _single_phase_witness
+from fr.run.evidence.derived import visual_witness as _visual_witness
+from fr.run.evidence.emitted import parse_emitted as _parse_emitted
+from fr.run.evidence.journals import closed_findings_witness as _closed_findings_witness
+from fr.run.evidence.journals import review_journal_entries as _review_journal_entries
+from fr.run.evidence.journals import verify_review_entry as _verify_review_entry
+from fr.run.evidence.lenses import lens_set_or_refuse
+from fr.run.evidence.lenses import lenses_witness as _lenses_witness
+from fr.run.evidence.lenses import owed_on as _owed_on
+from fr.run.evidence.lenses import verify_lens_reviewers as _verify_lens_reviewers
+from fr.run.evidence.owed import debt_phrase as _debt_phrase
+from fr.run.evidence.owed import unevidenced_units as _unevidenced_units
+from fr.run.evidence.review import check_returned_findings as _check_returned_findings
+from fr.run.evidence.review import refuse_unboundable_historical as _refuse_unboundable_historical
+from fr.run.evidence.review import verify_historical_bound as _verify_historical_bound
+from fr.run.evidence.review import verify_reviewer as _verify_reviewer
+from fr.run.evidence.suite import TESTS_CI, TESTS_REUSE
+from fr.run.evidence.suite import local_stamp_witness as _local_stamp_witness
+from fr.run.evidence.suite import reuse_tests_witness as _reuse_tests_witness
+from fr.run.evidence.suite import verify_phase_tests_log as _verify_phase_tests_log
+from fr.run.evidence.suite import verify_tests_log as _verify_tests_log
+from fr.run.evidence.target import PHASE_EVIDENCE as _PHASE_EVIDENCE
+from fr.run.evidence.target import VERIFIABLE_EVIDENCE as _VERIFIABLE_EVIDENCE
+from fr.run.evidence.target import evidence_hint as _evidence_hint
+from fr.run.evidence.target import evidence_target as _evidence_target
+from fr.run.evidence.target import parse_evidence as _parse_evidence
+from fr.run.evidence.target import reviews_the_feature as _reviews_the_feature
+from fr.run.evidence.walk import verify_walk as _verify_walk
+from fr.run.evidence.walk import walk_obligation as _walk_obligation
+from fr.run.provenance import GATE_DECISIONS as _GATE_DECISIONS
+from fr.run.provenance import cleared_gates as _cleared_gates
+from fr.run.provenance import clears_gate as _clears_gate
+from fr.run.provenance import flush_gate_decisions as _flush_gate_decisions
+from fr.run.provenance import gate_degradation_notice as _gate_degradation_notice
+from fr.run.provenance import gate_provenance as _gate_provenance
+from fr.run.provenance import gates as _gates
+from fr.run.provenance import queue_gate_decision as _queue_gate_decision
+from fr.run.provenance import refuse_gate_flags as _refuse_gate_flags
+from fr.run.provenance import refuse_missing_emits as _refuse_missing_emits
 from fr.run.reshape import ReshapeError, diff_ids, reshape
+from fr.run.steps import complete_step as _complete_step
+from fr.run.steps import derive_run_id
+from fr.run.steps import emitted_plan as _emitted_plan
+from fr.run.steps import expected_group_items as _expected_group_items
+from fr.run.steps import find_step as _find_step
+from fr.run.steps import group_done_line as _group_done_line
+from fr.run.steps import group_phases as _group_phases
+from fr.run.steps import item_phase as _item_phase
+from fr.run.steps import manual_items as _manual_items
+from fr.run.steps import phase_tier as _phase_tier
+from fr.run.steps import rebind_shape as _rebind_shape
+from fr.run.steps import rebound as _rebound
+from fr.run.steps import resolve_manifest_for_read as _read_manifest
+from fr.run.steps import resolve_manifest_for_state as _resolve_manifest_for_state
+from fr.run.steps import step_by_id as _step_by_id
+from fr.run.steps import unit_key as _lookup_unit_key
+from fr.run.steps import with_step as _with_step
 from fr.run.units import UnitAttempt
+from fr.run.unobserved import UNOBSERVED as _UNOBSERVED
+from fr.run.unobserved import take_unobserved as _take_unobserved
+from fr.run.verdict import RunRefusal, Say, Verdict
 from fr.run.workspace import RunWorkspaceError, ensure_run_workspace
 from fr.types import PHASE_TIERS
-from fr.workflow.artifacts import DERIVED_EVIDENCE, REPO_TRACKED_ARTIFACTS, emitted_artifacts
+from fr.workflow.artifacts import DERIVED_EVIDENCE
 from fr.workflow.check import check_workflow
 from fr.workflow.model import Step, WorkflowError, WorkflowManifest
 from fr.workflow.resolve import resolve_workflow
@@ -154,8 +217,6 @@ run_app = typer.Typer(
     help="Durable workflow-run cursor: start / status / advance / resolve / check.",
     no_args_is_help=True,
 )
-
-_TEMPLATE_RE = re.compile(r"\{\{\s*([A-Za-z0-9_.\-]+)\s*\}\}")
 
 
 @run_app.callback()
@@ -171,72 +232,51 @@ def _run_group() -> None:
         raise typer.Exit(2) from e
 
 
-_RECORD_ROWS: ContextVar[tuple[str, dict[str, str]] | None] = ContextVar(
-    "fr_record_rows", default=None
-)
-"""gh#1456: the step record a resolve applies, by name, and the status its `acceptance:`
-entries set per row — the record is applied before the gates read the fold, so a row it
-sets wins over any fragment edit, and a refusal over that row has to say so."""
+def _say(line: Say) -> None:
+    err_console.print(line.text, markup=line.markup, soft_wrap=line.soft_wrap, style=line.style)
 
 
-# --- spec 2026-09-25 §5.B.7: transcript gates stop degrading silently ---------
-#
-# A gate that cannot observe (no harness detected, no readable transcript)
-# notes itself here and prints a warning; the resolve then records the names
-# under the unit's `unobserved` evidence, so the gap is in the cursor, not
-# only in a stderr nobody keeps.
-
-_UNOBSERVED: ContextVar[list[str] | None] = ContextVar("fr_unobserved", default=None)
-
-
-def _note_unobserved(gate: str) -> None:
-    found = _UNOBSERVED.get()
-    if found is None:
-        found = []
-        _UNOBSERVED.set(found)
-    if gate not in found:
-        found.append(gate)
+def _settle[T](verdict: Verdict[T]) -> T | None:
+    """Print a verdict's warnings, then its refusal and exit; else return its witness (R2)."""
+    for w in verdict.warnings:
+        _say(w)
+    if verdict.refusal:
+        for line in verdict.refusal:
+            _say(line)
+        raise typer.Exit(verdict.exit_code)
+    return verdict.witness
 
 
-def _why_unobservable(what: str) -> str:
-    """Why a gate could not observe `what` — the thing it reads from the
-    transcript (`questions`, `subagent dispatches`, `commands`), so a gate
-    never borrows another gate's noun (#815)."""
-    from fr.run.observed import why_unobservable
+def _witness(verdict: Verdict[str]) -> str:
+    """`_settle` for a verifier whose witness the resolve stores: a verdict that does not
+    refuse carries one."""
+    found = _settle(verdict)
+    assert found is not None
+    return found
 
+
+@contextlib.contextmanager
+def _refusals() -> Iterator[None]:
+    """Turn a `RunRefusal` from `fr/run` back into its printed lines and `typer.Exit` (R2)."""
     try:
-        harness = detect_harness(os.environ)
-    except HarnessError:
-        harness = None
-    return why_unobservable(harness, os.environ, what)
+        yield
+    except RunRefusal as r:
+        for line in r.lines:
+            _say(line)
+        raise typer.Exit(r.exit_code) from r.__cause__
 
 
-TESTS_PROVENANCE_SURFACE = "deliver-tests-provenance"
-"""The parity row declaring where `tests=<log>` provenance is verified."""
+def _resolve_manifest_for_read(repo_root: Path, state: RunState) -> WorkflowManifest:
+    """`fr.run.steps.resolve_manifest_for_read`, its drift warning printed here."""
+    return _read_manifest(repo_root, state, _say)
 
 
-def _why_tests_unobservable() -> str:
-    """Why `tests=<log>` could not be tied to a command. Hermes is declared
-    `unsupported` for this check (operator decision 2026-09-26, gh#638): say
-    so by name rather than implying a reader is merely missing."""
-    try:
-        harness = detect_harness(os.environ)
-    except HarnessError:
-        harness = None
-    if harness == "hermes":
-        return f"tests= provenance is unsupported on hermes (parity row {TESTS_PROVENANCE_SURFACE})"
-    if harness == "opencode":
-        return "the OpenCode session database could not be read"
-    return _why_unobservable("commands")
-
-
-def _take_unobserved() -> dict[str, str]:
-    """`{"unobserved": "<gate>,…"}` for every gate noted so far, and forget them."""
-    from fr.run.telemetry import UNOBSERVED
-
-    found = _UNOBSERVED.get() or []
-    _UNOBSERVED.set(None)
-    return {UNOBSERVED: ",".join(found)} if found else {}
+def _unit_key(
+    repo_root: Path, state: RunState, step: Step, parent: Step | None, item: str | None
+) -> str:
+    """`fr.run.steps.unit_key`, its refusal printed and turned into `typer.Exit` here."""
+    with _refusals():
+        return _lookup_unit_key(repo_root, state, step, parent, item)
 
 
 def _save_run_state(repo_root: Path, state: RunState) -> Path:
@@ -328,1407 +368,6 @@ def _capture_on_new_host(writes: _RunWrites, kwargs: dict[str, Any]) -> None:
         _capture_usage(repo_root, state, f"resolve:{step}", require_sessions=True)
 
 
-_UNSAFE_IN_RUN_ID = re.compile(r"[^A-Za-z0-9._-]+")
-
-
-def derive_run_id(branch: str, *, today: _dt.date | None = None) -> str:
-    """Derive a run id from `branch` when `--run-id` is not given.
-
-    Must satisfy `validate_run_id` — and therefore
-    `fr_dispatch.work_item.run_item_id` — because it FEEDS them: a single
-    segment of `[A-Za-z0-9._-]`, starting with an alphanumeric. `branch`
-    routinely contains `/` (e.g. `feat/ticket-polling`), so it is flattened;
-    the date prefix mirrors the plan-slug shape spec §4.B's own example
-    (`2026-08-14-ticket-polling`) uses, keeping a run id visually consistent
-    with the plan slug a `unit: run` shape will go on to create.
-
-    **Every unsafe run collapses, not just `/`** (review r5-e1). Git branch
-    names admit far more than this: `feat/../x`, `-weird`, `wip #3`, a
-    non-ASCII word. Replacing only `/` produced ids that `validate_run_id`
-    then rejected — turning a legal branch into a `fr run start` that could
-    not run at all — or, worse, an id starting with `-`. The date prefix
-    guarantees the leading character, so only the tail needs sanitising, and
-    a branch that sanitises to nothing still yields the bare date.
-    """
-    day = today or _dt.date.today()
-    sanitized = _UNSAFE_IN_RUN_ID.sub("-", branch.strip("/")).strip("-.")
-    derived = f"{day.isoformat()}-{sanitized}" if sanitized else day.isoformat()
-    return derived[:RUN_ID_MAX_LENGTH].rstrip("-.") or day.isoformat()
-
-
-def _step_by_id(manifest: WorkflowManifest, step_id: str) -> Step:
-    step, _parent = _find_step(manifest, step_id)
-    return step
-
-
-def _split_member_id(manifest: WorkflowManifest, step_id: str) -> tuple[str, str] | None:
-    """`(item, member_id)` if `step_id` is a grouped fan-out's COMPOSITE key
-    (`phase/1/implement-phase`), else `None`.
-
-    The composite is the display id and the `items`-map key — what `fr run
-    status` and `advance` both show — but it is deliberately NOT accepted in
-    `--step` (spec §3.B, journal `d2`). Accepting it and splitting it
-    internally was the issue's own option 2 and was declined: it would leave
-    two spellings of one id, and it would hide the `--item` flag from the
-    operator at the exact moment they need to learn it. So this function
-    exists to *recognise* the composite in order to teach the two flags —
-    never to resolve it.
-
-    Recognition is manifest-driven, not shape-of-string: the tail after the
-    last `/` must name a member of some `for_each` group. An id that merely
-    contains a slash is an ordinary not-found id and gets the ordinary
-    message.
-    """
-    if "/" not in step_id:
-        return None
-    item, _, tail = step_id.rpartition("/")
-    for step in manifest.steps:
-        if step.for_each and any(member.id == tail for member in step.steps):
-            return item, tail
-    return None
-
-
-def _find_step(manifest: WorkflowManifest, step_id: str) -> tuple[Step, Step | None]:
-    """`(step, parent-group)` for a top-level OR member id — members share the
-    flattened id space `check_workflow` validates, so resolving one must find
-    them too. Parent is `None` for a top-level step."""
-    for step in manifest.steps:
-        if step.id == step_id:
-            return step, None
-        for member in step.steps:
-            if member.id == step_id:
-                return member, step
-    not_found = f"step {step_id!r} not found in workflow {manifest.workflow!r}"
-    split = _split_member_id(manifest, step_id)
-    if split is not None:
-        item, member_id = split
-        raise RunStateError(
-            f"{not_found}.\n"
-            "It is a grouped `for_each` member, which takes two flags:\n"
-            f"  --step {member_id} --item {item}"
-        )
-    raise RunStateError(not_found)
-
-
-def _unit_key(
-    repo_root: Path,
-    state: RunState,
-    step: Step,
-    parent: Step | None,
-    item: str | None,
-) -> str:
-    """The UNIT key a `(--step, --item)` pair names (`fr.run.units`) —
-    spec §4.B's two key spaces (`phase/<n>/<member-id>` for a grouped member,
-    `step/<step-id>` for a flat one) computed in exactly ONE place, so
-    `claim`, `_resolve_member` and `advance`'s own flat-step key can never
-    drift apart (P3.T1.S3). `step`/`parent` are `_find_step`'s own return
-    shape — `parent` is `None` for a top-level step, the group for a member.
-
-    Exits 2 (printing to `err_console`) for every input shape that cannot
-    name a unit: a member given no `--item`, a non-member given one, or an
-    `--item` naming a phase this run's recorded plan does not have.
-    """
-    if parent is not None:
-        if item is None:
-            err_console.print(
-                f"[red]{step.id}: a member outcome must address a phase item — "
-                "pass --item phase/<n>[/red]"
-            )
-            raise typer.Exit(2)
-        try:
-            # (agentic, manual) since gh#496 — a `tag: manual` phase is never
-            # dispatched, so only the agentic list can name a unit key.
-            agentic, manual = _group_phases(repo_root, state)
-        except (RunStateError, AdoptError) as e:
-            err_console.print(f"[red]{parent.id}: {escape(str(e))}[/red]", soft_wrap=True)
-            raise typer.Exit(2) from e
-        expected = _expected_group_items(parent, agentic)
-        key = f"{item}/{step.id}"
-        if key not in expected:
-            # #496 (spec §3.D.3): a manual phase gets its own message BEFORE
-            # the generic one. "not a phase member — expected phase/<n> for
-            # phases [1,2,3]" reads as a bug in the phase list when phase 4
-            # plainly exists in the plan; the reason it is absent is a
-            # deliberate omission, and the refusal has to say so. It lives
-            # HERE because this is the one place a unit key is validated: it
-            # used to sit in `_resolve_member` behind a call to this function,
-            # which refused first with the generic text — dead on arrival,
-            # and `claim` never had it at all.
-            if _item_phase(item) in manual:
-                err_console.print(
-                    f"[red]{key}: phase {_item_phase(item)} is `tag: manual` and is "
-                    "deliberately never dispatched, so there is no outcome to "
-                    "record.[/red]\n"
-                    "  Its record is the plan's own steps plus the PR's "
-                    '"unimplemented — operator pushes to this PR".',
-                    soft_wrap=True,
-                )
-                raise typer.Exit(2)
-            err_console.print(
-                f"[red]{key}: not a phase member of {parent.id!r} — expected "
-                f"phase/<n> for phases {agentic} (from the recorded plan)[/red]"
-            )
-            raise typer.Exit(2)
-        return key
-    if item is not None:
-        if step.steps:
-            members = ", ".join(m.id for m in step.steps)
-            err_console.print(
-                f"[red]{step.id}: a group outcome must address a member step "
-                f"({members}) — pass --step <member> --item phase/<n>[/red]"
-            )
-        else:
-            err_console.print(
-                f"[red]{step.id}: --item is only for members of a grouped "
-                f"`for_each` step — {step.id!r} has no members[/red]"
-            )
-        raise typer.Exit(2)
-    return _liveness.flat_unit_key(step.id)
-
-
-def _emitted_plan(state: RunState) -> str | None:
-    """The recorded repo-relative plan path, wherever the shape put it."""
-    for record in state.steps.values():
-        if record.emitted and "plan" in record.emitted:
-            return record.emitted["plan"]
-    return None
-
-
-def _group_phases(repo_root: Path, state: RunState) -> tuple[list[int], list[int]]:
-    """`(agentic, manual)` phase numbers, from the plan on disk — the one
-    source of which phases exist.
-
-    **The filter lives here, above everything else** (#496, spec §3.D.3).
-    `_expected_group_items` is the single place that decides which units
-    exist, and BOTH of `_advance_group`'s refusals read that list: filter a
-    manual phase out any later and a `tag: manual` phase can still be the
-    `running` key an ALREADY RUNNING refusal names, or the unit a
-    `--redispatch` re-briefs.
-
-    The split keys on `tag` alone and never on completion. A ticked
-    front-loaded manual phase waits on nobody (review `r4-f1`) but is still
-    not work this run did, so it is recorded as skipped rather than done —
-    and keeping the predicate completion-free is what lets `advance` and
-    `fr run adopt` write identical markers without either parsing state.
-
-    Fail-closed: a group advanced before its plan is recorded (or against an
-    unparseable plan) names what is missing instead of dispatching against a
-    guessed phase list.
-    """
-    plan_rel = _emitted_plan(state)
-    if plan_rel is None:
-        raise RunStateError(
-            "cannot dispatch per-phase members — no plan recorded yet "
-            "(resolve the step that emits `plan` first)"
-        )
-    tags = plan_phase_tags(repo_root, plan_rel)
-    agentic = sorted(n for n, tag in tags.items() if tag != "manual")
-    manual = sorted(n for n, tag in tags.items() if tag == "manual")
-    return agentic, manual
-
-
-def _manual_items(manual: list[int]) -> dict[str, str]:
-    """The `phase/<n>: manual` markers for every phase the fan-out skipped.
-
-    Item granularity, in the group's own map, so a deliberate omission is
-    visible in `fr run status` beside everything that WAS dispatched — the
-    alternative (leave them out entirely) is how a skipped phase becomes
-    indistinguishable from a phase nobody noticed.
-    """
-    return {f"phase/{n}": MANUAL_ITEM for n in manual}
-
-
-def _item_phase(item: str) -> int | None:
-    """The phase number a `phase/<n>` item names, or None when it names
-    something else. Structural, not a cast: `--item` is operator input, so
-    `phase/four` and `spec/1` must fall through to the generic refusal rather
-    than raise."""
-    head, _, tail = item.partition("/")
-    return int(tail) if head == "phase" and tail.isdigit() else None
-
-
-def _group_done_line(step_id: str, expected: list[str], manual: list[int]) -> str:
-    """The one completion line for a grouped fan-out.
-
-    Printed from both places a group can complete — `_advance_group` (nothing
-    left to dispatch) and `_resolve_member` (the last member's outcome) — so
-    the count and the manual phases it names cannot drift between them.
-
-    The manual phases are named rather than merely counted: "6 members done"
-    over a 4-phase plan reads as an arithmetic bug until the line says which
-    phase was never dispatched and why. It does NOT say "trailing", though
-    the common case is: after review `r4-f1` a manual phase may legitimately
-    be front-loaded-and-already-complete instead, and deciding which from
-    here would be a second definition of "trailing" beside
-    `fr.plan_review._trailing_manual_block`.
-    """
-    line = f"{step_id}: done ({len(expected)} members done"
-    if manual:
-        phases = ", ".join(f"phase {n}" for n in manual)
-        line += (
-            f"; {phases} `tag: manual`, never dispatched — the plan's own "
-            "steps and the PR are its record"
-        )
-    return line + ")"
-
-
-def _phase_tier(repo_root: Path, state: RunState, phase_n: int) -> str | None:
-    """The tier phase `phase_n` declares in its header on the plan this run
-    recorded, or `None` when it declares none, no plan is recorded yet, or
-    the plan is unparseable.
-
-    Fail-soft by design (unlike `_group_phases`, which fails closed): this is
-    an observability field, not a dispatch precondition, and refusing to
-    dispatch over an unreadable OPTIONAL tier would be a new failure mode for
-    a field whose whole point is that a phase may legitimately not set it.
-    "Observability must not break execution", rather than `_group_phases`'s
-    stance.
-    """
-    plan_rel = _emitted_plan(state)
-    if plan_rel is None:
-        return None
-    from fr.parser import PlanSchemaError, parse
-
-    try:
-        plan = parse(emitted_path(repo_root, plan_rel))
-    except PlanSchemaError, OSError:
-        return None
-    return next((p.phase.tier for p in plan.phases if p.phase.number == phase_n), None)
-
-
-def _expected_group_items(group: Step, phases: list[int]) -> list[str]:
-    """Every `phase/<n>/<member>` key of a grouped fan-out, in dispatch
-    order: phase-major, then member order — implement before review, per
-    phase, never the reverse.
-
-    `phases` is `_group_phases`'s AGENTIC list: a manual phase produces no
-    expected key at all, so it is neither dispatchable, resolvable, nor
-    countable towards the group's completion.
-    """
-    return [f"phase/{n}/{m.id}" for n in phases for m in group.steps]
-
-
-class _StepDriftError(RunStateError):
-    """The step list a cursor recorded differs from the manifest's — the one
-    refusal a read-only command downgrades to a warning (`_resolve_manifest_for_read`)."""
-
-
-def _resolve_manifest_for_state(repo_root: Path, state: RunState) -> WorkflowManifest:
-    """The manifest this run was started against — name AND schema version.
-
-    `state.workflow` is `"<name>@<schema>"`. The suffix used to be sliced off
-    and thrown away (review r5-e3), so a run started against `fr-goal@1` would
-    happily keep advancing after the shape was rewritten as `schema: 2` — with
-    a step graph the cursor was never computed for. The suffix is a version
-    stamp; a version stamp nobody checks is decoration.
-    """
-    manifest = _resolve_manifest_checked_schema(repo_root, state)
-    _check_step_drift(state, manifest)
-    return manifest
-
-
-def _resolve_manifest_checked_schema(repo_root: Path, state: RunState) -> WorkflowManifest:
-    name, _, recorded_schema = state.workflow.partition("@")
-    manifest = resolve_workflow(name, repo_root)
-    if recorded_schema and str(manifest.schema_version) != recorded_schema:
-        raise RunStateError(
-            f"run {state.run!r} was started against {state.workflow!r}, but "
-            f"{name!r} now declares schema {manifest.schema_version}. A shape's "
-            "schema version changes its step grammar; start a new run rather "
-            "than advancing this one against a different one."
-        )
-    return manifest
-
-
-def _resolve_manifest_for_read(repo_root: Path, state: RunState) -> WorkflowManifest:
-    """`_resolve_manifest_for_state` for a command that only READS the cursor
-    (spec 2026-10-05-run-upgrade-midflight §B).
-
-    A step-list drift is printed as ONE warning and the manifest returned
-    anyway: refusing to say who cleared a gate because a later step was added
-    helps nobody. A schema-version mismatch still refuses — a different grammar
-    is not safe to read with. Mutating commands keep the strict resolver.
-    """
-    manifest = _resolve_manifest_checked_schema(repo_root, state)
-    try:
-        _check_step_drift(state, manifest)
-    except _StepDriftError as e:
-        err_console.print(f"[yellow]warning: {escape(str(e))}[/yellow]", soft_wrap=True)
-    return manifest
-
-
-def _reshape_hint(state: RunState) -> str:
-    return (
-        f" `fr run reshape {state.run}` moves the cursor onto the current list "
-        "when that loses nothing it recorded."
-    )
-
-
-def _check_step_drift(state: RunState, manifest: WorkflowManifest) -> None:
-    """Refuse when the shape's STEPS have changed since `fr run start`.
-
-    A step added, removed or renamed makes every recorded position suspect:
-    the cursor may name a step that no longer exists, a new step silently
-    never runs, and `_next_step_id` moves the run somewhere the operator never
-    reviewed. Each of those used to surface as a `KeyError` or a `ValueError`
-    from `list.index` deep inside `advance` (review r5-e3) — or, for an added
-    step, as nothing at all.
-
-    Reported as a DIFF, because "the workflow changed" is not actionable and
-    "added: verify; removed: spec-review" is.
-    """
-    added, removed = diff_ids(state.steps, (s.id for s in manifest.steps))
-    if added or removed:
-        parts = []
-        if added:
-            parts.append(f"added: {', '.join(added)}")
-        if removed:
-            parts.append(f"removed: {', '.join(removed)}")
-        raise _StepDriftError(
-            f"run {state.run!r} was started against a different version of "
-            f"{state.workflow!r} ({'; '.join(parts)}). A run's cursor is a position in "
-            "a step list; start a new run rather than advancing this one against a "
-            "list it was never computed for." + _reshape_hint(state)
-        )
-    for step in manifest.steps:
-        if not step.steps:
-            continue
-        record = state.steps.get(step.id)
-        recorded_members = record.members if record is not None else None
-        if recorded_members is None:
-            continue  # pre-nesting run file: top-level ids match, members unknowable
-        current_members = [m.id for m in step.steps]
-        if recorded_members != current_members:
-            added, removed = diff_ids(recorded_members, current_members)
-            parts = []
-            if added:
-                parts.append(f"added: {', '.join(added)}")
-            if removed:
-                parts.append(f"removed: {', '.join(removed)}")
-            raise _StepDriftError(
-                f"run {state.run!r} was started against a different version of "
-                f"{state.workflow!r} (step {step.id!r} members changed: {'; '.join(parts)}). "
-                "A run's cursor is a position in a step list; start a new run rather "
-                "than advancing this one against a list it was never computed for."
-                + _reshape_hint(state)
-            )
-
-
-def _rebind_shape(
-    state: RunState,
-    manifest: WorkflowManifest,
-    step_id: str,
-    target: str,
-    repo_root: Path,
-) -> WorkflowManifest | None:
-    """The manifest a record's `shape: <target>` rebinds the run onto, `None`
-    for a same-shape no-op — or `RunStateError` naming the rule it broke.
-
-    2026-09-29-fr-goal-light-path §A (R1). A run's cursor is a position in a
-    step list, so moving it onto another list is safe only before it has
-    moved at all, and only onto a list that shares the position it is at:
-
-    1. the step being resolved is the run's first step, and no other step has
-       left `pending`;
-    2. `resolve_workflow(target)` finds the shape, and its first step has the
-       same id as the step being resolved;
-    3. the target is not the run's current shape — that declaration is a
-       no-op, so a re-applied record is idempotent.
-
-    Pure: it validates, and `_rebound` builds the new state. `apply_record`
-    calls it before any write, and `resolve` again where it rewrites.
-    """
-    current = state.workflow.partition("@")[0]
-    if target == current:
-        return None
-    first = manifest.steps[0].id
-    if step_id != first:
-        raise RunStateError(
-            f"shape: {target!r} refused — only the run's first step ({first!r}) may "
-            f"rebind it, and {step_id!r} is not that step. Start a new run with "
-            f"`fr run start {target}` instead."
-        )
-    moved = sorted(
-        sid for sid, rec in state.steps.items() if sid != step_id and rec.state != "pending"
-    )
-    if moved:
-        raise RunStateError(
-            f"shape: {target!r} refused — step(s) {', '.join(moved)} already left "
-            "`pending`, so the run has moved on its current shape. Start a new run "
-            f"with `fr run start {target}` instead."
-        )
-    try:
-        rebound = resolve_workflow(target, repo_root)
-    except WorkflowError as e:
-        raise RunStateError(f"shape: {target!r} refused — {e}") from e
-    if not rebound.steps or rebound.steps[0].id != step_id:
-        begins = rebound.steps[0].id if rebound.steps else "nothing"
-        raise RunStateError(
-            f"shape: {target!r} refused — it begins with {begins!r}, not {step_id!r}; "
-            "a run rebinds only onto a shape that begins with the step being resolved."
-        )
-    errors = check_workflow(rebound, repo_root)
-    if errors:
-        raise RunStateError(f"shape: {target!r} refused — not a valid workflow: {errors[0]}")
-    return rebound
-
-
-def _rebound(state: RunState, rebound: WorkflowManifest, step_id: str) -> RunState:
-    """`state` on `rebound`'s step list: `workflow` rewritten, every step
-    fresh and `pending` as `fr run start` builds them, bar `step_id`'s own
-    record, which is carried over. The cursor stays on `step_id`, so the
-    caller's `_complete_step` moves it along the NEW list."""
-    steps = {
-        s.id: StepRecord(state="pending", members=[m.id for m in s.steps] or None)
-        for s in rebound.steps
-    }
-    steps[step_id] = state.steps[step_id]
-    return state.model_copy(
-        update={"workflow": f"{rebound.workflow}@{rebound.schema_version}", "steps": steps}
-    )
-
-
-def _with_step(state: RunState, step_id: str, record: StepRecord) -> RunState:
-    new_steps = dict(state.steps)
-    new_steps[step_id] = record
-    return state.model_copy(update={"steps": new_steps})
-
-
-def _complete_step(
-    state: RunState,
-    manifest: WorkflowManifest,
-    step_id: str,
-    outcome: Literal["done", "failed"],
-    *,
-    exit_code: int | None = None,
-    stdout: str | None = None,
-    emitted: Mapping[str, str] | None = None,
-    answered_by: AnsweredBy | None = None,
-) -> RunState:
-    """Record `step_id`'s outcome and move the cursor — the ONE place that
-    implements the done/failed cursor asymmetry, shared by `advance`'s
-    `cli` branch and `resolve` (an `agent` step's outcome) rather than
-    forked between them: the cursor advances to the next step on `done`,
-    and stays exactly where it is on `failed` — a stalled step must stay
-    the loudest thing `status`/`check` report, never slide past silently.
-
-    **The cursor moves off the CURSOR, never relative to `step_id`** (review
-    fix r2-f8). Assigning `_next_step_id(manifest, step_id)` unconditionally
-    meant completing any step *behind* the cursor rewound the run to just
-    after that step — a silent state corruption. Only a step that IS the
-    cursor can move it; anything else records its outcome and leaves the
-    cursor alone. That is correct however many steps are `running` at once,
-    so it stays correct if a shape ever dispatches steps concurrently —
-    which enforcing "one running step" as an invariant would have foreclosed.
-
-    The prior record's `gate` is carried forward on `done`, and on `failed`
-    it is deliberately not — which is narrower than "an operator authorizes a
-    step once" (corrected in review r5-b6). `StepRecord.gate` is only ever set
-    to `"cleared"` by `resolve`'s **cli** branch, which returns the step to
-    `pending`; the `agent` branch below records `done`/`failed` and writes no
-    `gate` at all. So a *failed* gated agent step keeps `gate: None` and
-    `_gate_pending` re-asks on the next `advance`. That re-ask is correct — a
-    step that failed after its gate was answered is a new question, not a
-    resumption — but the claim that the gate is answered once for the life of
-    the run was not true of it.
-
-    `answered_by` is the gated **agent** branch's half of that story: those
-    steps never acquire `gate: cleared` at all, so provenance is the only
-    record that a gate was cleared there, and it is passed in by `resolve`.
-    Absent an explicit value the prior record's is carried forward — exactly
-    like `gate`, so a cleared `cli` gate's provenance survives the `advance`
-    that finally executes the step.
-    """
-    prior = state.steps.get(step_id)
-    # The successor is the PRIOR record with the fields completion decides
-    # overwritten — never a record rebuilt from a list of fields to keep.
-    # Finding f7 is why: this used to be `StepRecord(state=…, gate=prior.gate,
-    # members=prior.members, …)`, a hand-maintained carry-forward list, so any
-    # durable field added later was DROPPED at completion by default. The
-    # dispatch history was the one that got caught: the trail gh-503 asked for
-    # ("who was holding this phase, and when") was deleted by the very act of
-    # FINISHING — silently, because only `status`/`check` ever read it — and an
-    # adopted flat fan-out went blind the same way (`_fan_out_items` scans
-    # every record for exactly this). Now `gate`, `members`, `units` and
-    # whatever comes next survive unless a line below says otherwise.
-    completion: dict[str, object] = {
-        "state": outcome,
-        "at": _now(),
-        "answered_by": answered_by or (prior.answered_by if prior is not None else None),
-        "exit": exit_code,
-        "stdout": stdout,
-        "emitted": dict(emitted) if emitted else None,
-    }
-    new_record = (
-        prior.model_copy(update=completion)
-        if prior is not None
-        else StepRecord.model_validate(completion)
-    )
-    new_state = _with_step(state, step_id, new_record)
-    if outcome == "done" and step_id == state.cursor:
-        next_id = _next_step_id(manifest, step_id)
-        if next_id is not None:
-            new_state = new_state.model_copy(update={"cursor": next_id})
-    return new_state
-
-
-def _gate_degradation_notice() -> str | None:
-    """The loud degradation notice for a blocked `gate: operator` step (spec
-    §3.D.1), or `None` when fr can observe who answers it here (Claude Code
-    with a readable transcript, OpenCode with an exported, readable session).
-
-    Reads `os.environ` through `detect_harness` (never a hardcoded harness
-    name) and the shipped matrix's `operator-gate` row through `load_matrix`
-    — the notice text is built from that row's `scope_note`, so a stale or
-    hand-typed string here can never drift from what `fr harness parity`
-    itself declares. An UNRECOGNISED environment (`detect_harness` returns
-    `None`) is treated as degraded too — fail loud, the same posture as the
-    isolation gate: a wrong notice costs a confusing paragraph, a missing one
-    costs a silently skipped gate.
-
-    Raises `HarnessError` when `FR_HARNESS` is set to something outside
-    `fr.harness.HARNESSES` — a typo must not silently become an inference,
-    so the caller surfaces it as a command error rather than guessing.
-    """
-    from fr.run.observed import why_unobservable
-    from fr.run.telemetry import operator_answered_since
-
-    harness = detect_harness(os.environ)
-    matrix = load_matrix()
-    surface = next(s for s in matrix.surfaces if s.id == "operator-gate")
-    if harness is not None:
-        hstate = surface.harnesses[harness]
-        # Observed is a claim about a MECHANISM — `resolve` reading answered
-        # questions in the session (Claude Code's transcript, OpenCode's
-        # `question` parts) — so the notice is silent exactly where that read
-        # works, whatever the row's state. Before 2026-09-21 (debug journal C1)
-        # it was a claim about a TOOL existing, nothing checked it, and an early
-        # return spared the one harness that skipped its gate the only warning.
-        epoch = "1970-01-01T00:00:00+00:00"
-        if operator_answered_since(os.environ, epoch) is not None:
-            return None
-        if hstate.state in ("enforced", "partial"):
-            # fr HAS a reader here, so the row's scope_note (which describes
-            # the verification) would be false — say why the read failed.
-            detail = (
-                f"your harness ({harness}) is verified by reading the session, but "
-                f"{why_unobservable(harness, os.environ, 'questions')} — so this gate "
-                "is advisory now"
-            )
-        else:
-            detail = f"your harness ({harness}) does not enforce this gate (state: {hstate.state})"
-            if hstate.scope_note:
-                detail += f" — {hstate.scope_note}"
-    else:
-        detail = (
-            "your harness could not be detected (set FR_HARNESS to one of "
-            f"{', '.join(HARNESSES)}) — treating this gate as advisory to be safe"
-        )
-    return (
-        f"gate: {detail}.\n"
-        "      Put the questions to the operator (with your harness's question tool where "
-        "it has one) and STOP until they answer.\n"
-        "      fr cannot verify who answered this gate, so its resolve must say: "
-        "`answered_by: operator` (the operator answered) or `answered_by: agent` "
-        "(cleared without asking) — `--answered-by` on the flag form, an "
-        "`answered_by` evidence key in a record. There is no default."
-        # No braces in this notice: it precedes the JSON brief, which a harness
-        # finds by its first `{`.
-    )
-
-
-def _refuse_gate_flags(step_id: str) -> NoReturn:
-    """Gate flags on a resolve that clears no gate — refused, because silently
-    ignored flags read as honoured ones (review r1-7)."""
-    err_console.print(
-        f"[red]{step_id}: --no-questions/--reason and question rounds only apply to a "
-        "resolve that clears an operator gate, and this one clears none.[/red]",
-        soft_wrap=True,
-    )
-    raise typer.Exit(2)
-
-
-def _clears_gate(step: Step, record: StepRecord, outcome: str) -> bool:
-    """Does this `resolve` CLEAR an operator gate (rather than decline it, or
-    resolve a step that never had one)?
-
-    The condition provenance is recorded under, and deliberately narrow:
-    `answered_by` must not claim an authorization for a step nobody gated, and
-    a *declined* gate (`--state failed`) was not cleared. It reads the
-    record's own state rather than `_gate_pending`, because by the time this
-    runs the step is `blocked` — which is what "waiting on its gate" looks
-    like once `advance` has seen it.
-    """
-    return step.gate == "operator" and record.state == "blocked" and outcome == "done"
-
-
-ANNOUNCEMENTS = ("a 2nd round may follow", "round 1 of 2")
-"""What a design-risk second round's first round must say, case-insensitively,
-in one of its question texts (spec 2026-09-26 §3.C): the operator is told a
-second round may follow before answering the first. The first is the label fr-goal
-prints (gh#766: a round's total is a forecast, so the label no longer counts it);
-the second is the pre-gh#766 label, still accepted so a session that asked round 1
-under the old prose is not refused by the fr it upgraded to."""
-
-
-def question_rounds_refusal(
-    rounds: Sequence[Round], questions: QuestionRounds | None
-) -> str | None:
-    """The §3.C verdict table: `None` when the observed ANSWERED rounds agree
-    with the declaration (absent ≡ `rounds: 1`), else why they do not.
-
-    Pure — the gate calls it with the transcript's rounds, the tests with
-    hand-built ones. Zero rounds is not this table's case: that is the
-    existing "no answered question" refusal, decided before it.
-    """
-    n = len(rounds)
-    declared = questions.rounds if questions is not None else 1
-    if n > 2:
-        return (
-            f"the transcript shows {n} answered question rounds since the gate blocked — "
-            "there is never a round 3. A gate asked in three rounds is not one fr records "
-            "as answered: decline it (`--state failed`) and re-run the step, asking at "
-            "most two rounds."
-        )
-    if n != declared:
-        plural = "round" if n == 1 else "rounds"
-        fix = (
-            "Declare the second round: `questions: {rounds: 2, trigger: "
-            'design-risk|operator-request, reason: "…"}` in the record, or '
-            '`--question-rounds 2 --round-two-trigger … --round-two-reason "…"`.'
-            if n == 2
-            else "The transcript shows only one round: drop the `questions: {rounds: 2, …}` "
-            "declaration (or `--question-rounds 2`)."
-        )
-        return (
-            f"the transcript shows {n} answered question {plural} since the gate blocked, "
-            f"but this resolve declares {declared}. {fix}"
-        )
-    if (
-        questions is not None
-        and questions.rounds == 2
-        and questions.trigger == "design-risk"
-        and not any(
-            announcement in text.lower()
-            for text in rounds[0].question_texts
-            for announcement in ANNOUNCEMENTS
-        )
-    ):
-        return (
-            "the operator was not told a second round would follow: no round-1 question "
-            "says `a 2nd round may follow`. A design-risk second round is announced in round 1, "
-            "before the operator answers it."
-        )
-    return None
-
-
-# gh#690: a gate DECIDES in `_gate_provenance` but its spec-journal decision
-# is only QUEUED there, and written by `_flush_gate_decisions` immediately
-# before the resolve saves the cursor — after every refusal point. Written at
-# decision time, a later refusal left the entry behind, and the command's
-# closing commit (which keeps every noted write, on every exit path) recorded a
-# decision the cursor never did.
-
-_GATE_DECISIONS: ContextVar[list[tuple[Path, str, JournalEntry]] | None] = ContextVar(
-    "fr_gate_decisions", default=None
-)
-
-
-def _queue_gate_decision(
-    repo_root: Path, spec: str, entry_id: str, *, title: str, body: str
-) -> None:
-    """Queue one spec-journal `decision` about a cleared operator gate — once:
-    a retry after a later refusal must not log it twice (review r1-6).
-
-    A retry that would write a DIFFERENT body under the same id is refused
-    (exit 2) here, at decision time (review p2-r6): keeping the first body
-    silently would leave the journal — and the PR body read from it —
-    describing a trigger or reason this resolve no longer declares."""
-    from fr.journal.model import journal_path
-
-    slug = spec_journal_slug(Path(spec).name[: -len(".md")])
-    target = journal_path(repo_root, "spec", slug)
-    try:
-        existing = (
-            next((e for e in parse_journal(target.read_text()) if e.id == entry_id), None)
-            if target.is_file()
-            else None
-        )
-    except JournalParseError:
-        existing = None
-    if existing is not None:
-        if existing.body.strip() == body.strip():
-            return
-        shown = (
-            target.relative_to(repo_root).as_posix()
-            if target.is_relative_to(repo_root)
-            else str(target)
-        )
-        err_console.print(
-            f"journal entry `{entry_id}` in {shown} already records a different body "
-            f"({existing.body.strip()!r}) than this resolve would write ({body.strip()!r}). "
-            "Resolve again with what that entry says, or correct the entry first if it is "
-            "the one that is wrong — nothing applied.",
-            style="red",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    queued = _GATE_DECISIONS.get()
-    if queued is None:
-        queued = []
-        _GATE_DECISIONS.set(queued)
-    entry = JournalEntry(
-        kind="decision",
-        scope="spec",
-        id=entry_id,
-        # `fr journal add`'s own stamp (UTC with its offset, second precision).
-        created=journal_now(),
-        title=title,
-        body=body,
-    )
-    queued.append((target, slug, entry))
-
-
-def _flush_gate_decisions(repo_root: Path) -> None:
-    """Write every queued gate decision — called by each `resolve` branch
-    immediately before it saves the cursor, so nothing after it can refuse."""
-    from fr.journal.model import append_journal_entry
-
-    queued = _GATE_DECISIONS.get() or []
-    _GATE_DECISIONS.set(None)
-    for target, slug, entry in queued:
-        _remember(target)
-        append_journal_entry(target, slug, entry)
-        _note_record_write(repo_root, target)
-
-
-def observed_gate_rounds(record: StepRecord) -> list[Round] | None:
-    """The answered question rounds since this gate blocked (`record.at`), or
-    `None` where fr cannot read them — THE observation `_gate_provenance` and
-    `derive_gate_answer` share, so the two cannot disagree."""
-    from fr.run.telemetry import answered_rounds_since
-
-    return answered_rounds_since(os.environ, record.at) if record.at else None
-
-
-@dataclass(frozen=True)
-class GateAnswer:
-    """Who answered an operator gate, as `_gate_provenance` derives it (spec
-    2026-10-14 R12): `who` is `operator`, `agent` or `None` (a gate it refuses);
-    `observed` says the transcript was read; `rounds` are the answered rounds."""
-
-    who: str | None
-    observed: bool
-    rounds: tuple[Round, ...] = ()
-
-
-def derive_gate_answer(
-    record: StepRecord, *, no_questions: bool, claimed: str | None
-) -> GateAnswer:
-    """The answer `_gate_provenance` records, without its refusals or writes:
-    `--no-questions` → agent; answered rounds observed → operator; observed and
-    none → `None` (the gate refuses); not observable → the claim, unverified."""
-    if no_questions:
-        return GateAnswer("agent", observed=False)
-    rounds = observed_gate_rounds(record)
-    if rounds is None:
-        return GateAnswer(claimed if claimed in ("operator", "agent") else None, observed=False)
-    return GateAnswer("operator" if rounds else None, observed=True, rounds=tuple(rounds))
-
-
-def _gate_provenance(
-    repo_root: Path,
-    step_id: str,
-    record: StepRecord,
-    *,
-    claimed: AnsweredBy | None,
-    no_questions: bool,
-    reason: str | None,
-    questions: QuestionRounds | None = None,
-    emitted: Mapping[str, str],
-    state: RunState,
-) -> AnsweredBy:
-    """Who cleared this operator gate — OBSERVED where fr can see it, refused
-    where the observation contradicts the resolve (2026-09-21 debug journal C1).
-
-    The first fr-goal run after #508 cleared its brainstorm gate on Claude Code
-    without asking anything; `resolve` recorded `answered_by: agent` and let it
-    through, while `parity.yaml` declared the gate `enforced` — which also
-    suppressed the one warning OpenCode and Hermes get. Enforced now means what
-    it says, read from the session transcript (`operator_answered_since`):
-
-    - an answered question since the gate blocked → `operator`, whatever was
-      claimed: provenance is derived, not asserted;
-    - observed, none answered → REFUSED (exit 2), unless the bypass is explicit
-      and on the record: `--no-questions --reason "…"` → `agent`, the reason
-      written to the spec journal this resolve emits (when it emits one);
-    - not observable (Hermes, no harness, an unreadable Claude Code transcript,
-      OpenCode without a session export or with an unreadable store) → a
-      stated claim is recorded as claimed, unverified, and says so out loud;
-      no claim is REFUSED (R10 — there is no default).
-
-    `questions` is the declared round count (spec 2026-09-26 §3.C): observed
-    answered rounds are checked against it by `question_rounds_refusal`, and a
-    verified or claimed `rounds: 2` appends `gate-question-rounds-<step>` to
-    the same spec journal the bypass writes to.
-    """
-    if no_questions and not (reason and reason.strip()):
-        err_console.print(
-            f'[red]{step_id}: --no-questions needs --reason "…" — clearing an operator '
-            "gate without asking is allowed, but only on the record.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    # Review r1-5: "on the record" means a journal the PR body reads — the spec
-    # this resolve emits, else one an earlier step already emitted. With
-    # neither there is nowhere durable for the reason, so the bypass is refused
-    # rather than printed to a stderr nobody keeps.
-    spec_for_reason = emitted.get("spec") or next(
-        (r.emitted["spec"] for r in state.steps.values() if r.emitted and "spec" in r.emitted),
-        None,
-    )
-    if no_questions and not (spec_for_reason and spec_for_reason.endswith(".md")):
-        err_console.print(
-            f"[red]{step_id}: --no-questions has nowhere to record its reason — this "
-            "resolve emits no spec and the run has none yet. Pass the spec with "
-            "`--emitted spec=<path>`, or ask the operator.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    round_two = questions is not None and questions.rounds == 2
-    if round_two and not (spec_for_reason and spec_for_reason.endswith(".md")):
-        err_console.print(
-            f"[red]{step_id}: a second question round has nowhere to record its reason — "
-            "this resolve emits no spec and the run has none yet. Pass the spec with "
-            "`--emitted spec=<path>` (or `emitted: {spec: <path>}` in the record).[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    rounds = observed_gate_rounds(record)
-    observed = None if rounds is None else bool(rounds)
-    if observed is True and not no_questions:
-        assert rounds is not None
-        # gh#761: standalone fr-brainstorming asks one question per turn, so
-        # every question is a round to the transcript; the cap is fr-goal's.
-        refusal = (
-            None if state.driver == "standalone" else question_rounds_refusal(rounds, questions)
-        )
-        if refusal is not None:
-            err_console.print(f"{step_id}: {refusal}", style="red", markup=False, soft_wrap=True)
-            raise typer.Exit(2)
-        _record_round_two(repo_root, step_id, questions, spec_for_reason)
-        return "operator"
-    if observed is False and not no_questions:
-        err_console.print(
-            f"[red]{step_id}: no answered question in this session's transcript since the "
-            f"gate blocked at {record.at}. Put the questions to the operator with your "
-            "harness's question tool (AskUserQuestion on Claude Code) and resolve again "
-            "once they answer — or clear it without asking, on the record: "
-            f'`--no-questions --reason "<why no operator decision was needed>"`.[/red]',
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if no_questions:
-        assert spec_for_reason is not None  # refused above otherwise
-        _queue_gate_decision(
-            repo_root,
-            spec_for_reason,
-            f"gate-no-questions-{step_id}",
-            title=f"Operator gate `{step_id}` cleared without asking",
-            body=reason or "",
-        )
-        err_console.print(
-            f"[yellow]{step_id}: operator gate cleared WITHOUT asking (answered_by: "
-            f"agent). Reason: {reason}[/yellow]",
-            soft_wrap=True,
-        )
-        return "agent"
-    if claimed is None:
-        # R10 (spec 2026-10-02 §F): there is no default. An unobserved gate with
-        # no claim is a question fr cannot answer for the caller, so it asks.
-        err_console.print(
-            f"[red]{step_id}: could not verify who answered this gate "
-            f"({_why_unobservable('questions')}) — pass `answered_by: operator` "
-            "(the operator answered) or `answered_by: agent` (cleared without asking): "
-            "`--answered-by operator|agent` on the flag form, "
-            "`evidence: {answered_by: …}` in a record.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    # Wherever the gate cannot observe — no harness, an unreadable Claude Code
-    # transcript, OpenCode without a session id (OPENCODE_SESSION_ID),
-    # or with an unreadable store, or Hermes, which has no question reader —
-    # it says so on the record (§5.B.7, p2-r28); `advance` already printed the
-    # degradation notice there, which is no reason to be quiet now.
-    _note_unobserved("operator-gate")
-    _record_round_two(repo_root, step_id, questions, spec_for_reason)
-    # p2-r2: only `rounds: 2` writes anything (`_record_round_two`); `rounds: 1`
-    # is the default and is merely accepted.
-    if questions is None:
-        declared = ""
-    elif questions.rounds == 2:
-        declared = " The declared `questions: {rounds: 2}` is recorded as claimed too."
-    else:
-        declared = (
-            f" The declared `questions: {{rounds: {questions.rounds}}}` is accepted, unverified."
-        )
-    err_console.print(
-        f"[yellow]{step_id}: could not verify this gate — {_why_unobservable('questions')}, "
-        f"so `answered_by: {claimed}` is recorded as claimed, unverified "
-        f"(evidence: unobserved=operator-gate).{declared}[/yellow]",
-        soft_wrap=True,
-    )
-    return claimed
-
-
-def _record_round_two(
-    repo_root: Path, step_id: str, questions: QuestionRounds | None, spec: str | None
-) -> None:
-    """A cleared gate that took two question rounds says so on the spec journal
-    (spec 2026-09-26 §3.C) — where the PR body reads it. `rounds: 1` is the
-    default and writes nothing."""
-    if questions is None or questions.rounds != 2:
-        return
-    assert spec is not None  # refused before observation otherwise
-    _queue_gate_decision(
-        repo_root,
-        spec,
-        f"gate-question-rounds-{step_id}",
-        title=f"Operator gate `{step_id}` took two question rounds",
-        body=f"Trigger: {questions.trigger}. {questions.reason}",
-    )
-
-
-def _refuse_missing_emits(
-    label: str,
-    emits: tuple[str, ...] | list[str],
-    supplied: Mapping[str, str],
-    recorded: Mapping[str, str] | None,
-) -> None:
-    """Refuse `done` for a unit that names none of an artifact it declares
-    (gh#587). `_parse_emitted` checks every name GIVEN is declared; this is the
-    converse — every declared artifact is given now or already on the record.
-    Before it, `brainstorm` reached `done` with `emitted: None` and the run went
-    on to review a spec the cursor could not locate."""
-    missing = [
-        n for n in emitted_artifacts(emits) if n not in supplied and n not in (recorded or {})
-    ]
-    if not missing:
-        return
-    flags = " ".join(f"--emitted {n}=<…>" for n in missing)
-    err_console.print(
-        f"{label}: done without the artifact(s) it declares: {', '.join(missing)}. "
-        f"Name them — `{flags}`, or `emitted:` in the record — and resolve again; "
-        "nothing applied.",
-        style="red",
-        markup=False,
-        soft_wrap=True,
-    )
-    raise typer.Exit(2)
-
-
-def _parse_emitted(pairs: list[str], repo_root: Path, step: Step | None = None) -> dict[str, str]:
-    """`--emitted name=path` pairs, validated and made repo-relative.
-
-    **The normalization is the point** (review r5-b2). `emitted.plan` is the
-    key `archive.find_run_for_plan` and `run.adopt.adoptable_plans` match a
-    run to its plan by, and both compare against a repo-relative posix path.
-    A stored ABSOLUTE path matches neither — verified live: it made `fr run
-    adopt` create a SECOND run for a plan that already had one, and would
-    have left the first behind at `fr archive`. Both are silent no-ops, which
-    spec §4.B calls out as worse than failing. And an absolute path is what
-    an agent following SKILL.md's `--emitted plan=<path>` produces routinely.
-
-    Only `REPO_TRACKED_ARTIFACTS` (`spec`, `plan`) are path-normalised: `pr`
-    is a URL, `report` and `journal:*` have no repo path, and rewriting those
-    would be nonsense.
-
-    Five further rules, each closing a way to record a wrong thing quietly
-    (review r5-e2):
-
-    1. **Split on the FIRST `=` only.** A path may contain `=`; splitting on
-       the last, or on all, silently truncates it.
-    2. **Neither half may be empty.** `plan=` records the repo root as the
-       plan; `=x` records an artifact with no name.
-    3. **The name must be one the step declares it `emits`.** An artifact the
-       manifest never mentions is a shape/agent mismatch — the agent emitted
-       something the workflow does not know about, or misspelled the name it
-       does — and storing it means the run carries a key nothing will ever
-       read. The refusal names the step's declared emits.
-    4. **No duplicate names in one call.** `--emitted plan=a --emitted plan=b`
-       silently kept `b`.
-    5. **A repo-tracked artifact must EXIST.** An agent reporting a spec that
-       is not on disk is precisely the silent-wrong-state case the run cursor
-       exists to prevent.
-    """
-    result: dict[str, str] = {}
-    for pair in pairs:
-        name, sep, value = pair.partition("=")  # partition splits on the FIRST `=`
-        if not sep:
-            raise RunStateError(f"--emitted must be 'name=path', got {pair!r}")
-        name = name.strip()
-        if not name:
-            raise RunStateError(f"--emitted has an empty artifact name: {pair!r}")
-        if not value.strip():
-            raise RunStateError(f"--emitted {name}= has an empty value")
-        if name in result:
-            raise RunStateError(
-                f"--emitted {name}= given twice ({result[name]!r} then {value!r}) — "
-                "one artifact, one value"
-            )
-        if step is not None and name not in step.emits:
-            emits = ", ".join(sorted(step.emits)) or "(nothing)"
-            raise RunStateError(
-                f"step {step.id!r} does not emit {name!r}; it declares: {emits}. "
-                "Either the workflow shape is missing an `emits:` entry or the "
-                "artifact name is misspelled."
-            )
-        result[name] = _repo_relative_artifact(name, value.strip(), repo_root)
-    return result
-
-
-def _repo_relative_artifact(name: str, value: str, repo_root: Path) -> str:
-    if name not in REPO_TRACKED_ARTIFACTS:
-        return value
-    from fr.artifacts.paths import REPO, feature_root, space_for
-
-    # The artifact root, not the product checkout: under quiet or stealth the spec and
-    # plan live in the `fr` worktree or the tracking clone (R1), and a run records them
-    # relative to that root, the same layout as under `repo`. Readers resolve them back
-    # through `fr.artifacts.paths.emitted_path`.
-    space = space_for(repo_root)
-    base = feature_root(space)
-    raw = Path(value)
-    if raw.is_absolute():
-        candidates = [raw]
-    else:
-        # The logical spelling (`<kind dir>/<file>` below the feature root) first; off
-        # `repo`, also the same path spelled from the `fr` worktree or tracking root
-        # (`features/<id>/...`).
-        candidates = [base / raw]
-        if space.placement != REPO:
-            candidates.append(space.root / raw)
-    # `resolve()` on BOTH sides (review r5-e2): an fr worktree lives under
-    # `~/.cache`, which on macOS is reached through `/private/var/...` — so a
-    # resolved artifact path and an unresolved repo root have no common
-    # prefix and `relative_to` raises on a file that is plainly inside.
-    resolved_root = base.resolve()
-    inside: list[Path] = []
-    for target in candidates:
-        try:
-            inside.append(target.resolve().relative_to(resolved_root))
-        except ValueError:
-            continue
-    real_inside = [r for r in inside if (resolved_root / r).exists()]
-    if not real_inside and any(t.exists() for t in candidates):
-        inside = []  # it exists, but only outside the root: say that, not "missing"
-    if not inside:
-        if space.placement == REPO:
-            where, hint = "the repo", "a run records repo-relative artifact paths"
-        else:
-            where = f"this feature's {space.placement} artifact root"
-            hint = "a run records paths below it; `fr settings paths` names its directories"
-        raise RunStateError(
-            f"--emitted {name}={value!r} is outside {where} ({resolved_root}) — {hint}"
-        )
-    rel = real_inside[0] if real_inside else inside[0]
-    if not (resolved_root / rel).exists():
-        raise RunStateError(
-            f"--emitted {name}={value!r} does not exist ({resolved_root / rel}). "
-            "A run records artifacts that were actually written; recording one "
-            "that is not there is the silent-wrong-state this cursor exists to "
-            "prevent."
-        )
-    return rel.as_posix()
-
-
-# ------------------------------------------------------------------ evidence
-#
-# Spec 2026-09-20-unit-record-unification §4.E. The line this draws is §3's:
-# an obligation's SATISFACTION is control, its CONTENT is journal. The cursor
-# records THAT the review happened and WHERE the evidence is — a journal entry
-# id — exactly as `emitted` records that a spec exists and where, without
-# containing the spec. It never copies a finding.
-
-
-# The obligations fr can check, and the subset it checks BY ITSELF. A derived
-# obligation is never offered on the command line: one satisfied by passing a
-# flag is satisfied by anyone who can type the flag, and `findings` exists
-# precisely because "the review's findings were dealt with" was prose until
-# something other than the agent's word could witness it.
-PHASE_EXECUTOR_AGENT = "super-fr:fr-phase-executor"
-_VERIFIABLE_EVIDENCE = (
-    "review",
-    "reviewer",
-    "findings",
-    "tests",
-    "proportionality",
-    "docs",
-    "visual",
-    "single-phase",
-    "walk",
-    "lenses",
-    "settle",
-)
-# `proportionality` (2026-09-24 spec §C) is `deliver`'s derived witness: fr runs
-# `fr plan proportionality` itself and stores `<merge-base>:<sha256>`.
-# `docs` (2026-11-11-docs-currency R9) is its sibling: fr runs the `fr docs
-# check` gate in process against the same base, refuses on findings, and
-# stores `<merge-base>:<sha256>` of the pages it found current (`none` in a
-# repo with no `.fr/docs.yaml`).
-_DERIVED_EVIDENCE = DERIVED_EVIDENCE
-# `single-phase` (2026-09-29-fr-goal-light-path §A, R2) is the light shape's
-# `plan` witness: the emitted plan has exactly one phase that is not `[manual]`.
-# `visual` (2026-09-28-ui-visual-evidence §C) is derived from the step record's
-# `visual:` section and the witness transcript; the rules live in `fr.run.visual`.
-# Evidence ABOUT A REVIEWED JOURNAL — a phase of the plan journal, or the spec
-# journal (2026-09-24 spec §E) — verified against an `_EvidenceTarget`. A flat
-# `step/<id>` unit with no target (`_evidence_target`) refuses them rather than
-# recording them unchecked. `tests` is not one: it is delivery's evidence, on
-# the flat `deliver` unit (debug journal C5).
-_PHASE_EVIDENCE = frozenset({"review", "reviewer", "findings", "lenses"})
-# OFFERED evidence (2026-09-29-fr-goal-light-path §D, R6): a name a unit of a
-# `for_each: phase` group member may carry WITHOUT its step declaring it, and
-# that is never counted missing there. `tests` is the phase holder's own suite
-# log, which `deliver` may later reuse (`tests: reuse`) while the code tree it
-# covered is unchanged. Where a step DECLARES it (`deliver`) it stays mandatory
-# exactly as before; the shipped manifests do not change.
-_OFFERED_EVIDENCE = frozenset({"tests", "walk"})
-# `walk` (2026-10-06-verification-strategies §C, R11) is `deliver`'s witness of
-# the pre-merge strategy: a log `fr verification walk` wrote, on HEAD's code
-# tree. It is owed only when the run's spec gives the run or a row an
-# agent-driven pre-merge strategy (`fr.verification.walk.walk_owed`); when it is
-# not, omitting it or saying `walk=none` is accepted.
-_DERIVED_FROM = {
-    "findings": "from the reviewed journal: every finding filed against the phase "
-    "(plan journal) or the spec (spec journal) must be fixed, refuted, deferred or "
-    "out of scope",
-    "proportionality": "by running `fr plan proportionality` on the run's plan and "
-    "hashing the report at its merge-base",
-    "docs": "by running `fr docs check` against the same base as `proportionality`: every "
-    "page covering a path the branch changed must change too",
-    "visual": "from the step record's `visual:` section — every owed row's screenshots "
-    "cover its named states and interactions, and the witness transcript shows each "
-    "one opened since the unit opened",
-    "single-phase": "from the plan this step emits: exactly one phase that is not `[manual]`",
-    "lenses": "from the feature's lens set at this resolve and each lens reviewer's return: "
-    "per lens, the changed files it examined and the findings it raised (`none` for an "
-    "empty set)",
-    "settle": "from the PR's conflict and CI states under `git.settle` (fr.settle.witness)",
-}
-
-
-@dataclass(frozen=True)
-class _EvidenceTarget:
-    """The journal a review unit's evidence is verified against.
-
-    `review-phase` reviews a PHASE of the plan journal (`scope="plan"`,
-    `phase=N`); `spec-review` reviews the run's spec, in its spec journal
-    (`scope="spec"`, no phase); `lens-review` reviews the whole FEATURE, in the
-    plan journal with no phase (`feature=True`, spec 2026-11-12-review-lenses
-    §3.C). One value, passed through every rule, so the review steps cannot
-    drift into several spellings of "reviewed".
-    """
-
-    scope: Literal["plan", "spec", "debug"]
-    phase: int | None
-    feature: bool = False
-
-    @property
-    def subject(self) -> str:
-        if self.feature:
-            return "the feature"
-        fallback = "the fix" if self.scope == "debug" else "the spec"
-        return f"phase {self.phase}" if self.phase is not None else fallback
-
-
-def _evidence_target(step: Step, phase: int | None) -> _EvidenceTarget | None:
-    """Which journal `step`'s review evidence names — or `None` when fr can
-    locate none. A phase unit reviews its phase; a flat step reviews the spec
-    journal only when the manifest says it writes it (`emits: [journal:spec]`),
-    the debug journal likewise (`journal:debug`), and the whole feature only when
-    it is the lens review: it writes the plan journal AND declares `lenses`.
-    Anything else has nothing to check an id against, and fr says so."""
-    if phase is not None:
-        return _EvidenceTarget("plan", phase)
-    for scope in ("spec", "debug"):
-        if f"journal:{scope}" in step.emits:
-            return _EvidenceTarget(scope, None)
-    if "journal:plan" in step.emits and "lenses" in step.evidence:
-        return _EvidenceTarget("plan", None, feature=True)
-    return None
-
-
-def _reviews_the_feature(target: _EvidenceTarget | None) -> bool:
-    """Whether the unit is a review of the whole feature (the lens review). Only
-    a step declaring `lenses` gets that target (`_evidence_target`)."""
-    return target is not None and target.feature
-
-
-def _ci_configured(repo_root: Path | None) -> bool:
-    """Whether `fr services` names a CI for *repo_root* (lenient: a hint never
-    refuses). Spec 2026-10-07-cloud-triage §I step 6, p2-r8."""
-    if repo_root is None:
-        return False
-    from fr.services.resolve import resolve_services
-
-    return resolve_services(repo_root, lenient=True).ci.type != "none"
-
-
-def _evidence_hint(name: str, target: _EvidenceTarget | None, repo_root: Path | None = None) -> str:
-    if name == "walk":
-        return (
-            "<path-to-walk-log>, the log `fr verification walk --run <run> --model <m>` "
-            "wrote on this code tree"
-        )
-    if name == "tests":
-        log = (
-            "<path-to-log>, naming the output file of the full suite you ran "
-            "yourself, in this session, during this unit"
-        )
-        if _ci_configured(repo_root):
-            log += (
-                " — or --evidence tests=ci, naming this branch's CI on the pushed "
-                "head (fr reads its gate checks on the open PR)"
-            )
-        return log
-    assert target is not None  # phase-scoped evidence without a target is refused first
-    if name == "review":
-        when = "" if target.phase is not None else ", created after this step opened"
-        kind = "global `kind=review`" if target.feature else "`kind=review`"
-        return (
-            f"<journal-entry-id>, naming the {kind} {target.scope}-journal entry "
-            f"recorded for {target.subject}{when}"
-        )
-    if target.feature:
-        return (
-            "<lens>=<agent-id>,<lens>=<agent-id>, one per lens in the feature's set "
-            "(`fr lenses status`), each the id a dispatched reviewer's dispatch returned"
-        )
-    not_impl = f", not {target.subject}'s implementer" if target.phase is not None else ""
-    return (
-        f"<agent-id>, naming the dispatched reviewer subagent (a separate context{not_impl}) "
-        "by the id its dispatch returned"
-    )
-
-
-def _parse_evidence(pairs: list[str], step: Step, *, phase_unit: bool = False) -> dict[str, str]:
-    """`--evidence name=journal-entry-id` pairs, validated against `step`.
-
-    Same five-rule shape as `_parse_emitted` and for the same reasons — split
-    on the FIRST `=`, neither half empty, no duplicate name, and the name must
-    be one the STEP declares. That last rule is what stops evidence becoming
-    decoration: a name the shape never asked for is verified against nothing,
-    so recording it would put an unverified id on the cursor under a heading
-    that reads as proof.
-
-    `phase_unit` (the unit is a `for_each: phase` group member) admits an
-    `_OFFERED_EVIDENCE` name the step does not declare — still verified, by
-    `_verified_evidence`, before anything reaches the cursor.
-    """
-    result: dict[str, str] = {}
-    for pair in pairs:
-        name, sep, value = pair.partition("=")
-        if not sep:
-            raise RunStateError(f"--evidence must be 'name=journal-entry-id', got {pair!r}")
-        name = name.strip()
-        if not name:
-            raise RunStateError(f"--evidence has an empty obligation name: {pair!r}")
-        if not value.strip():
-            raise RunStateError(f"--evidence {name}= has an empty value")
-        if name in result:
-            raise RunStateError(
-                f"--evidence {name}= given twice ({result[name]!r} then {value.strip()!r}) — "
-                "one obligation, one entry"
-            )
-        if phase_unit and name in _OFFERED_EVIDENCE and name not in step.evidence:
-            result[name] = value.strip()
-            continue
-        if not step.evidence:
-            raise RunStateError(
-                f"step {step.id!r} declares no evidence, so --evidence {name}= "
-                "would record an id nothing verified"
-            )
-        if name not in step.evidence:
-            declared = ", ".join(sorted(step.evidence))
-            raise RunStateError(
-                f"step {step.id!r} does not require {name!r} evidence; it declares: {declared}"
-            )
-        if name in _DERIVED_EVIDENCE:
-            raise RunStateError(
-                f"--evidence {name}= is not yours to pass — fr derives {name!r} itself "
-                f"when the unit resolves `done` ({_DERIVED_FROM[name]}), and records "
-                "what it saw"
-            )
-        result[name] = value.strip()
-    return result
-
-
-def _plan_journal_entries(repo_root: Path, state: RunState) -> tuple[str, list[JournalEntry]]:
-    """`(slug, entries)` of this run's PLAN journal. Raises `RunStateError`
-    when the run has not recorded a plan yet, which is fail-closed: a gate that
-    cannot read its source does not know whether it passed."""
-    slug, _path = _plan_journal_path(state, repo_root)
-    return _journal_entries(repo_root, "plan", slug, "--phase <n> ")
-
-
-def _plan_journal_path(state: RunState, repo_root: Path) -> tuple[str, Path]:
-    plan_rel = _emitted_plan(state)
-    if plan_rel is None:
-        raise RunStateError(
-            "cannot verify evidence — no plan recorded yet (resolve the step "
-            "that emits `plan` first)"
-        )
-    slug = Path(plan_rel).name
-    return slug, resolve_journal_read_path(repo_root, "plan", slug)
-
-
-def _review_journal_entries(
-    repo_root: Path, state: RunState, target: _EvidenceTarget
-) -> tuple[str, list[JournalEntry]]:
-    """`(slug, entries)` of the journal `target` names — the plan journal, or
-    the spec journal of the spec this run emitted. Fail-closed like the plan
-    one: no spec recorded is a refusal, not an empty journal."""
-    if target.feature:
-        # The lens review: a plan journal that does not exist holds no lens finding
-        # and no review, exactly as `lens_set` reads it (no lens added).
-        slug, path = _plan_journal_path(state, repo_root)
-        if not path.exists():
-            return slug, []
-    if target.scope == "plan":
-        return _plan_journal_entries(repo_root, state)
-    if target.scope == "debug":
-        return _journal_entries(repo_root, "debug", require_debug_slug(state), "")
-    from fr.requirements import run_spec
-
-    spec_rel = run_spec(state)
-    if spec_rel is None:
-        raise RunStateError(
-            "cannot verify evidence — no spec recorded yet (resolve the step "
-            "that emits `spec` first)"
-        )
-    return _journal_entries(repo_root, "spec", spec_journal_slug(Path(spec_rel).stem), "")
-
-
-def _journal_entries(
-    repo_root: Path, scope: Literal["plan", "spec", "debug"], slug: str, phase_flag: str
-) -> tuple[str, list[JournalEntry]]:
-    path = resolve_journal_read_path(repo_root, scope, slug)
-    if not path.exists():
-        raise RunStateError(
-            f"cannot verify evidence — the {scope} journal {path} does not exist. "
-            f"Record the review first: fr journal add --scope {scope} --slug {slug} "
-            f"--kind review {phase_flag}..."
-        )
-    try:
-        return slug, parse_journal(path.read_text())
-    except (JournalParseError, OSError) as e:
-        raise RunStateError(
-            f"cannot verify evidence — {scope} journal {path} is unreadable: {e}"
-        ) from e
-
-
 def _verified_evidence(
     repo_root: Path,
     state: RunState,
@@ -1777,8 +416,8 @@ def _verified_evidence(
     checked.
     """
     if not step.evidence and not offered:
-        # `_parse_evidence` already refused an offered name the step does not
-        # declare — bar `_OFFERED_EVIDENCE` on a phase unit — so this is the
+        # `parse_evidence` already refused an offered name the step does not
+        # declare — bar `OFFERED_EVIDENCE` on a phase unit — so this is the
         # ordinary, unchanged path every pre-existing shape takes.
         return {}
     if state_value != "done" and not offered:
@@ -1819,20 +458,20 @@ def _verified_evidence(
         raise typer.Exit(2)
     # The lens review's set is computed HERE, at resolve (§3.C): a lens added
     # during the review, or a rule a fix newly matched, is owed before it closes.
-    lenses = (
-        _lens_set_or_exit(key, repo_root, state)
-        if _reviews_the_feature(target) and (state_value == "done" or offered)
-        else None
-    )
+    lenses = None
+    if _reviews_the_feature(target) and (state_value == "done" or offered):
+        with _refusals():
+            lenses = lens_set_or_refuse(key, repo_root, state)
     walk_owed = None
     if "walk" in offered or (state_value == "done" and "walk" in step.evidence):
-        walk_owed = _walk_obligation(key, repo_root, state)
+        with _refusals():
+            walk_owed = _walk_obligation(key, repo_root, state)
     missing = (
         [
             n
             for n in _owed_on(step, lenses)
             if n not in offered
-            and n not in _DERIVED_EVIDENCE
+            and n not in DERIVED_EVIDENCE
             and not (n == "walk" and walk_owed is not None and not walk_owed.owed)
         ]
         if state_value == "done"
@@ -1877,68 +516,91 @@ def _verified_evidence(
     historical = offered.get("reviewer") == HISTORICAL_REVIEWER
     if historical:
         assert target is not None  # phase-scoped, refused above otherwise
-        _refuse_unboundable_historical(key, target, offered)
+        with _refusals():
+            _refuse_unboundable_historical(key, target, offered)
     reviewers: dict[str, str] | None = None
     if "reviewer" in offered and not historical and lenses is not None:
         assert target is not None
-        reviewers = _verify_lens_reviewers(
-            key, offered["reviewer"], state, lenses, repo_root, target=target, opened=since
-        )
+        with _refusals():
+            reviewers = _verify_lens_reviewers(
+                key,
+                offered["reviewer"],
+                state,
+                lenses,
+                repo_root,
+                target=target,
+                opened=since,
+                warn=_say,
+            )
     elif "reviewer" in offered and not historical:
         assert target is not None  # phase-scoped, refused above otherwise
-        _verify_reviewer(
-            key,
-            offered["reviewer"],
-            state,
-            target=target,
-            opened=since,
-            expected_agent=step.agent if target.phase is None else None,
-        )
+        with _refusals():
+            _verify_reviewer(
+                key,
+                offered["reviewer"],
+                state,
+                target=target,
+                opened=since,
+                expected_agent=step.agent if target.phase is None else None,
+                warn=_say,
+            )
     # `tests: ci` first: the phase-log branch below would read it as a path.
     if "tests" in offered and offered["tests"] == TESTS_CI:
-        verified["tests"] = _ci_tests_witness(key, repo_root, done=state_value == "done")
+        verified["tests"] = _witness(_ci_tests_witness(key, repo_root, done=state_value == "done"))
     elif "tests" in offered and phase is not None:
-        verified["tests"] = _verify_phase_tests_log(
-            key,
-            offered["tests"],
-            repo_root,
-            opened=opened,
-            holder=holder or (attempt.agent if attempt is not None else None),
-            record_tree=state_value == "done",
+        verified["tests"] = _witness(
+            _verify_phase_tests_log(
+                key,
+                offered["tests"],
+                repo_root,
+                opened=opened,
+                holder=holder or (attempt.agent if attempt is not None else None),
+                record_tree=state_value == "done",
+            )
         )
     elif "tests" in offered and offered["tests"] == TESTS_REUSE:
-        verified["tests"] = _reuse_tests_witness(key, repo_root, state)
+        verified["tests"] = _witness(_reuse_tests_witness(key, repo_root, state))
     elif "tests" in offered:
-        verified["tests"] = _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
+        verified["tests"] = _witness(
+            _verify_tests_log(key, offered["tests"], repo_root, opened=opened)
+        )
     if "walk" in offered:
         assert walk_owed is not None
-        verified["walk"] = _verify_walk(
-            key, offered["walk"], repo_root, state, walk_owed, opened=opened
+        verified["walk"] = _witness(
+            _verify_walk(key, offered["walk"], repo_root, state, walk_owed, opened=opened)
         )
     # Every DERIVED witness is evaluated, and every refusal printed, before the
     # resolve is refused (gh#768): one environmental blocker (no fetchable
     # remote) used to exit first and hide each witness declared after it.
     refused: list[str] = []
 
-    def derive(name: str, witness: Callable[[], str]) -> None:
+    def derive(name: str, witness: Callable[[], str | None]) -> None:
         try:
-            verified[name] = witness()
+            found = witness()
         except typer.Exit:
             refused.append(name)
+            return
+        assert found is not None  # a settled verdict with no refusal carries its witness
+        verified[name] = found
 
     if state_value == "done" and "proportionality" in step.evidence:
-        derive("proportionality", lambda: _proportionality_witness(key, repo_root, state))
+        derive(
+            "proportionality",
+            lambda: _settle(_proportionality_witness(key, repo_root, state)),
+        )
     if state_value == "done" and "docs" in step.evidence:
         derive(
             "docs",
-            lambda: _docs_witness(
-                key, repo_root, announce="proportionality" not in step.evidence, state=state
+            lambda: _settle(
+                _docs_witness(
+                    key, repo_root, announce="proportionality" not in step.evidence, state=state
+                )
             ),
         )
     if state_value == "done" and "single-phase" in step.evidence:
         derive(
             "single-phase",
-            lambda: _single_phase_witness(key, repo_root, state, emitted or {}),
+            lambda: _settle(_single_phase_witness(key, repo_root, state, emitted or {})),
         )
     derives = state_value == "done" and "findings" in step.evidence
     review_journal: tuple[str, list[JournalEntry]] | None = None
@@ -1952,27 +614,35 @@ def _verified_evidence(
     if "review" in offered:
         assert review_journal is not None and target is not None
         slug, entries = review_journal
-        _verify_review_entry(
-            key, offered["review"], slug=slug, entries=entries, target=target, since=since
-        )
-        if historical:
-            _verify_historical_bound(
-                key, repo_root, state, target=target, entry_id=offered["review"], entries=entries
+        with _refusals():
+            _verify_review_entry(
+                key, offered["review"], slug=slug, entries=entries, target=target, since=since
             )
+            if historical:
+                _verify_historical_bound(
+                    key,
+                    repo_root,
+                    state,
+                    target=target,
+                    entry_id=offered["review"],
+                    entries=entries,
+                )
     if state_value == "done" and "visual" in step.evidence:
         derive(
             "visual",
-            lambda: _visual_witness(
-                key,
-                repo_root,
-                state,
-                step,
-                phase=phase,
-                entries=visual,
-                holder=holder or (attempt.agent if attempt is not None else None),
-                reviewer=offered.get("reviewer"),
-                since=since or (state.steps[step.id].at if step.id in state.steps else None),
-                dispatched_as=attempt.agent_type if attempt is not None else None,
+            lambda: _settle(
+                _visual_witness(
+                    key,
+                    repo_root,
+                    state,
+                    step,
+                    phase=phase,
+                    entries=visual,
+                    holder=holder or (attempt.agent if attempt is not None else None),
+                    reviewer=offered.get("reviewer"),
+                    since=since or (state.steps[step.id].at if step.id in state.steps else None),
+                    dispatched_as=attempt.agent_type if attempt is not None else None,
+                )
             ),
         )
     if derives:
@@ -1982,14 +652,15 @@ def _verified_evidence(
         # A historical review has no dispatch in this cursor, so no return to read.
         returned_phase = target.phase if "reviewer" in step.evidence and not historical else None
 
-        def findings_witness() -> str:
+        def findings_witness() -> str | None:
             if returned_phase is not None:
                 # R7: only a step that names a dispatched reviewer has a return
                 # that could owe a review-findings block.
-                _check_returned_findings(
-                    key, entries, returned_phase, since, offered.get("reviewer")
-                )
-            return _closed_findings_witness(key, slug, entries, findings_target)
+                with _refusals():
+                    _check_returned_findings(
+                        key, entries, returned_phase, since, offered.get("reviewer"), warn=_say
+                    )
+            return _settle(_closed_findings_witness(key, slug, entries, findings_target))
 
         derive("findings", findings_witness)
     if state_value == "done" and lenses is not None and "lenses" in step.evidence:
@@ -1997,7 +668,9 @@ def _verified_evidence(
         lens_entries = review_journal[1]
         derive(
             "lenses",
-            lambda: _lenses_witness(key, repo_root, lenses, lens_entries, reviewers, since),
+            lambda: _settle(
+                _lenses_witness(key, repo_root, lenses, lens_entries, reviewers, since)
+            ),
         )
     if len(refused) > 1:
         err_console.print(
@@ -2008,2094 +681,6 @@ def _verified_evidence(
     if refused:
         raise typer.Exit(2)
     return verified
-
-
-def _refuse_unboundable_historical(
-    key: str, target: _EvidenceTarget, offered: Mapping[str, str]
-) -> None:
-    """`reviewer=historical` where no bound can apply — or return. A flat unit
-    (spec-review) is refused: its review must postdate the step, and adoption
-    never leaves it open. A phase unit must name the `review` entry the bound
-    is checked against."""
-    if target.phase is None:
-        err_console.print(
-            f"[red]{key}: refused — reviewer={HISTORICAL_REVIEWER} is accepted only on a "
-            "phase review unit; a spec review must be done by a reviewer dispatched after "
-            "the step opened.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if "review" not in offered:
-        err_console.print(
-            f"[red]{key}: refused — reviewer={HISTORICAL_REVIEWER} needs --evidence "
-            "review=<entry-id>, the journal review it stands on.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-
-
-def _verify_historical_bound(
-    key: str,
-    repo_root: Path,
-    state: RunState,
-    *,
-    target: _EvidenceTarget,
-    entry_id: str,
-    entries: list[JournalEntry],
-) -> None:
-    """The review entry `entry_id` meets spec §D's bound for `target`'s phase
-    — or exit 2 naming the clause it fails."""
-    from fr.run.historical import historical_review_refusal
-    from fr.run.visual import VisualRefusedError, owed_for_unit
-
-    assert target.phase is not None
-    entry = next(e for e in entries if e.id == entry_id)  # `_verify_review_entry` found it
-    try:
-        owed = owed_for_unit(
-            repo_root, plan_rel=_emitted_plan(state), phase=target.phase, spec_rel=None
-        )
-    except VisualRefusedError as e:
-        _derived_refusal(key, e.lines)
-    attempt = units.last_attempt(state, key)
-    refusal = historical_review_refusal(
-        state,
-        target.phase,
-        entry,
-        owes_visual=bool(owed),
-        review_key=key,
-        review_dispatched=attempt.dispatched if attempt is not None else None,
-    )
-    if refusal is not None:
-        err_console.print(
-            f"[red]{key}: refused — reviewer={HISTORICAL_REVIEWER}: {escape(refusal)}.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-
-
-def _visual_witness(
-    key: str,
-    repo_root: Path,
-    state: RunState,
-    step: Step,
-    *,
-    phase: int | None,
-    entries: tuple[VisualEvidence, ...] | None,
-    holder: str | None,
-    reviewer: str | None,
-    since: str | None,
-    dispatched_as: str | None = None,
-) -> str:
-    """The derived `visual` witness — or exit 2. A thin call into
-    `fr.run.visual`, which owns every rule and every refusal's wording."""
-    from fr.record.model import records_dir
-    from fr.requirements import run_spec
-    from fr.run.visual import VisualRefusedError, derive_visual, owed_for_unit, role_for
-
-    try:
-        owed = owed_for_unit(
-            repo_root, plan_rel=_emitted_plan(state), phase=phase, spec_rel=run_spec(state)
-        )
-        derived = derive_visual(
-            owed,
-            entries,
-            role=role_for(step.evidence, phase),
-            since=since,
-            holder=holder,
-            reviewer=reviewer,
-            repo_root=repo_root,
-            records_dir=records_dir(repo_root, state.run),
-            env=os.environ,
-            dispatched_as=dispatched_as,
-            claim_hint=(
-                f"fr run claim {state.run} --step {step.id}"
-                + (f" --item phase/{phase}" if phase is not None else "")
-                + " --agent <id>"
-            ),
-        )
-    except VisualRefusedError as e:
-        _derived_refusal(key, e.lines)
-    if derived.unobserved:
-        _note_unobserved("visual")
-        err_console.print(
-            f"[yellow]{key}: could not verify that the screenshots were opened — "
-            f"{derived.why}; recorded as checked on disk, unverified "
-            "(evidence: unobserved=visual).[/yellow]",
-            soft_wrap=True,
-        )
-    return derived.witness
-
-
-def _single_phase_witness(
-    key: str, repo_root: Path, state: RunState, emitted: Mapping[str, str]
-) -> str:
-    """`phase <n>` — the light shape's one agentic phase — or exit 2.
-
-    2026-09-29-fr-goal-light-path §A (R2): a structural rule checked when the
-    plan is authored, not a hope that it stays small. `[manual]` phases are
-    allowed (they are not work a subagent runs); anything but exactly one
-    agentic phase is refused, naming the phases and the two ways forward.
-    Fail-closed on a plan fr cannot read.
-    """
-    plan_rel = emitted.get("plan") or _emitted_plan(state)
-    if plan_rel is None:
-        err_console.print(
-            f"[red]{key}: cannot derive single-phase evidence — no plan recorded "
-            "(pass --emitted plan=<plan-dir>)[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    try:
-        tags = plan_phase_tags(repo_root, plan_rel)
-    except AdoptError as e:
-        err_console.print(
-            f"[red]{key}: cannot derive single-phase evidence — {escape(str(e))}[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    agentic = sorted(n for n, tag in tags.items() if tag != "manual")
-    if len(agentic) != 1:
-        ids = ", ".join(str(n) for n in agentic) or "none"
-        err_console.print(
-            f"{key}: single-phase: the light shape takes one agentic phase; this plan "
-            f"has {len(agentic)} ({ids}). Merge them, or start a new run on fr-goal.",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    return f"phase {agentic[0]}"
-
-
-def _proportionality_witness(key: str, repo_root: Path, state: RunState) -> str:
-    """`<merge-base-sha>:<sha256-of-report>` for this run's plan — or exit 2.
-
-    The report itself never blocks (spec §C, report first); what fails closed
-    is only the witness. A report with no merge-base is the single line naming
-    `--base`, and hashing it would record "proportionality checked" over a
-    diff nobody computed, so the resolve is refused with that line instead.
-    """
-    import hashlib
-
-    from fr.parser import PlanSchemaError, parse
-    from fr.proportionality import run_report
-
-    plan_rel = _emitted_plan(state)
-    if plan_rel is None:
-        err_console.print(
-            f"[red]{key}: cannot derive proportionality evidence — no plan recorded "
-            "yet (resolve the step that emits `plan` first)[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    try:
-        plan = parse(emitted_path(repo_root, plan_rel))
-    except PlanSchemaError as e:
-        err_console.print(
-            f"[red]{key}: cannot derive proportionality evidence — plan {plan_rel} "
-            f"does not parse: {escape(str(e))}[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    base = _witness_base(key, repo_root, "proportionality", announce=True, state=state)
-    report = run_report(repo_root, plan, base)
-    if report.merge_base is None:
-        err_console.print(
-            f"{key}: cannot derive proportionality evidence — {report.text.strip()}",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    return f"{report.merge_base}:{hashlib.sha256(report.text.encode()).hexdigest()}"
-
-
-def _docs_witness(
-    key: str, repo_root: Path, *, announce: bool, state: RunState | None = None
-) -> str:
-    """`<merge-base-sha>:<sha256>` of the current pages, `none` with no
-    `.fr/docs.yaml` — or exit 2 with the check's own findings (R9).
-
-    The base is `_witness_base`'s, so both derived witnesses diff
-    against the same commit, the isolation start commit included; a fallback
-    base is named once, by proportionality when the step declares both.
-    """
-    import hashlib
-
-    from fr.docs import render
-    from fr.docs.gate import evaluate
-    from fr.docs.load import DocsEnvError, load_config, merge_base_of
-
-    try:
-        config = load_config(repo_root)
-        if config is None:
-            return "none"
-        base = _witness_base(key, repo_root, "docs", announce=announce, state=state)
-        outcome = evaluate(repo_root, config, base)
-        merge_base = merge_base_of(repo_root, base)
-    except DocsEnvError as e:
-        _derived_refusal(key, [f"cannot derive docs evidence — fr docs: {e}"])
-    if outcome.findings:
-        _derived_refusal(
-            key,
-            [
-                f"refused — `fr docs check` fails ({len(outcome.findings)} finding(s)):",
-                *render.findings_text(outcome.findings).splitlines(),
-            ],
-        )
-    current = render.status_json(outcome.pages, [])
-    return f"{merge_base}:{hashlib.sha256(current.encode()).hexdigest()}"
-
-
-def _witness_base(
-    key: str, repo_root: Path, name: str, *, announce: bool, state: RunState | None = None
-) -> str:
-    """The base a derived delivery witness diffs against, or exit 2 naming why.
-
-    `proportionality` and `docs` share it, so both diff against one commit.
-    `announce` prints the fallback used when the remote default branch did not
-    resolve.
-    """
-    from fr.run.target import TargetError, target_ref
-
-    if state is not None and state.base_branch is not None:
-        try:
-            explicit = target_ref(repo_root, state.base_branch)
-        except TargetError as error:
-            _derived_refusal(key, [f"cannot derive {name} evidence — {error}"])
-        assert explicit is not None
-        return explicit
-    base, label = _proportionality_base(repo_root)
-    if base is None:
-        err_console.print(
-            f"{key}: cannot derive {name} evidence — no base: {label}. Fetch the "
-            "remote so its default branch resolves, or create the local default branch.",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if announce and label is not None:
-        err_console.print(
-            f"{key}: {name}: no remote default branch; using base {label}",
-            markup=False,
-            soft_wrap=True,
-        )
-    return base
-
-
-def _proportionality_base(repo_root: Path) -> tuple[str | None, str | None]:
-    """The base `deliver`'s proportionality witness diffs against (gh#768).
-
-    `fr run resolve` takes no `--base`, so a repo whose remote default branch
-    does not resolve could never resolve `deliver`. In order: the remote
-    default branch (`(ref, None)` — the ordinary case, nothing printed); the
-    commit `fr isolation up` cut this branch from; the local default branch.
-    `(ref, label)` names a fallback; `(None, why)` means none is left.
-    """
-    from fr.git import GitRefusal, GitUnavailableError, git_answer, remote_default_ref
-    from fr.isolation.types import load_state
-
-    try:
-        found = remote_default_ref(repo_root)
-        if found is not None and not isinstance(found, GitRefusal):
-            return found, None
-        head = git_answer(repo_root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
-        try:
-            recorded = load_state(repo_root, head)
-        except OSError, ValueError:
-            recorded = None
-        if recorded is not None and recorded.base_sha:
-            ok = git_answer(repo_root, "cat-file", "-e", f"{recorded.base_sha}^{{commit}}")
-            if ok.returncode == 0:
-                return recorded.base_sha, f"{recorded.base_sha[:12]} (isolation start commit)"
-        for name in ("main", "master"):
-            if name == head:
-                continue
-            ok = git_answer(repo_root, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}")
-            if ok.returncode == 0:
-                return name, f"{name} (local default branch)"
-    except GitUnavailableError as e:
-        return None, f"git could not answer ({e}); retry"
-    return None, (
-        "no remote default branch, no isolation start commit, and no local default branch"
-    )
-
-
-def _derived_refusal(key: str, lines: list[str]) -> NoReturn:
-    """A derived witness's refusal: its first line after the unit key, the
-    rest indented beneath it."""
-    err_console.print(f"{key}: {lines[0]}", markup=False, soft_wrap=True)
-    for line in lines[1:]:
-        err_console.print(f"  {line}", markup=False, soft_wrap=True)
-    raise typer.Exit(2)
-
-
-def _verify_reviewer(
-    key: str,
-    agent_id: str,
-    state: RunState,
-    *,
-    target: _EvidenceTarget,
-    opened: str | None,
-    expected_agent: str | None = None,
-) -> None:
-    """`agent_id` is a SEPARATE context that reviewed this phase — or exit 2.
-
-    2026-09-21 debug journal C6 (operator decision: separate-context review).
-    The `review=<entry-id>` gate proved an entry EXISTS; on the #497 run the
-    orchestrator typed that entry itself, reviewing nothing — #430 one layer
-    down. So a review also names the subagent that did it, and fr checks two
-    things: it is not the agent that IMPLEMENTED this phase (a context marking
-    its own work), and — where the transcript is readable — this session really
-    dispatched it after the review unit opened. Unobservable: warned, recorded
-    as claimed, never silently.
-
-    A spec review (`target.phase is None`, 2026-09-24 spec §E) has no
-    implementer to exclude — the spec's author is the orchestrator, which has
-    no agent id and so can never pass the dispatch check. Dispatches are read
-    through `fr.run.observed` — Claude Code's transcript, OpenCode's child
-    sessions (once the super-fr plugin exports the run session); on Hermes, or
-    wherever the session cannot be read, the id is recorded as claimed.
-    When the step names its reviewer (`expected_agent`, spec-review's
-    `super-fr:fr-spec-reviewer`), an observed dispatch of any OTHER agent type
-    is refused (review p4-f2) — every spelling `agent_name` folds matches.
-    """
-
-    phase = target.phase
-    # The review unit's own holders are reviewers by construction: a reviewer
-    # that claims the unit it reviews is not an implementer, and counting it
-    # here would refuse the very reviewer the step dispatched.
-    implementers = (
-        {
-            a.agent
-            for record in state.steps.values()
-            for unit_key in (record.units or {})
-            if unit_key.startswith(f"phase/{phase}/") and unit_key != key
-            for a in units.attempts(record, unit_key)
-            if a.agent_type is not None and a.agent is not None
-        }
-        if phase is not None
-        else set()
-    )
-    if agent_id in implementers:
-        err_console.print(
-            f"[red]{key}: --evidence reviewer={agent_id} is the agent that IMPLEMENTED phase "
-            f"{phase} — a review must come from a separate context, not the one whose work "
-            "it judges. Dispatch a reviewer subagent and name its id.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    # Through the session protocol (spec 2026-10-02-opencode-observe-2 §A):
-    # the dispatch named by the id, among those since the review opened.
-    dispatched = _dispatches_since(opened)
-    observed: ChildDispatch | Literal[False] | None = (
-        None
-        if dispatched is None
-        else next((d for d in dispatched if d.agent_id == agent_id), False)
-    )
-    if observed and _same_agent(observed.agent_type, PHASE_EXECUTOR_AGENT):
-        # Review r1-11: a phase executor is an IMPLEMENTER by construction —
-        # any phase's — so it is never the separate context a review needs.
-        err_console.print(
-            f"[red]{key}: --evidence reviewer={agent_id} is a {PHASE_EXECUTOR_AGENT} "
-            "dispatch — an implementer, not a reviewer. Dispatch a reviewer subagent.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if (
-        observed
-        and expected_agent is not None
-        and not _same_agent(observed.agent_type, expected_agent)
-    ):
-        err_console.print(
-            f"[red]{key}: --evidence reviewer={agent_id} is a {observed.agent_type!r} "
-            f"dispatch — this step's reviewer is {expected_agent}. Dispatch that agent "
-            "and name its id.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if observed is False:
-        err_console.print(
-            f"[red]{key}: --evidence reviewer={agent_id} names no subagent this session "
-            f"dispatched since the review opened at {opened}. The review must be done by "
-            "a dispatched reviewer (a separate context), and named by the id its dispatch "
-            "returned.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if observed is None:
-        _note_unobserved("reviewer")
-        err_console.print(
-            f"[yellow]{key}: could not verify reviewer {agent_id!r} — "
-            f"{_why_unobservable('subagent dispatches')}; recorded as claimed, unverified "
-            "(evidence: unobserved=reviewer).[/yellow]",
-            soft_wrap=True,
-        )
-
-
-def _same_agent(observed: str | None, expected: str) -> bool:
-    """`observed` is `expected`, in any spelling `fr.run.observed.agent_name`
-    folds: plugin-qualified or bare (`super-fr:fr-spec-reviewer` /
-    `fr-spec-reviewer`), and OpenCode's tiered name (`fr-spec-reviewer-hard`)."""
-    from fr.run.observed import agent_name
-
-    if observed is None:
-        return False
-    return agent_name(observed) == agent_name(expected)
-
-
-def _check_returned_findings(
-    key: str,
-    entries: list[JournalEntry],
-    phase: int,
-    since: str | None,
-    reviewer: str | None,
-) -> None:
-    """Every finding a phase reviewer RETURNED is a plan-journal finding
-    against `phase` with the reviewer's own scope tag — or exit 2 (spec
-    2026-10-02-opencode-observe-2 §E, R7).
-
-    A child dispatched since the review opened is a reviewer of this unit when
-    it is the one the record names (`reviewer`), or when its return carries a
-    ```review-findings fence; each owes a well-formed block (`none` when it
-    raised nothing). Any other child — a helper dispatched while receiving the
-    review — owes nothing. The journal may hold MORE findings than the blocks
-    (the orchestrator's own), never fewer. Where fr cannot read the session, or
-    the named reviewer's return, the check is noted `unobserved=reviewer-return`
-    and warned, never silently skipped."""
-    from fr.run.review_return import ReviewFindingsBlockError, parse_review_findings
-
-    dispatched = _dispatches_since(since)
-    if dispatched is None:
-        _return_unobserved(key, "the phase reviewers", _why_unobservable("subagent returns"))
-        return
-    problems: list[str] = []
-    returned: dict[str, tuple[str, str]] = {}  # id -> (scope, reviewer)
-    for d in dispatched:
-        named = reviewer is not None and d.agent_id == reviewer
-        if d.returned is None:
-            if named:
-                _return_unobserved(key, f"reviewer {d.agent_id}", "its return is not readable yet")
-            continue
-        try:
-            rows = parse_review_findings(d.returned)
-        except ReviewFindingsBlockError as e:
-            problems.append(f"{d.agent_id}: {e}")
-            continue
-        if rows is None:
-            if named:
-                problems.append(
-                    f"reviewer {d.agent_id} returned no review-findings block — its return "
-                    "must end with one (`none` when it raised nothing)"
-                )
-            continue
-        for fid, scope, _summary in rows:
-            if fid in returned:
-                problems.append(
-                    f"{fid} is returned by both {returned[fid][1]} and {d.agent_id} — "
-                    "give each reviewer its own letter (p<N>a-r<k>, p<N>b-r<k>)"
-                )
-                continue
-            returned[fid] = (scope, d.agent_id)
-    # Phase N OR LATER (review p2-r3): the manifest files a finding that
-    # belongs to a later phase against THAT phase, where it gates that review.
-    journaled = {
-        e.id: e
-        for e in entries
-        if e.kind == "finding" and e.resolves is None and e.phase is not None and e.phase >= phase
-    }
-    missing = [fid for fid in returned if fid not in journaled]
-    if missing:
-        problems.append(
-            f"returned finding(s) not in the plan journal against phase {phase} or later: "
-            + ", ".join(f"{fid} (reviewer {returned[fid][1]})" for fid in missing)
-            + " — journal each under its id with the reviewer's tag "
-            "(`fr journal add --kind finding --id <id> --review-scope in|out ...`)"
-        )
-    for fid, (scope, by) in returned.items():
-        entry = journaled.get(fid)
-        if entry is not None and entry.review_scope != scope:
-            problems.append(
-                f"{fid} is journaled with review_scope {entry.review_scope} but {by} "
-                f"tagged it {scope} — keep the reviewer's tag; reclassify by resolving it "
-                "out-of-scope"
-            )
-    if problems:
-        _return_refusal(
-            key,
-            problems,
-            "Journal every returned finding under its id with the reviewer's tag, or "
-            "re-dispatch a reviewer whose return is malformed; never edit a return.",
-        )
-
-
-def _dispatches_since(since: str | None) -> list[ChildDispatch] | None:
-    """The subagents this session dispatched since `since`, or None where fr cannot
-    read the session. The one dispatch walk the reviewer check and both
-    reviewer-return checks read."""
-    from fr.run.observed import observed_session
-    from fr.run.telemetry import parse_timestamp
-
-    start = parse_timestamp(since) if since is not None else None
-    view = observed_session(os.environ) if start is not None else None
-    return view.dispatches(start) if view is not None and start is not None else None
-
-
-def _owed_on(step: Step, lenses: LensSet | None) -> list[str]:
-    """What `step` owes: its evidence, less `review`/`reviewer` on a lens review
-    whose set is empty (R11, `fr.lenses.review.owed_evidence`)."""
-    from fr.lenses.review import owed_evidence
-
-    return owed_evidence(step.evidence, lenses.ids) if lenses is not None else list(step.evidence)
-
-
-def _lens_lines(repo_root: Path, lenses: LensSet, lens_id: str) -> list[str]:
-    """What a refusal over `lens_id` prints (R10): its title, instruction text, why
-    it is in the set, and the return rule: the brief for the reviewer still owed."""
-    from fr.lenses.review import lens_review_rule, why_line
-
-    entry = next(e for e in lenses.lenses if e.lens == lens_id)
-    found = lenses.definitions.get(lens_id)
-    lines = [f"lens {lens_id}" + (f": {found.title}" if found is not None else "")]
-    lines.append(f"  in the set because: {why_line(entry)}")
-    if found is not None:
-        lines.extend(f"  {line}" for line in found.brief.strip().splitlines())
-    lines.extend(f"  {line}" for line in lens_review_rule(lens_id).splitlines())
-    return lines
-
-
-def _verify_lens_reviewers(
-    key: str,
-    value: str,
-    state: RunState,
-    lenses: LensSet,
-    repo_root: Path,
-    *,
-    target: _EvidenceTarget,
-    opened: str | None,
-) -> dict[str, str]:
-    """The lens review's `reviewer` map, `<lens>=<dispatch-id>,...`, checked
-    against the set computed at this resolve — or exit 2 (R10). Each id is then
-    verified as a phase reviewer's is (`_verify_reviewer`)."""
-    hint = (
-        "on the lens review, --evidence reviewer= is a map, one <lens>=<dispatch-id> per "
-        "lens in the feature's set, comma-separated"
-    )
-    named: dict[str, str] = {}
-    problems: list[str] = []
-    for pair in value.split(","):
-        lens_id, sep, agent = (part.strip() for part in pair.partition("="))
-        if not sep or not lens_id or not agent:
-            problems.append(f"{pair.strip()!r} is not <lens>=<dispatch-id>: {hint}")
-            continue
-        if lens_id in named:
-            problems.append(f"lens {lens_id} is named twice")
-            continue
-        named[lens_id] = agent
-    unknown = [lid for lid in named if lid not in lenses.ids]
-    if unknown:
-        problems.append(
-            f"{', '.join(unknown)} not in this feature's lens set ({', '.join(lenses.ids)})"
-            if lenses.ids
-            else f"{', '.join(unknown)} not in this feature's lens set, which is empty"
-        )
-    by_agent: dict[str, list[str]] = {}
-    for lens_id, agent in named.items():
-        by_agent.setdefault(agent, []).append(lens_id)
-    for agent, lens_ids in by_agent.items():
-        if len(lens_ids) > 1:
-            problems.append(
-                f"{agent} is named for two lenses ({', '.join(lens_ids)}) — one reviewer "
-                "per lens, each given only its own lens"
-            )
-    owed = [lid for lid in lenses.ids if lid not in named]
-    lines = [f"- {p}" for p in problems]
-    for lens_id in owed:
-        lines.append(f"- lens {lens_id} has no reviewer named for it; dispatch one with:")
-        lines.extend(f"    {line}" for line in _lens_lines(repo_root, lenses, lens_id))
-    if lines:
-        _derived_refusal(
-            key, ["refused — the lens reviewers named do not cover the lens set:", *lines]
-        )
-    for agent in named.values():
-        _verify_reviewer(key, agent, state, target=target, opened=opened)
-    return named
-
-
-def _lenses_witness(
-    key: str,
-    repo_root: Path,
-    lenses: LensSet,
-    entries: list[JournalEntry],
-    reviewers: Mapping[str, str] | None,
-    since: str | None,
-) -> str:
-    """The derived `lenses` evidence (R11): per lens the number of changed files its
-    reviewer examined, or `unobserved`, and the findings it raised —
-    `security=2:l-security-r1;tests=5:none` — or `none` for an empty set."""
-    if not lenses.lenses:
-        return "none"
-    assert reviewers is not None  # owed while the set is non-empty, so verified above
-    seen = _check_lens_returns(key, repo_root, lenses, entries, reviewers, since)
-    return ";".join(
-        f"{lens_id}={count}:{','.join(ids) or 'none'}" for lens_id, (count, ids) in seen.items()
-    )
-
-
-def _check_lens_returns(
-    key: str,
-    repo_root: Path,
-    lenses: LensSet,
-    entries: list[JournalEntry],
-    reviewers: Mapping[str, str],
-    since: str | None,
-) -> dict[str, tuple[str, list[str]]]:
-    """Each lens reviewer's return matches its lens, the feature's diff and the
-    plan journal — or exit 2 (R9, R10). Per lens, `(files examined | unobserved,
-    finding ids)`; where a return cannot be read the ids come from the journal and
-    the check is noted `unobserved=reviewer-return`."""
-    from fr.lenses.review import (
-        LENS_ID_HINT,
-        ReviewLensBlockError,
-        lens_finding_ids,
-        parse_review_lens,
-    )
-    from fr.run.review_return import ReviewFindingsBlockError, parse_review_findings
-
-    journaled = {
-        e.id: e
-        for e in entries
-        if e.kind == "finding" and e.resolves is None and _is_lens_finding(e.id)
-    }
-    dispatched = _dispatches_since(since)
-    if dispatched is None:
-        _return_unobserved(key, "the lens reviewers", _why_unobservable("subagent returns"))
-    changed = set(lenses.changed) if lenses.changed is not None else None
-    seen: dict[str, tuple[str, list[str]]] = {}
-    problems: dict[str, list[str]] = {}
-    for lens_id in lenses.ids:
-        agent = reviewers[lens_id]
-        mine = lens_finding_ids(lens_id)
-        d = next((c for c in dispatched or () if c.agent_id == agent), None)
-        if d is None or d.returned is None:
-            if dispatched is not None:
-                _return_unobserved(key, f"reviewer {agent}", "its return is not readable yet")
-            seen[lens_id] = ("unobserved", [fid for fid in journaled if mine.match(fid)])
-            continue
-        mine_problems = problems.setdefault(lens_id, [])
-        try:
-            block = parse_review_lens(d.returned)
-        except ReviewLensBlockError as e:
-            mine_problems.append(f"{agent}: {e}")
-            block = None
-        else:
-            if block is None:
-                mine_problems.append(
-                    f"reviewer {agent} returned no review-lens block — its return must end "
-                    f"with one naming lens {lens_id} and the changed files it examined"
-                )
-        if block is not None and block[0] != lens_id:
-            mine_problems.append(
-                f"reviewer {agent} was named for lens {lens_id}, and its review-lens block "
-                f"names lens {block[0]}"
-            )
-        elif block is not None and changed is not None:
-            outside = [f for f in block[1] if f not in changed]
-            if outside:
-                mine_problems.append(
-                    f"reviewer {agent} examined {', '.join(outside)}, which the feature "
-                    "did not change — name the changed files you read"
-                )
-        elif block is not None:
-            missing = [f for f in block[1] if f not in _tracked_files(repo_root)]
-            if missing:
-                mine_problems.append(
-                    f"reviewer {agent} examined {', '.join(missing)}, which is not a "
-                    "tracked file of this checkout"
-                )
-        try:
-            rows = parse_review_findings(
-                d.returned,
-                id_re=lens_finding_ids(lens_id),
-                id_hint=f"{LENS_ID_HINT} for lens {lens_id} (l-{lens_id}-r<k>)",
-            )
-        except ReviewFindingsBlockError as e:
-            mine_problems.append(f"{agent}: {e}")
-            rows = None
-        else:
-            if rows is None:
-                mine_problems.append(
-                    f"reviewer {agent} returned no review-findings block — its return must "
-                    "end with one (`none` when it raised nothing)"
-                )
-        ids = [fid for fid, _scope, _summary in rows or ()]
-        absent = [fid for fid in ids if fid not in journaled]
-        if absent:
-            mine_problems.append(
-                f"returned finding(s) not in the plan journal: {', '.join(absent)} (reviewer "
-                f"{agent}) — journal each under its id with the reviewer's tag, global "
-                "(`fr journal add --kind finding --id <id> --global --review-scope in|out ...`)"
-            )
-        for fid, scope, _summary in rows or ():
-            entry = journaled.get(fid)
-            if entry is not None and entry.review_scope != scope:
-                mine_problems.append(
-                    f"{fid} is journaled with review_scope {entry.review_scope} but {agent} "
-                    f"tagged it {scope} — keep the reviewer's tag; reclassify by resolving it "
-                    "out-of-scope"
-                )
-        count = str(len(block[1])) if block is not None else "0"
-        seen[lens_id] = (count, ids)
-    if any(problems.values()):
-        lines: list[str] = []
-        for lens_id, found in problems.items():
-            if not found:
-                continue
-            lines.extend(f"- {p}" for p in found)
-            lines.extend(f"    {line}" for line in _lens_lines(repo_root, lenses, lens_id))
-        _return_refusal(
-            key,
-            lines,
-            "Journal every returned finding under its id with the reviewer's tag, or "
-            "re-dispatch a lens reviewer whose return is malformed; never edit a return.",
-            who="the lens reviewers",
-            bulleted=True,
-        )
-    return seen
-
-
-@functools.cache
-def _tracked_files(repo_root: Path) -> frozenset[str]:
-    """The paths git tracks in this checkout: what a lens reviewer may name where
-    there is no remote and so no diff (review l-security-r2: `is_file()` accepted
-    `../` paths and untracked files)."""
-    from fr.git import git_answer
-
-    listed = git_answer(repo_root, "ls-files", "-z")
-    return frozenset(listed.stdout.split("\0")) - {""} if listed.returncode == 0 else frozenset()
-
-
-def _return_unobserved(key: str, who: str, why: str) -> None:
-    """A reviewer-return check skipped: warned and noted, never silent (§E)."""
-    _note_unobserved("reviewer-return")
-    err_console.print(
-        f"[yellow]{key}: could not read what {who} returned — {why}; the record is "
-        "taken as claimed (evidence: unobserved=reviewer-return).[/yellow]",
-        soft_wrap=True,
-    )
-
-
-def _return_refusal(
-    key: str,
-    problems: list[str],
-    remedy: str,
-    *,
-    who: str = "the phase reviewers",
-    bulleted: bool = False,
-) -> NoReturn:
-    """THE refusal of the reviewer-return checks (spec
-    2026-10-02-opencode-observe-2 §E, 2026-11-12-review-lenses R10): the unit
-    (its step and phase), every problem — each naming its reviewer and ids — on
-    its own line, then what to do; exit 2. `bulleted` lines arrive formatted."""
-    _derived_refusal(
-        key,
-        [
-            f"refused — the review record does not match what {who} returned:",
-            *(problems if bulleted else [f"- {p}" for p in problems]),
-            remedy,
-        ],
-    )
-
-
-def _wrote_before(
-    log: Path, opened: str | None, modified: _dt.datetime, slack: _dt.timedelta
-) -> bool:
-    """Did a command of the orchestrator's that wrote `log` start BEFORE the unit
-    opened, end after it, and write the bytes on disk? Only chooses the
-    refusal's wording (gh#765)."""
-    from fr.run.telemetry import orchestrator_wrote_since, parse_timestamp
-
-    opened_at = parse_timestamp(opened)
-    earlier = orchestrator_wrote_since(os.environ, log, "1970-01-01T00:00:00+00:00")
-    return opened_at is not None and any(
-        e >= opened_at and s - slack <= modified <= e + slack for s, e in earlier or ()
-    )
-
-
-def _walk_obligation(key: str, repo_root: Path, state: RunState) -> WalkOwed:
-    """What walk `deliver` owes for this run (§C), or exit 2.
-
-    Fail-closed: a section, matrix or strategy fr cannot read means fr cannot
-    tell whether a walk is owed, and a gate that cannot decide does not pass.
-    R10: an owed row that names no scenario is refused BY ID, before anything is
-    asked of the log.
-    """
-    from fr.acceptance.model import AcceptanceError
-    from fr.requirements import load_spec_matrix
-    from fr.verification.model import StrategyError
-    from fr.verification.rows import run_verification
-    from fr.verification.spec_section import SectionError
-    from fr.verification.walk import WalkOwed, walk_owed
-
-    try:
-        spec_rel, verification = run_verification(repo_root, state)
-        if spec_rel is None:
-            return WalkOwed()
-        matrix, spec_ref = load_spec_matrix(repo_root, spec_rel)
-        owed = walk_owed(matrix, spec_ref, verification, repo_root)
-    except (AcceptanceError, SectionError, StrategyError, OSError) as e:
-        err_console.print(
-            f"[red]{key}: cannot tell whether a pre-merge walk is owed — {escape(str(e))}[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    unscripted = [r.id for r in owed.rows if not r.scenario]
-    if unscripted:
-        err_console.print(
-            f"[red]{key}: refused — row {unscripted[0]!r} has an agent-driven pre-merge "
-            "strategy and names no `scenario` (set it with `fr acceptance set-status "
-            "--scenario`).[/red]",
-            soft_wrap=True,
-        )
-        for other in unscripted[1:]:
-            err_console.print(f"  also unscripted: {other}", markup=False)
-        raise typer.Exit(2)
-    return owed
-
-
-def _verify_walk(
-    key: str, value: str, repo_root: Path, state: RunState, owed: WalkOwed, *, opened: str | None
-) -> str:
-    """`value` is `none` (accepted only when no walk is owed) or a log
-    `fr verification walk` wrote on HEAD's code tree, every step passing and
-    every owed row covered — or exit 2 naming the cause. Returns the witness,
-    `<log>@<sha256[:12]>`.
-
-    Attributed as `tests=` is (review p3-r1): the header is the log's own
-    claim, so it must also sit in this run's walk dir and — where the
-    transcript is readable — have been written inside the run window of a
-    command of YOURS that ran `fr verification walk --run <run>` since this
-    unit opened. Unobservable: recorded `unobserved=walk`, never silent.
-    """
-    from fr.run.code_tree import code_tree, dirty_code_paths
-    from fr.verification.model import StrategyError
-    from fr.verification.resolve import strategy_identity
-    from fr.verification.walk import WalkError, check_walk_log, parse_walk_log, walk_log_dir
-
-    if value == "none":
-        if owed.owed:
-            wanted = [r.id for r in owed.rows] or [owed.run_strategy or "?"]
-            err_console.print(
-                f"[red]{key}: --evidence walk=none — a pre-merge walk is owed "
-                f"({', '.join(wanted)}); run `fr verification walk` and name its log.[/red]",
-                soft_wrap=True,
-            )
-            raise typer.Exit(2)
-        return "none"
-    given = Path(value).expanduser()
-    named = given if given.is_absolute() else repo_root / given
-    # The REAL path, symlinks followed, must sit in this run's walk dir, and
-    # the name itself must be a regular file — a link placed there is not a
-    # log the walk wrote (security review of p3-r1).
-    path = Path(os.path.realpath(named))
-    # `$HOME` may itself sit behind a link (macOS `/var`); the run's own dir
-    # may not — it is compared unresolved under the resolved walks root.
-    directory = Path(os.path.realpath(walk_log_dir(state.run).parent)) / state.run
-    if named.is_symlink():
-        err_console.print(
-            f"[red]{key}: --evidence walk={value} is a symlink — name the log "
-            f"`fr verification walk --run {state.run}` wrote.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if not path.is_relative_to(directory) or not path.is_file():
-        err_console.print(
-            f"[red]{key}: --evidence walk={value} is not a regular file in {directory} — "
-            f"name the log `fr verification walk --run {state.run}` wrote.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    try:
-        data = path.read_bytes()
-        log = parse_walk_log(data.decode())
-        problems = check_walk_log(
-            log,
-            owed,
-            code_tree(repo_root),
-            run=state.run,
-            manifest=strategy_identity(log.strategy, repo_root),
-        )
-        dirty = dirty_code_paths(repo_root)
-        modified = _dt.datetime.fromtimestamp(path.stat().st_mtime, tz=_dt.UTC)
-    except (OSError, UnicodeDecodeError, WalkError, GitUnavailableError, StrategyError) as e:
-        err_console.print(
-            f"[red]{key}: --evidence walk={value}: {escape(str(e))}[/red]", soft_wrap=True
-        )
-        raise typer.Exit(2) from e
-    if dirty:
-        problems.append(f"uncommitted code since the walk ({dirty[0]}...)")
-    problems += _walk_provenance(key, state.run, modified, opened=opened)
-    if problems:
-        err_console.print(f"[red]{key}: --evidence walk={value} is refused:[/red]", soft_wrap=True)
-        for problem in problems:
-            err_console.print(f"  - {problem}", markup=False, soft_wrap=True)
-        raise typer.Exit(2)
-    return _log_witness(path, data, repo_root)
-
-
-def _walk_provenance(
-    key: str, run: str, modified: _dt.datetime, *, opened: str | None
-) -> list[str]:
-    """Why the walk log, modified at `modified`, is not one a command of
-    yours wrote during this unit (empty when it is) — only a command that is
-    exactly the walk counts (`walks_run`). Unobservable:
-    `unobserved=walk`, warned — and a log older than the unit is still
-    refused."""
-    from fr.run.observed import walks_run
-    from fr.run.telemetry import orchestrator_ran_since, parse_timestamp
-
-    windows = (
-        orchestrator_ran_since(os.environ, lambda command: walks_run(command, run), opened)
-        if opened
-        else None
-    )
-    # One second of slack either side, as `tests=` (review r1-1).
-    slack = _dt.timedelta(seconds=1)
-    if windows is not None:
-        if any(s - slack <= modified <= e + slack for s, e in windows):
-            return []
-        why = (
-            "no command of yours ran it"
-            if not windows
-            else "its bytes were not written by the command of yours that ran it"
-        )
-        return [
-            f"{why} — `fr verification walk --run {run}` must run in this session since "
-            f"this unit opened at {opened}, and write the log you name"
-        ]
-    opened_at = parse_timestamp(opened)
-    if opened_at is not None and modified < opened_at - slack:
-        return [f"the log predates this unit (opened {opened}) — walk again"]
-    _note_unobserved("walk")
-    err_console.print(
-        f"[yellow]{key}: could not verify who ran the walk — "
-        f"{_why_unobservable('commands')}; recorded unverified "
-        "(evidence: unobserved=walk).[/yellow]",
-        soft_wrap=True,
-    )
-    return []
-
-
-def _verify_tests_log(key: str, log: str, repo_root: Path, *, opened: str | None) -> str:
-    """`log` is a suite the ORCHESTRATOR ran during this unit — or exit 2.
-    Returns the recorded witness, `<path>@<sha256[:12]>`.
-
-    2026-09-21 debug journal C5: `deliver` resolved `done` 28 seconds after it
-    opened with nothing but a PR url, and the PR said "verified locally" on the
-    executor's word. Now the unit names the log of a suite run during delivery:
-    it must exist and be non-empty, and — where the transcript is readable — a
-    main-thread `Bash` call naming it must have run to completion since the unit
-    opened. Unobservable: the file must at least be newer than the unit, and it
-    says it could not verify who ran it.
-    """
-    from fr.run.telemetry import orchestrator_wrote_since, parse_timestamp
-
-    path, data = _read_suite_log(key, log, repo_root)
-    modified = _dt.datetime.fromtimestamp(path.stat().st_mtime, tz=_dt.UTC)
-    windows = orchestrator_wrote_since(os.environ, path, opened) if opened else None
-    # One second of slack either side: the cursor stamps at second precision,
-    # and a filesystem's mtime may round (review r1-1).
-    slack = _dt.timedelta(seconds=1)
-    if windows is not None and not any(s - slack <= modified <= e + slack for s, e in windows):
-        if not windows and _wrote_before(path, opened, modified, slack):
-            # gh#765: the suite shared one call with the `fr run advance` that
-            # opened this unit, so that call predates it. Still refused — the
-            # suite must run during delivery — but "nobody wrote it" misled.
-            err_console.print(
-                f"[red]{key}: --evidence tests={log}: the command of yours that wrote it "
-                f"was issued before this unit opened at {opened} (in the same call as "
-                "the `fr run advance` that opened it?). Run the suite again as its own "
-                "command, now that the unit is open, and name that log.[/red]",
-                soft_wrap=True,
-            )
-            raise typer.Exit(2)
-        why = (
-            "no command of YOURS wrote it (a `>`, `>>` or `tee` naming it)"
-            if not windows
-            else "its bytes were not written by the command of yours that names it"
-        )
-        err_console.print(
-            f"[red]{key}: --evidence tests={log}: {why} since this unit opened at "
-            f"{opened}. A subagent's report is not verification — run the suite in this "
-            "session, writing its output to the log you name. A backgrounded suite "
-            "counts once its task-notification reports it completed (Claude Code), or "
-            "once a later command of yours prints the log's exit=0 line (OpenCode's "
-            "detached form, gh#719).[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if windows is None:
-        opened_at = parse_timestamp(opened)
-        if opened_at is not None and modified < opened_at:
-            err_console.print(
-                f"[red]{key}: --evidence tests={log} predates this unit (opened {opened}) — "
-                "it is not a run of the code being delivered.[/red]",
-                soft_wrap=True,
-            )
-            raise typer.Exit(2)
-        _note_unobserved("tests")
-        err_console.print(
-            f"[yellow]{key}: could not verify who ran {log} — {_why_tests_unobservable()}; "
-            "recorded as a fresh log, unverified (evidence: unobserved=tests).[/yellow]",
-            soft_wrap=True,
-        )
-    _refuse_stale_suite_log(key, log, path, repo_root)
-    return _log_witness(path, data, repo_root)
-
-
-def _refuse_stale_suite_log(key: str, log: str, path: Path, repo_root: Path) -> None:
-    """Exit 2 when a code path changed after the suite log was written
-    (`fr.run.code_tree.newest_code_mtime`, the phase log's freshness rule).
-
-    gh#1454: `deliver` checked who wrote its fresh log and when, never the code it
-    ran on, so code edited and committed after the suite read as covered by it
-    (and a `local` stamp recorded HEAD's tree for a run that never saw it). A
-    commit moves no mtime, but the edit before it does, and so does a checkout."""
-    from fr.run.code_tree import default_merge_base, newest_code_mtime
-
-    try:
-        newest = newest_code_mtime(repo_root, default_merge_base(repo_root), ignore=[path])
-    except GitUnavailableError as e:
-        err_console.print(
-            f"[red]{key}: --evidence tests={log}: cannot tell which code it covers — "
-            f"{escape(str(e))}[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    if newest is not None and newest[0] > path.stat().st_mtime:
-        err_console.print(
-            f"[red]{key}: --evidence tests={log} is stale — {newest[1]} changed after "
-            "the log was written, so the suite did not run the code being delivered. "
-            "Run the full suite again and name the new log.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-
-
-def _read_suite_log(key: str, log: str, repo_root: Path) -> tuple[Path, bytes]:
-    """`(resolved path, bytes)` of a named suite log — or exit 2 when it sits
-    in a run's records dir or is missing or empty. The checks every `tests=`
-    log meets, whoever wrote it (`deliver`'s and a phase unit's alike)."""
-    from fr.record.model import RECORDS_SUFFIX
-
-    path = (Path(log) if Path(log).is_absolute() else repo_root / log).resolve()
-    try:
-        rel_parts = path.relative_to(repo_root.resolve()).parts
-    except ValueError:
-        rel_parts = ()
-    if rel_parts[:3] == Path(KIND_DIRS["run"]).parts and (
-        len(rel_parts) > 4 and rel_parts[3].endswith(RECORDS_SUFFIX)
-    ):
-        # gh#638: `<run>.records/` holds step records and fr's pr-body render,
-        # and fr empties it; a log written there got committed and reached
-        # `main` with nothing to remove it.
-        err_console.print(
-            f"[red]{key}: --evidence tests={log} is inside a run's records dir, which "
-            "holds step records only and is emptied by fr. Write the suite log outside "
-            "the repo (e.g. $TMPDIR/full-suite.log) and name that path.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    try:
-        data = path.read_bytes()
-    except OSError:
-        data = b""
-    if not data:
-        err_console.print(
-            f"[red]{key}: --evidence tests={log} is missing or empty — run the full suite "
-            "yourself, write its output to a file, and name that file.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    from fr.run.ci_evidence import ADVISORY_LINE, is_advisory_log
-
-    if is_advisory_log(data):
-        # Spec 2026-11-19-local-suite-cost R7: a narrowed pytest session (the fast
-        # tier, `-m`/`-k`, explicit paths, --lf/--sw) marks itself advisory. It is
-        # not the whole suite, so it is no `tests` evidence, and a phase log refused
-        # here is never a witness `tests: reuse` could carry into `deliver`.
-        err_console.print(
-            f"[red]{key}: --evidence tests={log} holds the line `{ADVISORY_LINE}`: it is "
-            "not the whole suite. A session prints it when it ran with --fr-scope, a "
-            "non-empty -m or -k (the default local run's -m 'not scenario' included), "
-            "explicit paths or from a subdirectory, --lf, --sw, --ignore/--ignore-glob/"
-            "--deselect, -x/--maxfail, -o testpaths= or --collect-only; the line before "
-            "it in the log, `fr-scope: advisory because ...`, names which. Run the full "
-            'suite with `pytest -m ""` into a log and name that file, or offer '
-            "`tests: ci`.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    return path, data
-
-
-def _log_witness(path: Path, data: bytes, repo_root: Path) -> str:
-    """`<shown>@<sha256[:12]>`. Review r1-8: the witness lands in a git-tracked
-    cursor, so it names the log repo-relative, or by basename when it lives
-    outside the repo — never an absolute path carrying someone's home
-    directory."""
-    import hashlib
-
-    try:
-        shown = str(path.relative_to(repo_root.resolve()))
-    except ValueError:
-        shown = path.name
-    return f"{shown}@{hashlib.sha256(data).hexdigest()[:12]}"
-
-
-def _phase_log_windows(
-    path: Path, opened: str | None, holder: str | None
-) -> list[tuple[_dt.datetime, _dt.datetime]] | str | Literal[False] | None:
-    """The run windows of the holder's commands that wrote `path` — read
-    through `fr.run.observed` from the holder's own session: the claimed
-    agent's child (a Claude Code subagent transcript, an OpenCode child
-    session), or the run session itself when the unit ran inline (no holder).
-
-    `False` when this session dispatched no agent `holder` (a bogus or foreign
-    id: refused, never unobserved); a `str` reason when nothing can be read —
-    including Hermes, which has no session reader (spec
-    2026-09-29-fr-goal-light-path §D, §E; 2026-10-02-opencode-observe-2 §A)."""
-    from fr.run.observed import observed_session
-    from fr.run.telemetry import parse_timestamp
-
-    try:
-        harness = detect_harness(os.environ)
-    except HarnessError:
-        harness = None
-    if harness == "hermes":
-        return f"fr has no child-session reader for {harness}, so a phase log is not witnessed"
-    view = observed_session(os.environ)
-    start = parse_timestamp(opened)
-    if view is None or start is None:
-        return _why_unobservable("commands") if view is None else "the unit has no opening stamp"
-    found = view.child(holder) if holder is not None else view
-    if found is None:
-        return f"the session {view.session} could not be read"
-    if found is False:
-        return False
-    windows = found.wrote_windows(path, start)
-    if windows is None:
-        return f"the holder's session {found.session} could not be read"
-    return windows
-
-
-TESTS_REUSE = "reuse"
-"""`deliver`'s `tests: reuse` — the most recent phase suite log stands in for a
-fresh run while the code tree it covered is unchanged (spec
-2026-09-29-fr-goal-light-path §D, R6)."""
-_TREE_SEP = ";tree="
-REUSED_PREFIX = "reused:"
-TESTS_CI = "ci"
-"""`tests: ci` — the forge's CI on the pushed head stands in for a local suite
-log (spec 2026-10-07-cloud-triage R22, §I; `fr.run.ci_evidence`)."""
-
-
-def _ci_tests_witness(key: str, repo_root: Path, *, done: bool) -> str:
-    """`tests: ci`: on a `done` resolve the `verify_ci` witness, else the bare
-    claim (a failed unit vouches for no tree, and asks no forge). A pending gate
-    exits `CI_PENDING_EXIT` and a refusal exits 2, both before any write.
-
-    gh#1395: a failed forge read (`FORGE_ERRORS`: a timeout, an EOF, a 5xx) exits
-    `CI_PENDING_EXIT` too, in one line naming it — never a traceback and exit 1,
-    which fr-goal reads as "the record applied and a chained step failed". A host
-    trust refusal does not answer on a retry, so it exits 2."""
-    from fr.ghclient import HostRefusedError
-    from fr.hostclient import FORGE_ERRORS
-    from fr.run import ci_evidence
-
-    if not done:
-        return TESTS_CI
-    try:
-        return ci_evidence.verify_ci(repo_root)
-    except HostRefusedError as e:
-        err_console.print(
-            f"[red]{key}: tests: ci — the forge refused the host: {escape(str(e))}. "
-            "Nothing was recorded.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    except FORGE_ERRORS as e:
-        stderr = str(getattr(e, "stderr", "") or "")
-        detail = " ".join(f"{e} {stderr if stderr not in str(e) else ''}".split())
-        err_console.print(
-            f"[yellow]{key}: tests: ci — could not read CI from the forge ({escape(detail)}). "
-            "Nothing was recorded: resolve again.[/yellow]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(ci_evidence.CI_PENDING_EXIT) from e
-    except ci_evidence.CiPending as e:
-        err_console.print(
-            f"[yellow]{key}: tests: ci — {escape(str(e))}. Nothing was recorded: "
-            "resolve again when CI finishes.[/yellow]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(ci_evidence.CI_PENDING_EXIT) from e
-    except ci_evidence.CiEvidenceRefused as e:
-        err_console.print(f"[red]{key}: {escape(str(e))}[/red]", soft_wrap=True)
-        raise typer.Exit(2) from e
-
-
-def _latest_tests_witness(state: RunState) -> tuple[str, str] | None:
-    """`(unit key, witness)` of the most recently resolved `done` unit whose
-    `tests` evidence carries a code tree (a phase unit's,
-    `_verify_phase_tests_log`), or `None`. "Most recently" is the unit's last
-    attempt's `returned`; a unit with none sorts first, and a tie goes to the
-    later unit in cursor order."""
-    best: tuple[str, int, str, str] | None = None
-    seq = 0
-    for record in state.steps.values():
-        for key, unit in (record.units or {}).items():
-            seq += 1
-            witness = (unit.evidence or {}).get("tests", "")
-            if _TREE_SEP not in witness or witness.startswith(REUSED_PREFIX):
-                continue
-            # Review r2-3: only a unit that is `done` NOW vouches for its tree
-            # — a failed one, or one re-dispatched since, does not.
-            if (unit.state or record.state) != "done":
-                continue
-            returned = unit.attempts[-1].returned if unit.attempts else None
-            candidate = (returned or "", seq, key, witness)
-            if best is None or candidate[:2] > best[:2]:
-                best = candidate
-    return (best[2], best[3]) if best is not None else None
-
-
-def _reuse_tests_witness(key: str, repo_root: Path, state: RunState) -> str:
-    """`reused:<unit>:<witness>` when HEAD's code tree equals the tree of the
-    most recently resolved unit carrying a suite log and no code path is
-    uncommitted — or exit 2 with the fresh-run instruction."""
-    from fr.run.code_tree import code_paths_since_tree, code_tree, dirty_code_paths
-    from fr.run.telemetry import UNOBSERVED
-
-    latest = _latest_tests_witness(state)
-    if latest is None:
-        err_console.print(
-            f"[red]{key}: tests: reuse — no phase unit recorded a suite log "
-            "(`evidence: {tests: <log>}` on an implement-phase or review-phase record); "
-            "run the full suite yourself into a log and name it.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    unit, witness = latest
-    recorded = witness.rpartition(_TREE_SEP)[2]
-    own_log = _own_log_path(repo_root, witness.rpartition(_TREE_SEP)[0])
-    try:
-        dirty = [p for p in dirty_code_paths(repo_root) if p != own_log]
-        same = code_tree(repo_root) == recorded and not dirty
-        changed = None if same else code_paths_since_tree(repo_root, recorded)
-        if changed is not None:
-            changed = [p for p in changed if p != own_log]
-    except GitUnavailableError as e:
-        err_console.print(
-            f"[red]{key}: tests: reuse — cannot compute the code tree: {escape(str(e))}[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    if not same:
-        if changed:
-            n = len(changed)
-            what = f"{n} path{'' if n == 1 else 's'}, e.g. {changed[0]}"
-        else:
-            what = "its commit is not in HEAD's recent history"
-        err_console.print(
-            f"[red]{key}: tests: reuse — the code tree changed since {unit} ({what}); "
-            "run the full suite yourself into a log and name it.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if "tests" in _unit_evidence(state, unit).get(UNOBSERVED, "").split(","):
-        # Review r2-4: a reuse is no better verified than the log it reuses.
-        _note_unobserved("tests")
-        err_console.print(
-            f"[yellow]{key}: {unit}'s suite log was recorded unverified "
-            "(evidence: unobserved=tests), so this reuse is unverified too.[/yellow]",
-            soft_wrap=True,
-        )
-    return f"{REUSED_PREFIX}{unit}:{witness}"
-
-
-_FRESH_LOG_WITNESS = re.compile(r"^[^;]+@[0-9a-f]{12}$")
-"""A fresh `tests=<log>` witness, `<shown>@<sha256[:12]>` (`_log_witness`)."""
-
-
-def _local_stamp_witness(repo_root: Path, tests: str | None) -> tuple[str, str] | str:
-    """`(log, tree)` a `local` stamp records for `deliver`'s verified `tests` witness, or
-    why that witness cannot earn one (spec 2026-11-14-acceptance-local-status R4).
-
-    A `reused:` witness (`_reuse_tests_witness`) carries the tree its phase log covered.
-    A fresh log (`_verify_tests_log`, observed or `unobserved=tests`) covers HEAD's code
-    tree only when no code path is uncommitted. Anything else (`tests: ci`, no witness)
-    is no local run of the suite."""
-    from fr.run.code_tree import code_tree, dirty_code_paths
-
-    if tests is not None and tests.startswith(REUSED_PREFIX):
-        log, sep, tree = tests.rpartition(_TREE_SEP)
-        if not sep or not tree:
-            return f"tests: {tests} names no code tree"
-        return log, tree
-    if tests is None or not _FRESH_LOG_WITNESS.match(tests):
-        shown = "none" if tests is None else tests
-        return (
-            f"tests: {shown} is not a local suite log — a `local` row is earned by a "
-            "fresh suite log or a `tests: reuse` of a phase's"
-        )
-    try:
-        own = _own_log_path(repo_root, tests)
-        dirty = [p for p in dirty_code_paths(repo_root) if p != own]
-        tree = code_tree(repo_root)
-    except GitUnavailableError as e:
-        return f"cannot compute the code tree: {e}"
-    if dirty:
-        n = len(dirty)
-        return (
-            f"{n} code path{'' if n == 1 else 's'} uncommitted (e.g. {dirty[0]}), so the "
-            "suite log does not cover HEAD — commit, run the suite again and name the new log"
-        )
-    return tests, tree
-
-
-def _unit_evidence(state: RunState, key: str) -> dict[str, str]:
-    """`key`'s evidence, from whichever step holds that unit (`{}` if none)."""
-    for record in state.steps.values():
-        unit = (record.units or {}).get(key)
-        if unit is not None:
-            return dict(unit.evidence or {})
-    return {}
-
-
-def _own_log_path(repo_root: Path, log_witness: str) -> str | None:
-    """The repo-relative path of the log `log_witness` (`<shown>@<sha[:12]>`)
-    names, when that file is in the worktree with exactly those bytes — so an
-    untracked suite log does not read as uncommitted code (review r2-5). A
-    same-named file with other bytes is not the log, and stays dirty."""
-    import hashlib
-
-    shown, _, digest = log_witness.rpartition("@")
-    if not shown or not digest:
-        return None
-    path = repo_root / shown
-    try:
-        data = path.read_bytes() if path.is_file() else None
-    except OSError:
-        return None
-    if data is None or hashlib.sha256(data).hexdigest()[:12] != digest:
-        return None
-    return Path(shown).as_posix()
-
-
-def _verify_phase_tests_log(
-    key: str,
-    log: str,
-    repo_root: Path,
-    *,
-    opened: str | None,
-    holder: str | None,
-    record_tree: bool = True,
-) -> str:
-    """A phase unit's own suite log (spec 2026-09-29-fr-goal-light-path §D,
-    R6) — or exit 2. Returns `<shown>@<sha256[:12]>;tree=<code-tree>`.
-
-    1. **Writer** — `_verify_tests_log`'s rules, read from the HOLDER's
-       transcript (`_phase_log_windows`); unreadable records `unobserved=tests`.
-    2. **Freshness** — the log is no older than any tracked code path, any
-       directory holding one, or the directory a code path was deleted or
-       renamed out of since the merge-base (`fr.run.code_tree.newest_code_mtime`).
-    3. **Witness** — the code tree of HEAD. Computed here, before the record's
-       own commit, and equal to the tree after it: that commit writes only fr's
-       artifact trees, which the code tree excludes by definition. HEAD's tree
-       is what the suite ran only when nothing is uncommitted, so a dirty code
-       path (the log itself aside) is refused (review r2-1).
-
-    `record_tree=False` (a resolve that is not `done`, review r2-3) checks the
-    writer only and returns `<shown>@<sha256[:12]>` — a failed phase vouches
-    for no tree, so there is no tree to record and nothing to keep fresh.
-    """
-    from fr.run.code_tree import (
-        code_tree,
-        default_merge_base,
-        dirty_code_paths,
-        newest_code_mtime,
-    )
-    from fr.run.telemetry import parse_timestamp
-
-    path, data = _read_suite_log(key, log, repo_root)
-    modified = _dt.datetime.fromtimestamp(path.stat().st_mtime, tz=_dt.UTC)
-    windows = _phase_log_windows(path, opened, holder)
-    if windows is False:
-        err_console.print(
-            f"[red]{key}: --evidence tests={log}: this session dispatched no agent "
-            f"{holder!r}, so the unit's holder cannot be the one who ran the suite. "
-            "Name the agent id the executor's dispatch returned.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    slack = _dt.timedelta(seconds=1)
-    if isinstance(windows, list):
-        if not any(s - slack <= modified <= e + slack for s, e in windows):
-            why = (
-                "no command of the unit's holder wrote it (a `>`, `>>` or `tee` naming it)"
-                if not windows
-                else "its bytes were not written by the holder's command that names it"
-            )
-            err_console.print(
-                f"[red]{key}: --evidence tests={log}: {why} since this unit opened at "
-                f"{opened}. Name the log the phase's own full-suite run wrote, or leave "
-                "`tests` out of the record.[/red]",
-                soft_wrap=True,
-            )
-            raise typer.Exit(2)
-    else:
-        opened_at = parse_timestamp(opened)
-        if opened_at is not None and modified < opened_at:
-            err_console.print(
-                f"[red]{key}: --evidence tests={log} predates this unit (opened {opened}) — "
-                "it is not a run of this phase's code.[/red]",
-                soft_wrap=True,
-            )
-            raise typer.Exit(2)
-        _note_unobserved("tests")
-        err_console.print(
-            f"[yellow]{key}: could not verify who ran {log} — {windows}; recorded "
-            "unverified (evidence: unobserved=tests).[/yellow]",
-            soft_wrap=True,
-        )
-    if not record_tree:
-        return _log_witness(path, data, repo_root)
-    try:
-        own = _own_log_path(repo_root, _log_witness(path, data, repo_root))
-        dirty = [p for p in dirty_code_paths(repo_root) if p != own]
-        newest = newest_code_mtime(repo_root, default_merge_base(repo_root), ignore=[path])
-        tree = code_tree(repo_root)
-    except GitUnavailableError as e:
-        err_console.print(
-            f"[red]{key}: --evidence tests={log}: cannot compute the code tree it "
-            f"covers — {escape(str(e))}[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    if dirty:
-        n = len(dirty)
-        err_console.print(
-            f"[red]{key}: --evidence tests={log}: {n} code path{'' if n == 1 else 's'} "
-            f"uncommitted (e.g. {dirty[0]}) — the witness is HEAD's tree, which is not "
-            "what the suite ran. Commit your code before recording the suite log, then "
-            "run the full suite again and name the new log.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if newest is not None and newest[0] > path.stat().st_mtime:
-        err_console.print(
-            f"[red]{key}: --evidence tests={log} is stale — {newest[1]} changed after "
-            "the log was written, so the suite did not run the code being recorded. "
-            "Run the full suite again and name the new log.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    return f"{_log_witness(path, data, repo_root)}{_TREE_SEP}{tree}"
-
-
-def _verify_review_entry(
-    key: str,
-    entry_id: str,
-    *,
-    slug: str,
-    entries: list[JournalEntry],
-    target: _EvidenceTarget,
-    since: str | None,
-) -> None:
-    """`entry_id` is a `kind=review` entry for `target` — or `typer.Exit(2)`.
-
-    A phase: the entry carries `phase=N` (`reviews_phase`, the one rule). The
-    spec: the entry was created at or after the step opened (`since`) — a
-    review recorded before spec-review began is not a review OF it.
-    """
-    from fr.run.telemetry import parse_timestamp
-
-    scope = target.scope
-    found = next((e for e in entries if e.id == entry_id), None)
-    phase_flag = (
-        f"--phase {target.phase} "
-        if target.phase is not None
-        else ("--global " if target.feature else "")
-    )
-    if found is None:
-        err_console.print(
-            f"[red]{key}: --evidence review={entry_id} names no entry in the {scope} "
-            f"journal for {slug}[/red]",
-            soft_wrap=True,
-        )
-        err_console.print(
-            f"  fr journal add --scope {scope} --slug {slug} --kind review {phase_flag}"
-            f'--title "{target.subject} review" '
-            "--body \"<findings raised, by id; or 'no findings'>\"",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if target.phase is not None:
-        if not reviews_phase(found, target.phase):
-            err_console.print(
-                f"[red]{key}: --evidence review={entry_id} is a {found.kind!r} entry"
-                + (f" for phase {found.phase}" if found.phase is not None else " with no phase")
-                + f" — evidence must be a `kind=review` entry carrying `phase={target.phase}`, "
-                "the same rule `fr journal check --require-reviews` applies[/red]",
-                soft_wrap=True,
-            )
-            raise typer.Exit(2)
-        return
-    if target.feature and (found.kind != "review" or found.phase is not None):
-        err_console.print(
-            f"[red]{key}: --evidence review={entry_id} is a {found.kind!r} entry"
-            + (f" for phase {found.phase}" if found.phase is not None else "")
-            + " — the lens review's evidence is a global `kind=review` plan-journal entry "
-            "(no phase)[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if found.kind != "review":
-        err_console.print(
-            f"[red]{key}: --evidence review={entry_id} is a {found.kind!r} entry — evidence "
-            "must be a `kind=review` spec-journal entry[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    created = parse_timestamp(journal_stamp_as_utc(found.created))
-    opened = parse_timestamp(since) if since else None
-    if created is None or opened is None or created < opened.replace(microsecond=0):
-        began = "this step opened" if target.feature else "spec-review began"
-        err_console.print(
-            f"[red]{key}: --evidence review={entry_id} was created {found.created}, "
-            f"before this step opened at {since} — a review recorded before {began} "
-            "is not a review of it. Record the reviewer's findings, then a new "
-            "`kind=review` entry.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-
-
-def _target_finding_states(entries: list[JournalEntry], target: _EvidenceTarget) -> dict[str, str]:
-    """Every finding filed against `target` -> its effective state. A phase:
-    `phase_finding_states`. The spec: every finding in its journal (a spec
-    journal has no phases), through the SAME fold `fr journal check` reads."""
-    if target.phase is not None:
-        return dict(phase_finding_states(entries, target.phase))
-    states = effective_finding_states(entries)
-    return {
-        e.id: states[e.id]
-        for e in entries
-        if e.kind == "finding"
-        and e.resolves is None
-        and e.id in states
-        and (not target.feature or _is_lens_finding(e.id))
-    }
-
-
-def _is_lens_finding(fid: str) -> bool:
-    """A lens review's finding (`l-<lens>-r<k>`): the only plan findings the
-    feature target gates (spec 2026-11-12-review-lenses §3.C)."""
-    from fr.lenses.review import LENS_FINDING_ID_RE
-
-    return LENS_FINDING_ID_RE.match(fid) is not None
-
-
-def _closed_findings_witness(
-    key: str, slug: str, entries: list[JournalEntry], target: _EvidenceTarget
-) -> str:
-    """The `findings` evidence for `target` — or `typer.Exit(2)` while any
-    finding filed against it is still open.
-
-    This is `superpowers:receiving-code-review`'s OUTCOME, which is the only
-    part of "was the review received properly" fr can observe: every finding
-    the review raised ends `fixed` or `refuted`, never dropped. It is the check
-    `journal-check` already made once, before `deliver` — moved to the moment a
-    finding is cheapest to act on, while the phase that caused it is still the
-    one in hand.
-
-    The value is the WITNESS, not a token: the ids fr saw closed, in the order
-    they were raised, or `none`. A finding that genuinely belongs to a later
-    phase is filed against THAT phase, and gates that phase's review instead.
-    """
-    subject, scope = target.subject, target.scope
-    states = _target_finding_states(entries, target)
-    still_open = [fid for fid, st in states.items() if st == "open"]
-    # The operator guard `fr journal check` applies (spec 2026-09-24 §A), read
-    # from the same fold: an out-of-scope finding fixed without the operator.
-    unauthorized = [fid for fid in unauthorized_fixes(entries) if fid in states]
-    if unauthorized:
-        err_console.print(
-            f"[red]{key}: refused — {len(unauthorized)} unauthorized fix(es) against "
-            f"{subject}: {', '.join(unauthorized)} — moved from out-of-scope to fixed without "
-            "`answered_by=operator`. Ask the operator, then:[/red]",
-            soft_wrap=True,
-        )
-        for fid in unauthorized:
-            err_console.print(
-                f"  fr journal resolve --scope {scope} --slug {slug} --id {fid} --state fixed "
-                '--answered-by operator --note "<what the operator decided>"',
-                markup=False,
-                soft_wrap=True,
-            )
-        raise typer.Exit(2)
-    if not still_open:
-        return findings_witness(states)
-    err_console.print(
-        f"[red]{key}: refused — {len(still_open)} finding(s) filed against {subject} "
-        f"are still open: {', '.join(still_open)}.[/red]",
-        soft_wrap=True,
-    )
-    err_console.print(
-        "  A review is received, not just requested "
-        "(`superpowers:receiving-code-review`): verify each finding, then fix it with "
-        "a test or refute it with reasoning — never drop it. Close each one:",
-        soft_wrap=True,
-    )
-    for fid in still_open:
-        err_console.print(
-            f"  fr journal resolve --scope {scope} --slug {slug} --id {fid} --state fixed "
-            '--note "<what changed, and the test that pins it>"',
-            markup=False,
-            soft_wrap=True,
-        )
-    later = (
-        f" One that belongs to a later phase is filed against that phase, not {subject}."
-        if target.phase is not None
-        else ""
-    )
-    err_console.print(
-        "  (or `--state refuted` with the reasoning, when the finding is wrong; "
-        "`--state out-of-scope` when this change did not cause it)."
-        f"{later} `--state failed` needs no evidence.",
-        soft_wrap=True,
-    )
-    raise typer.Exit(2)
-
-
-def _evidence_owed(manifest: WorkflowManifest) -> dict[str, tuple[Step, ...]]:
-    """`{top-level step id: (every step under it that declares evidence,)}`.
-
-    A group's members are the realistic case (`implement`'s `review-phase`);
-    a flat step declaring evidence is included so a report can never go quiet
-    about a shape that asks for something it never got.
-    """
-    owed: dict[str, tuple[Step, ...]] = {}
-    for step in manifest.steps:
-        candidates = step.steps or (step,)
-        declaring = tuple(s for s in candidates if s.evidence)
-        if declaring:
-            owed[step.id] = declaring
-    return owed
-
-
-def _unevidenced_units(repo_root: Path, state: RunState) -> dict[tuple[str, str], tuple[str, ...]]:
-    """`{(step id, unit key): obligations it lacks}` for every unit that is
-    `done` under a step which declares evidence it does not carry — spec
-    §4.E's visible debt. Per OBLIGATION, because a shape can grow one: a unit
-    resolved with `review=` before `findings` existed owes `findings` and
-    nothing else, and saying "unevidenced" of it would be as wrong as silence.
-
-    **Never a failure, and never an exit code.** These are reviews resolved
-    before the gate existed; the migration cannot invent evidence for them and
-    does not try. An obligation cannot be enforced backwards in time — doing
-    so would fail every in-flight run on the day the plugin updates.
-
-    Fail-SOFT on a manifest it cannot resolve (drifted, renamed, deleted):
-    this is a report line, and a report that turns `fr run check` into an
-    error is a worse outcome than a report that is silent. The exit code of
-    every caller is unchanged either way.
-    """
-    try:
-        # Schema-checked only: a step-list drift does not make "which units owe
-        # evidence" unanswerable, and the caller (`status`/`check`) warns about
-        # the drift itself (spec 2026-10-05-run-upgrade-midflight §B).
-        manifest = _resolve_manifest_checked_schema(repo_root, state)
-    except RunStateError, WorkflowError, AdoptError, OSError:
-        return {}
-    out: dict[tuple[str, str], tuple[str, ...]] = {}
-    for step_id, declaring in _evidence_owed(manifest).items():
-        record = state.steps.get(step_id)
-        if record is None:
-            continue
-        for member in declaring:
-            suffix = f"step/{member.id}" if member.id == step_id else f"/{member.id}"
-            for key in units.unit_keys(record):
-                matches = key == suffix if member.id == step_id else key.endswith(suffix)
-                unit_state = record.state if member.id == step_id else units.unit_state(record, key)
-                if not matches or unit_state != "done":
-                    continue
-                held = units.evidence_of(record, key)
-                if held.get("reviewer") == HISTORICAL_REVIEWER:
-                    # R9: reviewed before this cursor existed — reported as
-                    # such by the caller, never as debt.
-                    continue
-                lacking = tuple(name for name in member.evidence if name not in held)
-                if lacking:
-                    out[(step_id, key)] = lacking
-    return out
-
-
-def _debt_phrase(record: StepRecord, key: str, lacking: tuple[str, ...]) -> str:
-    """How one unit's evidence debt reads — ONE spelling for `status` and
-    `check`. A unit with no evidence at all keeps the sentence it always had."""
-    if not units.evidence_of(record, key):
-        return "unevidenced (predates the evidence gate)"
-    return f"unevidenced: {', '.join(lacking)} (predates that obligation)"
-
-
-def _template_context(state: RunState, repo_root: Path | None = None) -> dict[str, str]:
-    """`{{ run.* }}` and `{{ artifacts.* }}` for a `kind: cli` step, which runs in the
-    product checkout. Under quiet or stealth a repo-tracked artifact (`spec`, `plan`) is
-    not there, so it is given as its absolute path below the artifact root; under `repo`
-    the recorded relative path already names it from the checkout."""
-    from fr.artifacts.paths import outside_repo
-
-    placed = repo_root is not None and outside_repo(repo_root) is not None
-    ctx = {"run.id": state.run, "run.branch": state.branch}
-    for record in state.steps.values():
-        if record.emitted:
-            for name, value in record.emitted.items():
-                if placed and repo_root is not None and name in REPO_TRACKED_ARTIFACTS:
-                    value = str(emitted_path(repo_root, value))
-                ctx[f"artifacts.{name}"] = value
-    return ctx
-
-
-def _render_template(text: str, context: Mapping[str, str], *, quote: bool) -> str:
-    """Substitute `{{ ... }}` from `context`.
-
-    `quote=True` shell-quotes every substituted value and is mandatory for
-    anything handed to a shell (review fix r2-f3). The manifest itself is
-    operator-authored, but `{{ artifacts.* }}` values are not: they arrive via
-    `fr run resolve --emitted name=path`, i.e. from whatever a dispatched
-    agent reports. The shipped `plan-review` step is `fr plan self-review
-    {{ artifacts.plan }}`, so an emitted path containing `;` or backticks was
-    a command-injection seam straight through `shell=True`. Quoting at the
-    substitution boundary keeps the manifest's own shell syntax (pipes,
-    redirects, `&&`) working while making an interpolated value inert data.
-    """
-
-    def repl(m: re.Match[str]) -> str:
-        key = m.group(1)
-        if key not in context:
-            raise RunStateError(f"unresolved template variable: {{{{ {key} }}}}")
-        value = context[key]
-        return shlex.quote(value) if quote else value
-
-    return _TEMPLATE_RE.sub(repl, text)
-
-
-def _build_brief(step: Step, state: RunState) -> dict[str, Any]:
-    """The dispatch brief for a `kind: agent` step — everything the harness
-    needs to actually run it, and nothing fr itself executes.
-
-    Phase 11 wires `fr-goal` onto `fr run`; it must produce/consume this
-    same shape, so its keys are deliberately exhaustive of `Step`'s
-    agent-relevant fields rather than a subset convenient for today's tests
-    — pinned by deriving the expected key set from `Step.model_fields` in
-    `test_run_cli.py`, so a future `Step` field cannot be silently omitted.
-
-    Exhaustive means every `Step` field except two: `id` (emitted as `step`)
-    and `run` (the one cli-only field — `advance` executes it; it is never
-    dispatched). `kind` is carried even though a brief is only ever printed
-    for an `agent` step, so the brief stays self-describing and the
-    exclusion list stays at exactly the two fields that have a reason.
-    `for_each` and `gate` were missing until review fix r2-f4, which made
-    the brief unable to express `implement`'s whole purpose (one executor
-    per phase) or the fact that a step is gated at all. `steps` carries the
-    member ids of a grouped `for_each` (empty for a flat step) so the
-    harness can see the per-phase loop without re-reading the manifest.
-    """
-    return {
-        "run": state.run,
-        "workflow": state.workflow,
-        "step": step.id,
-        "kind": step.kind,
-        "skill": _brief_skill(step),
-        "agent": step.agent,
-        "needs": list(step.needs),
-        "emits": list(step.emits),
-        "gate": step.gate,
-        "tier": step.tier,
-        "evidence": _caller_evidence(step),
-        "for_each": step.for_each,
-        "steps": [m.model_dump(exclude_none=True) for m in step.steps],
-        # spec 2026-09-25 §5.C.3: the pre-filled step record — for a flat
-        # step; a fan-out group's record is per member, in the member brief.
-        "record": None if step.steps else _record_brief(state, step),
-        "commit_templates": commit_templates_brief(resolve_repo_root(), state.issue),
-        "unbound_tiers": _unbound_tiers(resolve_repo_root()),
-        **_gated_binding_keys(step),
-        **_lens_review_brief(step, state),
-        **_tests_brief(resolve_repo_root(), step),
-        **_settle_brief(step),
-    }
-
-
-def _settle_brief(step: Step) -> dict[str, str]:
-    """`settle`, the settle loop's one instruction line, for a step that derives
-    `settle` evidence (`deliver`; spec 2026-11-23-pr-readiness-wait R9, R10)."""
-    from fr.settle.instructions import DELIVER_LINE
-
-    return {"settle": DELIVER_LINE} if "settle" in step.evidence else {}
-
-
-def commit_templates_brief(repo_root: Path, issue: int | None) -> dict[str, Any]:
-    """The repo's commit subject templates and the run's issue (spec
-    2026-11-04-repo-feature-settings R14): what an agent's commit subjects must
-    match, `with_issue` when the run records an issue. `fr push` checks them."""
-    from fr.settings import load_settings
-
-    commit = load_settings(repo_root).settings.git.commit
-    return {
-        "use": "with_issue" if issue is not None else "without_issue",
-        "with_issue": commit.with_issue,
-        "without_issue": commit.without_issue,
-        "issue": issue,
-    }
-
-
-def _unbound_tiers(repo_root: Path) -> list[str] | None:
-    """The phase tiers with no model bound for the harness `advance` runs
-    under, in `PHASE_TIERS` order — `None` when no harness is detected (or
-    `FR_HARNESS` is invalid, which the gate path reports itself): an empty
-    list would read as "every tier is bound". A malformed models.yaml raises,
-    as it already did from `_orchestrator_model_notice` at the top of every
-    `advance` — a broken config is reported, never read as "unbound".
-
-    gh#538: fr-goal's model-per-tier question was gated on a `fr models
-    resolve` the orchestrator had to REMEMBER to run, and on a real OpenCode
-    run with nothing bound it never ran it. fr answers it in one lookup, so the
-    brief states it and the question is triggered by data, not recall."""
-    try:
-        harness = detect_harness(os.environ)
-    except HarnessError:
-        return None
-    if harness is None:
-        return None
-    return [t for t in PHASE_TIERS if _resolved_model(repo_root, harness, t) is None]
-
-
-def _binding_health(
-    repo_root: Path, tiers: list[str] | None = None
-) -> tuple[str, list[BindingHealth]] | None:
-    """`(harness, report)` for the detected harness's bindings — `None` when no
-    harness is detected or it cannot be probed (spec 2026-10-06-model-binding-
-    churn R10: only OpenCode can). The ONE place `fr run` reaches
-    `check_bindings`: the start notice, the gated brief and the pre-dispatch
-    guard all read it, with the 6 h probe cache allowed (R3)."""
-    try:
-        harness = detect_harness(os.environ)
-    except HarnessError:
-        return None
-    if harness is None:
-        return None
-    prober = fr.bindings.prober_for(harness)
-    if prober is None:
-        return None
-    report = check_bindings(
-        harness,
-        load_models(repo_models_path(repo_root)),
-        load_models(default_models_path()),
-        prober,
-        tiers=tiers,
-        cache=default_probe_cache(),
-    )
-    return harness, report
-
-
-def _gated_binding_keys(step: Step) -> dict[str, list[dict[str, Any]] | None]:
-    """The brief's `dead_bindings` and `binding_offers` (R6): lists only for a
-    `gate: operator` step on a probed harness — the one place an operator is
-    there to answer them (R7) — and `null` everywhere else, so a dispatch
-    brief never pays for a probe nobody will act on."""
-    health = _binding_health(resolve_repo_root()) if step.gate == "operator" else None
-    if health is None:
-        return {"dead_bindings": None, "binding_offers": None}
-    _, report = health
-    dead = [
-        {
-            "tier": h.tier,
-            "model": h.model,
-            "verdict": h.verdict,
-            "proposal": None
-            if h.proposal is None
-            else {
-                "model": h.proposal.model,
-                "rule": h.proposal.rule,
-                "price_ratio": h.proposal.price_ratio,
-            },
-            "reason": h.detail,
-        }
-        for h in report
-        if h.verdict == "dead"
-    ]
-    offers = [
-        {"tier": o.tier, "model": o.model, "offer": o.offer} for h in report for o in h.offers
-    ]
-    return {"dead_bindings": dead, "binding_offers": offers}
-
-
-def _binding_notice_lines(harness: str, report: list[BindingHealth]) -> list[str]:
-    """`fr run start`'s loud lines (R6): one per dead binding, one per offer."""
-    lines: list[str] = []
-    for h in report:
-        if h.verdict == "dead":
-            line = f"warning: {harness}/{h.tier} is bound to {h.model}, which is dead ({h.detail})"
-            if h.proposal is not None:
-                line += f" — proposed: {proposal_text(h.proposal)}"
-            elif h.no_choice is not None:
-                line += f" — no replacement ({h.no_choice.reason})"
-            lines.append(line + "; review with `fr models check`")
-        lines.extend(
-            f"offer: {harness}/{o.tier} {o.model} → {o.offer} (newer, same family; never "
-            f"applied unasked — `fr models set --harness {harness} --tier {o.tier} {o.offer}`)"
-            for o in h.offers
-        )
-    return lines
-
-
-def _caller_evidence(step: Step) -> list[str]:
-    """The evidence a brief lists: what the caller passes. A derived name is
-    refused from the caller ("not yours to pass"), so listing it sent agents
-    straight into that refusal (gh#653)."""
-    return [n for n in step.evidence if n not in DERIVED_EVIDENCE]
-
-
-def _record_brief(
-    state: RunState, step: Step, group: Step | None = None, item: str | None = None
-) -> dict[str, Any] | None:
-    """The brief's `record` key — never the reason a brief fails to print."""
-    from fr.record.template import record_brief
-
-    try:
-        return record_brief(resolve_repo_root(), state, step, group, item).as_dict()
-    except Exception:  # noqa: BLE001 — a brief without a template still dispatches
-        return None
-
-
-def _brief_skill(step: Step) -> str | list[str] | None:
-    """`skill` as the brief carries it: exactly what the manifest wrote. One
-    skill is a string — byte-identical to every brief before the list form —
-    and several are a JSON list in the manifest's order, which IS the order to
-    load them in."""
-    return step.skill if step.skill is None or isinstance(step.skill, str) else list(step.skill)
-
-
-def _effective_tier(step: Step, group: Step | None = None) -> str | None:
-    """The tier a unit actually dispatches under: its own `tier:` when set,
-    else its group's — `None` when neither has one. `_build_member_brief`
-    and `_open_dispatch`'s `_advance_group` call site both read this ONE
-    helper (P2.T1.S3) rather than each re-deriving the fallback, which is
-    how the two came to duplicate it in the first place. `group=None` for a
-    flat step, which has none to fall back to."""
-    if step.tier is not None:
-        return step.tier
-    return group.tier if group is not None else None
-
-
-PHASE_TIER_SENTINEL = "from_phase"
-"""`Step.tier`'s one non-tier value — the shipped `fr-goal` shape's marker for
-"this unit's tier is whatever the plan's phase header says".
-
-`Step.tier` is a free `str`, not `PhaseHeader.tier`'s closed
-mechanical/standard/hard Literal, precisely so a shape can say this. The
-*brief* passes the sentinel through verbatim, because there it is an
-instruction to the harness: look the phase up. A dispatch RECORD cannot do
-that — it stores what was actually sent — so `_advance_group` resolves it
-first (finding f4). Handing the sentinel straight to `fr models resolve` can
-only ever miss, which is how every real fr-goal dispatch came to record
-`model: null`."""
-
-
-def _dispatch_tier(repo_root: Path, state: RunState, tier: str | None, phase_n: int) -> str | None:
-    """`tier` with `PHASE_TIER_SENTINEL` replaced by phase `phase_n`'s own
-    tier — what a dispatch RECORD needs, as opposed to what the brief says.
-
-    An unresolvable sentinel becomes `None`, which `_resolved_model` then
-    records as an absent model: the spec §4.A rule that nothing is ever
-    guessed applies to the sentinel exactly as it does to an unbound tier.
-
-    Resolution itself is `_phase_tier`'s, gh#506's function for the same
-    job — that PR landed the sentinel fix for the dispatch BRIEF while this
-    one landed it for the dispatch RECORD, and one reader of the plan's
-    phase header is enough for both."""
-    if tier != PHASE_TIER_SENTINEL:
-        return tier
-    return _phase_tier(repo_root, state, phase_n)
-
-
-def _resolved_model(repo_root: Path, harness: str | None, tier: str | None) -> str | None:
-    """The model bound to `tier` for `harness`, via `fr.models.resolve` —
-    repo config overriding user config, the same rule `fr models resolve`
-    itself uses. `None` when there is no tier, no harness, or no binding for
-    the pair: an unresolved tier leaves `model` absent rather than guessed
-    (spec §4.A / P2.T1.S2).
-
-    `harness` is PASSED IN rather than detected here (finding f8). A tier
-    resolves to a model only *for a harness*, so the two belong to the same
-    record — detecting it privately meant `_open_dispatch` could store a
-    model without naming the harness that chose it, which an orchestrator-run
-    step (never claimed) would never get filled in afterwards.
-
-    `PHASE_TIER_SENTINEL` is refused here as well as resolved upstream in
-    `_dispatch_tier`. Callers with no phase in hand — a flat `kind: agent`
-    step — have nothing to resolve it against, and without this guard a
-    models.yaml that happened to carry a `from_phase:` key would bind it,
-    turning a sentinel into a model name by coincidence."""
-    if tier is None or tier == PHASE_TIER_SENTINEL or harness is None:
-        return None
-    from fr.models import default_models_path, load_models, repo_models_path
-    from fr.models import resolve as resolve_model
-
-    repo_cfg = load_models(repo_models_path(repo_root))
-    user_cfg = load_models(default_models_path())
-    return resolve_model(harness, tier, repo_cfg=repo_cfg, user_cfg=user_cfg)
-
-
-ORCHESTRATOR_ROLE = "orchestrator"
-"""The models.yaml key binding the ORCHESTRATOR's model, beside the phase tiers
-(`claude-code: {orchestrator: claude-opus-5, standard: …}`). A role, not a
-tier: nothing dispatches to it, so it is only ever compared, never resolved
-into a dispatch (2026-09-21 debug journal C3)."""
-
-
-def _orchestrator_model_notice(repo_root: Path) -> str | None:
-    """A loud line when the orchestrator runs on a model other than the one
-    bound to `orchestrator` for this harness — else `None`.
-
-    Record + warn, NEVER block (operator decision, debug journal C3): the
-    session model is the operator's `/model` choice and outranks the binding.
-    Silent with no binding (no contract was asked for) and silent when the
-    running model cannot be observed — an unobservable model is not a mismatch,
-    and saying so on every harness without a transcript reader would be noise.
-    """
-    from fr.run.telemetry import orchestrator_model
-
-    try:
-        harness = detect_harness(os.environ)
-    except HarnessError:
-        # A bad FR_HARNESS is `advance`'s gate path's error to raise (exit 2,
-        # naming the variable); a notice must never pre-empt it.
-        return None
-    bound = _resolved_model(repo_root, harness, ORCHESTRATOR_ROLE)
-    if bound is None:
-        return None
-    running = orchestrator_model(os.environ)
-    if running is None or running == bound:
-        return None
-    return (
-        f"warning: this run's orchestrator is running on {running}, but models.yaml "
-        f"binds the {harness} orchestrator to {bound}. Every non-dispatched step "
-        f"(brainstorm, reviews, deliver) runs on the orchestrator's model. Switch "
-        f"with `/model` if that was not intended; fr records the model it observes."
-    )
 
 
 def _run_journal(repo_root: Path, state: RunState) -> tuple[JournalScope, str] | None:
@@ -4143,7 +728,7 @@ def _guard_dispatch_binding(
     """Refuse, or repair, a dead model binding before a unit is dispatched on it
     (spec 2026-10-06-model-binding-churn §C, R8, R9, R11).
 
-    Called on BOTH dispatch paths with the exact tier `_open_dispatch` will
+    Called on BOTH dispatch paths with the exact tier `open_dispatch` will
     receive, and before anything is marked running or saved — so a refusal
     leaves the cursor byte-identical, with no brief printed. Quiet unless the
     harness is OpenCode (the only one fr can probe), the tier is bound, and the
@@ -4300,649 +885,13 @@ def _guard_dispatch_binding(
     )
 
 
-def _open_dispatch(
-    state: RunState,
-    step_id: str,
-    key: str,
-    *,
-    agent_type: str | None,
-    tier: str | None,
-    repo_root: Path,
-    at: str | None = None,
-) -> RunState:
-    """Append a new attempt opening `key`'s hold under `step_id`.
-
-    `at` is the attempt's `dispatched`, taken by the grouped caller BEFORE
-    the brief is built. Absent, it is stamped here — right for the flat
-    `kind: agent` branch, which saves before it prints the brief.
-
-    Spec §4.B.1: called exactly when `advance` moves a unit to `running` —
-    from BOTH `_advance_group`'s write-claim and the flat `kind: agent`
-    branch, and only on the actual transition (both call sites already guard
-    on that). Never called from `_gate_pending`: a gated step is marked
-    `blocked`, not `running`, so nothing was dispatched and there is nothing
-    to hold.
-    """
-    from fr.run.telemetry import SESSION_ID_ENVS, orchestrator_model, run_session
-
-    record = state.steps[step_id]
-    # Detected ONCE and both recorded and used (finding f8): the harness is
-    # what turns a tier into a model, so a record that carries the model
-    # without naming it is not self-describing — and an orchestrator-run
-    # step, which nothing ever claims, would never have it filled in later.
-    harness = detect_harness(os.environ)
-    new_record = units.with_attempt_appended(
-        record,
-        key,
-        UnitAttempt(
-            dispatched=at or _now(),
-            agent_type=agent_type,
-            harness=harness,
-            # A tier is resolved only for work fr DISPATCHED to a tier. A tier
-            # binding answers "which model does a dispatched agent of this tier
-            # get"; an attempt with no `agent_type` is the orchestrator running
-            # the unit in its own session. Such a member still inherits its
-            # group's tier, so resolving it here wrote a model for work that
-            # tier never touched — seven false `claude-opus-5` reviews in this
-            # repo's own archive. That lesson stands. What changed (2026-09-21
-            # debug journal C3) is that the orchestrator's model is no longer
-            # invisible: its own transcript names it, so fr records what it
-            # OBSERVES there — never a resolution — and `None` when it cannot.
-            #
-            # For a SUBAGENT attempt the binding is a prediction, so it goes
-            # into `bound` beside its `tier` (spec 2026-10-06-cost-evidence
-            # §D, R7) and `model` is left for what ran: a `--model` claim, or
-            # `_observed_model` at resolve. Before run version 9 the binding
-            # sat in `model`, which is why "ran" is shown only beside `bound`.
-            model=(None if agent_type is not None else orchestrator_model(os.environ)),
-            tier=(tier if agent_type is not None else None),
-            bound=(_resolved_model(repo_root, harness, tier) if agent_type is not None else None),
-            # Derived from fr's OWN environment, exactly like `harness` — the
-            # agent never reports it (§4.D.1). It is what lets a later session
-            # read the RIGHT transcript directory, and what stops a window
-            # from being borrowed across sessions. `None` for a harness with
-            # no session concept, which reads as "not observable from here"
-            # and never as zero. No hostname beside it: a missing session
-            # directory already says "elsewhere".
-            #
-            # `current_session` reads only the key the detected harness OWNS
-            # (gh#537): an OpenCode started from a Claude Code shell inherits
-            # Claude Code's key, which names a session that never held this
-            # unit; OpenCode's own arrives through the super-fr plugin's
-            # `shell.env` export (spec 2026-10-02-opencode-observe-2 §B).
-            # `run_session` walks a child's id up to the run's. An UNDETECTED
-            # harness owns no key (review p1-r1): there `current_session`
-            # falls back to Claude Code's, which in gh#537's mixed shell is
-            # the inherited, stale one — record nothing, as main did.
-            session=(run_session(os.environ) if harness in SESSION_ID_ENVS else None),
-        ),
-    )
-    return _with_step(state, step_id, new_record)
-
-
-def _dispatch_needs_open(record: StepRecord, key: str) -> bool:
-    """Should `advance` append a fresh `Attempt` for `key`?
-
-    True when nothing has been recorded for it yet, or its last attempt is
-    CLOSED (`returned` is not `None`) — an abandoned (`fr run claim
-    --abandoned`) or failed-and-retried unit is not currently held, so
-    re-dispatching it opens a NEW hold rather than silently leaving the old,
-    closed one as the only record. False while the last attempt is still
-    OPEN — the unit is currently HELD, which `advance` refuses to dispatch
-    over (`_hold_on`, spec §4.C / gh-499) unless `--redispatch` says so.
-
-    This is the ONE notion of "is the last record open?" in the module:
-    `_held_record` is its read half, and `advance`'s refusal (`_hold_on`),
-    `--redispatch`'s abandon and `resolve`'s close all go through the pair
-    rather than each re-deriving it.
-    """
-    return _held_record(record, key) is None
-
-
-def _held_record(record: StepRecord, key: str) -> UnitAttempt | None:
-    """`key`'s OPEN attempt, or `None` when the unit is free.
-
-    The read half of `_dispatch_needs_open` — same predicate, but handing
-    back the holder so a caller can name it. Delegates to
-    `fr.run.units.open_attempt`, which is where "open = the last attempt,
-    unreturned" is decided; this module keeps the name because every comment
-    and refusal in it is written in terms of the pair."""
-    return units.open_attempt(record, key)
-
-
-def _close_dispatch(record: StepRecord, key: str, outcome: DispatchOutcome) -> StepRecord:
-    """Close `key`'s open dispatch: `returned` = now, `outcome` = `outcome`.
-
-    `Attempt` enforces that the two are one fact, so they are written
-    in one `model_copy` and never separately. Callers must have established
-    that the unit IS held (`_held_record` / `_open_dispatch_record`); this
-    helper does not re-derive it, so there is still exactly one place that
-    decides what "open" means."""
-    return units.with_last_attempt_replaced(
-        record,
-        key,
-        units.attempts(record, key)[-1].model_copy(update={"returned": _now(), "outcome": outcome}),
-    )
-
-
-def _merge_claim(
-    open_record: UnitAttempt,
-    key: str,
-    *,
-    agent: str | None,
-    harness: str | None,
-    model: str | None,
-    agent_type: str | None,
-) -> UnitAttempt:
-    """`open_record` after a claim of `harness`/`model`/`agent_type` (#1110).
-
-    The ONE rule for what a claim does to an open attempt, shared by
-    `fr run claim`, `--open-unit` and `fr run resolve`'s late identity. An
-    UNCLAIMED attempt (no `agent`) takes the claim's values as given — that is
-    how a first claim refines what `advance` pre-filled. A CLAIMED one keeps
-    what its first claim recorded: an empty field is filled, an equal value
-    (or, for `model`, one in the same `model_family`) is a silent no-op, and
-    anything else is kept with a warning, exit 0."""
-    from fr.models import model_family
-
-    claimed_by = agent if agent is not None else open_record.agent
-    if open_record.agent is None:
-        update: dict[str, Any] = {}
-        if agent is not None:
-            update["agent"] = agent
-        for field, value in (("harness", harness), ("model", model), ("agent_type", agent_type)):
-            if value is not None:
-                update[field] = value
-        return open_record.model_copy(update=update)
-    update = {}
-    for field, value in (("harness", harness), ("model", model), ("agent_type", agent_type)):
-        if value is None:
-            continue
-        recorded = getattr(open_record, field)
-        if recorded is None:
-            update[field] = value
-        elif recorded == value or (
-            field == "model" and model_family(recorded) == model_family(value)
-        ):
-            continue
-        else:
-            err_console.print(
-                f"warning: {key}: {claimed_by} is recorded with {field}={recorded}; keeping "
-                f"it (this claim said {value}). The first claim's identity stands; resolve "
-                "records the model the transcript observed. If the executor was really "
-                "replaced, close it with `fr run claim ... --abandoned` and re-dispatch.",
-                markup=False,
-                soft_wrap=True,
-            )
-    return open_record.model_copy(update=update) if update else open_record
-
-
-def _claimed_identity(
-    open_record: UnitAttempt,
-    key: str,
-    *,
-    agent: str,
-    harness: str | None,
-    model: str | None,
-    agent_type: str | None = None,
-) -> UnitAttempt:
-    """`open_record` carrying the orchestrator's reported identity, or refuse.
-
-    Shared by `fr run claim` (the eager report) and `fr run resolve`'s late
-    fallback (decision d2), so a *second* agent id can never be attached to a
-    dispatch by taking the other route. Re-reporting the SAME id is
-    idempotent: it fills empty `harness`/`model`/`agent_type` fields only and
-    otherwise keeps the first claim's values, warning on a different one
-    (`_merge_claim`); a DIFFERENT id is refused
-    naming both, because two ids on one hold is the two-writers hazard this
-    whole feature exists to make visible."""
-    if open_record.agent is not None and open_record.agent != agent:
-        err_console.print(
-            f"[red]{key}: already claimed by {open_record.agent!r} — refusing to "
-            f"attribute it to {agent!r} as well. The worktree has exactly one "
-            "writer; close the first claim (`fr run resolve ... --state "
-            "done|failed`, or `fr run claim ... --abandoned`) before naming a "
-            "second.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    return _merge_claim(
-        open_record, key, agent=agent, harness=harness, model=model, agent_type=agent_type
-    )
-
-
-def _close_on_resolve(
-    state: RunState,
-    owner_id: str,
-    key: str,
-    outcome: DispatchOutcome,
-    *,
-    agent: str | None,
-    harness: str | None,
-    model: str | None,
-) -> RunState:
-    """`resolve`'s half of the dispatch pair: close `key`'s open record with
-    `outcome`, optionally attaching a late identity first (spec §4.C).
-
-    **Silent when there is nothing open** — and that is the requirement, not
-    a shortcut. A run `fr run adopt`ed from a plan on disk has no dispatch
-    history at all, and a `gate: operator` step is marked `blocked` without
-    ever being dispatched; neither may start failing to resolve because this
-    feature landed. Nothing is invented for them either: an absent record
-    stays absent rather than being back-filled with a dispatch fr never made.
-
-    A record that is already CLOSED (`claim --abandoned`) is likewise left
-    exactly as it is — `abandoned` is what happened to that attempt, and
-    overwriting it with this resolve's outcome would erase the one fact the
-    operator recorded by hand.
-    """
-    record = state.steps[owner_id]
-    open_record = _held_record(record, key)
-    if open_record is None:
-        return state
-    if agent is not None:
-        open_record = _claimed_identity(open_record, key, agent=agent, harness=harness, model=model)
-    elif harness is not None or model is not None:
-        open_record = _merge_claim(
-            open_record, key, agent=None, harness=harness, model=model, agent_type=None
-        )
-    open_record = _observed_model(open_record, key)
-    record = units.with_last_attempt_replaced(record, key, open_record)
-    return _with_step(state, owner_id, _close_dispatch(record, key, outcome))
-
-
-def _observed_model(attempt: UnitAttempt, key: str) -> UnitAttempt:
-    """`attempt` carrying the model its subagent's transcript says RAN (gh#637).
-
-    `advance` wrote the tier binding for a dispatched attempt — what SHOULD
-    run. Resolve is the first point that knows the agent id, so the transcript
-    can now say what DID: a dispatch sent without a model argument runs on
-    the orchestrator's model, and the binding then named a model that never
-    ran (run 2026-09-26-fix-624: haiku/sonnet recorded, opus throughout).
-    Observed beats bound and beats reported, as `orchestrator_model` already
-    does for the orchestrator's own units; a difference is said aloud, never
-    blocked. Unobservable leaves the attempt as it was — an absence is not
-    a mismatch.
-
-    The comparison is against `bound` (spec 2026-10-06-cost-evidence §D),
-    falling back to `model` for an attempt opened before run version 9, whose
-    `model` held the binding. `tier` and `bound` are never touched."""
-    from fr.models import model_family
-    from fr.run.telemetry import subagent_model
-
-    if attempt.agent is None or attempt.agent_type is None:
-        return attempt
-    observed = subagent_model(os.environ, attempt.session, attempt.agent)
-    if observed is None:
-        return attempt
-    # Compared even when a claim already wrote the observed model (review
-    # p2-r2: OpenCode always claims `--model`), against the binding.
-    expected = attempt.bound if attempt.bound is not None else attempt.model
-    if expected is not None and model_family(observed) != model_family(expected):
-        err_console.print(
-            f"[yellow]{key}: agent {attempt.agent} ran on {observed}, but the cursor "
-            f"recorded {expected}. fr records what ran. If the tier's binding was "
-            "meant, pass that model in the dispatch.[/yellow]",
-            soft_wrap=True,
-        )
-    return attempt.model_copy(update={"model": observed})
-
-
-def _build_member_brief(
-    member: Step,
-    group: Step,
-    item: str,
-    state: RunState,
-    resolved_tier: str | None,
-    harness: str | None = None,
-) -> dict[str, Any]:
-    """The dispatch brief for one `(phase, member)` unit of a grouped step.
-
-    Same keys as the step brief (so a harness parses one shape) plus `group`
-    (the fan-out step's id), `item` (the `phase/<n>` unit) and
-    `resolved_tier`. `tier` and `for_each` fall back to the group's when the
-    member leaves them unset — the common case, where the group declares the
-    dispatch policy once.
-
-    `resolved_tier` is member-only (D5): `tier` keeps the manifest's literal
-    meaning — for the shipped `fr-goal` shape, the sentinel `"from_phase"` —
-    so `resolved_tier` carries what that sentinel actually resolves to for
-    THIS item: the tier declared on the named phase's header, or `None` when
-    the phase declares none (the dispatch-time observable form of phase 2's
-    untiered-plan warning). It has no analogue on the group/flat brief
-    (`_build_brief`, left untouched): a group spans every phase, so there is
-    no single tier to resolve there, and a confidently-wrong value would be
-    worse than an absent one.
-
-    `long_commands` (gh#582) is the long-command rule for `harness`, the
-    one `fr.harness.long_commands` resolves. It rides every member brief
-    because the executor reads its task prompt when it acts, and the same
-    rule in its agent file alone did not stop OpenCode killing a full suite
-    at 120 s. fr-goal §5 relays it verbatim.
-    """
-    return {
-        "run": state.run,
-        "workflow": state.workflow,
-        "step": member.id,
-        "group": group.id,
-        "long_commands": long_command_rule(harness),
-        "item": item,
-        "kind": member.kind,
-        "skill": _brief_skill(member),
-        "agent": member.agent,
-        "needs": list(member.needs),
-        "emits": list(member.emits),
-        "gate": member.gate,
-        "tier": _effective_tier(member, group),
-        # The member's OWN, never the group's: an obligation is a property of
-        # the step that carries it, and inheriting it would make every member
-        # of the loop owe the review member's evidence.
-        "evidence": _caller_evidence(member),
-        "resolved_tier": resolved_tier,
-        "for_each": group.for_each,
-        "steps": [],
-        "record": _record_brief(state, member, group, item),
-        "commit_templates": commit_templates_brief(resolve_repo_root(), state.issue),
-        # R6: every agent-step brief carries them; a member is never
-        # `gate: operator`, so there is nobody here to answer them.
-        "dead_bindings": None,
-        "binding_offers": None,
-        **_review_findings_brief(member, item),
-        **_tests_brief(resolve_repo_root(), member),
-    }
-
-
-def _tests_brief(repo_root: Path, step: Step) -> dict[str, Any]:
-    """`tests: {mode: ci[, fast_tier: ...]}` for `deliver` (a step that declares
-    `tests` evidence) and for a phase executor's unit, when the repo's
-    `.fr/ci.yaml` at HEAD declares `tests: ci` (spec 2026-11-19-local-suite-cost
-    R8, §3.F) — else nothing, so every other brief is unchanged. `fast_tier` is
-    the repo's own command (`.fr/ci.yaml`'s `fast_tier`, `{base}` made the run's
-    default ref), present only when the repo names one: fr ships none. A value
-    fr refuses refuses the brief (exit 2), never read as "not declared", and so
-    does a `fast_tier` whose default ref git cannot name: never a blank base. Under quiet
-    and stealth both keys come from the configuration branch only when the forge protects
-    it (`ci_evidence._at_tip`, review p3-r1): unprotected, this brief carries neither."""
-    from fr.git import GitRefusal, remote_default_ref
-    from fr.run.ci_evidence import CiEvidenceRefused, declared_fast_tier, declared_tests_mode
-
-    if "tests" not in step.evidence and step.agent != PHASE_EXECUTOR_AGENT:
-        return {}
-    try:
-        mode = declared_tests_mode(repo_root)
-        template = declared_fast_tier(repo_root) if mode is not None else None
-    except CiEvidenceRefused as e:
-        err_console.print(f"[red]{step.id}: refused — {escape(str(e))}[/red]", soft_wrap=True)
-        raise typer.Exit(2) from e
-    if mode is None:
-        return {}
-    tests: dict[str, Any] = {"mode": mode}
-    if template is not None:
-        base = remote_default_ref(repo_root)
-        if not isinstance(base, str) or not base:
-            # Never a blank `{base}` (l-errors-r1): the executor would run the
-            # tier against nothing and read its silence as green.
-            why = base.reason if isinstance(base, GitRefusal) else "no remote default ref"
-            err_console.print(
-                f"[red]{step.id}: refused — .fr/ci.yaml's fast_tier needs {{base}}, the "
-                f"run's default ref, and git cannot name it: {escape(why)}. Fix: "
-                "`git remote set-head <remote> --auto` (a remote with no HEAD), or "
-                "`git config checkout.defaultRemote <remote>` (several remotes).[/red]",
-                soft_wrap=True,
-            )
-            raise typer.Exit(2)
-        command = template.format(base=base)
-        tests["fast_tier"] = " ".join(command.split())
-    return {"tests": tests}
-
-
-def _review_findings_brief(member: Step, item: str) -> dict[str, str]:
-    """`review_findings` for a phase review unit whose reviewer's return fr
-    checks at resolve (spec 2026-10-02-opencode-observe-2 §E, R7) — every
-    `review-phase` of the shipped shapes — else nothing. fr-goal §6 puts its
-    text into the reviewer's prompt verbatim."""
-    from fr.run.review_return import review_findings_rule
-
-    if not {"findings", "reviewer"} <= set(member.evidence):
-        return {}
-    phase = _item_phase(item)
-    return {} if phase is None else {"review_findings": review_findings_rule(phase)}
-
-
-def _lens_review_brief(step: Step, state: RunState) -> dict[str, Any]:
-    """`lens_review` for the lens review (spec 2026-11-12-review-lenses R8, §3.C):
-    the feature's lens set, each lens with its text, why it is there and its
-    return rule — else nothing, so every other brief is unchanged. A set fr cannot
-    compute refuses the brief (exit 2) before anything is written: an empty set
-    read off an error would dispatch no reviewer for a lens a rule requires."""
-    from fr.lenses.review import LENS_EVIDENCE, lens_review_brief
-    from fr.shape import shape_path
-
-    if LENS_EVIDENCE not in step.evidence:
-        return {}
-    repo_root = resolve_repo_root()
-    lenses = _lens_set_or_exit(step.id, repo_root, state)
-    return {"lens_review": lens_review_brief(repo_root, lenses, shape_path(repo_root, state.run))}
-
-
-def _lens_set_or_exit(key: str, repo_root: Path, state: RunState) -> LensSet:
-    """The feature's lens set (`fr.lenses.accumulate.lens_set`), or exit 2 naming
-    why it cannot be told. Never an empty set in place of an error."""
-    from fr.lenses.accumulate import lens_set
-    from fr.lenses.model import LensError
-
-    try:
-        return lens_set(repo_root, state)
-    except LensError as e:
-        err_console.print(
-            f"[red]{key}: refused — the feature's lens set cannot be computed: "
-            f"{escape(str(e))}. Nothing was written.[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-
-
-def _resolve_hint(run_id: str, member_id: str, item: str | None, state: str = "done") -> str:
-    """The exact `fr run resolve` command that records one grouped unit's
-    outcome — the two-flag form `--step <member> --item <head>` that
-    `_split_member_id` teaches when someone reaches for the composite.
-
-    One builder because two surfaces print it for the same act: `advance`
-    pre-empts the #501 error beside every dispatch brief, and (Phase 2) the
-    ALREADY RUNNING refusal names the command that clears it. Spelled
-    separately they would drift, and an operator who was shown two different
-    commands for one outcome has no way to tell which is current.
-
-    **`--state` is a CONCRETE value, never the alternation `done|failed`**
-    (review `r1-f1`). This string is printed under "resolve with:" and is
-    meant to be pasted. In every POSIX shell `|` is a pipe, so pasting
-    `--state done|failed` RUNS the resolve with `--state done` and then fails
-    with `command not found: failed` — exit 127 over a run whose state has
-    already changed. A line that reports failure while having done the thing
-    is the precise defect class this whole PR exists to remove, and the
-    existing operator-gate hint (`--state done`) already set the precedent.
-    A caller that needs to mention the other outcome says so in prose beside
-    the command, outside the pasteable span.
-
-    `item` is None for a TOP-LEVEL step, which has no `--item` to address —
-    the flag is simply omitted. One builder rather than two spellings for the
-    same act: the ALREADY RUNNING refusal (§3.A) prints this for both shapes,
-    and a second inline `f"fr run resolve ..."` is exactly how the two would
-    drift apart.
-    """
-    scope = f" --item {item}" if item is not None else ""
-    return f"fr run resolve {run_id} --step {member_id}{scope} --state {state}"
-
-
-def _dispatched_from_another_session(attempt: UnitAttempt | None) -> bool:
-    """Was `attempt` opened by a session that is NOT this one? (spec §4.D.1)
-
-    A PROOF, never a default. An attempt with no recorded `session` — every
-    one written before the field existed, and every harness with no session
-    concept — is not claimed to be elsewhere, because not knowing where it
-    came from is not the same as knowing it came from somewhere else.
-    """
-    from fr.run.telemetry import dispatched_from_this_session
-
-    if attempt is None or attempt.session is None:
-        return False
-    return not dispatched_from_this_session(os.environ, attempt.session)
-
-
-def _already_running_refusal(
-    step_id: str,
-    subject: str,
-    at: str | None,
-    run_id: str,
-    member_id: str,
-    item: str | None,
-    held: UnitAttempt | None = None,
-) -> str:
-    """The #499 refusal, in one renderer for both call sites (spec §3.A).
-
-    `advance_cmd`'s top-level `agent` branch and `_advance_group`'s grouped
-    member differ only in whether the outstanding unit has an `--item`, so
-    they differ only in this function's last argument. Spelled separately,
-    the operator would eventually be shown two different texts for one
-    situation and have no way to tell which was current.
-
-    Both ways forward are named because both are legitimate: waiting is
-    almost always right, and `--redispatch` is the deliberate escape for a
-    genuinely lost agent. Neither pasteable command carries a shell
-    metacharacter (review `r1-f1`) — the `--state failed` alternative is
-    prose OUTSIDE the command, not an alternation inside it.
-    """
-    # A top-level step IS its own outstanding unit, so naming it twice
-    # ("plan: plan is ALREADY RUNNING") reads as a bug in the message. The
-    # group prefix exists to say WHICH group the unit belongs to; when there
-    # is no group there is nothing to prefix.
-    named = subject if subject == step_id else f"{step_id}: {subject}"
-    # HELD names the agent; RUNNING only names the clock. gh#503 and gh#519
-    # each built this refusal, one from the dispatch record and one from the
-    # `items` map, and the record is strictly the better witness: it knows WHO
-    # is holding the unit, not merely that something is. It is still optional,
-    # because a cursor adopted from disk, or written before the record existed,
-    # has no holder to name — and "ALREADY RUNNING (dispatched <ts>)" is the
-    # honest sentence in that case rather than a fabricated identity.
-    if held is not None:
-        who = _dispatch_holder_label(held)
-        suffix = _dispatch_descriptor_suffix(held, with_agent_type=True)
-        head = f"[red]{named} is ALREADY HELD by {who}{suffix} "
-        head += f"(dispatched {held.dispatched}) — not yet returned.[/red]\n"
-    else:
-        head = f"[red]{named} is ALREADY RUNNING (dispatched {at}).[/red]\n"
-    # §4.D.1: every other refusal fr prints means "someone is working". This
-    # one may mean "that agent died with its host" — the cursor travelled with
-    # the branch and nothing else did — and without saying so the operator
-    # waits forever on a holder nothing here can observe. The escape is named
-    # below already; this only says why to reach for it.
-    if _dispatched_from_another_session(held):
-        head += (
-            "  Dispatched from ANOTHER session: this one cannot see whether that agent is "
-            "alive, and its cost is not observable from here. If it died with its host "
-            "(a run picked up on another machine), close it with the `lost agent` line "
-            "below.\n"
-        )
-    return (
-        head
-        + "  Waiting on that agent — do NOT dispatch again.\n"
-        + f"  resolve it:      {_resolve_hint(run_id, member_id, item)}"
-        "   (or --state failed)\n"
-        f"  lost agent:      fr run claim {run_id} --step {member_id}"
-        + (f" --item {item}" if item else "")
-        + " --abandoned\n"
-        + f"  re-brief anyway: fr run advance {run_id} --redispatch"
-    )
-
-
-def _nothing_running_refusal(subject: str, detail: str, run_id: str) -> str:
-    """`--redispatch` with nothing outstanding (spec §3.A).
-
-    It exits 2 rather than quietly degrading into an ordinary `advance`: the
-    operator reaching for the flag believes an agent is running, and if none
-    is, the mental model is wrong and saying so is the whole point of §3.A.
-    `fr-goal`'s loop never passes the flag, so this strictness costs the
-    normal path nothing.
-
-    Two call sites, one renderer, for the same reason as
-    `_already_running_refusal`: `advance_cmd` catches the step that is not
-    running at all (including every `cli` step, which fr executes inline and
-    so is never `running`), `_advance_group` catches the group that is
-    running with every unit already resolved. `detail` is the only part that
-    differs.
-    """
-    return (
-        f"[red]{subject}: --redispatch, but nothing is running{detail}.[/red]\n"
-        "  --redispatch re-briefs a unit already dispatched; it never starts one.\n"
-        f"  advance normally: fr run advance {run_id}"
-    )
-
-
-def _manual_placement_errors(repo_root: Path, state: RunState) -> tuple[str | None, list[str]]:
-    """`(plan_rel, messages)` — every way this run's plan mis-places a manual
-    phase (spec §3.D.2). Empty when the plan is fine, missing or unparseable.
-
-    The VERDICT half of `_manual_placement_preflight`, split out so the idle
-    reading (`fr run check --idle`, spec 2026-09-20-unit-record-unification
-    §4.G) can ask "would `advance` refuse this group?" without a second
-    definition of the rule — and without printing or exiting.
-
-    It calls `fr.plan_review._manual_placement_issues` — the authoring gate
-    ITSELF, not a re-implementation of it — so the two points share one
-    definition of "trailing" (`_trailing_manual_block`), one definition of
-    "outstanding", and one message. Spelled twice they would drift, and an
-    operator shown two different texts for one situation has no way to tell
-    which is current.
-    """
-    from fr.parser import PlanSchemaError, parse
-    from fr.plan_review import _manual_placement_issues
-
-    plan_rel = _emitted_plan(state)
-    if plan_rel is None:  # pragma: no cover — `_group_phases` refused first
-        return None, []
-    try:
-        plan = parse(emitted_path(repo_root, plan_rel))
-    except PlanSchemaError:  # pragma: no cover — `_group_phases` refused first
-        return plan_rel, []
-    return plan_rel, [i.message for i in _manual_placement_issues(plan) if i.severity == "error"]
-
-
-def _manual_placement_preflight(repo_root: Path, state: RunState, step_id: str) -> None:
-    """Refuse a whole group whose plan mis-places a manual phase (spec §3.D.2).
-
-    The rule is one invariant — *no manual phase may be outstanding when an
-    agentic phase after it runs* — and `fr plan self-review` is its primary
-    gate, running as fr-goal's `plan-review` `kind: cli` step, where a `cli`
-    step's exit code is its verdict. This is the second enforcement point,
-    for the paths that never pass through the first: a run reached by
-    `fr run adopt`, or driven by a repo-authored shape with no plan-review
-    step, arrives at the fan-out with the plan unchecked.
-
-    Silent when the plan is missing or unparseable: `_group_phases` has
-    already refused the advance for both, naming the cause, and a second
-    refusal here would only mask its message.
-    """
-    plan_rel, messages = _manual_placement_errors(repo_root, state)
-    if not messages:
-        return
-    detail = "\n".join(f"  {message}" for message in messages)
-    err_console.print(
-        f"[red]{step_id}: this plan mis-places a manual phase — refusing to "
-        f"dispatch ANY of it.[/red]\n{detail}\n"
-        f"  re-check it with: fr plan self-review {plan_rel}",
-        # soft_wrap: the last line is a command meant to be pasted, and rich
-        # folds at width 80 whenever stderr is not a tty (`p1-f1`, `r1-f2`).
-        soft_wrap=True,
-    )
-    raise typer.Exit(2)
-
-
 def _print_member_dispatch(
     step: Step,
     member: Step,
     item: str,
     state: RunState,
     resolved_tier: str | None,
+    repo_root: Path,
 ) -> None:
     """The three stdout lines a dispatched grouped unit produces, in the one
     order that is safe to print them.
@@ -4965,7 +914,7 @@ def _print_member_dispatch(
 
     Taking `member` rather than its id keeps the dispatch key spelled once:
     `item/member.id` is the `items`-map key, the display id and the hint's
-    two flags, and `_resolve_hint` takes (member, item) while
+    two flags, and `resolve_hint` takes (member, item) while
     `_split_member_id` returns (item, member) — opposite orders that are
     easy to splat into each other by accident.
     """
@@ -4973,23 +922,20 @@ def _print_member_dispatch(
     _commit_run_writes_now()
     console.print(f"{step.id}: dispatch brief ({item}/{member.id})", soft_wrap=True)
     console.print(
-        f"  resolve with: {_resolve_hint(state.run, member.id, item)}   (or --state failed)",
+        f"  resolve with: {resolve_hint(state.run, member.id, item)}   (or --state failed)",
         soft_wrap=True,
     )
-    console.print(
-        json.dumps(
-            _build_member_brief(
-                member,
-                step,
-                item,
-                state,
-                resolved_tier,
-                harness=detect_harness(os.environ),
-            ),
-            sort_keys=True,
-        ),
-        soft_wrap=True,
-    )
+    with _refusals():
+        brief = build_member_brief(
+            member,
+            step,
+            item,
+            state,
+            resolved_tier,
+            harness=detect_harness(os.environ),
+            repo_root=repo_root,
+        )
+    console.print(json.dumps(brief, sort_keys=True), soft_wrap=True)
 
 
 AdvanceStop = Literal["brief", "gate", "cli-done", "cli-failed", "refused", "complete"]
@@ -5039,12 +985,12 @@ def _advance_group(
     running = next((key for key in expected if items.get(key) == "running"), None)
     hold = _hold_on(record, running, running=True) if running is not None else None
     if running is not None and hold is not None and not redispatch:
-        # `_split_member_id` returns (item, member); `_resolve_hint` takes
+        # `_split_member_id` returns (item, member); `resolve_hint` takes
         # (member, item). Same two strings, opposite order — do not splat one
         # into the other (phase 1, `p1-d1`).
         item, _, member_id = running.rpartition("/")
         err_console.print(
-            _already_running_refusal(
+            already_running_refusal(
                 step.id,
                 running,
                 record.at,
@@ -5061,7 +1007,7 @@ def _advance_group(
         raise typer.Exit(2)
     if redispatch and running is None:
         err_console.print(
-            _nothing_running_refusal(
+            nothing_running_refusal(
                 step.id, " — every unit of this group is already resolved", state.run
             ),
             soft_wrap=True,
@@ -5090,11 +1036,12 @@ def _advance_group(
     # a plan reached via `fr run adopt`, or run under a repo-authored shape,
     # can arrive here without the authoring gate ever having run.
     if record.state != "running":
-        _manual_placement_preflight(repo_root, state, step.id)
+        with _refusals():
+            manual_placement_preflight(repo_root, state, step.id)
     item, _, member_id = pending.rpartition("/")
     member = next(m for m in step.steps if m.id == member_id)
     phase_n = int(item.rsplit("/", 1)[-1])
-    tier = _dispatch_tier(repo_root, state, _effective_tier(member, step), phase_n)
+    tier = dispatch_tier(repo_root, state, effective_tier(member, step), phase_n)
     # Before anything below marks the unit running or saves (R8): a refusal
     # leaves the cursor exactly as it was.
     _guard_dispatch_binding(repo_root, state, step.id, pending, tier)
@@ -5108,12 +1055,12 @@ def _advance_group(
     # unit leaves BOTH unchanged (still "running") so its hold looks
     # unchanged to this comparison, yet its last dispatch record is CLOSED —
     # exactly the case a fresh hold must open a new record for
-    # (`_dispatch_needs_open`).
-    held = _held_record(record, pending)
+    # (`dispatch_needs_open`).
+    held = held_record(record, pending)
     if held is not None:
-        record = _close_dispatch(record, pending, "abandoned")
+        record = close_dispatch(record, pending, "abandoned")
         state = _with_step(state, step.id, record)
-    needs_dispatch = _dispatch_needs_open(record, pending)
+    needs_dispatch = dispatch_needs_open(record, pending)
     # `or redispatch`: on a re-dispatch neither the state nor the item map
     # moves, so without it the record would keep the ORIGINAL dispatch time
     # and the next ALREADY RUNNING refusal would name the wrong moment.
@@ -5123,7 +1070,7 @@ def _advance_group(
         )
         state = _with_step(state, step.id, record)
     if needs_dispatch:
-        state = _open_dispatch(
+        state = open_dispatch(
             state,
             step.id,
             pending,
@@ -5134,7 +1081,7 @@ def _advance_group(
         )
     _save_run_state(repo_root, state)
     resolved_tier = _phase_tier(repo_root, state, phase_n)
-    _print_member_dispatch(step, member, item, state, resolved_tier)
+    _print_member_dispatch(step, member, item, state, resolved_tier, repo_root)
     return "brief"
 
 
@@ -5518,13 +1465,13 @@ def start_cmd(
     # was bound for does not exist.
     _bind_session(workspace, branch, *_sessions.ambient_binding(session, harness, os.environ))
     try:
-        notice = _orchestrator_model_notice(workspace)
+        notice = orchestrator_model_notice(workspace)
         if notice is not None:
             err_console.print(f"[yellow]{notice}[/yellow]", soft_wrap=True)
         # R6: report, never block — the run has started either way.
-        health = _binding_health(workspace)
+        health = binding_health(workspace)
         if health is not None:
-            for line in _binding_notice_lines(*health):
+            for line in binding_notice_lines(*health):
                 err_console.print(f"[yellow]{escape(line)}[/yellow]", soft_wrap=True)
     except ModelsError as exc:
         err_console.print(
@@ -5792,36 +1739,6 @@ def _load_or_exit(repo_root: Path, run_id: str) -> RunState:
     return state
 
 
-def _dispatch_holder_label(attempt: UnitAttempt) -> str:
-    """Who to name for `attempt` — the priority spec §4.B.1/§4.C both rely on.
-
-    `agent_type is None` means an orchestrator-run `kind: agent` step (the
-    manifest's own `agent: null`): that is not a missing value, it is the
-    orchestrator doing the work itself, and it never reports an `agent` id
-    for itself. Only once a unit IS dispatched to an actual agent type does
-    an absent `agent` read as `an unclaimed agent` — the same distinction
-    the gh-499 refusal (`_already_running_refusal`) draws, by calling this.
-    """
-    if attempt.agent_type is None:
-        return "the orchestrator"
-    if attempt.agent is not None:
-        return f"agent {attempt.agent}"
-    return "an unclaimed agent"
-
-
-def _dispatch_descriptor_suffix(attempt: UnitAttempt, *, with_agent_type: bool = False) -> str:
-    """` (harness, model)` — and, for the gh-499 refusal, the agent TYPE first.
-
-    `fr run status` prints one line per attempt and already says which unit it
-    is under, so the type would be noise there. The refusal is read by someone
-    deciding whether to wait, and "what kind of agent has this" is one of the
-    four facts that decision needs (who, what kind, which harness, since when).
-    """
-    agent_type = attempt.agent_type if with_agent_type else None
-    descriptors = [d for d in (agent_type, attempt.harness, attempt.model) if d]
-    return f" ({', '.join(descriptors)})" if descriptors else ""
-
-
 def _render_dispatch_attempt(attempt: UnitAttempt) -> str:
     """One `Attempt` as a line of `fr run status`/`fr run check`
     prose — spec §4.C's illustration, cases (a)-(d) of P5.T1.S1."""
@@ -5831,8 +1748,8 @@ def _render_dispatch_attempt(attempt: UnitAttempt) -> str:
         return (
             f"dispatched {attempt.dispatched} — holder not recorded (predates the dispatch record)"
         )
-    who = _dispatch_holder_label(attempt)
-    suffix = _dispatch_descriptor_suffix(attempt)
+    who = dispatch_holder_label(attempt)
+    suffix = dispatch_descriptor_suffix(attempt)
     if attempt.returned is None:
         if attempt.agent_type is None:
             return f"held by the orchestrator{suffix} since {attempt.dispatched}"
@@ -6237,7 +2154,7 @@ def _advance_chain(repo_root: Path, run_id: str, *, redispatch: bool) -> Advance
     # Every advance, not once at start: `/model` can move mid-run, and the
     # moment a turn is spent on the wrong model is the moment to hear it (C3).
     # Once per chain — the chain is one call, so one notice.
-    notice = _orchestrator_model_notice(repo_root)
+    notice = orchestrator_model_notice(repo_root)
     if notice is not None:
         err_console.print(f"[yellow]{notice}[/yellow]", soft_wrap=True)
     try:
@@ -6302,7 +2219,7 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
         # here" is a fact about the step's state. Whether a dispatched unit
         # may be briefed again is `_hold_on`'s, below.
         err_console.print(
-            _nothing_running_refusal(state.cursor, f" (the step is {record.state})", state.run),
+            nothing_running_refusal(state.cursor, f" (the step is {record.state})", state.run),
             soft_wrap=True,
         )
         raise typer.Exit(2)
@@ -6364,7 +2281,9 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
         # the gate is guarding.
         _commit_run_writes_now()
         if step.kind == "agent":
-            console.print(json.dumps(_build_brief(step, state), sort_keys=True), soft_wrap=True)
+            with _refusals():
+                gate_brief = build_brief(step, state, repo_root=repo_root)
+            console.print(json.dumps(gate_brief, sort_keys=True), soft_wrap=True)
         return "gate"
 
     if step.kind == "agent":
@@ -6385,26 +2304,27 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
                 # subject == step_id and member_id == step_id: a top-level
                 # step is its own unit, and `item=None` drops `--item` from
                 # the resolve hint. Same renderer as the grouped call site.
-                _already_running_refusal(
+                already_running_refusal(
                     step.id, step.id, record.at, state.run, step.id, None, hold.holder
                 ),
                 soft_wrap=True,
             )
             raise typer.Exit(2)
-        # R8, the flat path: the tier its `_open_dispatch` below receives.
+        # R8, the flat path: the tier its `open_dispatch` below receives.
         _guard_dispatch_binding(repo_root, state, step.id, key, step.tier)
-        brief = _build_brief(step, state)
-        held = _held_record(record, key)
+        with _refusals():
+            brief = build_brief(step, state, repo_root=repo_root)
+        held = held_record(record, key)
         if held is not None:
-            record = _close_dispatch(record, key, "abandoned")
+            record = close_dispatch(record, key, "abandoned")
             state = _with_step(state, state.cursor, record)
-        needs_dispatch = _dispatch_needs_open(record, key)
+        needs_dispatch = dispatch_needs_open(record, key)
         if redispatch or record.state != "running" or needs_dispatch:
             if redispatch or record.state != "running":
                 record = record.model_copy(update={"state": "running", "at": _now()})
                 state = _with_step(state, state.cursor, record)
             if needs_dispatch:
-                state = _open_dispatch(
+                state = open_dispatch(
                     state,
                     state.cursor,
                     key,
@@ -6419,9 +2339,9 @@ def _advance_step(repo_root: Path, run_id: str, *, redispatch: bool) -> AdvanceS
         return "brief"
 
     # kind == "cli"
-    context = _template_context(state, repo_root)
+    context = template_context(state, repo_root)
     try:
-        command = _render_template(step.run or "", context, quote=True)
+        command = render_template(step.run or "", context, quote=True)
     except RunStateError as e:
         err_console.print(f"[red]{escape(str(e))}[/red]")
         raise typer.Exit(2) from e
@@ -6536,7 +2456,7 @@ def _resolve_member(
     # the other units and never the unit itself, so a never-advanced unit went
     # absent -> done with no attempt: no holder, no cost, and — for a review —
     # evidence attached to work nothing records anyone being asked to do.
-    # `_close_on_resolve` is silent when nothing is open ON PURPOSE (adopted
+    # `close_on_resolve` is silent when nothing is open ON PURPOSE (adopted
     # cursors), so nothing downstream would ever notice; the check belongs
     # here, before the write. A unit that is `running` with no record still
     # resolves — a cursor migrated from before dispatch records existed carries
@@ -6552,14 +2472,15 @@ def _resolve_member(
         raise typer.Exit(2)
     # R5 (spec 2026-10-02-opencode-observe-2 §D): the holder is filled FIRST,
     # before any evidence is derived — the visual witness refuses an unclaimed
-    # unit — and written through the claim path `_close_on_resolve` takes.
+    # unit — and written through the claim path `close_on_resolve` takes.
     agent = agent if agent is not None else _observed_holder(state, key)
     # The evidence gate runs BEFORE any write (§4.E). A refusal must leave
     # the unit exactly as it found it — a half-resolved review is a worse
     # state than an unresolved one, and is indistinguishable from the skipped
     # review this gate exists to make impossible.
     if state_value == "done":
-        _refuse_missing_emits(key, member.emits or group.emits, emitted_map, grec.emitted)
+        with _refusals():
+            _refuse_missing_emits(key, member.emits or group.emits, emitted_map, grec.emitted)
     if state_value == "done" and "plan:ticks" in (member.emits or group.emits):
         _refactor_gate(repo_root, state, key, _item_phase(item) if item is not None else None)
     verified = _verified_evidence(
@@ -6591,9 +2512,17 @@ def _resolve_member(
     # is what that rebuild carries forward — and before the `failed` branch
     # too, because a failed unit's holder returned just as surely as a done
     # one's did.
-    updated = _close_on_resolve(
-        updated, group.id, key, state_value, agent=agent, harness=harness, model=model
-    )
+    with _refusals():
+        updated = close_on_resolve(
+            updated,
+            group.id,
+            key,
+            state_value,
+            agent=agent,
+            harness=harness,
+            model=model,
+            warn=_say,
+        )
     if state_value == "failed":
         _save_run_state(repo_root, _complete_step(updated, manifest, group.id, "failed"))
         console.print(f"{member.id} {item}: failed")
@@ -6798,16 +2727,8 @@ def resolve_cmd(
         for pair in emitted:
             name, _, value = pair.partition("=")
             if name == "spec" and value:
-                _print_unrunnable_warnings(resolve_repo_root(), _repo_relative(value), run_id)
-
-
-def _repo_relative(value: str) -> str:
-    """A `--emitted` path as repo-relative text (best effort, advisory use)."""
-    try:
-        root = resolve_repo_root().resolve()
-        return str(Path(value).resolve().relative_to(root)) if Path(value).is_absolute() else value
-    except OSError, ValueError:
-        return value
+                root = resolve_repo_root()
+                _print_unrunnable_warnings(root, deliver.repo_relative(root, value), run_id)
 
 
 def _print_unrunnable_warnings(repo_root: Path, spec_rel: str, run_id: str | None = None) -> None:
@@ -6824,84 +2745,15 @@ def _print_unrunnable_warnings(repo_root: Path, spec_rel: str, run_id: str | Non
 def _questions_from_flags(
     rounds: int | None, trigger: str | None, reason: str | None
 ) -> QuestionRounds | None:
-    """The flag form of a record's `questions:` section — the SAME model, so
-    both paths hand `_gate_provenance` one value (spec 2026-09-26 §3.B)."""
-    from pydantic import ValidationError
-
-    from fr.record.model import QuestionRounds
-
-    if rounds is None:
-        if trigger is not None or reason is not None:
-            err_console.print(
-                "--round-two-trigger/--round-two-reason describe a second round: pass "
-                "them with --question-rounds 2",
-                style="red",
-                markup=False,
-                soft_wrap=True,
-            )
-            raise typer.Exit(2)
-        return None
-    try:
-        return QuestionRounds.model_validate(
-            {"rounds": rounds, "trigger": trigger, "reason": reason}
-        )
-    except ValidationError as e:
-        detail = "; ".join(str(err["msg"]) for err in e.errors())
-        err_console.print(
-            f"--question-rounds {rounds}: {detail}", style="red", markup=False, soft_wrap=True
-        )
-        raise typer.Exit(2) from e
+    """`fr.run.deliver.questions_from_flags`, its refusal printed and exited here."""
+    with _refusals():
+        return deliver.questions_from_flags(rounds, trigger, reason)
 
 
 def _spec_review_ids(repo_root: Path, state: RunState) -> tuple[str, ...]:
     from fr.verification.baseline import spec_review_steps
 
     return spec_review_steps(repo_root, state)
-
-
-def _warn_ops_gap(repo_root: Path, state: RunState) -> None:
-    """Spec 2026-11-01-ops-gate-probes R3: the spec review resolved, so warn when the run
-    has an ops gap — against its plan when it has one, else as steps that will need ops.
-    Advisory: it never refuses, and an unreadable section, matrix, ops carrier or spec
-    (an undecodable one is a `ValueError`, as `SectionError` is) is silent."""
-    from fr.acceptance.model import AcceptanceError
-    from fr.ops.gap import gap_message, ops_gap
-    from fr.ops.load import OpsLoadError
-    from fr.requirements import run_spec
-    from fr.spec import TestPlanHeadingError
-    from fr.verification.exit import run_exit, run_plan_dir
-
-    spec_rel = run_spec(state)
-    if spec_rel is None:
-        return
-    plan_dir = run_plan_dir(repo_root, state)
-    try:
-        gap = ops_gap(repo_root, spec_rel, plan_dir, run_exit(repo_root, state).gates)
-    except TestPlanHeadingError as e:  # never silent: it hides every step (#1315)
-        err_console.print(f"warning: {e}", markup=False, soft_wrap=True)
-        return
-    except ValueError, OSError, AcceptanceError, OpsLoadError:
-        return
-    if gap:
-        message = gap_message(gap, has_plan=plan_dir is not None)
-        err_console.print(f"warning: {message}", markup=False, soft_wrap=True)
-
-
-def _warn_label_sync(repo_root: Path, state: RunState) -> None:
-    """Exit-gates R7: a spec-bearing step resolved, so bring the run's PR labels to its
-    exit (the PR is found by the run's branch). Advisory: a run with no PR yet is
-    silent, any failure a warning — `deliver` is the one place the labels are required."""
-    from fr.verification import labels as _labels
-
-    try:
-        outcome = _labels.sync_exit_labels(repo_root, state, None)
-    except _labels.PrNotFound:
-        return
-    except Exception as e:  # noqa: BLE001 — advisory, after the step already resolved
-        err_console.print(f"warning: PR labels not synced: {e}", markup=False, soft_wrap=True)
-        return
-    if outcome.warning:
-        err_console.print(f"warning: {outcome.warning}", markup=False, soft_wrap=True)
 
 
 def _queue_exit_baseline(repo_root: Path, state: RunState) -> None:
@@ -6921,674 +2773,16 @@ def _queue_exit_baseline(repo_root: Path, state: RunState) -> None:
         body = baseline_body(run_exit(repo_root, state))
     except Exception:  # noqa: BLE001 — advisory: an unreadable exit leaves no baseline
         return
-    _queue_gate_decision(
-        repo_root, spec_rel, BASELINE_ID, title="exit when spec-review resolved", body=body
-    )
-
-
-def _deliver_exit_guard(repo_root: Path, state: RunState) -> None:
-    """Exit-gates R8: `deliver` refuses an exit lowered since the baseline that no
-    operator-answered `exit-change-*` decision covers (a hand edit of the spec)."""
-    from fr.verification.baseline import unaccounted_lowerings
-
-    try:
-        lowered = unaccounted_lowerings(repo_root, state)
-    except Exception:  # noqa: BLE001 — an unreadable exit is the label sync's to report
-        return
-    if lowered:
-        err_console.print(
-            "refused: the spec's verification exit waits for less than when spec-review "
-            "resolved, and no operator-answered `fr verification set` covers it: "
-            + "; ".join(lowered)
-            + ". Restore it, or have the operator answer it with `fr verification set "
-            "... --answered-by operator`",
-            markup=False,
-            soft_wrap=True,
+    with _refusals():
+        _queue_gate_decision(
+            repo_root, spec_rel, BASELINE_ID, title="exit when spec-review resolved", body=body
         )
-        raise typer.Exit(2)
-
-
-def _deliver_label_sync(repo_root: Path, state: RunState, pr: str | None, run_id: str) -> None:
-    """Exit-gates R7: `deliver` refuses a PR whose `verification:`/`gate:` labels it could
-    not sync (printing the retry) — a failed write, no open PR, an unreadable exit — and
-    only warns where there is no forge to ask or it cannot label a PR."""
-    from fr.verification import labels as _labels
-
-    def refuse(why: str) -> typer.Exit:
-        err_console.print(
-            f"refused: could not sync the PR's verification/gate labels: {why}. Fix that, then "
-            f"resolve again (`{_resolve_hint(run_id, 'deliver', None)}`, with your --record "
-            "if you resolve through one)",
-            markup=False,
-            soft_wrap=True,
-        )
-        return typer.Exit(2)
-
-    try:
-        outcome = _labels.sync_exit_labels(repo_root, state, pr)
-    except _labels.ForgeUndeterminable as e:
-        err_console.print(f"warning: PR labels not synced: {e}", markup=False, soft_wrap=True)
-        return
-    except _labels.LabelSyncError as e:
-        raise refuse(str(e)) from e
-    if outcome.unknown:
-        raise refuse(outcome.warning or "the exit cannot be read")
-    if outcome.warning:
-        err_console.print(f"warning: {outcome.warning}", markup=False, soft_wrap=True)
-    if outcome.off:
-        err_console.print(f"PR labels not synced: {outcome.off}", markup=False, soft_wrap=True)
-
-
-def _same_pr(recorded: str, pr: str) -> bool:
-    """*pr* (a url, `#n` or `n`) names the PR whose url the cursor recorded."""
-    if pr == recorded:
-        return True
-    number = pr.removeprefix("#")
-    return number.isdigit() and recorded.rstrip("/").rsplit("/", 1)[-1] == number
-
-
-def _deliver_pr_ask_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
-    """Under `git.pr: ask` (spec 2026-11-04-repo-feature-settings R12), `deliver`
-    accepts only the PR `fr pr create` opened: the one the cursor recorded."""
-    from fr.settings import load_settings
-
-    if load_settings(repo_root).settings.git.pr != "ask":
-        return
-    if state.pr is None:
-        err_console.print(
-            "refused: under `git.pr: ask` deliver accepts only a PR `fr pr create` opened, "
-            "and this run's cursor records none. Open it with `fr pr create --title <t> "
-            "--body-file <f>` (it asks the operator first), then resolve again",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    if pr is not None and not _same_pr(state.pr, pr):
-        err_console.print(
-            f"refused: under `git.pr: ask` deliver accepts only the PR `fr pr create` opened "
-            f"({state.pr}), not {pr}",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-
-
-def _deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None) -> None:
-    """Render the PR body fr owns, then refuse `deliver` until the LIVE PR
-    carries every required section (spec 2026-09-25 §5.C.4). The render is
-    the one file a refusal leaves behind: it is what the agent opens the PR
-    with. On success the render is removed — it goes with the delivered step.
-
-    Under `forge.pr_body: minimal` (spec 2026-11-04-repo-feature-settings R10) the
-    live PR stays a plain summary: the render is kept durable at
-    `runs/<run-id>.pr-body.md` (committed with this resolve, never removed), the live
-    body is not asked for fr's sections but is refused any fr marker, and the
-    closing-keyword checks hold either way.
-    """
-    from fr.artifacts.atomic import write_text_atomic
-    from fr.hostclient import FORGE_ERRORS, client_for, pr_command
-    from fr.record.model import records_dir
-    from fr.record.pr_body import (
-        PR_BODY_NAME,
-        REQUIRED_SECTIONS,
-        PrBodyRefused,
-        durable_pr_body_path,
-        fr_markers,
-        missing_sections,
-        render_pr_body,
-        shared_closing_keywords,
-    )
-    from fr.settings import load_settings
-    from fr.shape import deliver_shape_refusal
-
-    if (shape := deliver_shape_refusal(repo_root, state)) is not None:  # show-me-visuals R11
-        err_console.print(f"refused: {shape}", markup=False, soft_wrap=True)
-        raise typer.Exit(2)
-    _deliver_pr_ask_gate(repo_root, state, pr)
-    pr = pr or state.pr
-    minimal = load_settings(repo_root).settings.forge.pr_body == "minimal"
-    if minimal:
-        body_path = durable_pr_body_path(repo_root, state.run)
-    else:
-        body_path = records_dir(repo_root, state.run) / PR_BODY_NAME
-    body_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        write_text_atomic(body_path, render_pr_body(repo_root, state))
-    except PrBodyRefused as e:  # l-errors-r8
-        err_console.print(f"refused: {e}", markup=False, soft_wrap=True)
-        raise typer.Exit(2) from e
-    # Under quiet and stealth the render is under the artifact root, outside the checkout:
-    # named by its full path there (lens-pr-body-quiet), committed by the same seam.
-    rel = _shown_path(body_path, repo_root)
-    ref = pr or state.branch
-    # Through the forge adapter, never `fr.gh`: on GitLab/Gitea `gh` cannot
-    # read the PR, and a gate that cannot read it never passes (gh#742).
-    try:
-        live = client_for(repo_root).pr_body(ref, cwd=repo_root)
-    except FORGE_ERRORS as e:
-        # R12: fr's skills open every PR through `fr pr create` (always a draft).
-        create = f"fr pr create --title <title> --body-file {rel}"
-        err_console.print(
-            f"refused: cannot read the PR {ref!r} ({e}). fr rendered its body to {rel}: open "
-            f"the PR with `{create}`, record its url (`emitted: "
-            "{pr: <url>}` in the record, or `--emitted pr=<url>`), and resolve again",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    _refuse_unclosed_owed(repo_root, state, live, ref, rel)
-    if minimal:
-        markers = fr_markers(live)
-        if markers:
-            edit = pr_command(repo_root, "edit", ref=ref, body="<plain summary file>")
-            err_console.print(
-                "refused: under `forge.pr_body: minimal` the live PR carries no fr marker, "
-                f"and it has: {'; '.join(markers)}. Replace the body with a plain summary "
-                f"(`{edit}`); the full render stays at {rel} — and resolve again",
-                markup=False,
-                soft_wrap=True,
-            )
-            raise typer.Exit(2)
-        missing: list[str] = []
-    else:
-        required = (
-            (*REQUIRED_SECTIONS, HISTORICAL_HEADING)
-            if historical_reviews(state)
-            else REQUIRED_SECTIONS
-        )
-        missing = missing_sections(live, required=required)
-        # Review p2-r1: the heading alone is not the control — the operator's ok
-        # is given against the LIST, so every historical review must be named.
-        live_lines = {line.strip() for line in live.splitlines()}
-        missing += [line for line in historical_review_lines(state) if line not in live_lines]
-    if missing:
-        edit = pr_command(repo_root, "edit", ref=ref, body=rel)
-        err_console.print(
-            f"refused: the PR body lacks required section(s): {', '.join(missing)}. Update "
-            f"it from fr's render — `{edit}` — and resolve again",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    # gh#821: one keyword closes one reference, so `Closes #a and #b` would
-    # leave #b open after its fix merges. Checked on the body already read.
-    shared = shared_closing_keywords(live)
-    if shared:
-        fixes = "\n".join(
-            f"  {bad!r} — write instead:\n" + "\n".join(f"    {f}" for f in fixed)
-            for bad, fixed in shared
-        )
-        err_console.print(
-            "refused: the PR body shares one closing keyword across several issues, "
-            "and only the first would close on merge. Give each reference its own "
-            "keyword, one per line (move a non-closing mention to a line with no "
-            f"keyword), then resolve again:\n{fixes}",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-    _refuse_premature_closes(repo_root, state, live)
-    if minimal:
-        # Kept, and committed with this resolve: it is what the operator reviews.
-        _note_record_write(repo_root, body_path)
-        err_console.print(
-            f"PR body (forge.pr_body: minimal): review the full render at {rel} — its "
-            "findings, owed rows and historical-review list; the live PR stays plain",
-            markup=False,
-            soft_wrap=True,
-        )
-        return
-    from fr.record.apply import _is_tracked
-
-    tracked = _is_tracked(repo_root, body_path)
-    _remember(body_path)
-    body_path.unlink()
-    if tracked:
-        _note_record_write(repo_root, body_path)
-
-
-def _refuse_unclosed_owed(repo_root: Path, state: RunState, live: str, ref: str, rel: str) -> None:
-    """Owed-archive R4: every issue `## Owed actions discharged` lists as `Closes`
-    must be closed by the live body — any closing keyword, read as a merge reads
-    it (`closing_refs(as_github=True)`) — under `forge.pr_body: full` and `minimal`
-    alike. A held one (rendered `Refs`, R5) is not asked for. Under quiet and
-    stealth (R15) the discharge never travels with the PR and resolve closed the
-    issue at once, so nothing is asked. What cannot be read — the discharges
-    (review p2-r2) or the holds (p2-r5) — refuses, naming it."""
-    from fr.acceptance.model import AcceptanceError
-    from fr.hostclient import pr_command
-    from fr.owed_refs import discharge_travels
-    from fr.record import pr_body
-
-    if not discharge_travels(repo_root):
-        return
-    try:
-        items = pr_body.discharged_owed(repo_root)
-    except pr_body.UnreadableDischargeError as e:
-        err_console.print(
-            f"refused: cannot tell which owed actions this branch discharged — {e}. "
-            "Their issues must close when this PR merges; fix that, then resolve again",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    if not items:
-        return
-    try:
-        held = pr_body.run_held_issues(repo_root, state)
-    except (AcceptanceError, pr_body.UnreadableJournalError) as e:
-        err_console.print(
-            "refused: cannot tell whether a discharged owed issue is held open (the "
-            f"acceptance matrix or a run journal does not read: {e}); fix it, then resolve "
-            "again",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    from fr._hosts import origin_hostname
-
-    owner, _, rest = items[0].ref.partition("/")
-    identity = (owner, rest.partition("#")[0])
-    host = origin_hostname(repo_root) or ""  # super-fr#1488: a URL closes only on the forge
-    closed = {
-        pr_body.normalize_issue_ref(written, identity, host=host)
-        for _line, _keyword, written in pr_body.closing_refs(live, as_github=True)
-    }
-    missing = [i.ref for i in items if i.ref.lower() not in held and i.ref.lower() not in closed]
-    if not missing:
-        return
-    edit = pr_command(repo_root, "edit", ref=ref, body=rel)
-    lines = "\n".join(f"  Closes {m}" for m in missing)
-    err_console.print(
-        "refused: this branch discharges owed action(s) whose issue the PR body does not "
-        f"close on merge. Add each line to the body (`{edit}`, or by hand under "
-        f"`forge.pr_body: minimal`), then resolve again:\n{lines}",
-        markup=False,
-        soft_wrap=True,
-    )
-    raise typer.Exit(2)
-
-
-def _refuse_premature_closes(repo_root: Path, state: RunState, live: str) -> None:
-    """R15: a live PR body that closes, fixes or resolves an issue a post-merge,
-    not-walk-verified row cites would close it on merge, before the promise it
-    carries has been verified. Printed with the `Refs <ref>` that mentions it
-    without closing; exit 2. Exit-gates R11 widens it: a row gated by a post-merge
-    gate holds its issues too, and so does a narrowing decision the operator did
-    not answer. A repo whose matrix cites no issue and whose journals narrow none
-    is never asked (the reference's repo identity needs a remote or matrix keys)."""
-    from fr.acceptance.check import resolve_identity
-    from fr.acceptance.fold import has_fragments, load_effective
-    from fr.acceptance.model import AcceptanceError
-    from fr.record.pr_body import (
-        PrematureClose,
-        holds_open_for_run,
-        premature_closes,
-        run_narrowings,
-    )
-    from fr.requirements import load_spec_matrix, run_spec
-    from fr.verification.exit import run_exit
-
-    narrowings = _gate_journals(lambda: run_narrowings(repo_root, state))
-    try:
-        matrix = load_effective(repo_root)
-        if not any(row.issues for row in matrix.rows) and not narrowings:
-            return
-        identity = resolve_identity(matrix, repo_root)
-        spec_rel = run_spec(state)
-        spec_ref = (
-            load_spec_matrix(repo_root, spec_rel)[1]
-            if spec_rel is not None and has_fragments(repo_root)
-            else None
-        )
-    except AcceptanceError as e:
-        err_console.print(
-            f"[red]refused: cannot check the PR body's closing keywords against the "
-            f"acceptance matrix — {escape(str(e))}[/red]",
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-    try:
-        exit_ = run_exit(repo_root, state)
-    except Exception:  # noqa: BLE001 — an unreadable exit is the label sync's to refuse
-        exit_ = None
-    found = premature_closes(
-        live,
-        matrix,
-        identity,
-        holds_open_for_run(repo_root, state, matrix, spec_ref),
-        exit=exit_,
-        narrowings=narrowings,
-    )
-    if not found:
-        return
-
-    def why(p: PrematureClose) -> str:
-        held = []
-        if p.rows:
-            held.append(
-                f"row {', '.join(p.rows)} still holds open (post-merge or gated by a "
-                "post-merge gate, and not yet walk-verified)"
-            )
-        if p.decisions:
-            held.append(
-                f"decision {', '.join(p.decisions)} narrows it and the operator did not "
-                "answer it (`decided_by=operator`)"
-            )
-        if p.tracks:
-            held.append(
-                f"owed row {', '.join(p.tracks)} names it as the issue tracking what it still owes"
-            )
-        return " and ".join(held)
-
-    lines = "\n".join(
-        f"  {p.line!r} closes {p.ref}, which {why(p)} — write instead: {p.fix}" for p in found
-    )
-    err_console.print(
-        "refused: the PR body closes an issue whose promise is not verified until after "
-        "merge, or that a decision narrowed. Mention it without closing (`Refs <ref>`); "
-        "the close command is printed when the walk is recorded (`fr acceptance "
-        f"set-status --walk`):\n{lines}",
-        markup=False,
-        soft_wrap=True,
-    )
-    raise typer.Exit(2)
-
-
-def _gate_journals[T_JOURNALS](read: Callable[[], T_JOURNALS]) -> T_JOURNALS:
-    """Run a `deliver` gate's journal read; a journal that does not parse
-    refuses, naming it (review p3-r4) — never a gate judging a run with one
-    of its journals silently dropped."""
-    from fr.record.pr_body import UnreadableJournalError
-
-    try:
-        return read()
-    except UnreadableJournalError as e:
-        err_console.print(
-            f"refused: {e}. Fix the journal (a hand edit, most likely), then resolve again",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2) from e
-
-
-def _deliver_placement_gate(repo_root: Path) -> None:
-    """Spec 2026-11-04 R28: `deliver` refuses a branch whose artifacts do not match the
-    repo's placement, naming `fr placement migrate-branch`; it never migrates."""
-    from fr.placement.drift import DriftError, refuse
-
-    try:
-        refuse(repo_root, "deliver")
-    except DriftError as e:
-        err_console.print(f"refused: {e}", markup=False, soft_wrap=True)
-        raise typer.Exit(2) from e
-
-
-def _deliver_acceptance_gate(repo_root: Path) -> None:
-    """Spec 2026-11-04 R16, R17: `deliver` fetches the default ref and refuses a
-    branch amendment whose base is stale, and an in-place edit of a merged row —
-    the same refusals `fr acceptance check` prints, from the one function."""
-    from fr.acceptance.amend import branch_refusals
-    from fr.settings import SettingsError, disabled
-
-    try:
-        if disabled(repo_root, "acceptance"):
-            return
-    except SettingsError:
-        pass  # the settings' own gates refuse an unreadable file
-    found = branch_refusals(repo_root)
-    for w in found.warnings:
-        err_console.print(f"warning: {w}", markup=False, soft_wrap=True)
-    problems = [*found.errors, *found.stale]
-    if not problems:
-        return
-    lines = "\n".join(f"  {p}" for p in problems)
-    err_console.print(
-        f"refused: the branch's acceptance amendments cannot merge as they stand:\n{lines}",
-        markup=False,
-        soft_wrap=True,
-    )
-    raise typer.Exit(2)
-
-
-def _deliver_leftovers_gate(repo_root: Path, state: RunState) -> None:
-    """Exit-gates R9: `deliver` refuses while the run leaves anything unaccounted
-    — an out-of-scope finding, an owed entry, an owed row citing the spec, a
-    narrowing decision — printing each with the command that accounts for it.
-    An unreadable exit judges no row here; the label sync refuses it."""
-    from fr.record.pr_body import unaccounted
-    from fr.verification.exit import run_exit
-
-    try:
-        exit_ = run_exit(repo_root, state)
-    except Exception:  # noqa: BLE001 — the label sync refuses an unreadable exit
-        exit_ = None
-    leftovers = _gate_journals(lambda: unaccounted(repo_root, state, exit_))
-    if not leftovers:
-        return
-    held = _RECORD_ROWS.get()
-    if held is not None:
-        import dataclasses
-
-        name, statuses = held
-        leftovers = [
-            dataclasses.replace(
-                left,
-                fix=(
-                    f"the record {name} sets this row {statuses[left.id]}, and the record "
-                    "wins over the fragment: change or drop its `acceptance:` entry for "
-                    f"{left.id} first. Then: {left.fix}"
-                ),
-            )
-            if left.kind == "row" and left.id in statuses
-            else left
-            for left in leftovers
-        ]
-    lines = "\n".join(f"  {left.line()}" for left in leftovers)
-    err_console.print(
-        "refused: the run leaves work unaccounted for. File each leftover, gate it, or "
-        f"track it, then resolve again:\n{lines}",
-        markup=False,
-        soft_wrap=True,
-    )
-    raise typer.Exit(2)
-
-
-@dataclass(frozen=True)
-class _LocalStamps:
-    """The feature's fragments (gh#1456: one per spelling of its slug) with every `local`
-    stamp `deliver` owes written in, built in
-    memory by `_deliver_local_stamp_plan` and written by `_deliver_local_stamp_write`."""
-
-    files: tuple[tuple[Path, str], ...]
-    rows: tuple[str, ...]
-
-
-def _deliver_local_stamp_plan(
-    repo_root: Path, state: RunState, tests: str | None
-) -> _LocalStamps | None:
-    """Spec 2026-11-14-acceptance-local-status R4, §D: the stamps for the `local` rows
-    this run's feature added or set `local`, checked with `deliver`'s other refusals —
-    exit 2 naming each row that cannot be stamped. Writes nothing."""
-    from fr.acceptance.fragment import fragment_slug_for_spec
-    from fr.requirements import run_spec
-
-    spec = run_spec(state)
-    if spec is None:
-        return None
-    return _local_stamp_plan(repo_root, fragment_slug_for_spec(spec), tests, today=_now()[:10])
-
-
-def _feature_local_ids(fragment: Any) -> list[str]:
-    """The rows *fragment* (one feature's) sets `local`: the rows whose latest `set-status`
-    amendment in it is to `local` — its own merged rows included, which change only by
-    amendment (gh#1462) — and its own rows at `local` that no amendment in it re-sets."""
-    latest: dict[str, str] = {}
-    for a in fragment.amendments:
-        if a.op == "set-status":
-            latest[a.row] = a.status
-    return [r.id for r in fragment.rows if r.status == "local" and r.id not in latest] + [
-        rid for rid, status in latest.items() if status == "local"
-    ]
-
-
-_LOCAL_STAMP_WHY = "deliver stamps the local suite run that covers this row (R4)"
-"""The `why` of the amendment `deliver` writes to stamp a merged `local` row."""
-
-
-def _local_stamp_plan(
-    repo_root: Path, feature: str, tests: str | None, *, today: str
-) -> _LocalStamps | None:
-    """`_deliver_local_stamp_plan` for *feature*'s fragment, read where the placement
-    keeps it (the artifact root); the blobs come from the product checkout's HEAD."""
-    from fr.acceptance.edit import append_amendment, local_stamp_target, stamp_local
-    from fr.acceptance.fold import effective, merged_row_ids
-    from fr.acceptance.fragment import FRAGMENTS_DIR, SetStatus, parse_fragment
-    from fr.acceptance.local import head_blobs, level_ref_paths
-    from fr.acceptance.model import AcceptanceError, LocalStamp, Row
-    from fr.settings import SettingsError, disabled
-
-    try:
-        if disabled(repo_root, "acceptance"):
-            return None
-    except SettingsError:
-        pass  # the settings' own gates refuse an unreadable file
-
-    def refuse(lines: list[str]) -> NoReturn:
-        shown = "\n".join(f"  {line}" for line in lines)
-        err_console.print(
-            "refused: deliver cannot stamp this feature's `local` rows (each needs a "
-            f"stamp of the suite run that covers it):\n{shown}",
-            markup=False,
-            soft_wrap=True,
-        )
-        raise typer.Exit(2)
-
-    # gh#1456: a fragment created before #1451 gave a spec slug one spelling may still be
-    # named `<slug>-design.yaml`. The fold reads it either way, so deliver reads it either
-    # way: a lookup that missed it passed deliver with its `local` rows unstamped.
-    folder = artifact_root(repo_root) / FRAGMENTS_DIR
-    texts: dict[Path, str] = {}
-    wanted: dict[Path, list[str]] = {}
-    own_rows: set[str] = set()
-    for path in (folder / f"{feature}.yaml", folder / f"{feature}-design.yaml"):
-        if not path.is_file():
-            continue
-        texts[path] = path.read_text(encoding="utf-8")
-        try:
-            fragment = parse_fragment(texts[path], source=path.name)
-        except AcceptanceError as e:
-            refuse([f"{path.name}: {e}"])
-        own_rows |= {r.id for r in fragment.rows}
-        ids = _feature_local_ids(fragment)
-        if ids:
-            wanted[path] = ids
-    if not wanted:
-        return None  # review p2-r1: no `local` row, no fold, deliver as before
-    try:
-        current = effective(repo_root)
-    except AcceptanceError as e:
-        refuse([f"the acceptance matrix: {e}"])
-    rows = {r.id: r for r in current.matrix.rows}
-    merged: frozenset[str] | None = None
-
-    def frozen(target: Row | SetStatus) -> bool:
-        """gh#1462: is the block a stamp would land in history — a row merged on the
-        default ref, or a set-status amendment that is not this branch's own? Such a
-        block is never rewritten: the stamp goes in a new amendment."""
-        nonlocal merged
-        if isinstance(target, SetStatus):
-            return target not in current.pending
-        if merged is None:
-            try:
-                merged = merged_row_ids(repo_root, frozenset(own_rows), current=current)
-            except AcceptanceError as e:
-                refuse([f"the merged acceptance rows: {e}"])
-        return target.id in merged
-
-    by_path = {
-        path: [
-            r
-            for r in (rows[rid] for rid in dict.fromkeys(ids) if rid in rows)
-            if r.status == "local"
-        ]
-        for path, ids in wanted.items()
-    }
-    local = [r for rs in by_path.values() for r in rs]
-    if not local:
-        return None
-    witness = _local_stamp_witness(repo_root, tests)
-    if isinstance(witness, str):
-        refuse([f"row {r.id}: {witness}" for r in local])
-    log, tree = witness
-    blobs = head_blobs(repo_root, (p for r in local for p in level_ref_paths(r)))
-    if blobs is None:
-        refuse([f"row {r.id}: git cannot read HEAD of {repo_root}" for r in local])
-    problems: list[str] = []
-    files: list[tuple[Path, str]] = []
-    for path, path_rows in by_path.items():
-        text = texts[path]
-        for r in path_rows:
-            paths = level_ref_paths(r)
-            missing = [p for p in paths if p not in blobs]
-            if not paths:
-                problems.append(f"row {r.id}: names no test path (add `--level unit=...`)")
-                continue
-            if missing:
-                problems.append(f"row {r.id}: {missing[0]} is not committed at HEAD")
-                continue
-            stamp = LocalStamp(at=today, tree=tree, log=log, files={p: blobs[p] for p in paths})
-            try:
-                if frozen(local_stamp_target(text, r.id)):
-                    amendment = SetStatus(
-                        row=r.id,
-                        op="set-status",
-                        base=current.revisions.get(r.id, 0),
-                        status="local",
-                        notes=r.notes,
-                        local=stamp,
-                        why=_LOCAL_STAMP_WHY,
-                    )
-                    text = append_amendment(text, amendment)
-                else:
-                    text = stamp_local(text, r.id, stamp)
-            except AcceptanceError as e:
-                problems.append(f"row {r.id}: {e}")
-        if path_rows:
-            files.append((path, text))
-    if problems:
-        refuse(problems)
-    return _LocalStamps(tuple(files), tuple(r.id for r in local))
-
-
-def _deliver_local_stamp_write(repo_root: Path, plan: _LocalStamps | None) -> None:
-    """Write `_deliver_local_stamp_plan`'s fragment — called beside
-    `_flush_gate_decisions`, after `deliver`'s last refusal, so a refused resolve
-    writes no stamp; remembered for a `--record` restore and committed with the
-    resolve (in the artifact root's checkout under quiet or stealth)."""
-    if plan is None:
-        return
-    from fr.artifacts.atomic import write_text_atomic
-
-    for path, text in plan.files:
-        _remember(path)
-        write_text_atomic(path, text)
-        _note_record_write(repo_root, path)
 
 
 def _answered_by_or_exit(value: str | None) -> AnsweredBy | None:
-    """Narrow an `answered_by` string where it ENTERS fr — the flag, or a
-    record's evidence key — to the closed set (spec §F). Refused rather than
-    coerced: a typo recorded as a third provenance would be read by nobody and
-    would quietly weaken the one claim this field exists to make."""
-    if value is None:
-        return None
-    if value == "operator":
-        return "operator"
-    if value == "agent":
-        return "agent"
-    err_console.print(f"[red]--answered-by must be 'operator' or 'agent', got {value!r}[/red]")
-    raise typer.Exit(2)
+    """`fr.run.deliver.narrow_answered_by`, its refusal printed and exited here."""
+    with _refusals():
+        return deliver.narrow_answered_by(value)
 
 
 def _resolve_body(
@@ -7657,7 +2851,8 @@ def _resolve_body(
         # A grouped member never carries an operator gate, and `_resolve_member`
         # has no gate path: before this, the gate flags were dropped silently
         # here (review r1-7's refusal only covered top-level steps).
-        _refuse_gate_flags(step_id)
+        with _refusals():
+            _refuse_gate_flags(step_id)
     if parent is not None:
         _resolve_member(
             repo_root,
@@ -7728,22 +2923,23 @@ def _resolve_body(
     gate_flags = no_questions or reason is not None or questions is not None
     if gate_flags and not _clears_gate(step, record, state_value):
         # Review r1-7: silently ignored flags read as honoured ones.
-        _refuse_gate_flags(step_id)
-    gate_by: AnsweredBy | None = (
-        _gate_provenance(
-            repo_root,
-            step_id,
-            record,
-            claimed=answered_by,
-            no_questions=no_questions,
-            reason=reason,
-            questions=questions,
-            emitted=emitted_map,
-            state=state,
-        )
-        if _clears_gate(step, record, state_value)
-        else None
-    )
+        with _refusals():
+            _refuse_gate_flags(step_id)
+    gate_by: AnsweredBy | None = None
+    if _clears_gate(step, record, state_value):
+        with _refusals():
+            gate_by = _gate_provenance(
+                repo_root,
+                step_id,
+                record,
+                claimed=answered_by,
+                no_questions=no_questions,
+                reason=reason,
+                questions=questions,
+                emitted=emitted_map,
+                state=state,
+                warn=_say,
+            )
 
     if step.kind == "cli":
         # A `cli` step is fr's to execute, so `resolve` may never declare one
@@ -7760,7 +2956,7 @@ def _resolve_body(
         if state_value == "done":
             unobserved = _take_unobserved()
             if unobserved:
-                # gh#632: the note `_gate_provenance` just made reaches the
+                # gh#632: the note `gate_provenance` just made reaches the
                 # cursor on this branch too — on the step's flat unit, which
                 # `_complete_step` carries through the `advance` that runs it.
                 record = units.with_evidence(
@@ -7770,7 +2966,7 @@ def _resolve_body(
                 update={
                     "state": "pending",
                     "gate": "cleared",
-                    # `_clears_gate`, not the inline `blocked and done` this
+                    # `clears_gate`, not the inline `blocked and done` this
                     # branch already established (review r4-m1). The two are
                     # equivalent today — the only writer of `blocked` is
                     # `_gate_pending`, which requires `gate == "operator"` —
@@ -7847,28 +3043,34 @@ def _resolve_body(
     # The flat unit's dispatch closes here, keyed through the SAME `_unit_key`
     # `advance` opened it with and `claim` annotates it by — a `step/<id>` key
     # computed a second time by hand is the drift phase 3 removed.
-    state = _close_on_resolve(
-        state,
-        step_id,
-        flat_key,
-        state_value,  # type: ignore[arg-type]  # validated above
-        agent=agent,
-        harness=harness,
-        model=model,
-    )
-    local_stamps: _LocalStamps | None = None
+    with _refusals():
+        state = close_on_resolve(
+            state,
+            step_id,
+            flat_key,
+            state_value,  # type: ignore[arg-type]  # validated above
+            agent=agent,
+            harness=harness,
+            model=model,
+            warn=_say,
+        )
+    local_stamps: deliver.LocalStamps | None = None
     if "pr" in step.emits and state_value == "done":
         # p3-r2: the live-PR section check is `deliver`'s own gate, so the flag
         # form and a record reach the same one — before the cursor moves.
         pr = emitted_map.get("pr") or (record.emitted or {}).get("pr")
-        _deliver_placement_gate(repo_root)
-        _deliver_acceptance_gate(repo_root)
-        _deliver_leftovers_gate(repo_root, state)
-        local_stamps = _deliver_local_stamp_plan(
-            repo_root, state, units.evidence_of(state.steps[step_id], flat_key).get("tests")
-        )
-        _deliver_pr_gate(repo_root, state, pr)
-        _deliver_exit_guard(repo_root, state)
+        with _refusals():
+            deliver.deliver_placement_gate(repo_root)
+            deliver.deliver_acceptance_gate(repo_root, _say)
+            deliver.deliver_leftovers_gate(repo_root, state)
+            local_stamps = deliver.deliver_local_stamp_plan(
+                repo_root,
+                state,
+                units.evidence_of(state.steps[step_id], flat_key).get("tests"),
+                _local_stamp_witness,
+            )
+            deliver.deliver_pr_gate(repo_root, state, pr, _say)
+            deliver.deliver_exit_guard(repo_root, state)
         if "settle" in step.evidence:  # R8: after every hard gate, before the forge write
             from fr.settle.witness import deliver_witness
 
@@ -7876,12 +3078,16 @@ def _resolve_body(
             state = _with_step(
                 state, step_id, units.with_evidence(state.steps[step_id], flat_key, settled)
             )
-        _deliver_label_sync(repo_root, state, pr, run_id)
+        with _refusals():
+            deliver.deliver_label_sync(
+                repo_root, state, pr, run_id, resolve_hint(run_id, "deliver", None), _say
+            )
     if state_value == "done":
         # gh#587: after `deliver`'s PR gate, which renders the body a first
         # `pr`-less resolve exists to fetch, and before the gate's queued
         # journal decision is written — the last refusal before any write.
-        _refuse_missing_emits(step_id, step.emits, emitted_map, record.emitted)
+        with _refusals():
+            _refuse_missing_emits(step_id, step.emits, emitted_map, record.emitted)
     if rebind is not None and state_value == "done":
         state, manifest = _rebound(state, rebind, step_id), rebind
         console.print(f"{step_id}: run rebound onto {state.workflow}", soft_wrap=True)
@@ -7899,14 +3105,14 @@ def _resolve_body(
         # cleared at all.
         answered_by=gate_by,
     )
-    _deliver_local_stamp_write(repo_root, local_stamps)
+    deliver.deliver_local_stamp_write(repo_root, local_stamps)
     _flush_gate_decisions(repo_root)
     _save_run_state(repo_root, new_state)
     console.print(f"{step_id}: {state_value}")
     if state_value == "done" and step_id in ("brainstorm", *_spec_review_ids(repo_root, new_state)):
-        _warn_label_sync(repo_root, new_state)
+        deliver.warn_label_sync(repo_root, new_state, _say)
     if state_value == "done" and step_id in _spec_review_ids(repo_root, new_state):
-        _warn_ops_gap(repo_root, new_state)
+        deliver.warn_ops_gap(repo_root, new_state, _say)
     if step_id == "deliver" and state_value == "done":
         # spec 2026-09-25 §5.B.3: the usage capture rides this commit
         _capture_usage(repo_root, new_state, "deliver")
@@ -8016,7 +3222,7 @@ def resolve_in_process(
     for path in also_commit:
         writes.note(repo_root, path)
     token = _RUN_WRITES.set(writes)
-    rows_token = _RECORD_ROWS.set(record_rows)
+    rows_token = deliver.RECORD_ROWS.set(record_rows)
     held = io.StringIO()
     try:
         with contextlib.redirect_stdout(held):
@@ -8045,7 +3251,7 @@ def resolve_in_process(
         raise
     finally:
         _RUN_WRITES.reset(token)
-        _RECORD_ROWS.reset(rows_token)
+        deliver.RECORD_ROWS.reset(rows_token)
     outcome = writes.last_outcome
     # The body's first line restates what the engine's line says; anything
     # after it (a group-done line, deliver's closeout handoff) is kept.
@@ -8220,7 +3426,7 @@ def _open_dispatch_record(record: StepRecord, key: str) -> UnitAttempt:
     `fr run claim` annotates a dispatch `fr run advance` already made; it
     never invents one (spec §4.C) — a unit with no attempts at all, or whose
     last attempt is already closed, has nothing open to annotate."""
-    open_record = _held_record(record, key)
+    open_record = held_record(record, key)
     if open_record is None:
         err_console.print(
             f"[red]{key}: no open dispatch — nothing to claim. `fr run claim` "
@@ -8239,7 +3445,7 @@ def _claim_abandon(repo_root: Path, state: RunState, owner_id: str, key: str) ->
     The step's `items`/`state` are left exactly as they are — still
     `running` — so the next `fr run advance` sees the unit as still pending
     and briefs it again, appending a fresh `Attempt` alongside this
-    now-closed one (`_dispatch_needs_open`). This is the sanctioned recovery
+    now-closed one (`dispatch_needs_open`). This is the sanctioned recovery
     for an executor that is never coming back: nothing can retire it from the
     orchestrator side, so freeing the tree has to be a named operator act.
 
@@ -8250,7 +3456,7 @@ def _claim_abandon(repo_root: Path, state: RunState, owner_id: str, key: str) ->
     """
     record = state.steps[owner_id]
     _open_dispatch_record(record, key)  # refuses when there is nothing to abandon
-    new_record = _close_dispatch(record, key, "abandoned")
+    new_record = close_dispatch(record, key, "abandoned")
     _save_run_state(repo_root, _with_step(state, owner_id, new_record))
     console.print(
         f"{key}: dispatch abandoned — `fr run advance` will brief it again", soft_wrap=True
@@ -8273,7 +3479,7 @@ def _claim_identity(
 
     Idempotent for the SAME `agent` id (a re-claim fills empty fields only and
     otherwise keeps the first claim's values, warning on a different one —
-    `_merge_claim`); refuses a DIFFERENT one while the
+    `merge_claim`); refuses a DIFFERENT one while the
     first is still open, naming both — the two-writers hazard this whole
     feature exists to make visible.
 
@@ -8282,7 +3488,7 @@ def _claim_identity(
     `advance` recorded never says which tier did the work. An unclaimed
     attempt takes it when it is that agent or one of its tier variants
     (`_ran_as`); a claimed one keeps its first value (warning on a different
-    tier, `_merge_claim`). A different agent entirely is refused.
+    tier, `merge_claim`). A different agent entirely is refused.
     """
     record = state.steps[owner_id]
     open_record = _open_dispatch_record(record, key)
@@ -8302,9 +3508,16 @@ def _claim_identity(
             soft_wrap=True,
         )
         raise typer.Exit(2)
-    claimed = _claimed_identity(
-        open_record, key, agent=agent, harness=harness, model=model, agent_type=agent_type
-    )
+    with _refusals():
+        claimed = claimed_identity(
+            open_record,
+            key,
+            agent=agent,
+            harness=harness,
+            model=model,
+            agent_type=agent_type,
+            warn=_say,
+        )
     if claimed == open_record:
         console.print(f"{key}: already claimed by {agent} (no change)", soft_wrap=True)
         return
@@ -8571,7 +3784,7 @@ def _plan_refusals(
         return [_liveness.Refusal("not-advanceable", f"{step.id}: {e}")]
     if record.state == "running":
         return []
-    _, messages = _manual_placement_errors(repo_root, state)
+    _, messages = manual_placement_errors(repo_root, state)
     return [_liveness.Refusal("manual", message) for message in messages]
 
 
@@ -8765,7 +3978,7 @@ def check_cmd(
     record = state.steps.get(state.cursor)
     step_state = record.state if record is not None else "unknown"
     console.print(f"{state.run}: cursor={state.cursor} ({step_state})")
-    for gate in cleared_gates(state):
+    for gate in _cleared_gates(state):
         # An observed operator answer is the gate working — nothing to report.
         # An agent clearance, or an operator answer fr only has the caller's
         # word for (R11, p3-r2), is reported in the sentence `gates` prints.
@@ -8851,7 +4064,7 @@ def gates_cmd(run_id: str = typer.Argument(..., help="Run id.")) -> None:
         err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
         raise typer.Exit(2) from e
 
-    statuses = gates(state, manifest)
+    statuses = _gates(state, manifest)
     if not statuses:
         console.print(f"{state.run}: no `gate: operator` steps recorded as cleared")
         return

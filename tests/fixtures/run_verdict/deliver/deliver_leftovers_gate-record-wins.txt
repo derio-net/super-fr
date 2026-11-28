@@ -1,0 +1,5 @@
+refused: the run leaves work unaccounted for. File each leftover, gate it, or track it, then resolve again:
+  row r-1 — owed
+    fix: the record rec.yaml sets this row walked, and the record wins over the fragment: change or drop its `acceptance:` entry for r-1 first. Then: fr acceptance set-status --id r-1
+  finding f-1 — out of scope
+    fix: fr journal resolve f-1

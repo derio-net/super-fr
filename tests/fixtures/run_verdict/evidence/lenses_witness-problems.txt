@@ -1,0 +1,55 @@
+step/lens-review: refused — the review record does not match what the lens reviewers returned:
+  - reviewer rev-1 was named for lens security, and its review-lens block names lens tests
+  - returned finding(s) not in the plan journal: l-security-r7 (reviewer rev-1) — journal each under its id with the reviewer's tag, global (`fr journal add --kind finding --id <id> --global --review-scope in|out ...`)
+  - l-security-r1 is journaled with review_scope in but rev-1 tagged it out — keep the reviewer's tag; reclassify by resolving it out-of-scope
+      lens security: security title
+        in the set because: path rule src/** (matches src/a.py)
+        look at security
+        Review the feature's whole diff through the security lens only. End your return with a fenced review-lens block naming your lens and the files the feature changed that you examined, then a fenced review-findings block, one line per finding, `<id> | in|out | <one-line summary>`, ids l-security-r<k> (k from 1), or the single line `none` when you raised nothing. `in` = this change is wrong, incomplete or worse than it needs to be; `out` = true, but not caused by this change. fr refuses the lens-review resolve while your block names another lens, names no file the feature changed or a file it did not change, or a returned id is missing from the plan journal or carries another scope there. When the brief names a `shape` file, read it: any way it contradicts the diff is a finding of your lens; do not list the shape file under `examined` (the feature diff leaves it out):
+        ```review-lens
+        lens: security
+        examined: <changed file>, <changed file>
+        ```
+        ```review-findings
+        l-security-r1 | in | <one-line summary>
+        ```
+  - reviewer rev-2 returned no review-lens block — its return must end with one naming lens tests and the changed files it examined
+  - reviewer rev-2 returned no review-findings block — its return must end with one (`none` when it raised nothing)
+      lens tests: tests title
+        in the set because: path rule src/** (matches src/a.py)
+        look at tests
+        Review the feature's whole diff through the tests lens only. End your return with a fenced review-lens block naming your lens and the files the feature changed that you examined, then a fenced review-findings block, one line per finding, `<id> | in|out | <one-line summary>`, ids l-tests-r<k> (k from 1), or the single line `none` when you raised nothing. `in` = this change is wrong, incomplete or worse than it needs to be; `out` = true, but not caused by this change. fr refuses the lens-review resolve while your block names another lens, names no file the feature changed or a file it did not change, or a returned id is missing from the plan journal or carries another scope there. When the brief names a `shape` file, read it: any way it contradicts the diff is a finding of your lens; do not list the shape file under `examined` (the feature diff leaves it out):
+        ```review-lens
+        lens: tests
+        examined: <changed file>, <changed file>
+        ```
+        ```review-findings
+        l-tests-r1 | in | <one-line summary>
+        ```
+  - reviewer rev-3 examined src/zz.py, which the feature did not change — name the changed files you read
+  - rev-3: review-findings block is empty — one line per finding, or the single line `none`
+      lens errors: errors title
+        in the set because: path rule src/** (matches src/a.py)
+        look at errors
+        Review the feature's whole diff through the errors lens only. End your return with a fenced review-lens block naming your lens and the files the feature changed that you examined, then a fenced review-findings block, one line per finding, `<id> | in|out | <one-line summary>`, ids l-errors-r<k> (k from 1), or the single line `none` when you raised nothing. `in` = this change is wrong, incomplete or worse than it needs to be; `out` = true, but not caused by this change. fr refuses the lens-review resolve while your block names another lens, names no file the feature changed or a file it did not change, or a returned id is missing from the plan journal or carries another scope there. When the brief names a `shape` file, read it: any way it contradicts the diff is a finding of your lens; do not list the shape file under `examined` (the feature diff leaves it out):
+        ```review-lens
+        lens: errors
+        examined: <changed file>, <changed file>
+        ```
+        ```review-findings
+        l-errors-r1 | in | <one-line summary>
+        ```
+  - rev-4: review-lens block line 'broken' is not `lens: <id>` or `examined: <files>`
+  - rev-4: review-findings block id 'p1-r1' is not a lens finding id l-<lens>-r<k> for lens docs (l-docs-r<k>)
+      lens docs: docs title
+        in the set because: path rule src/** (matches src/a.py)
+        look at docs
+        Review the feature's whole diff through the docs lens only. End your return with a fenced review-lens block naming your lens and the files the feature changed that you examined, then a fenced review-findings block, one line per finding, `<id> | in|out | <one-line summary>`, ids l-docs-r<k> (k from 1), or the single line `none` when you raised nothing. `in` = this change is wrong, incomplete or worse than it needs to be; `out` = true, but not caused by this change. fr refuses the lens-review resolve while your block names another lens, names no file the feature changed or a file it did not change, or a returned id is missing from the plan journal or carries another scope there. When the brief names a `shape` file, read it: any way it contradicts the diff is a finding of your lens; do not list the shape file under `examined` (the feature diff leaves it out):
+        ```review-lens
+        lens: docs
+        examined: <changed file>, <changed file>
+        ```
+        ```review-findings
+        l-docs-r1 | in | <one-line summary>
+        ```
+  Journal every returned finding under its id with the reviewer's tag, or re-dispatch a lens reviewer whose return is malformed; never edit a return.

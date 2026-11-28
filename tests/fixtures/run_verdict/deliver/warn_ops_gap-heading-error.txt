@@ -1,0 +1,1 @@
+warning: docs/s.md:4: heading '## Test plan' is not the Test Plan section fr reads — rename it to "## Test Plan" (exactly: unnumbered, no suffix), or fr sees no Test Plan and holds nothing for it

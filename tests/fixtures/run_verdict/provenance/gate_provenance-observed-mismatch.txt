@@ -1,0 +1,1 @@
+[31mbrainstorm: the operator was not told a second round would follow: no round-1 question says `a 2nd round may follow`. A design-risk second round is announced in round 1, before the operator answers it.[0m

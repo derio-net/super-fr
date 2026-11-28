@@ -113,14 +113,24 @@ uv workspace monorepo, version lockstepped across every manifest (see
     mirrored to OpenCode/Hermes like skills/rules are — `fr run` is a CLI
     surface every harness drives the same way, not a per-harness prompt.
     `fr-goal` and `fr-goal-light` run `lens-review` between `journal-check` and
-    `deliver` (spec `2026-11-12-review-lenses` §3.C): `_evidence_target` has a
-    third, FEATURE-level target (a flat step emitting `journal:plan`: the plan
+    `deliver` (spec `2026-11-12-review-lenses` §3.C):
+    `fr.run.evidence.target.evidence_target` has a third, FEATURE-level target (a flat step emitting `journal:plan`: the plan
     journal, no phase, `feature=True`), which reads `reviewer` as a
     `<lens>=<dispatch-id>` map over `lens_set` recomputed at resolve, gates
     only `l-<lens>-r<k>` findings, and derives `lenses` (per lens, files
     examined and findings raised; `none` for an empty set, which owes no
     `review`/`reviewer`). Adoption never infers the lens review done. The
     `fr-debugging` shape has no `lens-review` step.
+    **What `fr/run` decides and `commands/run_cmd.py` prints** (spec
+    `2026-11-27-run-verdict`, #1519): a check returns a `Verdict` or raises a
+    `RunRefusal`, each line a `Say` (`verdict.py`) that carries the options its
+    old print passed; `run_cmd`'s `_say`, `_settle` and `_refusals()` print it. The
+    unobserved-gate channel is `unobserved.py`; the rest of the engine is `steps.py`
+    (lookup, run ids, completion), `deliver.py` (the deliver gates), `brief.py` (the
+    dispatch briefs and records), `provenance.py` (the operator gate's provenance,
+    with `GATE_DECISIONS`) and `evidence/` (the evidence verifiers). `fr/run`
+    imports no `typer`, no console and no `fr.commands` (`rich.markup` alone is
+    allowed), held over the whole package by `tests/unit/test_run_writes_layering.py`.
     `fr/run/liveness.py` (2026-09-20 unit-record-unification §4.G, gh#518) is
     the ONE definition of "idle" — a run that is advanceable with nobody
     working on it: `is_idle` (pure) behind `fr run check --idle` (exit **3**),

@@ -350,11 +350,11 @@ def test_a_named_reviewer_still_running_is_noted_unobserved(
 ) -> None:
     """A reviewer fr sees dispatched but whose return it cannot read yet: the
     block check is skipped for it, and the record says so."""
-    from fr.commands import run_cmd
+    from fr.run.evidence import lenses, review
     from fr.run.observed import ChildDispatch
 
     repo, shipped, env = _ready(tmp_path)
-    real = run_cmd._dispatches_since
+    real = review.dispatches_since
 
     def _tests_reviewer_has_not_returned(since: str | None):
         found = real(since)
@@ -366,7 +366,8 @@ def test_a_named_reviewer_still_running_is_noted_unobserved(
             for d in found
         ]
 
-    monkeypatch.setattr(run_cmd, "_dispatches_since", _tests_reviewer_has_not_returned)
+    # The name the lens-return check reads (fr.run.evidence.review.dispatches_since, imported).
+    monkeypatch.setattr(lenses, "dispatches_since", _tests_reviewer_has_not_returned)
 
     result = _resolve(repo, shipped, env, "review=lens-rev", MAP)
 

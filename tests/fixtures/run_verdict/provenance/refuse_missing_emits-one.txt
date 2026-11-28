@@ -1,0 +1,1 @@
+[31mbrainstorm: done without the artifact(s) it declares: spec. Name them — `--emitted spec=<…>`, or `emitted:` in the record — and resolve again; nothing applied.[0m

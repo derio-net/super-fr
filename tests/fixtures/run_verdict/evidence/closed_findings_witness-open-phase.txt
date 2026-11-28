@@ -1,0 +1,4 @@
+[31mphase/1/review-phase: refused — 1 finding(s) filed against phase 1 are still open: p1-r1.[0m
+  A review is received, not just requested (`superpowers:receiving-code-review`): verify each finding, then fix it with a test or refute it with reasoning — never drop it. Close each one:
+  fr journal resolve --scope plan --slug p --id p1-r1 --state fixed --note "<what changed, and the test that pins it>"
+  (or `--state refuted` with the reasoning, when the finding is wrong; `--state out-of-scope` when this change did not cause it). One that belongs to a later phase is filed against that phase, not phase 1. `--state failed` needs no evidence.

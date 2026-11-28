@@ -1,0 +1,39 @@
+{
+  "agent": null,
+  "binding_offers": null,
+  "commit_templates": {
+    "issue": null,
+    "use": "without_issue",
+    "with_issue": "{type}({scope}): {summary} (#{issue})",
+    "without_issue": "{type}({scope}): {summary}"
+  },
+  "dead_bindings": null,
+  "emits": [],
+  "evidence": [
+    "tests"
+  ],
+  "for_each": null,
+  "gate": null,
+  "kind": "agent",
+  "needs": [],
+  "record": {
+    "path": "RECORD",
+    "template": "t"
+  },
+  "run": "r1",
+  "settle": "After the PR body is on the PR and before resolving `deliver`, run `fr pr settle --wait 300`: on exit 4 fix it, a conflict by merging `origin/<base>` into the branch (never rebase or force-push) and a red check by an ordinary commit, otherwise do what the printed line says, push with `fr push` and run it again; on exit 75 run it again; on exit 2 fix what it names (open the PR, correct the override) and run it again, which is not a fix round; after three fix rounds stop and report. `deliver` stays refused until the PR settles or a `settle.<key>: <mode> \u2014 <reason>` line in the spec's `## Verification` relaxes the key; CI cannot run on a conflicting PR, so a relaxed `settle.conflicts` leaves `settle.ci` `unrunnable` until it is relaxed too or the conflict is resolved. After the `deliver` resolve's push, run it once more under the same loop (a fix then is a commit after `deliver`) and report the result.",
+  "skill": null,
+  "step": "deliver",
+  "steps": [],
+  "tests": {
+    "fast_tier": "pytest origin/main -q",
+    "mode": "ci"
+  },
+  "tier": null,
+  "unbound_tiers": [
+    "mechanical",
+    "standard",
+    "hard"
+  ],
+  "workflow": "fr-goal@1"
+}

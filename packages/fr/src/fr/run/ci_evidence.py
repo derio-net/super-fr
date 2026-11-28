@@ -10,7 +10,7 @@ before any write; the only writes are the caller's, after a witness.
 What a green gate proves is narrower than a local log: a `pull_request`
 workflow tests the synthetic merge of the head into the base, so the witness
 names both shas. `;tree=` is HEAD's code tree, which is what `tests: reuse`
-reads (`run_cmd._latest_tests_witness`).
+reads (`fr.run.evidence.suite.latest_tests_witness`).
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ after that `verify_ci` refuses "no CI ran" (§I step 5, p2-r5)."""
 ADVISORY_LINE = "fr-scope: advisory — not deliver evidence"
 """The line a pytest session that is not the whole configured suite prints on a
 line of its own (this repo's `tests/conftest.py`, spec 2026-11-19-local-suite-cost
-R7). `run_cmd._read_suite_log` refuses a `tests` log holding it as a whole line."""
+R7). `fr.run.evidence.suite.read_suite_log` refuses a `tests` log holding it as a whole line."""
 
 
 def is_advisory_log(data: bytes) -> bool:

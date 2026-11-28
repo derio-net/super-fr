@@ -1,0 +1,5 @@
+{
+  "queued": [],
+  "returned": "raised HarnessError: FR_HARNESS='bogus' is not one of ['claude-code', 'opencode', 'hermes', 'codex', 'copilot-cli']",
+  "unobserved": {}
+}

@@ -1,0 +1,4 @@
+{
+  "returned": "2 code paths uncommitted (e.g. src/a.py), so the suite log does not cover HEAD \u2014 commit, run the suite again and name the new log",
+  "unobserved": {}
+}

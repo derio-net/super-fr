@@ -1,0 +1,17 @@
+{
+  "queued": [],
+  "returned": {
+    "observed": true,
+    "rounds": [
+      {
+        "answer_pairs": null,
+        "answer_texts": [],
+        "question_texts": [
+          "What shall it do?"
+        ]
+      }
+    ],
+    "who": "operator"
+  },
+  "unobserved": {}
+}

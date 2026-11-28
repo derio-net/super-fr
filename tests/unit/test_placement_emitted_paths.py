@@ -80,7 +80,7 @@ def test_the_brainstorm_brief_carries_a_record_template_under_quiet(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The brief went out with `record: null` (the records dir is outside the checkout,
-    and `relative_to` raised inside the swallowing `_record_brief`)."""
+    and `relative_to` raised inside the swallowing `record_brief`)."""
     import json
 
     repo = make_repo(tmp_path)
@@ -147,8 +147,9 @@ def test_readers_of_the_emitted_paths_follow_the_artifact_root(
     """The cli steps' `{{ artifacts.* }}` (they run in the product checkout), a quiet
     plan's own spec, and `fr pickup`'s plan -> run match all read the feature root."""
     from fr.commands.pickup_cmd import _run_unit_record
-    from fr.commands.run_cmd import _save_run_state, _template_context
+    from fr.commands.run_cmd import _save_run_state
     from fr.parser import parse
+    from fr.run.brief import template_context
     from fr.run.model import load_run_state
 
     worktree, feature, run_id = started
@@ -177,10 +178,10 @@ def test_readers_of_the_emitted_paths_follow_the_artifact_root(
     )
     _save_run_state(worktree, state)
 
-    ctx = _template_context(state, worktree)
+    ctx = template_context(state, worktree)
     assert ctx["artifacts.spec"] == str(feature / KIND_DIRS["spec"] / SPEC)
     assert ctx["artifacts.plan"] == str(feature / plan_rel)
-    assert _template_context(state)["artifacts.plan"] == plan_rel  # no root: as recorded
+    assert template_context(state)["artifacts.plan"] == plan_rel  # no root: as recorded
 
     plan = parse(feature / plan_rel)
     assert plan.artifact_root == feature

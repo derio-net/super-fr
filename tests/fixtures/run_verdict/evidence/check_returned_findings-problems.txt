@@ -1,0 +1,7 @@
+phase/1/review-phase: refused — the review record does not match what the phase reviewers returned:
+  - reviewer rev-1 returned no review-findings block — its return must end with one (`none` when it raised nothing)
+  - p1-r1 is returned by both rev-2 and rev-3 — give each reviewer its own letter (p<N>a-r<k>, p<N>b-r<k>)
+  - rev-4: review-findings block line 'garbage line' is not `<id> | in|out | <summary>`
+  - returned finding(s) not in the plan journal against phase 1 or later: p1-r9 (reviewer rev-2) — journal each under its id with the reviewer's tag (`fr journal add --kind finding --id <id> --review-scope in|out ...`)
+  - p1-r1 is journaled with review_scope in but rev-2 tagged it out — keep the reviewer's tag; reclassify by resolving it out-of-scope
+  Journal every returned finding under its id with the reviewer's tag, or re-dispatch a reviewer whose return is malformed; never edit a return.

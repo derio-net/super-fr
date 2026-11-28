@@ -1,0 +1,1 @@
+[33mstep/deliver: could not verify who ran suite.log — the OpenCode session database could not be read; recorded as a fresh log, unverified (evidence: unobserved=tests).[0m

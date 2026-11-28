@@ -139,7 +139,7 @@ def test_stop_1_a_pending_operator_gate_is_not_idle(tmp_path: Path) -> None:
 def test_stop_2_an_outstanding_manual_phase_is_not_idle(tmp_path: Path) -> None:
     """fr-goal's front-load: `1 [manual], 2 agentic depends_on [1]`, and the
     operator has not given the go. `advance` REFUSES the whole group here
-    (`_manual_placement_preflight`), so the run is not advanceable — it waits
+    (`manual_placement_preflight`), so the run is not advanceable — it waits
     on a human, and blocking the stop would demand a command that cannot work.
     """
     from fr.plan_ops import tick

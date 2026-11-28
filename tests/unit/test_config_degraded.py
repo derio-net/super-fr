@@ -183,19 +183,19 @@ def test_an_old_path_workflow_under_quiet_is_ignored_for_the_shipped_one(
 def test_run_advance_resolves_its_shape_through_the_guard(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`fr run advance` resolves the run's shape with `_resolve_manifest_checked_schema`:
+    """`fr run advance` resolves the run's shape with `resolve_manifest_checked_schema`:
     under quiet the repo override counts only from a protected fr-config."""
     from types import SimpleNamespace
 
-    from fr.commands import run_cmd
+    from fr.run.steps import resolve_manifest_checked_schema
 
     root = _root(tmp_path)
     state: object = SimpleNamespace(workflow="fr-goal-light@1", run="r1")
-    shape = run_cmd._resolve_manifest_checked_schema(root, state)  # type: ignore[arg-type]
+    shape = resolve_manifest_checked_schema(root, state)  # type: ignore[arg-type]
     assert "REPO-OVERRIDE" not in shape.description
     protection._CACHE.clear()
     _enforce(monkeypatch)
-    shape = run_cmd._resolve_manifest_checked_schema(root, state)  # type: ignore[arg-type]
+    shape = resolve_manifest_checked_schema(root, state)  # type: ignore[arg-type]
     assert "REPO-OVERRIDE" in shape.description
 
 

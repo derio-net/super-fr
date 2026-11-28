@@ -1,0 +1,1 @@
+[33mbrainstorm: could not verify this gate — no harness detected, so `answered_by: operator` is recorded as claimed, unverified (evidence: unobserved=operator-gate). The declared `questions: {rounds: 1}` is accepted, unverified.[0m

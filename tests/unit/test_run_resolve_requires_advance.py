@@ -8,7 +8,7 @@ OpenCode run, which advanced first, has one.
 `_resolve_member` guarded the GROUP's state and refused while any OTHER unit
 was running, but had no precondition on the unit it was resolving. The flat
 step path always had one ("not running or blocked … advance first"); this file
-holds the grouped path to the same rule. `_close_on_resolve` stays silent when
+holds the grouped path to the same rule. `close_on_resolve` stays silent when
 nothing is open — adopted cursors depend on that — so the check has to sit
 before the write, which is where the flat path keeps its own.
 """

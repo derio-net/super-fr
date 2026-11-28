@@ -462,7 +462,7 @@ def test_unprotected_ci_keys_are_ignored_and_said_once(
 ) -> None:
     """Under quiet an unprotected `fr-config` cannot relax `deliver`'s suite evidence, put a
     command into a brief, or choose the gate set: the keys are ignored, with the reason."""
-    from fr.commands.run_cmd import _tests_brief
+    from fr.run.brief import tests_brief
     from fr.run.ci_evidence import declared_fast_tier, declared_gates, declared_tests_mode
 
     root = _quiet_with_config(tmp_path, {".fr/ci.yaml": CI_ALL})
@@ -470,8 +470,8 @@ def test_unprotected_ci_keys_are_ignored_and_said_once(
     assert declared_tests_mode(root) is None
     assert declared_fast_tier(root) is None
     assert declared_gates(root, "main") is None
-    assert _tests_brief(root, _executor_step()) == {}
-    assert _tests_brief(root, _deliver_step()) == {}
+    assert tests_brief(root, _executor_step()) == {}
+    assert tests_brief(root, _deliver_step()) == {}
     err = capsys.readouterr().err
     said = [line for line in err.splitlines() if "ignoring" in line and "ci.yaml" in line]
     assert len(said) == 1, err
@@ -487,7 +487,7 @@ def test_unprotected_gate_checks_fall_back_to_the_bases_required_checks(tmp_path
 
 
 def test_protected_ci_keys_are_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from fr.commands.run_cmd import _tests_brief
+    from fr.run.brief import tests_brief
     from fr.run.ci_evidence import declared_fast_tier, declared_gates, declared_tests_mode
 
     root = _quiet_with_config(tmp_path, {".fr/ci.yaml": CI_ALL})
@@ -497,7 +497,7 @@ def test_protected_ci_keys_are_read(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert declared_tests_mode(root) == "ci"
     assert declared_fast_tier(root) == "pytest --since {base}"
     assert declared_gates(root, "main") == ["config-gate"]
-    assert _tests_brief(root, _executor_step())["tests"]["mode"] == "ci"
+    assert tests_brief(root, _executor_step())["tests"]["mode"] == "ci"
     assert client.asked and set(client.asked) == {(SLUG, "fr-config")}
 
 

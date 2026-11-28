@@ -1,0 +1,1 @@
+[31mstep/spec-review: --evidence review=sd-1 is a 'discovery' entry — evidence must be a `kind=review` spec-journal entry[0m
