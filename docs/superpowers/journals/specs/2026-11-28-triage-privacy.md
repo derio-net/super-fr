@@ -217,3 +217,8 @@ run_kind: none
 ### phase-split-2026-11-28-triage-privacy-p2 · decision · ask: #1634, the carried-state scan, is its own ask; it reads the state directory, not facts
 
 Phase 2 serves R8-R9 (#1634), independent of phase 1's facts changes.
+
+<!-- fr:journal kind=finding scope=spec id=s-r12-resolved-2 created=2026-11-28T16:47:39+00:00 state=open resolves=s-r12 tracked_by=https://github.com/derio-net/super-fr/issues/1786 -->
+### s-r12-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1786] · resolves s-r12: Origins collect stores outside authors' PR titles too, and they ride the state ref
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1786.
