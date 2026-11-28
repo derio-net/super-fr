@@ -181,3 +181,141 @@ The line is now "spec's Requirements do not parse (<error>); write an `| ID | Re
 an `R<n>.` list; asks cannot be counted." Tests:
 test_plan_proportionality.py::test_an_invalid_requirements_section_names_the_line_and_cause and the two
 updated no-section / no-spec tests.
+
+<!-- fr:journal kind=review scope=plan id=review-lens-1 created=2026-11-28T15:50:24+00:00 -->
+### review-lens-1 · review · lens review (docs-accuracy, errors, tests): 7 in-scope findings fixed, 1 out of scope
+
+One reviewer per lens over the whole feature diff (merge base c4e69ecd0). errors: the
+migration's one-size "fix the requirement id" hint and a malformed stamp-1 table refusing
+instead of being stamped. docs-accuracy: a stale R9a docstring example and an explainer
+overstating the rewrite. tests: three surviving mutations (sort-key tie, first prose line,
+stamp >= 2) and unpinned migration edge cases. All fixed in 96e189712 with tests.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-28T15:50:24+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · the spec rewrite catches every RequirementsError and always says 'fix the requirement id'
+
+`build()` in fr/artifacts/spec_requirements_table.py turned every reader error into the one hint
+"fix the requirement id", and a stamp-1 spec already in table form but with a malformed row or
+delimiter was refused instead of only stamped (R4), leaving the stamp-2 validator (R7) to name it.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-28T15:50:24+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · the migration module docstring gives R9a. as an id-like error, which is now a valid id
+
+The docstring of fr.artifacts.spec_requirements_table (around line 22) named `R9a.` as the
+example of a malformed id-like line; lettered ids are valid since decision lettered-requirement-ids.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-28T15:50:24+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · the brainstorming-and-plan explainer says the list is rewritten, with no exception
+
+docs/explainers/fr-brainstorming-and-plan.md (lines 125-126) said an older spec's list "is
+rewritten" by `fr migrate artifacts --yes`, without saying that a spec the rewrite cannot convert is
+left unchanged and the error names the line to fix.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-28T15:50:24+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · the lettered-order proportionality test passes by set-hash luck
+
+test_plan_proportionality.py's lettered-order test served R9, R9a and R10 only, so a sort key on
+the integer part alone could still pass; no two served ids tied on the number.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-28T15:50:24+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · the unconvertible-spec fixture has a single prose line
+
+With one prose line between requirements the test cannot tell the first offending line from any
+other; it must hold two and assert the FIRST is named.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-28T15:50:24+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · no test pins the validator's stamp >= 2
+
+The stamp-2 form check runs at `stamp >= 2`; nothing failed if it were written `== 2`.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-28T15:50:24+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · migration edge layouts are untested
+
+No test covered: a file with no final newline, a literal `\|` already in list text, a continuation
+line equal to a table header, a requirement line inside a code fence, the round trip's
+`except RequirementsError` branch, or mixed line endings.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-28T15:50:24+00:00 state=open review_scope=out -->
+### l-tests-r5 · finding [open] (reviewer: out of scope) · the R8 prose test checks only that wording is present
+
+test_spec_requirements_prose.py asserts that phrases appear in the skills; it cannot check that
+the prose is correct.
+
+<!-- fr:journal kind=discovery scope=plan id=l-fenced-requirement-pinned created=2026-11-28T15:50:24+00:00 -->
+### l-fenced-requirement-pinned · discovery · a code fence inside the Requirements list is not special to the reader
+
+Pinned rather than changed: a fence opening line after a blank line is prose between requirements,
+so a list with a fenced `R2.` below `R1.` refuses to migrate at the fence line. Neither the reader
+nor the rewrite tracks fences; a fenced requirement-shaped line directly after a requirement would
+read as a continuation. No live spec does either.
+
+<!-- fr:journal kind=discovery scope=plan id=l-fast-tier created=2026-11-28T15:50:24+00:00 -->
+### l-fast-tier · discovery · fast tier after the lens fixes: 8 failed, 12287 passed; none in this diff
+
+`uv run pytest --fr-scope origin/main -n 2 -q --no-cov`: 8 failed, 12287 passed, 137 skipped. Five are
+the known devcontainer failures (run_idle_guard, four isolation_decision_core relative-PATH cases);
+three are xdist worker crashes (test_skills_cmd smoke, test_tripwire_artifact_paths,
+test_tripwire_own_artifacts) that pass alone (43 passed). `fr migrate artifacts --yes` changed nothing,
+`fr validate artifacts` reports all 227 valid, `fr docs check`, ruff and mypy are clean.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-28T15:50:24+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: the spec rewrite catches every RequirementsError and always says 'fix the requirement id'
+
+(a) New `fr.requirements.requirements_form` judges the section by its first requirement-shaped line;
+`build()` returns None (stamp only) for anything but the list form, so a malformed table is stamped
+with its body unchanged and `fr validate artifacts` then names the bad line. Test:
+test_spec_requirements_table_migration.py::test_a_malformed_table_is_only_stamped_and_the_validator_names_the_row
+(three cells, no delimiter, broken row). (b) Each list refusal gets its own fix text: malformed id,
+repeated or out-of-order id, a table header inside the list (`table_header_line`), prose between
+requirements, and a failed round trip. Test: ::test_an_unconvertible_spec_is_left_byte_identical_and_named
+(prose-between, R9ab, out-of-order, header-in-list, fenced) and
+::test_the_round_trip_parse_error_branch_refuses_with_the_join_fix.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-28T15:50:24+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: the migration module docstring gives R9a. as an id-like error, which is now a valid id
+
+The docstring now names `R09.` as the malformed id, lists the header-inside-the-list refusal and the
+per-cause fixes, and states that a table-form section (even a malformed one) is only stamped.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-28T15:50:24+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: the brainstorming-and-plan explainer says the list is rewritten, with no exception
+
+The explainer now says that a spec the rewrite cannot convert, for example with prose between two
+requirements or a malformed id, is left unchanged, and the error names the line to fix. `fr docs check`
+passes.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-28T15:50:24+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: the lettered-order proportionality test passes by set-hash luck
+
+test_plan_proportionality.py::test_a_lettered_requirement_is_served_and_ordered now serves R9b, R10,
+R9a and R9 and expects (R9, R9a, R9b, R10): R9a and R9b tie on the integer part, so only the letter
+orders them.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-28T15:50:24+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: the unconvertible-spec fixture has a single prose line
+
+The PROSE_BETWEEN fixture holds two prose paragraphs; the test asserts line 7 (the first) is named
+and that the error names exactly one line.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-28T15:50:24+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: no test pins the validator's stamp >= 2
+
+test_validate_artifacts.py::test_a_spec_stamped_past_two_is_still_refused_for_a_list_line: an
+`fr_schema: 3` spec with a list line. `validate_spec` refuses the line ("stamped fr_schema 3"), and
+through `fr validate artifacts` the stamp check alone reports it (version 3 is newer than this fr
+and validation stops there); both are asserted.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-28T15:50:24+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: migration edge layouts are untested
+
+test_spec_requirements_table_migration.py::test_edge_layouts_convert_exactly: no final newline (the
+result keeps none: the last row carries no ending), a literal `\|` (written `\\|`, reads back
+unchanged), mixed endings (pinned: the table takes the first requirement line's ending). The
+header-as-continuation and fenced cases are in ::test_an_unconvertible_spec_is_left_byte_identical_and_named
+(the fenced one pinned as a prose refusal), and the round trip's except branch in
+::test_the_round_trip_parse_error_branch_refuses_with_the_join_fix.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-28T15:50:24+00:00 state=open resolves=l-tests-r5 out_of_scope=true -->
+### l-tests-r5-resolved · finding [out-of-scope] · resolves l-tests-r5: the R8 prose test checks only that wording is present
+
+true of the R8 prose test by design: a prose requirement can only be checked by presence

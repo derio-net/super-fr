@@ -3,7 +3,7 @@ run: 2026-11-26-feat-spec-requirements-table
 workflow: fr-goal@1
 branch: feat/spec-requirements-table
 started: '2026-11-26T10:59:36+00:00'
-cursor: lens-review
+cursor: deliver
 steps:
   brainstorm:
     state: done
@@ -110,8 +110,8 @@ steps:
     exit: 0
     stdout: ''
   lens-review:
-    state: running
-    at: '2026-11-28T14:17:07+00:00'
+    state: done
+    at: '2026-11-28T15:50:25+00:00'
     units:
       step/lens-review:
         attempts:
@@ -119,6 +119,13 @@ steps:
           harness: claude-code
           model: claude-opus-5-5
           session: e0c01434-1137-4e4d-a10f-0dcc9639e6fe
+          returned: '2026-11-28T15:50:25+00:00'
+          outcome: done
+        evidence:
+          review: review-lens-1
+          reviewer: docs-accuracy=a184d03e75ec4d7d6,errors=ad4fcf47adb6b99cf,tests=a08a09f0ae694d2f5
+          findings: l-errors-r1,l-docs-accuracy-r1,l-docs-accuracy-r2,l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4,l-tests-r5
+          lenses: docs-accuracy=10:l-docs-accuracy-r1,l-docs-accuracy-r2;errors=5:l-errors-r1;tests=11:l-tests-r1,l-tests-r2,l-tests-r3,l-tests-r4,l-tests-r5
   deliver:
     state: pending
 driver: standalone
