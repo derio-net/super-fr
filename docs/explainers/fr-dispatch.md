@@ -16,7 +16,7 @@ covers:
   - packages/fr-cncd/src/**
   - packages/fr-herdr/src/fr_herdr/runner.py
   - packages/fr-claude-cloud/src/**
-reviewed: 2026-11-27 still true, import-only change (plan_ops split); 2026-11-27 still true, isolation/local.py split into modules (#1517), no reader-visible change; 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-19 the dedup failure reason (#1499) and the cncd symlink refusal (#1501); 2026-11-15 no shipped tick caller; preflight reasons; issues stranded on the removed VK runner
+reviewed: 2026-11-27 board-session-state adds the optional SessionActivity protocol, described above; 2026-11-27 still true, import-only change (plan_ops split); 2026-11-27 still true, isolation/local.py split into modules (#1517), no reader-visible change; 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-19 the dedup failure reason (#1499) and the cncd symlink refusal (#1501); 2026-11-15 no shipped tick caller; preflight reasons; issues stranded on the removed VK runner
 ---
 
 ## Why does the plan stay the source of truth?
@@ -170,6 +170,12 @@ takes phases, so it is the one `fr apply --to` queues to. `herdr` and `claude-cl
 whole runs only, so `fr apply --to` refuses them. The triage batch driver uses those two
 to start whole-run sessions. See [fr-triage](fr-triage.md), the [herdr
 guide](../herdr-control-sessions.md) and the [cloud guide](../cloud-setup.md).
+
+Beside the runner itself, a runner may add small optional protocols. `SessionInspector` reports
+each session's status, and `SessionNotes` says why a session is blocked. `SessionActivity`
+says which idle sessions still have background shells, monitors or subagents running. The
+Batches page uses it to show `waits for background`. The herdr runner implements it by
+reading the screen of each idle Claude pane; a runner without it simply reports none.
 
 ## What does dispatch not do?
 

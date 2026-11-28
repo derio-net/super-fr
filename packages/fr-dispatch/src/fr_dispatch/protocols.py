@@ -172,6 +172,20 @@ class SessionNotes(Protocol):
 
 
 @runtime_checkable
+class SessionActivity(Protocol):
+    """An optional protocol beside `Runner`, never part of it: which sessions sit at an
+    idle prompt while background shells, monitors or subagents run (spec
+    2026-11-27-board-session-state R3). `SessionStatus` stays the closed six-value
+    Literal; a runner that can read a session's screen reports the rest here, and the
+    Batches page shows `waits for background` instead of `waits for agent`."""
+
+    def session_background(self, items: Sequence[WorkItem]) -> frozenset[str]:
+        """The ids of the items whose session is idle with background work. Raising is a
+        failed read; a session the runner cannot read is simply left out."""
+        ...
+
+
+@runtime_checkable
 class SessionFocuser(Protocol):
     """An optional protocol beside `Runner`, never part of it: bring a session forward."""
 

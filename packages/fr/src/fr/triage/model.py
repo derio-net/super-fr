@@ -102,7 +102,10 @@ from fr.triage.stage import Stage, derive_stage
 # 20 adds (2026-11-19-event-driven-a-la-carte R20) `state_repo_declared`, the state repo a
 # one-repo scope's settings name: `to_json` dumps it, which a closed-world schema-19 reader
 # rejects; a file below 20 reads it as empty, so no mismatch is reported until collect.
-FACTS_SCHEMA: Final[int] = 20
+# 21 adds (2026-11-27-board-session-state R4) per-config `lane_owners`, the logins that own each
+# Needs-you lane: `to_json` dumps it, which a closed-world schema-20 reader rejects; a file below
+# 21 reads it as empty, so every lane shows `owner: unassigned` until the next collect.
+FACTS_SCHEMA: Final[int] = 21
 FACTS_READS: tuple[int, ...] = tuple(range(3, FACTS_SCHEMA + 1))
 # The version this fr WRITES: every engine write stamps 14 (the `conflict` event's `onto`
 # and `reissue`, 2026-11-24-wave-queue-gaps R16; 13 was the wave merge queue's
@@ -544,6 +547,83 @@ class ConfigDefaults(_Strict):
     launch: Launch = Launch()
 
 
+LaneIgnoreCause = Literal["unknown-key", "not-a-list", "not-a-login", "not-a-mapping"]
+
+
+class IgnoredLane(_Strict):
+    """One thing `lane_owners:` held that the board ignores, and why (l-errors-r4): `key`
+    names it (`review`, `developer`, `developer[1]`, `lane_owners`), `cause` says which rule."""
+
+    key: str
+    cause: LaneIgnoreCause
+
+
+class LaneOwners(_Strict):
+    """`.fr/triage.yaml`'s `lane_owners:` (spec 2026-11-27-board-session-state R4): who owns
+    each Needs-you lane, for display. Display-only, so a key that is not one of the four
+    lanes never refuses the repo's config: it is moved into `ignored` and the board names it."""
+
+    developer: list[str] = []
+    reviewer: list[str] = []
+    tester: list[str] = []
+    devops: list[str] = []
+    # The note the board shows. Stored under a name no config file would write, so the
+    # parsed model round-trips through the facts file while a user's own `ignored:` key is
+    # just another unknown key. Read it as `.ignored` (keys) or `.ignored_causes`.
+    fr_ignored_keys: list[IgnoredLane] = []
+
+    @property
+    def ignored(self) -> list[str]:
+        return [i.key for i in self.fr_ignored_keys]
+
+    @property
+    def ignored_causes(self) -> list[IgnoredLane]:
+        return self.fr_ignored_keys
+
+    @model_validator(mode="before")
+    @classmethod
+    def _ignore_unknown_lanes(cls, data: object) -> object:
+        """Display-only, so nothing in it refuses the repo's config: null is empty, a lone
+        string is one login, a null lane is empty, a non-string item and any key that is
+        not a lane (a user-written `ignored:` included) is dropped into the note with its
+        cause, and a value that is no mapping at all is an empty block."""
+        if data is None:
+            return {}
+        if not isinstance(data, dict):
+            return {"fr_ignored_keys": [{"key": "lane_owners", "cause": "not-a-mapping"}]}
+        lanes = ("developer", "reviewer", "tester", "devops")
+        kept: dict[str, object] = {}
+        moved: dict[tuple[str, str], None] = {}
+        carried = data.get("fr_ignored_keys")
+        if isinstance(carried, list):
+            for c in carried:
+                if isinstance(c, IgnoredLane):
+                    c = c.model_dump()
+                if isinstance(c, dict) and isinstance(c.get("key"), str):
+                    moved[(c["key"], str(c.get("cause")))] = None
+        for key, value in data.items():
+            if key == "fr_ignored_keys":
+                continue
+            if key not in lanes:
+                moved[(str(key), "unknown-key")] = None
+                continue
+            if value is None:
+                items: list[object] = []
+            elif isinstance(value, str):
+                items = [value]
+            elif isinstance(value, (list, tuple)):
+                items = list(value)
+            else:
+                moved[(str(key), "not-a-list")] = None
+                continue
+            kept[key] = [i for i in items if isinstance(i, str)]
+            for n, i in enumerate(items):
+                if not isinstance(i, str):
+                    moved[(f"{key}[{n}]", "not-a-login")] = None
+        kept["fr_ignored_keys"] = [{"key": k, "cause": c} for k, c in sorted(moved)]
+        return kept
+
+
 class ExportConfig(_Strict):
     """`.fr/triage.yaml`'s `export:` (spec 2026-10-05-triage-pages-goal §I): the
     repo-relative directory the driver exports the triage state under."""
@@ -634,6 +714,9 @@ class TriageConfig(_Strict):
     # The wave merge queue (spec 2026-11-19-wave-merge-queue): None, the repo's merges are
     # not the queue's.
     queue: QueueBlock | None = None
+    # Who owns each Needs-you lane (spec 2026-11-27-board-session-state R4). Display-only, so
+    # it is not one of `config.protection.GUARDED_TRIAGE_KEYS`.
+    lane_owners: LaneOwners = LaneOwners()
 
 
 def trusted_logins(config: TriageConfig, viewer: str | None) -> frozenset[str]:

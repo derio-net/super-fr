@@ -50,7 +50,7 @@ from fr.commands.triage_cmd import (
     warn_nav,
 )
 from fr.commands.triage_cmd import fail as _fail
-from fr.triage import gitseam, pacing_state
+from fr.triage import dwell, gitseam, pacing_state
 from fr.triage.batch import batch_item_id, batch_repo, batch_workflow, last_dispatch
 from fr.triage.batch_drive import (
     DEFAULT_WORKSPACE_PREFIX,
@@ -75,8 +75,9 @@ from fr.triage.errors import TriageError
 from fr.triage.gitseam import Checkout
 from fr.triage.kanban import BoardStatus, build_board
 from fr.triage.kanban_render import render_board
+from fr.triage.lease import load_lease
 from fr.triage.merge_stops import load_stops
-from fr.triage.model import Facts, Judgements, Scope
+from fr.triage.model import Facts, IgnoredLane, Judgements, Scope
 from fr.triage.orphan import focus_refusal
 from fr.triage.plan_overlap import card_lines, plan_overlap_report, source_for_clones
 from fr.triage.quota import budget_from_json
@@ -274,6 +275,9 @@ class SessionReads:
     statuses: dict[str, BoardStatus]
     notes: list[str]
     session_notes: dict[str, str]
+    # Item ids whose session is idle with background work (`SessionActivity`, spec
+    # 2026-11-27-board-session-state R3); empty from a runner that cannot say
+    background: frozenset[str] = frozenset()
 
 
 def session_statuses(
@@ -311,11 +315,12 @@ def read_sessions(
         return SessionReads({}, [], {})
     if importlib.util.find_spec("fr_dispatch") is None:
         return SessionReads({}, ["fr-dispatch is not installed; session status is unavailable"], {})
-    from fr_dispatch.protocols import SessionInspector, SessionNotes
+    from fr_dispatch.protocols import SessionActivity, SessionInspector, SessionNotes
 
     statuses: dict[str, BoardStatus] = {}
     notes: list[str] = []
     said: dict[str, str] = {}
+    background: set[str] = set()
     for name, probes in sorted(by_runner.items()):
         runner, reason = try_load(name, loader)
         if runner is None:
@@ -351,7 +356,12 @@ def read_sessions(
             continue
         for key, value in found.items():
             statuses[key] = value if value in _STATUSES else "unknown"
-    return SessionReads(statuses, notes, said)
+        if not notes_only and isinstance(runner, SessionActivity):
+            try:
+                background |= set(runner.session_background(probes))
+            except Exception as exc:  # noqa: BLE001 - no background is a lost hint, never a failed render
+                notes.append(f"runner `{name}` could not read background work: {one_line(exc)}")
+    return SessionReads(statuses, notes, said, frozenset(background))
 
 
 def local_ci_none(facts: Facts) -> frozenset[str]:
@@ -394,6 +404,34 @@ def gated_notes(facts: Facts) -> list[str]:
     return notes
 
 
+_LANES_SAID = "lanes are developer, reviewer, tester, devops"
+
+
+def _ignored_note(item: IgnoredLane) -> str:
+    """One ignored item, worded for its own cause (l-errors-r4)."""
+    match item.cause:
+        case "unknown-key":
+            return f"`{item.key}` is not a lane ({_LANES_SAID})"
+        case "not-a-list":
+            return f"`{item.key}` is not a list of logins"
+        case "not-a-login":
+            return f"`{item.key}` is not a login"
+        case _:
+            return f"`{item.key}` is not a mapping"
+
+
+def lane_owner_notes(facts: Facts) -> list[str]:
+    """One page note per repo whose `lane_owners:` held something the board ignores (spec
+    2026-11-27-board-session-state R4): never a refusal, and each ignored item is worded
+    for its own cause."""
+    return [
+        f"{repo}: lane_owners ignores "
+        + "; ".join(_ignored_note(i) for i in cfg.lane_owners.ignored_causes)
+        for repo, cfg in sorted(facts.config.items())
+        if cfg.lane_owners.ignored_causes
+    ]
+
+
 ACTIVITY_ENTRIES = 50
 
 
@@ -419,11 +457,18 @@ def write_board(
     ci_none: Collection[str] | None = None,
     now: datetime | None = None,
     checkouts: Mapping[str, Path | None] | None = None,
+    writer: bool | None = None,
 ) -> tuple[Path, int]:
     """Render the Batches page into the state directory *target* from the facts and
     judgements on disk now, with live session statuses, and remove the page's old-named
     file (triage-pages-ux R3). *now* is the render time and the idle clock (the wall clock when
-    None). Returns the path written and its card count."""
+    None). Returns the path written and its card count.
+
+    The dwell ledger (spec 2026-11-27-board-session-state R5) is observed at *now* on every
+    render and stored only by its one writer: *writer* True (the driver holding
+    `drive.lock`, or its supervisor), or None while no driver runs anywhere
+    (`_no_driver_anywhere`). False, or None beside a driver here or on another host,
+    observes in memory and leaves `dwell.json` alone, so nothing new reaches the ref push."""
     _, facts, judgements = _load_state(scope, target, None)
     reads = read_sessions(judgements, facts, prefix=prefix, target=target, loader=loader)
     statuses, notes = reads.statuses, reads.notes
@@ -437,6 +482,7 @@ def write_board(
     if (labels_note := in_progress_note(facts, scope_args)) is not None:
         notes.append(labels_note)
     notes.extend(gated_notes(facts))
+    notes.extend(lane_owner_notes(facts))
     if (refusal := stopped(*view_inputs(target))) is not None:  # batch-train-truth R8
         notes.insert(0, stopped_line(refusal))
     try:  # plan file overlap (spec 2026-11-25): the board is a view, never a refusal
@@ -452,7 +498,21 @@ def write_board(
         ci_none=local_ci_none(facts) if ci_none is None else ci_none,
         scope_args=scope_args,
         overlaps=card_overlaps,
+        background=reads.background,
     )  # fmt: skip
+    ledger, dwell_note = dwell.load(target)
+    if dwell_note is not None:
+        notes.append(dwell_note)
+    ledger = dwell.observe(ledger, board, rendered_at)
+    if writer or (writer is None and _no_driver_anywhere(target, rendered_at, notes)):
+        try:  # the board is a view: a ledger that cannot be kept never stops the page (r2)
+            if dwell_note is not None and (kept := dwell.set_aside(target)) is not None:
+                notes.append(f"the unusable {dwell.DWELL_FILE} was moved to {kept}")
+            dwell.store(target, ledger)
+        except OSError as exc:
+            notes.append(
+                f"dwell times are not stored: {target / dwell.DWELL_FILE}: {one_line(exc)}"
+            )
     html = render_board(
         board,
         scope_args=scope_args,
@@ -463,6 +523,7 @@ def write_board(
         banner=skew_banner(facts),
         present=pages_present(target, "batches"),
         activity=_activity_entries(target),
+        dwell=ledger,
     )
     out = target / page("batches").file
     write_text_atomic(out, html)
@@ -472,6 +533,21 @@ def write_board(
         warn_nav(f"the Batches page's old file was not removed: {exc}")
     refresh_navs(target, "batches", warn=warn_nav)
     return out, len(judgements.batches)
+
+
+def _no_driver_anywhere(target: Path, now: datetime, notes: list[str]) -> bool:
+    """True when no live driver holds the local `drive.lock` and `lease.yaml` (which the
+    state ref carries from other hosts and cloud sessions) holds no lease unexpired at
+    *now* (R5, p2-r1). An unreadable lease is not proof of no driver: the render does
+    not store, and says why on the page."""
+    if live_driver(target) is not None:
+        return False
+    try:
+        held = load_lease(target)
+    except TriageError as exc:
+        notes.append(f"dwell times are not stored: {one_line(exc)}")
+        return False
+    return held is None or held.expired(now)
 
 
 def publish(scope: Scope, target: Path, board: Path, failures: set[str]) -> None:
