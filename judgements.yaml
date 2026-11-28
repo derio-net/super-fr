@@ -12373,6 +12373,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-28T04:09:35.588699Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-28T04:09:40.435331Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -13926,6 +13941,13 @@ batches:
     checks:
     - 1 failing check(s)
     delivered: none
+  - kind: conflict
+    at: '2026-11-28T04:09:37.542971Z'
+    head: a7960db13098602c36d4dc967127f4d92a403bef
+    paths:
+    - docs/explainers/fr-triage.md
+    delivered: session
+    handle: derio-net/super-fr/run/batch-board-session-state
 - id: s1-followups
   title: 'S1 follow-ups: refuse old paths, config-branch executables, test sites, import-time home'
   ids:
