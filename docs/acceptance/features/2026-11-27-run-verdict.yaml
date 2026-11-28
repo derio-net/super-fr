@@ -66,10 +66,16 @@ rows:
       unit:
       - super-fr:tests/unit/test_tripwire_module_budget.py#test_module_is_within_its_budget
       - super-fr:tests/unit/test_run_writes_layering.py#test_every_run_engine_module_imports_no_cli_layer
+      - super-fr:tests/unit/test_run_verdict_steps.py#test_the_moved_lookup_prints_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_deliver.py#test_the_moved_gates_print_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_brief.py#test_the_moved_briefs_print_and_return_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_evidence.py#test_the_moved_verifiers_print_and_return_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_provenance.py#test_the_moved_gate_provenance_prints_and_returns_the_captured_bytes
     status: ci
-    notes: lookup, derived, deliver, brief, evidence and provenance live in fr/run modules;
-      run_cmd.py's budget fell from 4540 to 4115 across slices 5-6 and the layering
-      test holds the package
+    notes: 'lookup, derived, deliver, brief, evidence and provenance live in fr/run
+      modules: each slice''s capture test drives its moved names from the fr/run module
+      (a cluster left in run_cmd fails its import); run_cmd.py''s budget fell from 4540
+      to 4111 across slices 5-6 and the layering test holds the package'
     verify: none
 amendments:
   - row: harness-gate-degrades-loudly
