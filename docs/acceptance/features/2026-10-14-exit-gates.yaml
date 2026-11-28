@@ -246,3 +246,23 @@ amendments:
       rehearsal (one was started and paused unfinished, not evidence) before the Tester
       records it walked. Earlier: v6.0.0 and v7.0.0 finals were version overrides, not
       the gated transition. tracked by derio-net/super-fr#1348'
+  - row: exit-gates-collected-closeout
+    op: set-status
+    base: 1
+    status: walk-owed
+    notes: 'Observed live (wave driver, 2026-11-15..27): one collected close-out per
+      repo with one housekeeping PR the driver merged through the queue (#1743: six
+      wave 25 batches; #1582: three), and a single hand-back on a failing check, then
+      the operator (#1495, #1536, #1567). Still owed: a merged close-out that closes
+      passed batches'' Refs issues; none of the 24 merged close-out PRs #1469..#1744
+      carried a Closes line, and the only one that did (#1704, Closes #1691) was closed
+      unmerged. Unit tests: test_triage_batch_closeout, test_triage_batch_closeout_cmd,
+      test_triage_collected_closeout_drive. tracked by derio-net/super-fr#1347'
+    why: 'Observed live (wave driver, 2026-11-15..27): one collected close-out per repo
+      with one housekeeping PR the driver merged through the queue (#1743: six wave
+      25 batches; #1582: three), and a single hand-back on a failing check, then the
+      operator (#1495, #1536, #1567). Still owed: a merged close-out that closes passed
+      batches'' Refs issues; none of the 24 merged close-out PRs #1469..#1744 carried
+      a Closes line, and the only one that did (#1704, Closes #1691) was closed unmerged.
+      Unit tests: test_triage_batch_closeout, test_triage_batch_closeout_cmd, test_triage_collected_closeout_drive.
+      tracked by derio-net/super-fr#1347'
