@@ -378,3 +378,8 @@ Fixed with l-docs-accuracy-r1 in 4c7e2e9d6.
 ### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: Verdict warnings print only at settle, so an unexpected exception after a queued warning (run_report in proportionality_witness, evaluate in docs_witness) lost it
 
 fr.run.verdict.noted_on_crash attaches the queued warnings to an unexpected exception as notes, so the traceback shows them; proportionality_witness and docs_witness wrap their post-warning calls in it. Test test_a_crash_after_a_queued_warning_carries_the_warning failed first, then passed (44e211bc8).
+
+<!-- fr:journal kind=finding scope=plan id=p3-r2-resolved-2 created=2026-11-28T04:01:42+00:00 state=fixed resolves=p3-r2 -->
+### p3-r2-resolved-2 · finding [fixed] · resolves p3-r2: tests/unit/test_deliver_local_stamp.py:508 docstring still names removed _deliver_exit_guard (cosmetic)
+
+The docstring at tests/unit/test_deliver_local_stamp.py:508 now names fr.run.deliver.deliver_exit_guard; it was updated in passing in phase 3, so nothing is left to file.
