@@ -5,8 +5,8 @@ schema_version: 12
 run: 2026-11-26-feat-spec-requirements-table
 step: implement-phase
 item: phase/1
-outcome: blocked
-ticks: [P1.T1.S1, P1.T1.S2, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S2, P1.T5.S3, P1.T5.S4]
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T4.S3, P1.T5.S1, P1.T5.S2, P1.T5.S3, P1.T5.S4]
 refactor:
   P1.T1: "the table reader reuses the existing _split_row/_is_row helpers and mirrors _legacy_rows; Task 2's refactor step reshaped the readers onto one (lines, first_line_no) signature"
   P1.T3: "the validator delegates to one new fr.requirements.table_form_problems, which reuses the reader's own regexes and _table_body; nothing duplicated to clean"
@@ -33,16 +33,6 @@ journal:
       `test_migration_runner.py::test_this_repos_own_artifacts_plan_only_safe_actions` sees the pending spec
       actions. All four clear once that spec's id is fixed and `fr migrate artifacts --yes` runs here.
   - kind: discovery
-    id: p1-fast-tier-unrelated-failures
-    phase: 1
-    title: "fast tier: 6 failures in paths this diff does not touch, 3 xdist worker crashes"
-    body: |
-      `test_install_opencode_agents.py` (2), `test_run_idle_guard.py::test_the_gh518_stop_is_blocked` and
-      `test_isolation_decision_core.py::test_a_relative_path_entry_holding_a_git_is_never_run` (4, `bash`
-      not found under a stripped PATH) fail in the devcontainer; the diff touches no install script, hook,
-      agent or isolation code. `test_sentinel_lifecycle`, `test_tripwire_own_artifacts` and
-      `test_tripwire_artifact_paths` were worker crashes under host load and pass when run alone.
-  - kind: discovery
     id: p1-preview-cannot-show-refusal
     phase: 1
     title: "fr migrate artifacts (preview) lists a spec the rewrite will refuse as 'would migrate'"
@@ -54,3 +44,32 @@ journal:
       requirements list, then re-run fr migrate artifacts --yes`, leaving the file byte-identical.
       `fr.artifacts.spec_requirements_table.build(path, text)` is the side-effect-free check a preview
       could call.
+  - kind: decision
+    id: p1-lettered-ids-implemented
+    phase: 1
+    title: "Lettered requirement ids (R9a) accepted per operator decision lettered-requirement-ids; P1.T5.S1 then ran"
+    body: |
+      `fr.requirements` reads an id as `R[1-9][0-9]*[a-z]?` in list and table form (one `_ID_PATTERN` behind
+      `_ID_RE` and `_LIST_ITEM_RE`), orders ids with the new `requirement_order` (R9 < R9a < R9b < R10), and
+      still raises on `R9ab.`, `R09.`, `R9A.` and `R9-a.`. Phase sizing's `_ASK_RE` takes the letter; proportionality
+      used `int(r[1:])` to sort served asks, which would have crashed on R9a, and now uses `requirement_order`.
+      The stamp-2 validator and the migration's round trip go through the same reader. Prose names the optional
+      letter (fr-brainstorming §2, fr-brainstorming-and-plan explainer; both mirrors re-synced).
+      The CLI-entry gate had already migrated and committed the other ten live specs (9eeb5c8ef) during the
+      earlier blocked run; `fr migrate artifacts --yes` then converted 2026-11-27-triage-leaves-split (its R9a is
+      now a `| R9a | ... |` row), committed as `chore(fr): migrate artifacts`, and `fr validate artifacts`
+      reports all 227 artifacts valid.
+  - kind: discovery
+    id: p1-fast-tier-final
+    phase: 1
+    title: "final fast tier: the four R9a-held tests are green; 5 environment failures and 3 worker crashes remain, none in this diff"
+    body: |
+      `uv run pytest --fr-scope origin/main -n 2 -q --no-cov`: 8 failed, 12258 passed, 137 skipped.
+      Green now: test_this_repos_own_artifacts_are_structurally_valid,
+      test_this_repos_own_artifacts_plan_only_safe_actions, test_dispatch_lint_corpus, and the closed-world
+      runner tests. Still failing in the devcontainer, in paths this diff does not touch:
+      test_run_idle_guard::test_the_gh518_stop_is_blocked and test_isolation_decision_core's four
+      relative-PATH cases (`bash` not found under a stripped PATH). Three xdist worker crashes under the
+      container's 2 GB memory (test_run_evidence_separate_context, test_tripwire_own_artifacts,
+      test_tripwire_artifact_paths) pass when run alone (43 passed). One earlier run aborted on an xdist
+      INTERNALERROR and was rerun.
