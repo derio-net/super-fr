@@ -288,3 +288,28 @@ a capture task: fixtures and a test, nothing pre-existing to clean
 ### no-refactor-p6-t2 · discovery · no-refactor-because P6.T2 (phase 6)
 
 a move that must keep its bytes; the only cleanup (run_cmd imports left unused, the re-pointed tests, the stale prose names) was done in the green step
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1 created=2026-11-28T02:24:44+00:00 phase=6 state=open review_scope=in -->
+### p6-r1 · finding [open] (reviewer: in scope) · run_cmd.py budget was 4115 for a 4093-line module (+22), above spec R12's at-most-+20 headroom (phase 6)
+
+tests/unit/test_tripwire_module_budget.py set 4115 while its comment claimed +20. Fix - set the budget to the module's length plus 20.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2 created=2026-11-28T02:24:44+00:00 phase=6 state=open review_scope=in -->
+### p6-r2 · finding [open] (reviewer: in scope) · run_cmd.py imported the moved provenance names unprefixed, against spec R11's _-prefixed spelling (phase 6)
+
+The fr.run.provenance import block in run_cmd.py brought in GATE_DECISIONS, clears_gate, gate_provenance and the rest unprefixed, while slices 3-5 alias every moved name with a leading underscore. Fix - alias each as _<name> and re-point the call sites.
+
+<!-- fr:journal kind=review scope=plan id=review-p6-1 created=2026-11-28T02:24:44+00:00 phase=6 -->
+### review-p6-1 · review · phase 6 reviewed by an independent reviewer; 2 in-scope findings, both fixed (phase 6)
+
+Reviewer compared every moved body in fr/run/provenance.py with run_cmd.py at e26e7d925: each print + typer.Exit(2) became RunRefusal with the same text, markup, soft_wrap and style, and the two yellow warnings go through warn=_say in the same order; every call site is wrapped in _refusals(); gate_degradation_notice still raises HarnessError, which the caller maps as before; GATE_DECISIONS keeps its ContextVar name and is still reset and flushed at the same points. Layering holds (no typer, rich or fr.commands in provenance.py; the layering test walks the whole package). No dead monkeypatch of a moved name. Fixtures were committed in 9ba4ff522 before the move and are unchanged since. AGENTS.md, stamps, acceptance amendment and rows, and _WRITER_MODULES are accurate. Findings p6-r1 (budget headroom) and p6-r2 (unprefixed imports) fixed.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r1-resolved created=2026-11-28T02:24:44+00:00 phase=6 state=fixed resolves=p6-r1 -->
+### p6-r1-resolved · finding [fixed] · resolves p6-r1: run_cmd.py budget was 4115 for a 4093-line module (+22), above spec R12's at-most-+20 headroom (phase 6)
+
+Budget set to 4111 for the 4091-line module (+20) in 64771b649; the comment names the new length.
+
+<!-- fr:journal kind=finding scope=plan id=p6-r2-resolved created=2026-11-28T02:24:44+00:00 phase=6 state=fixed resolves=p6-r2 -->
+### p6-r2-resolved · finding [fixed] · resolves p6-r2: run_cmd.py imported the moved provenance names unprefixed, against spec R11's _-prefixed spelling (phase 6)
+
+run_cmd.py now imports all ten provenance names as _<name> and its call sites use them (64771b649); ruff and mypy are clean, and 414 focused tests pass (budget, provenance capture, question rounds, run CLI, layering, stamp offset).
