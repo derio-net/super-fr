@@ -184,26 +184,41 @@ class FakeTree:
         return 0, ""
 
     def _walk_named_rows(self, n: int, args: list[str]) -> None:
-        """What the real `fr closeout outcome --ran` writes (R9): a passing walk on each
-        row step *n* names, `walked` once no harness the row names is still owed."""
+        """What the real `fr closeout outcome --ran` writes (R9, `_row_walks`): a passing
+        walk on each row step *n* names, with the row's effective strategy, `walked` once
+        `walk_verified` holds over the walks `--pr-head` does not carry (R12). Merged-row
+        amendments are not modelled: every fixture row is pending in the fragment."""
         import yaml
+        from fr.acceptance.model import Row, Walk
+        from fr.acceptance.walks import walk_verified
         from fr.spec import test_plan_steps
+        from fr.verification.exit import run_exit
 
         steps = test_plan_steps((self.path / SPEC).read_text())
         named = set(steps[n - 1].rows) if n <= len(steps) else set()
+        if not named:
+            return
         harness = args[args.index("--harness") + 1] if "--harness" in args else "operator"
         model = args[args.index("--model") + 1] if "--model" in args else "human"
+        head = (
+            gate_mod.head_walks(self, args[args.index("--pr-head") + 1])
+            if "--pr-head" in args
+            else {}
+        )
+        kinds = run_exit(self.path, _state()).row_kinds
         for frag in (self.path / "docs/acceptance/features").glob("*.yaml"):
             data = yaml.safe_load(frag.read_text())
             for r in data.get("rows") or []:
                 if r["id"] not in named:
                     continue
-                walk = {"strategy": "live", "harness": harness, "model": model,
-                        "outcome": "pass", "at": "2026-10-22T10:00:00Z",
+                walk = {"strategy": kinds.get(r["id"], "live"), "harness": harness,
+                        "model": model, "outcome": "pass", "at": "2026-10-22T10:00:00Z",
                         "evidence": f"Test Plan step {n}"}  # fmt: skip
                 r["walks"] = [*(r.get("walks") or []), walk]
-                passing = {w["harness"] for w in r["walks"] if w["outcome"] == "pass"}
-                if all(h in passing for h in r.get("harnesses") or []):
+                mine = [
+                    w for w in r["walks"] if Walk.model_validate(w) not in head.get(r["id"], set())
+                ]
+                if walk_verified(Row.model_validate({**r, "walks": mine})):
                     r["status"] = "walked"
             frag.write_text(yaml.safe_dump(data, sort_keys=False))
 
