@@ -77,9 +77,12 @@ rows:
       batch's merged PR, which the batch route skips
     origin:
     - spec:2026-11-28-tester-gate-auto-pass#R8
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_a_batch_pr_without_a_closeout_is_not_loose_but_a_closed_out_one_is
+      - super-fr:tests/unit/test_triage_pr_gates.py#test_a_closed_out_batchs_pr_given_as_a_loose_ledger_is_passed
+    status: ci
+    notes: a closed-out batch's PR is loose and planned
     verify: none
 amendments:
   - row: loose-gated-pr-no-pass-without-evidence
