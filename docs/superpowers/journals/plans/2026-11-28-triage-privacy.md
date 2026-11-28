@@ -144,3 +144,8 @@ The fix is to carry the account type (REST user.type, GraphQL __typename) in bot
 ### bot-account-type-resolved · finding [out-of-scope] · resolves bot-account-type: Comment adapters do not report whether an author is a bot, so a pr_author listed as x[bot] is pinned under GraphQL but not under REST
 
 Pre-existing adapter limitation
+
+<!-- fr:journal kind=finding scope=plan id=bot-account-type-resolved-2 created=2026-11-28T16:52:25+00:00 state=open resolves=bot-account-type tracked_by=https://github.com/derio-net/super-fr/issues/1788 -->
+### bot-account-type-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1788] · resolves bot-account-type: Comment adapters do not report whether an author is a bot, so a pr_author listed as x[bot] is pinned under GraphQL but not under REST
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1788.
