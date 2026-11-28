@@ -1,0 +1,5 @@
+{
+  "queued": [],
+  "returned": "the transcript shows 2 answered question rounds since the gate blocked, but this resolve declares 1. Declare the second round: `questions: {rounds: 2, trigger: design-risk|operator-request, reason: \"\u2026\"}` in the record, or `--question-rounds 2 --round-two-trigger \u2026 --round-two-reason \"\u2026\"`.",
+  "unobserved": {}
+}

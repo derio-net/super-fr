@@ -1,0 +1,13 @@
+{
+  "queued": [
+    [
+      "s",
+      "gate-no-questions-brainstorm",
+      "Operator gate `brainstorm` cleared without asking",
+      "the operator had decided",
+      "s.md"
+    ]
+  ],
+  "returned": "agent",
+  "unobserved": {}
+}

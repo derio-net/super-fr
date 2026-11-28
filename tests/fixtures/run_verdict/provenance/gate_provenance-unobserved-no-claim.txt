@@ -1,0 +1,1 @@
+[31mbrainstorm: could not verify who answered this gate (no harness detected) — pass `answered_by: operator` (the operator answered) or `answered_by: agent` (cleared without asking): `--answered-by operator|agent` on the flag form, `evidence: {answered_by: …}` in a record.[0m
