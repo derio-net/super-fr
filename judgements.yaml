@@ -12934,6 +12934,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-28T10:22:57.128013Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-28T10:23:08.325693Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -14322,6 +14337,13 @@ batches:
     at: '2026-11-28T10:03:40.579266Z'
     pr: 1755
     head: ddbe09a818b34d182e002d6d62a2e04fdb69065b
+    checks:
+    - ci-ok
+    delivered: session
+  - kind: red_handback
+    at: '2026-11-28T10:22:33.470081Z'
+    pr: 1755
+    head: 290344ae706de6aa0e5375a349991043fecaf10e
     checks:
     - ci-ok
     delivered: session
