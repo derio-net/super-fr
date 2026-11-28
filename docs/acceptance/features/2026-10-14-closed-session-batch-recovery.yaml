@@ -126,3 +126,24 @@ amendments:
       is unit-pinned. No live recovery walk was performed. Post-merge candidate walk
       2026-11-28: the row''s scenario (tests/scenarios/triage-closed-recovery.sh, fake-backed,
       temp dirs) passed against the installed candidate built from main 9aefd594f.'
+  - row: triage-closed-recovery-refusals
+    op: set-status
+    base: 1
+    status: ci
+    notes: 'Captured-roster variants and disposable CLI tests prove preview/refusal
+      safety; named anchors resolve. Post-merge candidate walk 2026-11-28: the row''s
+      scenario (tests/scenarios/triage-closed-recovery.sh, fake-backed, temp dirs) passed
+      against the installed candidate built from main 9aefd594f.'
+    walk:
+      strategy: candidate
+      harness: claude
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-28T14:28:34Z'
+      evidence: tests/integration/test_scenarios.py::test_triage_closed_recovery passed
+        2026-11-28 (scenario tests/scenarios/triage-closed-recovery.sh against fr 9.1.0rc10
+        installed from main 9aefd594f), 1 passed in 8.81s
+    why: 'Captured-roster variants and disposable CLI tests prove preview/refusal safety;
+      named anchors resolve. Post-merge candidate walk 2026-11-28: the row''s scenario
+      (tests/scenarios/triage-closed-recovery.sh, fake-backed, temp dirs) passed against
+      the installed candidate built from main 9aefd594f.'
