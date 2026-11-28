@@ -1,0 +1,61 @@
+schema_version: 2
+run: 2026-11-28-feat-batch-s2-alacarte-settings
+captures:
+- host: h-29c07c1a
+  harness: claude-code
+  mode: devcontainer
+  captured_at: '2026-11-28T08:21:59+00:00'
+  at:
+  - resolve:brainstorm
+  sessions:
+  - session: f1aab1a6-831c-498a-845a-2749af8b52b3
+    role: main
+    models:
+      claude-opus-5-5:
+        input: 60
+        cache_write: 345545
+        cache_read: 4501761
+        output: 23036
+        usd: null
+        usd_source: none
+    activity:
+      implementation:
+        usd: null
+        turns: 9
+      other:
+        usd: null
+        turns: 8
+      paperwork:
+        usd: null
+        turns: 13
+    steps:
+      (outside run):
+        usd: null
+        turns: 5
+        input: 12
+        cache_write: 108000
+        cache_read: 535621
+        output: 1071
+      brainstorm:
+        usd: null
+        turns: 24
+        input: 48
+        cache_write: 237545
+        cache_read: 3966140
+        output: 21965
+    steps_by_role:
+      main:
+        (outside run):
+          usd: null
+          turns: 5
+          input: 12
+          cache_write: 108000
+          cache_read: 535621
+          output: 1071
+        brainstorm:
+          usd: null
+          turns: 24
+          input: 48
+          cache_write: 237545
+          cache_read: 3966140
+          output: 21965

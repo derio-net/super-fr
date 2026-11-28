@@ -1,0 +1,51 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-28-alacarte-settings
+repo: derio-net/super-fr
+rows:
+  - id: s2-workflows-disabled
+    capability: 'à la carte settings: available workflows'
+    acceptance: A repo lists shapes in `workflows.disabled`; fr refuses to start a run
+      on one (start, rebind, adopt), names the shapes still available, lets a run already
+      started continue, and `fr settings check` refuses an unknown or all-disabling
+      list.
+    origin:
+    - spec:2026-11-28-alacarte-settings#R1
+    - spec:2026-11-28-alacarte-settings#R2
+    - spec:2026-11-28-alacarte-settings#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/alacarte-settings.sh
+  - id: s2-pr-sections
+    capability: 'à la carte settings: PR-body sections'
+    acceptance: A repo turns `forge.pr_sections.proportionality`, `cost` or `settle`
+      off; the rendered and durable PR body omit that section and deliver no longer
+      requires it, while every review-bearing section stays required.
+    origin:
+    - spec:2026-11-28-alacarte-settings#R4
+    - spec:2026-11-28-alacarte-settings#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/alacarte-settings.sh
+  - id: s2-stealth-confirm
+    capability: 'stealth: code reaches the target only on operator confirmation'
+    acceptance: Under stealth, `fr push` and `fr pr create` ask for a verified operator
+      approval whatever the tracking settings say, an explicit `auto` there is refused,
+      and fr's state still pushes to the tracking repo on every write without asking.
+    origin:
+    - spec:2026-11-28-alacarte-settings#R7
+    - spec:2026-11-28-alacarte-settings#R8
+    - spec:2026-11-28-alacarte-settings#R9
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+    scenario: tests/scenarios/alacarte-settings.sh
