@@ -50,9 +50,14 @@ rows:
     origin:
     - spec:2026-11-27-ops-gate-truth#R10
     - spec:2026-11-27-ops-gate-truth#R11
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate_pass.py#test_the_tester_pass_refuses_naming_an_unwalked_tester_row
+      - super-fr:tests/unit/test_ops_gate_pass.py#test_the_tester_pass_refuses_naming_an_unrecorded_tester_step
+      - super-fr:tests/unit/test_ops_gate.py#test_after_a_restart_an_existing_pass_with_a_blocker_fails_stage_6
+    status: ci
+    notes: 'unit tests with fake ports and fixture repos, run in this PR''s CI (spec
+      Verification: none)'
   - id: ops-gate-walks-and-reports-its-own-rows
     capability: 'fr ops gate: its own rows'
     acceptance: The DevOps stage asks the operator to walk each devops row no step covers,
