@@ -40,3 +40,8 @@ The spec's bound (?!\.\w) would reject https://host/acme/secret.git, which R8 re
 ### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
 
 docs and acceptance row only; no code to clean
+
+<!-- fr:journal kind=review scope=plan id=p2-review-1 created=2026-11-28T16:13:51+00:00 phase=2 -->
+### p2-review-1 · review · phase 2 review: no findings (R8, R9, Design D, docs currency verified) (phase 2)
+
+An independent reviewer (separate context, with a shell) checked diff 24b7345..539fbdc30 against R8, R9 and Design D, and ran adversarial strings through repo_patterns. Private owner/name matches case-insensitively, including with a .git suffix and in sentence-final position. Lookalikes (xowner/name, name-two, name.md, my-name#12) do not match. The name#N form is skipped when a public repo shares the name. The p2-git-suffix decision is sound: Design C already requires the .git form, and backtracking still rejects .gitx. A push scans state_ref.ref_entries, which covers the whole REF_FILES walk. An export scans the durable set, including subdirectories. Refusals name the file, the repo and the remedy, never the matched text. An unreadable file refuses. An org scope with no facts raises VisibilityUnreadable naming fr triage collect. Tests: 173 passed (test_triage_privacy, test_triage_state_ref, test_triage_state_sync). fr docs check is clean, and both mirror syncs report in sync. Findings: none.
