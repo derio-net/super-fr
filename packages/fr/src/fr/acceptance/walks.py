@@ -10,6 +10,7 @@ fr only prints the commands that close such an issue; it never closes one.
 
 from __future__ import annotations
 
+from collections.abc import Collection, Iterable, Sequence
 from pathlib import Path
 
 from fr.acceptance.model import Matrix, Row, Walk
@@ -21,6 +22,8 @@ __all__ = [
     "close_commands",
     "holds_open",
     "issues_now_closable",
+    "fragment_walks",
+    "head_free_walks",
     "owed_harnesses",
     "row_walked",
     "walk_verified",
@@ -40,21 +43,65 @@ def walk_verified(row: Row) -> bool:
     return bool(passing)
 
 
-def owed_harnesses(row: Row, walks: tuple[Walk, ...] | list[Walk] | None = None) -> list[str]:
-    """The harnesses *row* names that no passing walk in *walks* (default: the row's own)
-    covers yet, in the row's order (ops-gate-truth R9, R10)."""
-    passing = {w.harness for w in (row.walks if walks is None else walks) if w.outcome == "pass"}
-    return [h for h in row.harnesses if h not in passing]
+def owed_harnesses(row: Row, walks: Sequence[Walk] | None = None) -> list[str]:
+    """The harnesses *row* names whose latest walk in *walks* (default: the row's own)
+    did not pass, or that have none, in the row's order (ops-gate-truth R9, R10, R12)."""
+    pool = list(row.walks if walks is None else walks)
+    owed = []
+    for h in row.harnesses:
+        on = [w for w in pool if w.harness == h]
+        if not on or _latest(on).outcome != "pass":
+            owed.append(h)
+    return owed
 
 
-def row_walked(row: Row, exclude: frozenset[Walk] | set[Walk] = frozenset()) -> bool:
+def _latest(walks: list[Walk]) -> Walk:
+    """The latest walk by `at`; a tie goes to the later one in the list (p2-r9)."""
+    return max(enumerate(walks), key=lambda iw: (iw[1].at, iw[0]))[1]
+
+
+def row_walked(row: Row, exclude_walks: Collection[Walk] | None = None) -> bool:
     """The one rule for a walked row (spec 2026-11-27-ops-gate-truth R10): its status
-    is `walked` and its latest walk (by `at`) passed. A walk in *exclude* does not
-    count (R12: the DevOps stage ignores the walks the pinned PR head carries)."""
-    if row.status != "walked":
+    is `walked` and its latest walk (by `at`, ties to the later one) passed.
+
+    With *exclude_walks* (R12, the DevOps stage's head-free judgement: the walks the
+    pinned PR head carries) the status never counts, since the head may have written it:
+    the row is walked only when every harness it owes has a latest passing walk among the
+    walks that remain (any one harness when it names none)."""
+    if exclude_walks is None:
+        return (
+            row.status == "walked"
+            and bool(row.walks)
+            and _latest(list(row.walks)).outcome == "pass"
+        )
+    walks = [w for w in row.walks if w not in exclude_walks]
+    if not walks:
         return False
-    walks = [w for w in row.walks if w not in exclude]
-    return bool(walks) and max(walks, key=lambda w: w.at).outcome == "pass"
+    if not row.harnesses:
+        return _latest(walks).outcome == "pass"
+    return not owed_harnesses(row, walks)
+
+
+def head_free_walks(row: Row, exclude_walks: Collection[Walk]) -> list[Walk]:
+    """*row*'s walks with *exclude_walks* (the PR head's) taken out (R12)."""
+    return [w for w in row.walks if w not in exclude_walks]
+
+
+def fragment_walks(texts: Iterable[tuple[str, str]]) -> dict[str, set[Walk]]:
+    """Row id -> every walk the fragments in *texts* (`(path, text)`) carry, on their rows
+    and in their set-status amendments: what the DevOps stage excludes as PR-carried
+    (R12). An unreadable fragment raises `AcceptanceError` naming its path."""
+    from fr.acceptance.fragment import SetStatus, parse_fragment
+
+    out: dict[str, set[Walk]] = {}
+    for rel, text in texts:
+        fragment = parse_fragment(text, source=rel)
+        for r in fragment.rows:
+            out.setdefault(r.id, set()).update(r.walks)
+        for a in fragment.amendments:
+            if isinstance(a, SetStatus) and a.walk is not None:
+                out.setdefault(a.row, set()).add(a.walk)
+    return out
 
 
 def _spec_of(row: Row, repo_root: Path) -> str | None:

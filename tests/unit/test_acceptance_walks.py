@@ -298,3 +298,40 @@ def test_row_walked_is_false_for_a_walk_owed_row_with_a_passing_walk() -> None:
     from fr.acceptance.walks import row_walked
 
     assert not row_walked(_row("r", status="walk-owed", walks=[_at("2026-10-01T00:00:00Z")]))
+
+
+def test_row_walked_breaks_a_tie_on_at_by_position_last_wins() -> None:
+    """p2-r9: a pass then a fail in the same second reads not walked."""
+    from fr.acceptance.walks import row_walked
+
+    same = "2026-10-01T00:00:00Z"
+    assert not row_walked(_row("r", status="walked", walks=[_at(same), _at(same, "fail")]))
+    assert row_walked(_row("r", status="walked", walks=[_at(same, "fail"), _at(same)]))
+
+
+def _hw(harness: str, at: str, outcome: str = "pass") -> Walk:
+    return _walk(harness=harness, outcome=outcome).model_copy(update={"at": at})
+
+
+def test_head_free_judgement_ignores_status_and_excluded_walks() -> None:
+    """p2-r1 (R12): with an exclusion, walked means every owed harness has a latest
+    passing walk among the walks that remain; the row's status never counts."""
+    from fr.acceptance.walks import row_walked
+
+    a = _hw("a", "2026-10-01T00:00:00Z")
+    b = _hw("b", "2026-10-02T00:00:00Z")
+    row = _row("r", status="walked", harnesses=["a", "b"], walks=[a, b])
+    assert not row_walked(row, exclude_walks={b})
+    owed = _row("r", status="walk-owed", harnesses=["a", "b"], walks=[a, b])
+    assert row_walked(owed, exclude_walks=set())
+
+
+def test_head_free_judgement_needs_each_harness_latest_walk_to_pass() -> None:
+    from fr.acceptance.walks import row_walked
+
+    walks = [_hw("a", "2026-10-01T00:00:00Z"), _hw("a", "2026-10-02T00:00:00Z", "fail"),
+             _hw("b", "2026-10-03T00:00:00Z")]  # fmt: skip
+    assert not row_walked(_row("r", status="walk-owed", harnesses=["a", "b"], walks=walks),
+                          exclude_walks=set())  # fmt: skip
+    plain = [_hw("x", "2026-10-01T00:00:00Z"), _hw("y", "2026-10-02T00:00:00Z", "fail")]
+    assert not row_walked(_row("r", status="walked", walks=plain), exclude_walks=set())
