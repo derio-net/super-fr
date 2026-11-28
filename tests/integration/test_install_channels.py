@@ -8,6 +8,7 @@ records argv -- never the network, never the operator's real install.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -131,6 +132,11 @@ def _fixture_remote(tmp_path: Path) -> Path:
     # Unmarked and lexically last, as this repo's real v5.9.4 is (p8-r1).
     commit("v1.9.0", marked=False)
     commit("v0.9.0", marked=False)
+    # A tag whose commit has no scripts/install.sh at all: skipped without a message.
+    (origin / "scripts" / "install.sh").unlink()
+    _git(origin, "add", "-A")
+    _git(origin, "commit", "-q", "-m", "v0.8.0")
+    _git(origin, "tag", "v0.8.0")
     commit("v1.2.0", marked=True)
     commit("rc/some-branch/abc1234", marked=True)  # per-branch tag, never a channel
     commit(None, marked=True)  # main moves past every tag
@@ -226,6 +232,70 @@ def test_the_refusal_lists_installable_tags_in_version_order(tmp_path: Path) -> 
         "v1.2.0-rc.10",
         "v1.2.0",
     ], res.stderr
+
+
+# ── 2026-11-28-batch-silent-failures R3, R4: no tag is dropped without a message ──
+
+_REAL_GIT = shutil.which("git") or "/usr/bin/git"
+_RC10_SHOW = "show refs/tags/v1.2.0-rc.10:scripts/install.sh"
+
+
+def _git_stub(tmp_path: Path, match: str, stderr: str, code: int = 128) -> None:
+    """A `git` first on PATH that fails one invocation and delegates the rest to the real one."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    stub = bin_dir / "git"
+    stub.write_text(
+        "#!/bin/sh\n"
+        f'case "$*" in *"{match}"*) echo "{stderr}" >&2; exit {code};; esac\n'
+        f'exec "{_REAL_GIT}" "$@"\n'
+    )
+    stub.chmod(0o755)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [(), ("--version", "RC"), ("--version", "1.2.0"), ("--version", "9.9.9")],
+    ids=["default", "rc", "exact", "refusal"],
+)
+def test_a_tag_whose_install_sh_cannot_be_read_stops_bootstrap(
+    tmp_path: Path, args: tuple[str, ...]
+) -> None:
+    origin = _fixture_remote(tmp_path)
+    _git_stub(tmp_path, _RC10_SHOW, "fatal: simulated read failure")
+    res, marker = _bootstrap(tmp_path, origin, *args)
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert (
+        "ERROR: could not read scripts/install.sh at v1.2.0-rc.10: fatal: simulated read failure"
+        in res.stderr
+    )
+    assert not marker.exists()
+    assert "No installable versions" not in res.stderr
+
+
+def test_an_unreadable_tag_never_blocks_the_main_channel(tmp_path: Path) -> None:
+    origin = _fixture_remote(tmp_path)
+    _git_stub(tmp_path, _RC10_SHOW, "fatal: simulated read failure")
+    res, marker = _bootstrap(tmp_path, origin, "--version", "main")
+    assert res.returncode == 0, res.stderr
+    assert marker.exists()
+
+
+def test_a_failing_tag_listing_is_named_never_read_as_no_versions(tmp_path: Path) -> None:
+    origin = _fixture_remote(tmp_path)
+    _git_stub(tmp_path, "ls-remote --tags", "fatal: simulated network failure")
+    for args in ((), ("--version", "9.9.9")):
+        res, marker = _bootstrap(tmp_path, origin, *args)
+        assert res.returncode == 1, res.stdout + res.stderr
+        assert "ERROR: could not list release tags: fatal: simulated network failure" in res.stderr
+        assert "No installable versions" not in res.stderr
+        assert not marker.exists()
+
+
+def test_a_tag_without_an_install_sh_is_skipped_without_a_message(tmp_path: Path) -> None:
+    res, _ = _bootstrap(tmp_path, _fixture_remote(tmp_path), "--version", "9.9.9")
+    assert "v0.8.0" not in res.stderr
+    assert "could not" not in res.stderr
 
 
 def test_an_unknown_version_installs_nothing(tmp_path: Path) -> None:

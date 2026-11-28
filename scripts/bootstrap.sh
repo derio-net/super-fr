@@ -114,20 +114,50 @@ else
 fi
 
 # Release and RC tags, one per line, versions only (no leading v). The per-branch
-# pre-merge tags rc/<branch>/<sha> never match and are not channels.
+# pre-merge tags rc/<branch>/<sha> never match and are not channels. A failing
+# listing fails this function (R3): it is captured, never piped, so `set -o pipefail`
+# cannot lose it and the caller sees the status.
 channel_tags() {
-  git -C "$SRC" ls-remote --tags origin </dev/null | sed -n 's|.*refs/tags/\(v[0-9][0-9.]*\(-rc\.[0-9]*\)\{0,1\}\)$|\1|p' |
-    grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$' | sort -u
+  local raw err_file rc=0
+  err_file="$(mktemp)"
+  raw="$(git -C "$SRC" ls-remote --tags origin </dev/null 2>"$err_file")" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "ERROR: could not list release tags: $(head -n 1 "$err_file")" >&2
+    rm -f "$err_file"
+    return 1
+  fi
+  rm -f "$err_file"
+  printf '%s\n' "$raw" | sed -n 's|.*refs/tags/\(v[0-9][0-9.]*\(-rc\.[0-9]*\)\{0,1\}\)$|\1|p' |
+    grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$' | sort -u || true
 }
-# Installable = the tag's install.sh carries the channel marker.
+# Installable = the tag's install.sh carries the channel marker. Three cases per tag
+# (R3): no scripts/install.sh, or one without the marker, is skipped silently; one git
+# cannot read stops everything with a message. Returns non-zero then, so every caller
+# must call it as `if ! X="$(installable_tags)"` (an `exit` here ends only the subshell).
 installable_tags() {
-  local t content
+  local t content tags listing err_file rc
+  tags="$(channel_tags)" || return 1
+  err_file="$(mktemp)"
   while IFS= read -r t; do
-    content="$(git -C "$SRC" show "refs/tags/$t:scripts/install.sh" 2>/dev/null </dev/null)" || continue
-    if printf '%s\n' "$content" | grep -qx '# fr-install-channels: 1'; then
+    [ -n "$t" ] || continue
+    rc=0
+    listing="$(git -C "$SRC" ls-tree --name-only "refs/tags/$t" -- scripts/install.sh </dev/null 2>"$err_file")" || rc=$?
+    if [ "$rc" -eq 0 ] && [ -n "$listing" ]; then
+      content="$(git -C "$SRC" show "refs/tags/$t:scripts/install.sh" </dev/null 2>"$err_file")" || rc=$?
+    fi
+    if [ "$rc" -ne 0 ]; then
+      echo "ERROR: could not read scripts/install.sh at $t: $(head -n 1 "$err_file")" >&2
+      rm -f "$err_file"
+      return 1
+    fi
+    [ -n "$listing" ] || continue
+    # A here-string, not a pipe: `grep -q` stops at its first match and a producer
+    # still writing would get SIGPIPE, which `pipefail` reads as "no marker" (R4).
+    if grep -qx '# fr-install-channels: 1' <<<"$content"; then
       echo "$t"
     fi
-  done < <(channel_tags)
+  done <<<"$tags"
+  rm -f "$err_file"
   return 0
 }
 # Numeric version order (rc.10 > rc.9, and vX.Y.Z above its own RCs): sort on
@@ -137,10 +167,15 @@ sort_versions() {
     sort -k1,1n -k2,2n -k3,3n -k4,4n | cut -d' ' -f5- | sed -e 's/^\([0-9][0-9.]*\) \(.*\)$/v\1-rc.\2/' -e 't' -e 's/^\([0-9][0-9.]*\)$/v\1/'
 }
 
+# Filter the installable list (INSTALLABLE, computed once below); an empty list is fine.
+installable() {
+  [ -z "$INSTALLABLE" ] || printf '%s\n' "$INSTALLABLE"
+}
+
 refuse() {
   local all
   echo "ERROR: $1" >&2
-  all="$(installable_tags | sort_versions)"
+  all="$(installable | sort_versions)"
   if [ -n "$all" ]; then
     echo "Installable versions:" >&2
     printf '  %s\n' "$all" >&2
@@ -151,14 +186,17 @@ refuse() {
 }
 
 TAG=""
+INSTALLABLE=""
 WANT="$(printf '%s' "$VERSION" | sed -e 's/^v//' | tr '[:upper:]' '[:lower:]')"
 if [ "$HAVE_VERSION" = 1 ] && [ "$WANT" = main ]; then
   TAG=main
+elif ! INSTALLABLE="$(installable_tags)"; then
+  exit 1  # the ERROR line is already on stderr
 elif [ "$HAVE_VERSION" = 0 ]; then
-  TAG="$(installable_tags | grep -v -- '-rc\.' | sort_versions | tail -n 1 || true)"
+  TAG="$(installable | grep -v -- '-rc\.' | sort_versions | tail -n 1 || true)"
   [ -n "$TAG" ] || refuse "no installable release vX.Y.Z yet. The default installs only a release; ask for another channel explicitly: --version RC (the newest release candidate) or --version main (the development channel)."
 else
-  AVAILABLE="$(installable_tags)"
+  AVAILABLE="$INSTALLABLE"
   case "$WANT" in
     rc) CAND="$(printf '%s\n' "$AVAILABLE" | grep -- '-rc\.' | sort_versions | tail -n 1 || true)" ;;
     *-rc) CAND="$(printf '%s\n' "$AVAILABLE" | grep -F "v${WANT%-rc}-rc." | sort_versions | tail -n 1 || true)" ;;
