@@ -2126,3 +2126,86 @@ def test_p2_r6_stage_7s_tester_pass_names_the_run(ops_root: Path) -> None:
 
     (gp,) = _gate_passes(tree)
     assert gp[gp.index("--run") + 1] == "run-1"
+
+
+# ------------------------------------------ ops-gate-truth R20: the final line reads the DoD
+
+
+def _real_plan(ops_root: Path, *, manual: str | None = None) -> None:
+    """The fixture plan as a real folder (`_meta.yaml`, a ticked phase 1, and optionally a
+    `[manual]` phase 2 whose step is *manual*: " " unticked, "x" ticked)."""
+    from tests.unit.test_run_dod import FIXTURE, MANUAL
+
+    for name in ("_meta.yaml", "01.yaml"):
+        shutil.copy(FIXTURE / name, ops_root / PLAN / name)
+    phase = ops_root / PLAN / "01.yaml"
+    phase.write_text(phase.read_text().replace('state: " "', "state: x"))
+    if manual is not None:
+        (ops_root / PLAN / "02.yaml").write_text(MANUAL.format(n=2, tick=manual))
+
+
+def _all_recorded(ops_root: Path, tree: FakeTree) -> None:
+    """Every op closed and both Test Plan steps recorded ran: only the plan can owe."""
+    for op, phase in (("pre", "pre-merge"), ("mut", "pre-merge"), ("post", "post-merge")):
+        record_op(ops_root, "p", op=op, result="done", phase=phase)
+    for n in ("1", "2"):
+        tree.fr(["closeout", "outcome", "--run", "run-1", "--step", n, "--ran"])
+
+
+def test_r20_a_rerun_with_a_discharged_dod_says_the_stage_is_complete(ops_root: Path) -> None:
+    _real_plan(ops_root, manual="x")
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _all_recorded(ops_root, tree)
+
+    result = run(gate)
+
+    assert result.ok and result.ran == ()
+    assert "the DevOps stage is complete" in said, said
+    assert not any("still owed" in line for line in said)
+
+
+def test_r20_a_rerun_with_owed_items_lists_them_and_never_says_complete(ops_root: Path) -> None:
+    _real_plan(ops_root)
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+
+    result = run(gate)
+
+    assert result.ok and result.ran == ()
+    assert "the DevOps stage is complete" not in said
+    assert "every stage ran; still owed:" in said, said
+    assert any(line.startswith("  gate:devops: Test Plan step 1 (devops)") for line in said)
+    assert any(line.startswith("  gate:devops: op post [post-merge]") for line in said)
+
+
+def test_r20_a_held_archive_leaves_its_manual_phase_owed_on_the_ran_path(ops_root: Path) -> None:
+    _real_plan(ops_root, manual=" ")
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _all_recorded(ops_root, tree)
+    real = tree.fr
+
+    def held_archive(args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
+        if list(args)[:1] == ["archive"]:
+            return 0, "  held: docs/superpowers/plans/p — phase 2 [manual] is unticked\n"
+        return real(args, terminal=terminal)
+
+    tree.fr = held_archive  # type: ignore[method-assign]
+
+    result = run(gate)
+
+    assert result.ok and result.ran == (8,)
+    assert "the DevOps stage is complete" not in said
+    assert "every stage ran; still owed:" in said, said
+    assert any(line.startswith("  manual phases: phase 2 [manual]: not ticked") for line in said)
+
+
+def test_r20_an_unreadable_dod_never_says_complete(ops_root: Path) -> None:
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)  # the plan folder has no _meta.yaml
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+
+    run(gate)
+
+    assert "the DevOps stage is complete" not in said
+    assert any("Definition of Done cannot be read" in line for line in said), said

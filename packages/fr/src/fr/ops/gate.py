@@ -1416,10 +1416,7 @@ def _owed_items(gate: Gate, tree: OpsTree, gate_name: StepGate) -> list[GateItem
     from fr.verification.spec_section import SectionError
 
     t = gate.target
-    head = gate.pinned_head()
-    spec_slug = _spec_slug(t.run)
-    at_head = head_entry_ids(tree, head, "spec", spec_slug) if spec_slug else set()
-    excluded = head_walks(tree, head)
+    at_head, excluded = _head_exclusions(gate, tree)
     try:
         items = gate_items(tree.path, t.run, gate_name, exclude_walks=excluded,
                            exclude_outcomes=at_head)  # fmt: skip
@@ -1430,6 +1427,38 @@ def _owed_items(gate: Gate, tree: OpsTree, gate_name: StepGate) -> list[GateItem
     except (AcceptanceError, SectionError, SettingsError, OSError) as exc:  # p2-r4
         raise StageFailed(f"the run's exit cannot be read: {exc}") from exc
     return [i for i in items if not i.discharged]
+
+
+def _head_exclusions(gate: Gate, tree: OpsTree) -> tuple[set[str], dict[str, set[Walk]]]:
+    """The spec-journal entry ids and the walks the pinned PR head carries: PR-controlled,
+    so none of them counts inside the stage (R12)."""
+    head = gate.pinned_head()
+    spec_slug = _spec_slug(gate.target.run)
+    at_head = head_entry_ids(tree, head, "spec", spec_slug) if spec_slug else set()
+    return at_head, head_walks(tree, head)
+
+
+def _say_done(gate: Gate) -> None:
+    """R20: the stage is complete only while the run's Definition of Done, read on the ops
+    workspace with the PR head's own evidence excluded, is discharged; otherwise every item
+    still owed, from every group."""
+    from fr.run.dod import DodError, definition_of_done
+
+    try:
+        tree = gate.tree()
+        at_head, excluded = _head_exclusions(gate, tree)
+        dod = definition_of_done(tree.path, gate.target.run, exclude_walks=excluded,
+                                 exclude_outcomes=at_head)  # fmt: skip
+    except (DodError, StageFailed) as exc:
+        why = exc.why if isinstance(exc, StageFailed) else str(exc)
+        gate.say(f"every stage ran; the Definition of Done cannot be read: {why}")
+        return
+    if dod.discharged:
+        gate.say("the DevOps stage is complete")
+        return
+    gate.say("every stage ran; still owed:")
+    for line in dod.owed():
+        gate.say(f"  {line}")
 
 
 def _say_owed(gate: Gate, tree: OpsTree, gate_name: StepGate) -> list[GateItem]:
@@ -1716,7 +1745,9 @@ def run(gate: Gate) -> GateResult:
                 "queue serves the repo); re-run once it has"
             )
             return GateResult(False, tuple(ran), waiting=True)
-    gate.say("the DevOps stage is complete" if ran else "every stage is already done; nothing ran")
+    if not ran:
+        gate.say("every stage is already done; nothing ran")
+    _say_done(gate)
     return GateResult(True, tuple(ran))
 
 

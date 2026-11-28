@@ -545,3 +545,23 @@ def test_p2_r5_test_plan_off_owes_no_test_plan_outcomes_in_the_brief(tmp_path: P
     brief = closeout_brief(tmp_path, _state())
     assert f"Test Plan: {SPEC_REL}" not in brief
     assert "fr archive --branch" in brief
+
+
+# --- ops-gate-truth R19: the brief ends with the Definition of Done ---------------------
+
+
+def test_closeout_brief_ends_with_the_definition_of_done(tmp_path: Path) -> None:
+    import shutil
+
+    from tests.unit.requirements_support import row, write_matrix
+    from tests.unit.test_run_dod import FIXTURE, MANUAL
+
+    _spec_file(tmp_path, with_test_plan=False)
+    write_matrix(tmp_path, [row(SPEC_REL, rid="r1")])
+    shutil.copytree(FIXTURE, tmp_path / PLAN_REL)
+    (tmp_path / PLAN_REL / "02.yaml").write_text(MANUAL.format(n=2, tick=" "))
+    brief = closeout_brief(tmp_path, _state())
+    headings = [ln for ln in brief.splitlines() if ln.startswith("#")]
+    assert headings[-1].startswith("## Definition of Done — 1 item owed"), headings
+    tail = brief[brief.index("## Definition of Done") :]
+    assert "[owed] phase 2 [manual]: not ticked" in tail

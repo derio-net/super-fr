@@ -591,7 +591,10 @@ def closeout_brief(repo_root: Path, state: RunState) -> str:
         test_plan_steps=missing,
         test_plan_problem=problem,
     )
-    return branch_closeout_brief(repo_root, state.branch, run_extras=run_extras)
+    from fr.run.dod import dod_section
+
+    brief = branch_closeout_brief(repo_root, state.branch, run_extras=run_extras)
+    return "\n".join([brief, "", *dod_section(repo_root, state)[0]])
 
 
 def run_out_of_scope(repo_root: Path, state: RunState) -> list[tuple[str, str]]:
@@ -655,8 +658,30 @@ def devops_brief(repo_root: Path, state: RunState) -> str:
             f"run {state.run!r} is not ready for its DevOps stage — its cursor is "
             f"{state.cursor!r}, not a done `deliver`"
         )
+    from fr.run.dod import dod_section
+
     pr = _emitted(state, "pr") or "(no PR recorded)"
-    if _devops_stage_finished(repo_root, state.run):  # gh#1275
+    dod_text, dod = dod_section(repo_root, state)
+    finished = _devops_stage_finished(repo_root, state.run)
+    if finished and (dod is None or not dod.discharged):  # R19: never "complete" while owed
+        owed = dod.owed() if dod is not None else ["the Definition of Done cannot be read"]
+        return "\n".join([
+            f"# DevOps stage: every stage ran, work still owed — run {state.run}",
+            "",
+            f"branch: {state.branch}",
+            f"PR: {pr}",
+            "",
+            "The operator's DevOps stage record says every stage (1-8) ran, but the run's",
+            "Definition of Done still owes:",
+            "",
+            *(f"  - {line}" for line in owed),
+            "",
+            "Each is discharged by its own evidence (a walk, an outcome, a ticked phase, a",
+            "resolved owed entry); `fr run dod " + state.run + "` re-reads it.",
+            "",
+            *dod_text,
+        ])  # fmt: skip
+    if finished:  # gh#1275
         return "\n".join([
             f"# DevOps stage complete — run {state.run}",
             "",
@@ -671,6 +696,8 @@ def devops_brief(repo_root: Path, state: RunState) -> str:
             "Reap the feature workspace:",
             "",
             f"    fr isolation down --branch {state.branch}",
+            "",
+            *dod_text,
         ])  # fmt: skip
     lines = [
         f"# DevOps stage — run {state.run}",
@@ -696,5 +723,7 @@ def devops_brief(repo_root: Path, state: RunState) -> str:
         "",
         "Judgement (reading OPEN reasons, attesting vs writing a check, confirming the",
         "merge): the fr-devops-gate skill.",
+        "",
+        *dod_text,
     ]
     return "\n".join(lines)

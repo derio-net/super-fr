@@ -14,9 +14,9 @@ import re
 from collections.abc import Collection, Mapping, Set
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, get_args
 
-from fr.gates import POST_MERGE_GATES
+from fr.gates import PostMergeGate
 
 if TYPE_CHECKING:
     from fr.acceptance.model import Walk
@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
 MANUAL_GROUP = "manual phases"
 OWED_GROUP = "owed"
+UNREADABLE = "cannot be read"
 _STEP_OUTCOME = re.compile(r"^test-plan-step-(\d+)(?:-\d+)?$")
 _MANUAL_OWED = re.compile(r"^manual-phase-(\d+)$")
 
@@ -127,12 +128,13 @@ def _derive(
     groups: list[DodGroup] = []
     steps: set[int] = set()
     gates = run_exit(repo_root, run).gates
-    for gate in sorted(POST_MERGE_GATES & gates):
-        items = gate_items(repo_root, run, gate, exclude_walks=exclude_walks,  # type: ignore[arg-type]
-                           exclude_outcomes=exclude_outcomes)  # fmt: skip
+    for gate in sorted(g for g in get_args(PostMergeGate) if g in gates):
+        items = gate_items(
+            repo_root, run, gate, exclude_walks=exclude_walks, exclude_outcomes=exclude_outcomes
+        )
         steps |= {i.step for i in items if i.step is not None}
-        groups.append(DodGroup(f"gate:{gate}", tuple(DodItem(i.what, i.discharged, i.why)
-                                                     for i in items)))  # fmt: skip
+        dod_items = tuple(DodItem(i.what, i.discharged, i.why) for i in items)
+        groups.append(DodGroup(f"gate:{gate}", dod_items))
     plan_dir = run_plan_dir(repo_root, run)
     manual = _manual_phases(plan_dir) if plan_dir is not None else []
     groups.append(DodGroup(MANUAL_GROUP, tuple(item for _, item in manual)))
@@ -206,6 +208,11 @@ def dod_lines(dod: DefinitionOfDone) -> list[str]:
     return lines
 
 
-def dod_unreadable_lines(exc: DodError) -> list[str]:
-    """The text form when the Definition of Done cannot be derived."""
-    return [f"## Definition of Done — cannot be read: {exc}"]
+def dod_section(repo_root: Path, run: RunState) -> tuple[list[str], DefinitionOfDone | None]:
+    """`dod_lines` for *run*, and the DoD itself; `(the unreadable heading, None)` when it
+    cannot be derived (R19)."""
+    try:
+        dod = definition_of_done(repo_root, run)
+    except DodError as exc:
+        return [f"## Definition of Done — {UNREADABLE}: {exc}"], None
+    return dod_lines(dod), dod
