@@ -91,6 +91,7 @@ class GateItem:
     what: str
     discharged: bool
     why: str
+    step: int | None = None  # the Test Plan step number, for a step item (R17's owed group)
 
     @property
     def line(self) -> str:
@@ -151,7 +152,10 @@ def gate_items(
             why = "recorded owed, which does not close it" if kind else "no recorded outcome"
         out.append(
             GateItem(
-                f"Test Plan step {step.n} ({gate})", kind == "discovery", f"{why} — {step.text}"
+                f"Test Plan step {step.n} ({gate})",
+                kind == "discovery",
+                f"{why} — {step.text}",
+                step=step.n,
             )  # fmt: skip
         )
     for row, _ in gated_rows(repo_root, exit_, gate):

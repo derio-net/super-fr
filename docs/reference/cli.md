@@ -162,6 +162,7 @@ one artifact kind.
   - `fr run claim`: Put the orchestrator's reported identity onto the dispatch for a unit.
   - `fr run check`: Freshness gate: non-zero when the cursor sits on a failed step.
   - `fr run gates`: Every `gate: operator` step this run's manifest declares, and who cleared it — the source `fr-goal`'s `deliver` step reads for the PR body's "Operator gates" section.
+  - `fr run dod`: Print a run's Definition of Done, derived from its gates, plan and journals.
 - `fr validate`: Structural validation of generated artifacts.
   - `fr validate artifacts`: Structurally validate every live artifact against the version this fr writes.
   - `fr validate plans`: Run the plan-file validator bundled with this fr: `[--profile <yaml>] [FILE]...`.
