@@ -3,11 +3,14 @@ run: 2026-11-27-feat-batch-s1-followups
 workflow: fr-goal@1
 branch: feat/batch-s1-followups
 started: '2026-11-27T22:12:45+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-27T22:12:56+00:00'
+    state: done
+    at: '2026-11-28T08:09:38+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-28-s1-followups-design.md
   spec-review:
     state: pending
   plan:

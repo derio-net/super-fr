@@ -1,0 +1,72 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-28-s1-followups
+repo: derio-net/super-fr
+rows:
+  - id: s1-old-paths-refused
+    capability: configuration homes
+    acceptance: From fr 9.2 (or with FR_OLD_PATHS=refuse) a configuration file found
+      only at its pre-S1 path, and a per-kind FR_SHIPPED_<KIND>_DIR variable, refuse
+      the command naming the new home and fr migrate artifacts --yes / FR_SHIPPED_DEFAULTS_DIR,
+      while fr migrate artifacts still moves old paths; before 9.2 nothing changes
+    origin:
+    - spec:2026-11-28-s1-followups#R1
+    - spec:2026-11-28-s1-followups#R2
+    - spec:2026-11-28-s1-followups#R3
+    - spec:2026-11-28-s1-followups#R6
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: s1-old-settings-copy-retired
+    capability: configuration homes
+    acceptance: From fr 9.2, under quiet and stealth fr writes and reads only the configuration
+      branch's settings file, never the old copy, refuses a repo whose switch exists
+      only at the old location, and fr settings sync is retired (hidden, exit 2)
+    origin:
+    - spec:2026-11-28-s1-followups#R4
+    - spec:2026-11-28-s1-followups#R5
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: s1-shell-readers-refuse
+    capability: fr-isolation
+    acceptance: From the 9.2 release, the edit gate on Claude Code, Hermes and OpenCode
+      and validate-plans.sh no longer read the old .fr-isolation-allow, the old origin/fr:settings.yaml
+      switch or the old plan-config; a release version they cannot read counts as 9.2
+    origin:
+    - spec:2026-11-28-s1-followups#R7
+    - spec:2026-11-28-s1-followups#R8
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: s1-config-argv-from-tip
+    capability: executable configuration protection
+    acceptance: Under quiet and stealth, every .fr/ path in a walk's install or scenario
+      argv runs from the protected branch's fetched tip, a kind:cli step naming a .fr/
+      path is refused before it runs, and a repo shape or strategy comes from the fetched
+      tip when enforced or the shipped one when not
+    origin:
+    - spec:2026-11-28-s1-followups#R10
+    - spec:2026-11-28-s1-followups#R11
+    - spec:2026-11-28-s1-followups#R12
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: candidate
+  - id: repos-manifest-home-at-call
+    capability: fr repos
+    acceptance: fr repos sync's default manifest is $HOME/.config/fr/repos.yaml as HOME
+      is when the command runs; FR_REPOS_MANIFEST still wins
+    origin:
+    - spec:2026-11-28-s1-followups#R14
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
