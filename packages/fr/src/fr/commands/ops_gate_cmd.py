@@ -139,12 +139,14 @@ class HostCheckout:
 
         return run_this_fr(list(args), self.primary, terminal=terminal)
 
-    def fetch(self, ref: str) -> None:
+    def fetch(self, ref: str, *, strict: bool = False) -> None:
         from fr.triage.gitseam import GitError, git
 
         try:
             git(["fetch", "--quiet", "origin", "--end-of-options", ref], self.primary)
         except GitError as exc:  # a deleted branch: the PR head may still be here
+            if strict:
+                raise
             typer.echo(f"fr ops gate: warning: {exc}", err=True)
 
     def materialise(self, ref: str, paths: Sequence[str]) -> Path:

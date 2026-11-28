@@ -137,6 +137,22 @@ def _merge_by_hand(gate: Gate, tree: OpsTree, ref: str, paths: tuple[str, ...]) 
     )
 
 
+def _settle_pending_merge(gate: Gate, tree: OpsTree) -> None:
+    """A refresh whose merge failed left the pinned commit for the operator to merge by
+    hand (l-errors-r3). Whatever that commit's plan journal holds is the default branch's,
+    so it joins the reopened ops' `before` even when the hand merge left no drift."""
+    from fr.ops.gate import head_entry_ids
+
+    pending = gate.state.pending_merge()
+    if pending is None:
+        return
+    ops, before = gate.state.reopened()
+    if ops:
+        merged_in = head_entry_ids(tree, pending, "plan", gate.target.slug)
+        gate.state.set_reopened(ops, before | merged_in)
+    gate.state.set_pending_merge(None)
+
+
 def refresh(gate: Gate, tree: OpsTree, stage: int) -> None:
     """Bring the ops workspace up to date with the default branch before stage *stage* acts
     (R1–R6); says nothing when nothing moved. Raises `Restart` when a refresh after stage 4
@@ -149,7 +165,14 @@ def refresh(gate: Gate, tree: OpsTree, stage: int) -> None:
     from fr.requirements import run_spec
 
     t = gate.target
-    gate.host.fetch(gate.default)
+    try:
+        gate.host.fetch(gate.default, strict=True)  # a stale tip is never diffed (l-errors-r1)
+    except Exception as exc:  # noqa: BLE001 — git's own words
+        raise StageFailed(
+            f"cannot fetch origin/{gate.default} to bring {t.ops_branch} up to date: {exc}",
+            code=2,
+        ) from exc
+    _settle_pending_merge(gate, tree)
     # Pinned once (review p1-sec-r1): the diff, the question and the merge name ONE commit,
     # so a default branch that moves while the operator reads the question merges nothing new.
     tip = f"origin/{gate.default}"
@@ -190,9 +213,14 @@ def refresh(gate: Gate, tree: OpsTree, stage: int) -> None:
     try:
         tree.merge_commit(sha, f"chore(ops): merge {ref} into {t.ops_branch}")
     except MergeConflict as exc:
+        gate.state.set_pending_merge(sha)  # the hand merge brings in sha's entries (l-errors-r3)
         raise StageFailed(_merge_by_hand(gate, tree, sha, exc.paths)) from exc
     except Exception as exc:  # noqa: BLE001 — git's own words
-        raise StageFailed(f"cannot merge {ref} into {t.ops_branch}: {exc}") from exc
+        gate.state.set_pending_merge(sha)
+        raise StageFailed(
+            f"cannot merge {ref} into {t.ops_branch}: {exc}; if a merge is still in progress, "
+            f"`git -C {tree.path} merge --abort`, then re-run `fr ops gate --run {t.run.run} --yes`"
+        ) from exc
     if reopen:  # what the merge brought in is the default branch's, never recorded here
         ops, _ = gate.state.reopened()
         gate.state.set_reopened(ops, before | _entry_ids(tree, t.slug))

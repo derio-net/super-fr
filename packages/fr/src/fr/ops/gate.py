@@ -108,7 +108,11 @@ class GateHost(Protocol):
         terminal attached and nothing captured (an `interactive: true` op)."""
         ...
 
-    def fetch(self, ref: str) -> None: ...
+    def fetch(self, ref: str, *, strict: bool = False) -> None:
+        """`git fetch origin <ref>` in the base checkout. A failure warns and continues
+        (the PR's own branch may be deleted while its head is still here), or, with
+        *strict*, raises: the refresh must never diff a stale default branch (l-errors-r1)."""
+        ...
 
     def changed_paths(self, base: str, head: str, paths: Sequence[str]) -> list[str]:
         """The *paths* (pathspecs) *head* changed since it forked from *base*, in the base
@@ -290,6 +294,10 @@ class GateState(Protocol):
 
     def clear_reopened(self) -> None: ...
 
+    def pending_merge(self) -> str | None: ...
+
+    def set_pending_merge(self, sha: str | None) -> None: ...
+
     def forget(self, from_stage: int) -> None: ...
 
     def forgotten(self) -> set[int]: ...
@@ -359,6 +367,21 @@ class HostGateState:
     def clear_reopened(self) -> None:
         data = self._data()
         data.pop("reopened", None)
+        self._write(data)
+
+    def pending_merge(self) -> str | None:
+        """The default-branch commit a refresh could not merge (a conflict, a failed merge
+        commit), which the operator is told to merge by hand (l-errors-r3): the next
+        refresh adds the plan-journal entries it carries to the reopened ops' `before`."""
+        sha = self._data().get("pending_merge")
+        return str(sha) if sha is not None else None
+
+    def set_pending_merge(self, sha: str | None) -> None:
+        data = self._data()
+        if sha is None:
+            data.pop("pending_merge", None)
+        else:
+            data["pending_merge"] = sha
         self._write(data)
 
     def forget(self, from_stage: int) -> None:

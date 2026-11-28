@@ -116,6 +116,8 @@ class FakeTree:
         self.on_merge: Any = None  # called on a clean merge: what the merge brings in
         self.contains: set[str] = set()  # commits the ops branch already holds
         self.tip_files: dict[str, str] = {}  # what the default branch's tip carries, by path
+        self.head_sha = HEAD  # the ops branch's own head
+        self.merged_head: str | None = None  # the head a clean merge_commit leaves
 
     def snapshot_head(self) -> None:
         """Freeze the tree's current journals as what the PR head carries (p4-r2)."""
@@ -136,7 +138,7 @@ class FakeTree:
         )
 
     def head(self) -> str:
-        return HEAD
+        return self.head_sha
 
     def fr(self, args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
         args = list(args)
@@ -223,7 +225,9 @@ class FakeTree:
             raise gate_mod.MergeConflict(self.merge_conflict)
         if self.on_merge is not None:
             self.on_merge()
-        return HEAD
+        if self.merged_head is not None:
+            self.head_sha = self.merged_head
+        return self.head_sha
 
     def push(self, branch: str, lease: str | None = None) -> None:
         self.calls.append(("push", branch))
@@ -266,6 +270,7 @@ class FakeHost:
         self.by_id: dict[str, list[tuple[int, Any]]] = {}
         # what origin/<default> carries beyond the ops workspace: path -> text (None: absent)
         self.default_edits: dict[str, str | None] = {}
+        self.fetch_error: str | None = None  # a strict fetch of the default branch fails
 
     def materialise(self, ref: str, paths: Sequence[str]) -> Path:
         """*paths* as the PR head carries them: copied from the fake's own tree."""
@@ -305,8 +310,10 @@ class FakeHost:
     def queue_configured(self, default: str) -> bool:
         return self.queue
 
-    def fetch(self, ref: str) -> None:
+    def fetch(self, ref: str, *, strict: bool = False) -> None:
         self.calls.append((["fetch", ref], False))
+        if strict and self.fetch_error:
+            raise RuntimeError(self.fetch_error)
 
     def workspace(self, branch: str) -> FakeTree | None:
         assert branch == "chore/ops-p"
@@ -2423,3 +2430,105 @@ def test_l_errors_r9_a_malformed_head_phase_file_fails_closed(ops_root: Path) ->
 
     assert "the DevOps stage is complete" not in said
     assert result.code == 2 and "is not a plan phase file" in result.why
+
+
+# ------------------------------------------- lens review: the refresh's failure paths
+
+
+def test_l_errors_r1_a_failed_fetch_of_the_default_branch_refuses(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    host.fetch_error = "could not read from remote repository"
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_4(gate)
+    assert exc.value.code == 2 and "cannot fetch origin/main" in exc.value.why
+    assert "could not read from remote" in exc.value.why
+    assert not tree.calls and _refresh_q(prompt) == []
+
+
+def test_l_errors_r3_a_hand_merge_brings_in_nothing_that_closes_a_reopened_op(
+    ops_root: Path,
+) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    tree.merge_conflict = (f"{PLAN}/ops.yaml",)
+    with pytest.raises(gate_mod.StageFailed):
+        gate_mod.stage_4(gate)
+    # l-tests-r7 (R3): the records were committed before the merge; the host state already
+    # holds the reopened op, and the pinned commit waits for the hand merge
+    assert [k for k, _ in tree.calls if k in ("commit", "merge")] == ["commit", "merge"]
+    assert _host(ops_root).reopened()[0] == {"post"}
+    assert _host(ops_root).pending_merge() == TIP
+
+    # the operator merges by hand: the default branch's ops, and its journal entry for post
+    _write_edits(ops_root, host.default_edits)
+    record_op(ops_root, "p", op="post", result="done", phase="post-merge")
+    tree.tip_files[_journal_rel(ops_root, "plan", "p")] = journal_path(
+        ops_root, "plan", "p"
+    ).read_text()
+    host.live["post"] = "DONE"
+    tree.merge_conflict = ()
+    again = Gate(gate.target, host, gate.forge, FakePrompt(), [].append, _host(ops_root))
+
+    gate_mod.stage_4(again)
+
+    assert _post_applies(host) == [["fr", "ops", "apply", "post", "--plan", PLAN, "--yes"]]
+    assert _host(ops_root).pending_merge() is None
+
+
+def test_l_errors_r3_a_failed_merge_commit_names_the_abort(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+
+    def failing(ref: str, message: str) -> str:
+        raise RuntimeError("commit hook rejected")
+
+    tree.merge_commit = failing  # type: ignore[method-assign]
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_4(gate)
+    assert f"git -C {ops_root} merge --abort" in exc.value.why
+    assert _host(ops_root).pending_merge() == TIP
+
+
+def test_l_tests_r1_the_refresh_itself_grants_trust_before_it_returns(ops_root: Path) -> None:
+    from fr.ops.refresh import refresh
+
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    refresh(gate, tree, 4)  # no stage acts afterwards: only the refresh can have asked
+    trusts = [a for a in (c[1][0] for c in tree.calls if c[0] == "fr") if a[:2] == ["ops", "trust"]]
+    assert trusts == [["ops", "trust", "--plan", PLAN]]
+    kinds = [k for k, _ in tree.calls]
+    assert kinds.index("push") < kinds.index("fr")
+
+
+def test_l_tests_r7_the_refresh_push_is_leased_on_the_last_pushed_sha(ops_root: Path) -> None:
+    gate, host, tree, prompt = _drifted(ops_root, 1, 3)
+    _host(ops_root).set_pushed("e" * 40)
+    tree.merged_head = "d" * 40
+    gate_mod.stage_4(gate)
+    assert tree.leases[0] == "e" * 40
+    assert _host(ops_root).pushed() == "d" * 40
+
+
+def test_l_tests_r7_ran_on_a_row_still_owing_another_harness_keeps_its_status(
+    ops_root: Path,
+) -> None:
+    _row_spec(ops_root, harnesses=["operator", "b"])
+    tree, prompt, _ = _stage5(ops_root, ["ran walked the step", "ran walked the row"])
+    (args,) = _fr_calls(tree, "acceptance", "set-status")
+    flags = dict(zip(args[2::2], args[3::2], strict=False))
+    assert flags["--status"] == "walk-owed" and flags["--harness"] == "operator"
+
+
+def test_l_tests_r7_stage_6_refuses_an_unreadable_setting(
+    ops_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.settings import SettingsError
+
+    gate, host, tree, forge, _ = _stage_6_ready(ops_root)
+
+    def broken(root: Path, feature: str) -> bool:
+        raise SettingsError(".fr/settings.yaml: not a mapping")
+
+    monkeypatch.setattr("fr.settings.disabled", broken)
+    with pytest.raises(gate_mod.StageFailed) as exc:
+        gate_mod.stage_6(gate)
+    assert "cannot be read" in exc.value.why and "settings" in exc.value.why
+    assert not _gate_passes(tree)
