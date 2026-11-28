@@ -15,33 +15,41 @@ adds one rule: under stealth, code reaches the target only after the operator co
 
 What the code does today:
 
-- Every shipped or repo-authored workflow shape resolves (`fr.workflow.resolve.resolve_workflow`)
-  and `fr run start` (`commands/run_cmd.py:1321`), a brainstorm record's `shape:` rebind
-  (`fr.run.steps.rebind_shape`, `run/steps.py:482`) and `fr run adopt` (`run/adopt.py:928`) start
-  a run on any of them. A repo cannot withdraw one.
+- Every shipped or repo-authored workflow shape resolves (`fr.workflow.resolve.resolve_workflow`),
+  and `fr run start` (`commands/run_cmd.py:1321`, re-resolved in the workspace at `:1373`), a
+  brainstorm record's `shape:` rebind (`fr.run.steps.rebind_shape`, `run/steps.py:482`) and
+  `fr run adopt` (`run/adopt.py:928`, also reached from `fr migrate artifacts`,
+  `commands/migrate_cmd.py:328`) start a run on any of them. A repo cannot withdraw one.
 - `fr.record.pr_body.REQUIRED_SECTIONS` (`record/pr_body.py:85`) is a fixed tuple of nine headings;
   `render_pr_body` (`record/pr_body.py:1560`) renders each, and `deliver` refuses a live body that
   lacks any (`run/deliver.py:332`).
 - The `placement` key's description still says "stealth is not yet served"
-  (`settings/model.py:273`), though stealth is served and `.fr/settings.yaml` may only say `repo`
-  (`settings/load.py:_repo_file`).
-- `git.push: ask` / `git.pr: ask` make `fr push` and `fr pr create` wait for a verified operator
-  approval (`fr.git_policy.ask.require_approval`). Under stealth the loader forces the forge keys
-  to stealth's own values (`QUIET_FORGE`) and reports an explicit contrary value as `contrary`
-  (refused by `fr settings check` as `stealth-forge-explicit` and by `fr run start`), but leaves
-  `git.push` and `git.pr` at whatever the tracking file says, `auto` by default.
+  (`settings/model.py:273`), and `_repo_file`'s refusal (`settings/load.py:280-295`) still names the
+  `fr` branch's root `settings.yaml` as quiet's switch, though S1 moved it to `.fr/settings.yaml`
+  on `fr-config`.
+- `git.push: ask` / `git.pr: ask` make `fr push` (`commands/push_cmd.py:199`) and `fr pr create`
+  (`commands/pr_cmd.py:146`) wait for a verified operator approval
+  (`fr.git_policy.ask.require_approval`); on a harness whose transcript fr cannot read the request
+  always refuses (`git_policy/ask.py:245-259`). Under stealth the loader forces the forge keys to
+  stealth's own values (`QUIET_FORGE`) and reports an explicit contrary value as `contrary`
+  (refused by `fr settings check` as `stealth-forge-explicit` and by `fr run start` through
+  `check_settings`), but leaves `git.push` and `git.pr` at whatever the tracking file says, `auto`
+  by default. Two other readers of those keys exist: `config/change.py:229` (`pr_policy`, the
+  configuration-change PRs `fr settings init`/`sync` open on the configuration branch) and
+  `settings/check.py:52-74` (`push-ask-with-driven-triage`).
 
 ## Requirements
 
-R1. Settings schema 3 adds `workflows.disabled`, a list of shape names (default empty). A file that sets any key this spec adds declares `schema: 3`; fr reads schemas 1, 2 and 3, and a file that sets one without `schema: 3` is refused naming the key.
-R2. `fr run start <shape>`, a brainstorm record's `shape:` rebind and `fr run adopt` of a plan or spec with no run refuse a disabled shape, naming `workflows.disabled` and the shapes still available. A run already started on a shape later disabled keeps going: `advance`, `resolve`, `reshape` and `adopt --supersede` of that run never refuse on it.
+R1. Settings schema 3 adds `workflows.disabled`, a list of shape names (default empty), and `forge.pr_sections` (R4). A file whose raw data names `workflows` or `forge.pr_sections` at all, an empty list or mapping included, declares `schema: 3`, and is refused naming the key otherwise. fr reads schemas 1, 2 and 3.
+R2. `fr run start <shape>`, a brainstorm record's `shape:` rebind and `fr run adopt` (including the adopt `fr migrate artifacts` performs) refuse a disabled shape, naming `workflows.disabled` and the shapes still available. Under stealth the check reads the tracking space's settings, so it runs in the workspace. A run already started on a shape later disabled keeps going: `advance`, `resolve` and `reshape` never refuse on it, and `adopt --supersede` of an existing run is allowed when the shape it resolves is that run's own shape.
 R3. `fr settings check` refuses a `workflows.disabled` entry that names no shape fr can resolve (shipped or the repo's own), and a list that disables every shape.
-R4. Settings schema 3 adds `forge.pr_sections`, three on|off keys, default on: `proportionality` (`## Proportionality`), `cost` (`## Cost`) and `settle` (`## PR settle`). No other heading is configurable; the closed model refuses any other key, naming the three.
+R4. `forge.pr_sections` holds three on|off keys, default on: `proportionality` (`## Proportionality`), `cost` (`## Cost`) and `settle` (`## PR settle`). No other heading is configurable; any other key is refused with a message naming the three.
 R5. A section turned off is rendered nowhere: neither in `pr-body.md` nor in the durable `<run-id>.pr-body.md`, and `deliver` does not require it on the live PR. Its figures stay reachable through their own commands (`fr plan proportionality`, `fr run cost`, `fr pr settle`), and the settle check at `deliver` still runs as `git.settle` says.
-R6. The `placement` key's description says what is true: `.fr/settings.yaml` may only say `repo`; quiet is switched on by `.fr/settings.yaml` on `fr-config`; stealth is chosen per run and reads its settings from `<target-dir>/.fr/settings.yaml` on the tracking repo's `<branch>-config`. `fr settings init` renders that text.
-R7. Under stealth, the effective `git.push` and `git.pr` are `ask` whatever the tracking settings file says, and `fr settings show` reports their source as `stealth`. A tracking file that sets either one explicitly to `auto` is refused by `fr settings check` and `fr run start`, as an explicit contrary forge key is.
-R8. Under stealth, writes of fr's state to the tracking repo keep being pushed on every write without asking; only `fr push` of the product branch and `fr pr create` ask.
-R9. Under stealth, the fr-goal and fr-debugging skills push no code before `deliver`: a phase executor never pushes, and a phase's suite evidence is a local log, never `tests: ci`. The first `fr push` is at `deliver`'s open and is an operator confirmation (the `ask` request), and `fr pr create` asks for its own.
+R6. The `placement` key's description and `_repo_file`'s refusal say what is true: `.fr/settings.yaml` may only say `repo`; quiet is switched on by `.fr/settings.yaml` on `fr-config`; stealth is chosen per run and reads its settings from `<target-dir>/.fr/settings.yaml` on the tracking repo's `<branch>-config`. `fr settings init` renders that text, renders a list default as a YAML list, and under stealth shows `git.push` and `git.pr` at `ask`.
+R7. Under stealth, the effective `git.push` and `git.pr` are `ask` whatever the tracking settings file says, and `fr settings show` reports their source as `stealth`. A tracking file that sets either one explicitly to `auto` is refused by `fr settings check` and `fr run start`, as an explicit contrary forge key is. Under stealth, `push-ask-with-driven-triage` names the driven `.fr/triage.yaml` keys as the only fix, since `git.push` is not the operator's to change there.
+R8. Under stealth, writes of fr's state to the tracking repo keep being pushed on every write without asking, and the configuration-change PRs fr opens on the tracking repo's configuration branch follow the tracking file's own `git.pr` (default `auto`), not the forced value. Only `fr push` of the product branch and `fr pr create` are forced to ask.
+R9. Under stealth, `fr push` asks only when it would add code to the target: with no product commit to push it pushes nothing, asks nothing and exits 0. Each push that does add code asks for its own approval, settle-fix pushes included.
+R10. Under stealth, the fr-goal and fr-debugging skills push no code before `deliver`: a phase executor never pushes, and a phase's suite evidence is a local log, never `tests: ci`. The first code push is at `deliver`'s open, and `fr pr create` asks for its own approval. The skills state the costs: until that push the phases' code exists only on the host that wrote it, so a cross-host `--resume` before `deliver` does not carry it; and on a harness whose transcript fr cannot read, a stealth run cannot push or open its PR through fr and stops at `deliver`'s open.
 
 ## Design shape
 
@@ -49,112 +57,146 @@ R9. Under stealth, the fr-goal and fr-debugging skills push no code before `deli
 packages/fr/src/fr/
   settings/
     model.py        ~ SCHEMAS (1,2,3); Workflows{disabled}; Forge.pr_sections{proportionality,cost,settle}
-                      placement description (R6); schema-3 validator (R1)
+                      before-validator: raw presence -> schema 3 (R1); pr_sections key refusal names the three (R4)
+                      _strict_int message; placement description (R6)
+    load.py         ~ _stealth forces git.push/git.pr = ask, contrary += git.* (R7); keeps the tracking
+                      file's own git.pr for config-change PRs (R8); _repo_file text (R6)
     check.py        + unknown-disabled-shape, every-shape-disabled (R3)
-                    ~ stealth-forge-explicit also reports git.push / git.pr (R7)
-    load.py         ~ _stealth forces git.push/git.pr = ask, contrary += git.* (R7)
+                    ~ stealth-forge-explicit also reports git.push / git.pr; driven-triage text under stealth (R7)
+    render.py       ~ list defaults as YAML lists; stealth git keys at ask; schema hint 1, 2, 3 (R6)
+  config/change.py  ~ pr_policy reads the unforced git.pr under stealth (R8)
   workflow/
-    available.py    + available_or_refusal(name, repo_root) — the one disabled check (R2)
-  commands/run_cmd.py   ~ start calls it
-  run/steps.py          ~ rebind_shape calls it
-  run/adopt.py          ~ a new cursor calls it (not --supersede)
-  record/pr_body.py     ~ required_sections(settings); render skips an off section (R4, R5)
-  run/deliver.py        ~ reads required_sections(settings)
+    resolve.py      + discover_names (moved from commands/workflow_cmd.py:_discover_names)
+    available.py    + refuse_disabled(name, repo_root) -> None — the one disabled check (R2)
+  commands/
+    workflow_cmd.py ~ imports discover_names
+    run_cmd.py      ~ start: refuse_disabled before isolation (repo, quiet) or in the workspace (stealth)
+    push_cmd.py     ~ under stealth: no code pending -> no ask, push nothing (R9)
+  run/steps.py      ~ rebind_shape calls refuse_disabled
+  run/adopt.py      ~ calls refuse_disabled unless superseding a run onto its own shape
+  record/pr_body.py ~ PR_SECTION_HEADINGS; required_sections(settings); render skips an off section (R4, R5)
+  run/deliver.py    ~ reads required_sections(settings)
 plugins/super-fr/skills/
-  fr-goal/SKILL.md      ~ stealth: no per-phase push; deliver-open push is a confirmation (R9)
-  fr-debugging/SKILL.md ~ the same rule for its one push (R9)
-tests/scenarios/alacarte-settings.sh   + the candidate walk
+  fr-goal/SKILL.md      ~ stealth: no per-phase push, deliver-open push asks, the two costs (R10)
+  fr-debugging/SKILL.md ~ the same rule (R10)
+  (OpenCode and Hermes mirrors regenerated; docs pages in §F)
+tests/scenarios/alacarte-settings.sh   + the candidate walk (+ its test in tests/integration/test_scenarios.py)
 ```
 
 ## Design
 
-### A. Schema 3 (R1)
+### A. Schema 3 (R1, R4)
 
-`SCHEMAS = (1, 2, 3)`, `SCHEMA_VERSION = 3`. A new `Workflows(_Closed)` section with
-`disabled: list[str] = []` and a new `PrSections(_Closed)` under `Forge` with three `OnOffType`
-fields. The `Settings` model validator that already demands `schema: 2` for `triage.state_repo`
-gains the same rule for schema 3: when the file sets a non-default `workflows.disabled` or any
-`forge.pr_sections` key, `schema_ < 3` is refused naming the key (the check reads the raw data's
-presence, as `_present` does, so an explicit `on` under schema 2 is refused too). Each field
-carries its `description=`, from which `fr settings init` renders the comments. Settings is not a
-registered artifact kind, so there is no stamp bump or migration: the schema number is the
-compatibility signal an older fr refuses on ("newer than this fr understands").
+`SCHEMAS = (1, 2, 3)`, `SCHEMA_VERSION = 3`, `schema_: Literal[1, 2, 3]`; `_strict_int`'s message
+and `render.py`'s schema hint name 1, 2 and 3. A new `Workflows(_Closed)` section holds
+`disabled: list[str] = []`; a new `PrSections` under `Forge` holds three `OnOffType` fields.
+Presence is a raw-data question, so it is a `mode="before"` model validator on `Settings` in
+`model.py` (no import of `load._present`, which would cycle): when the raw mapping has a
+`workflows` key, or its `forge` mapping has a `pr_sections` key, and `schema` is not 3, it raises
+`<key> needs schema: 3`. `PrSections` also has a `mode="before"` validator that refuses an unknown
+key with `unknown key <k>; allowed: cost, proportionality, settle`, so the closed model's generic
+"extra inputs" never reaches the operator. Settings is not a registered artifact kind, so there
+is no stamp bump or migration: the schema number is the compatibility signal an older fr refuses
+on ("newer than this fr understands").
 
 ### B. Disabled workflows (R2, R3)
 
-`fr.workflow.available` holds one function, `refuse_disabled(name, repo_root) -> None`, raising
-`WorkflowError` with the message `workflow <name> is disabled by this repo's settings
-(workflows.disabled); available: <names>`. Available names are the shapes `fr workflow check`
-discovers (repo then shipped, `commands/workflow_cmd.py:_discover_names`, moved into
-`fr.workflow.resolve` so both read one list) minus the disabled ones. It reads
-`load_settings(repo_root)`, so under quiet and stealth the list comes from the configuration
-space. Callers: `run start` before isolation is ensured (a disabled shape provisions nothing, as a
-typo'd one does), `rebind_shape` before it returns a manifest, and `adopt` only on the path that
-creates a new cursor. `advance`, `resolve`, `reshape` and `adopt --supersede` do not call it.
+`fr.workflow.resolve.discover_names(repo_root, shipped_dir)` is `workflow_cmd._discover_names`
+moved, so `fr workflow check` and the new check read one list. `fr.workflow.available` holds
+`refuse_disabled(name, repo_root) -> None`, which reads `load_settings(repo_root)` and raises
+`WorkflowError("workflow <name> is disabled by this repo's settings (workflows.disabled); available:
+<names>")`. Callers:
 
-`fr settings check` gains two checks: each disabled name must be in the discovered list
-(`unknown-disabled-shape`), and the available list must not be empty (`every-shape-disabled`).
+- `fr run start`: before isolation is ensured under repo and quiet (a disabled shape provisions
+  nothing); under stealth the base clone has no marker yet and would read the target's ignored
+  file, so the check runs in the workspace beside the manifest re-resolve (`run_cmd.py:1373`),
+  where settings are already checked for stealth (`:1384`).
+- `rebind_shape`, before it returns a manifest.
+- `adopt_run`, unless it supersedes an existing run and the resolved shape name equals the old
+  run's (`old_state.workflow` before `@`). A `--supersede` with no existing run is a plain adopt
+  and is checked; `fr migrate artifacts`'s adopt goes through the same function.
+
+`advance`, `resolve` and `reshape` do not call it. `fr settings check` gains two checks: each
+disabled name must be in `discover_names` (`unknown-disabled-shape`), and the remaining list must
+not be empty (`every-shape-disabled`).
 
 ### C. PR-body sections (R4, R5)
 
-`pr_body.required_sections(settings) -> tuple[str, ...]` is `REQUIRED_SECTIONS` minus the headings
-of the off keys; `REQUIRED_SECTIONS` stays the full tuple (the docs and tests name it). The map
-from key to heading is one constant, `PR_SECTION_HEADINGS`. `render_pr_body` reads the settings
-once and skips an off section's heading and body; the durable copy is the same render, so it
-drops them too. `deliver`'s required set is `required_sections(...)` plus the historical heading
-when the run has any. Turning `settle` off removes only the section: the `settle` evidence and the
-deliver settle check still follow `git.settle`.
+`PR_SECTION_HEADINGS = {"proportionality": "## Proportionality", "cost": "## Cost", "settle": "##
+PR settle"}`. `pr_body.required_sections(settings)` is `REQUIRED_SECTIONS` minus the headings of the
+off keys; `REQUIRED_SECTIONS` stays the full tuple. `render_pr_body` reads the settings once and
+skips an off section's heading and body; the durable copy is the same render. `deliver`'s required
+set is `required_sections(...)` plus the historical heading when the run has any. `settle: off`
+removes only the section; the deliver settle check (`git.settle`) is untouched.
 
-### D. Placement text (R6)
+### D. Placement text and init rendering (R6)
 
-The description is corrected in `settings/model.py`; `fr settings init`'s rendered comments follow.
-No behaviour changes.
+The `placement` description and `_repo_file`'s quiet message are corrected. `render.py`'s
+`_scalar` renders a list as a YAML flow list (`[]`, `[a, b]`), so an uncommented `#disabled: []`
+parses; under stealth its header prose and `_stealth_forge` also show `git.push: ask` and
+`git.pr: ask`.
 
-### E. Stealth confirmation (R7, R8, R9)
+### E. Stealth confirmation (R7–R10)
 
 `_stealth` in `settings/load.py` updates `git` with `push: ask, pr: ask` beside the forge keys,
-marks both sources `stealth`, and adds `git.push` / `git.pr` to `contrary` when the tracking file
-sets them explicitly to `auto`. `fr settings check`'s `stealth-forge-explicit` (renamed in its
-message only: "stealth's own values") and `fr run start`'s contrary refusal already read
-`contrary`, so they refuse both. `fr push` and `fr pr create` need no change: they already read
-`settings.git.push` / `settings.git.pr` and take the `ask` path, recording the approval in the
-run's own journal, which under stealth lives in the tracking clone. State pushes to the tracking
-repo are a different code path (`fr.placement.stealth`) that never reads `git.push` (R8, pinned by
-a test).
+marks both sources `stealth`, adds `git.push` / `git.pr` to `contrary` when the tracking file sets
+them explicitly to `auto`, and keeps the tracking file's own `git.pr` on `EffectiveSettings` as
+`config_pr` (the unforced value). `config/change.py`'s `pr_policy` reads `config_pr` when it is set,
+so configuration PRs on the tracking repo are not forced to ask (R8). `stealth-forge-explicit`
+reports `contrary`, so both git keys are refused with the forge ones; `push-ask-with-driven-triage`
+under stealth says that stealth forces `git.push: ask` and that the fix is removing the driven
+`.fr/triage.yaml` keys.
 
-Under `tests: ci` a phase executor would push to get CI; under stealth the executor cannot ask the
-operator, so the skills say a stealth phase's suite evidence is a local log. fr-goal §5/§6 and §8
-gain one stealth sentence each; fr-debugging's stealth bullet gains the same rule. Both mirrors
-(`scripts/sync-opencode.py`, `scripts/sync-hermes.py`) are regenerated.
+`fr push` computes `unpushed` before the ask. Under stealth (`outside_repo(...) == STEALTH`), when
+`_code_pending` is false it prints `nothing to push to <remote>` and exits 0 without a request; with
+code pending it asks as today and consumes the approval after the push, so the next code push asks
+again (R9). `fr pr create` is unchanged: it already asks under `git.pr: ask`, and `deliver`'s ask
+gate (`run/deliver.py:214-245`) then accepts only the PR `fr pr create` recorded, now for every
+stealth run. State pushes to the tracking repo go through `fr.placement.stealth`'s own pusher,
+which reads no settings (R8, pinned by a test).
+
+The skills (R10): fr-goal's stealth bullet, §5 and §6 gain "under stealth no executor pushes, phase
+evidence is a local log, and the branch is pushed first at `deliver`'s open, where `fr push` asks";
+the resume sentence gains its limit; the Hermes limit is stated once. fr-debugging's stealth
+bullet gains the same rule. Both mirrors are regenerated (`scripts/sync-opencode.py`,
+`scripts/sync-hermes.py`).
 
 ### F. Docs
 
 `docs/reference/workflow-shapes.md` (covers `fr/workflow/**`, `run_cmd.py`) gains the disabled
 list; `docs/explainers/01-fr-goal.md` and `docs/explainers/fr-debugging.md` (cover their skills)
-gain the stealth confirmation; `fr docs check` decides what else is owed.
+gain the stealth confirmation and its two costs; `fr docs check` decides what else is owed.
 
 ## Verification
 
 strategy: candidate
 - s2-workflows-disabled: candidate — the scenario installs the candidate, disables a shape in a fixture repo's settings and sees `fr run start` refuse it while another shape starts
 - s2-pr-sections: candidate — the scenario turns `cost` and `proportionality` off and renders a fixture run's PR body without them
-- s2-stealth-confirm: candidate — the scenario reads a stealth fixture's effective settings (`git.push`/`git.pr` ask, source stealth) and sees `fr push` print an approval request instead of pushing
+- s2-stealth-confirm: candidate — the scenario reads a stealth fixture's effective settings (`git.push`/`git.pr` ask, source stealth) and sees `fr push` print an approval request instead of pushing, and push nothing without asking when no code is pending
 gate: developer
 
 ## Test Plan
 
 - pre-merge — CI: `tests/unit/test_settings_model.py` and `tests/unit/test_settings_check.py` pin
-  schema 3, the two new sections, the schema-3 refusal and the two new checks (R1, R3, R4, R6)
-  (rows `s2-workflows-disabled`, `s2-pr-sections`).
-- pre-merge — CI: `tests/unit/test_workflow_available.py` pins the refusal at `run start`, rebind
-  and adopt, and that `advance`/`resolve`/`reshape`/`adopt --supersede` of a started run do not
-  refuse (R2) (row `s2-workflows-disabled`).
-- pre-merge — CI: `tests/unit/test_pr_body_sections.py` renders a body with each key off and checks
-  `deliver`'s required set (R5) (row `s2-pr-sections`).
-- pre-merge — CI: `tests/unit/test_settings_stealth.py` pins stealth's forced `ask`, its source and the
-  contrary refusal; a test pins that a stealth state write pushes without a request (R7, R8) (row
-  `s2-stealth-confirm`).
-- pre-merge — candidate: `tests/scenarios/alacarte-settings.sh` (all three rows).
+  schema 3, the two new sections, the raw-presence refusal (an empty `workflows: {}` included), the
+  `pr_sections` key refusal naming the three, and the two new checks (R1, R3, R4); a
+  `tests/unit/test_settings_cmd.py` test renders init with a list default and the corrected text
+  (R6) (rows `s2-workflows-disabled`, `s2-pr-sections`).
+- pre-merge — CI: `tests/unit/test_workflow_available.py` pins the refusal at `run start` (repo and
+  stealth, the stealth check reading the tracking settings), rebind, plain adopt, `--supersede`
+  with no run and onto another shape, and that `advance`/`resolve`/`reshape` and a same-shape
+  `adopt --supersede` do not refuse (R2) (row `s2-workflows-disabled`).
+- pre-merge — CI: `tests/unit/test_pr_body_sections.py` renders a body with each key off, checks
+  `deliver`'s required set, and that `settle: off` still leaves the deliver settle check in force
+  (R5) (row `s2-pr-sections`).
+- pre-merge — CI: `tests/unit/test_settings_stealth.py` pins stealth's forced `ask`, its source, the
+  contrary refusal and the driven-triage wording; a test pins that a stealth state write and a
+  configuration-change PR proceed without a request, and that `fr push` with no code pending asks
+  nothing (R7, R8, R9) (row `s2-stealth-confirm`).
+- pre-merge — CI: a skill-prose test asserts the stealth sentences of R10 in both canonical
+  SKILL.md files (the mirror tripwires carry them to the mirrors) (row `s2-stealth-confirm`).
+- pre-merge — candidate: `tests/scenarios/alacarte-settings.sh`, run by its own test in
+  `tests/integration/test_scenarios.py` (all three rows).
 
 ## Out of scope
 
@@ -163,4 +205,6 @@ gate: developer
 - Allowed-placement lists and retiring the `placement` key (operator decision, round 1 Q4).
 - Making the review-bearing sections (findings, owed verification, manual operations, owed
   actions) optional (operator decision, round 1 Q2).
+- `fr placement move` pushing product-side branches without reading `git.push`: an operator-typed
+  move, outside D7's `fr push` and `fr pr create` (review s-r1-13).
 - S3 and S4 of epic #1652.
