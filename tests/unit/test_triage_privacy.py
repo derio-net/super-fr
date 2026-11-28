@@ -10,6 +10,7 @@ point. Remotes are bare repos under `tmp_path`.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -20,9 +21,15 @@ from fr.commands import triage_batch_cmd, triage_cmd
 from fr.real_ghrestclient import RealGhRestClient
 from fr.triage.errors import TriageError
 from fr.triage.model import Facts, Issue, Scope, load_judgements
-from fr.triage.privacy import PrivacyError, VisibilityUnreadable, leak_risk, refusal
+from fr.triage.privacy import (
+    PrivacyError,
+    VisibilityUnreadable,
+    carried_files,
+    leak_risk,
+    refusal,
+)
 from fr.triage.scope_config import ScopeDurable, write_durable
-from fr.triage.state_ref import push_state, ref_name
+from fr.triage.state_ref import REF_FILES, push_state, ref_name
 from typer.testing import CliRunner
 
 from tests.unit.fakes import FakeGhClient
@@ -888,6 +895,61 @@ def test_an_export_scans_the_durable_set_only(tmp_path: Path, gh: FakeGhClient) 
             client_for=lambda _r: gh,
             carried=durable_files(state),
         )
+
+
+@pytest.mark.parametrize("entry", REF_FILES)
+def test_every_carried_entry_is_scanned_on_push(
+    tmp_path: Path, origin: Path, gh: FakeGhClient, entry: str
+) -> None:
+    """A private key planted in ANY `REF_FILES` entry (a file inside a directory entry)
+    refuses the push, naming that file: a scan that walked fewer entries would pass."""
+    state = _workspace(tmp_path, origin)
+    state.mkdir(parents=True, exist_ok=True)
+    (state / "judgements.yaml").write_text(PUBLIC_ONLY, encoding="utf-8")
+    (state / "facts.json").write_text(json.dumps(_facts().to_json()), "utf-8")
+    write_durable(state, ScopeDurable(state_repo=OPEN_REPO))
+    name = entry.rstrip("/")
+    # Entries whose reader checks shape before the guard runs get content it accepts.
+    shaped = {
+        "origins.yaml": (state / name, "schema: 2\n# see example-org/secret#4\n"),
+        "snapshots": (
+            state / name / "x.json",
+            json.dumps(
+                {"batches": {"b": "example-org/secret#4"}, "issues": {}, "prs": {}, "figures": {}}
+            ),
+        ),
+    }
+    if name in shaped:
+        target, text = shaped[name]
+    else:
+        target = state / name / "deep" / "x.md" if entry.endswith("/") else state / name
+        before = target.read_text(encoding="utf-8") if target.exists() else ""
+        text = before + "\n# see example-org/secret#4\n"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8")
+
+    with pytest.raises(PrivacyError, match=re.escape(target.relative_to(state).as_posix())):
+        _push(state, origin, OPEN_REPO, gh)
+
+    assert _ref(origin) == ""
+
+
+def test_a_symlinked_entry_is_neither_carried_nor_scanned(
+    tmp_path: Path, origin: Path, gh: FakeGhClient
+) -> None:
+    """A symlink is never carried, so the file it points at is not scanned either."""
+    state = _workspace(tmp_path, origin)
+    state.mkdir(parents=True, exist_ok=True)
+    (state / "judgements.yaml").write_text(PUBLIC_ONLY, encoding="utf-8")
+    (state / "facts.json").write_text(json.dumps(_facts().to_json()), "utf-8")
+    write_durable(state, ScopeDurable(state_repo=OPEN_REPO))
+    outside = tmp_path / "elsewhere.json"
+    outside.write_text("example-org/secret#4", encoding="utf-8")
+    (state / "merge-stops.json").symlink_to(outside)
+
+    assert "merge-stops.json" not in carried_files(state)
+    _push(state, origin, OPEN_REPO, gh)
+    assert _ref(origin) != ""
 
 
 def test_a_push_naming_a_private_repo_in_a_carried_file_pushes_nothing(

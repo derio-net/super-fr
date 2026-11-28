@@ -1717,10 +1717,13 @@ def test_a_schema_21_file_loads_with_outside_pr_titles_withheld(tmp_path: Path) 
     from fr.triage.model import load_facts
 
     forge = _assoc_forge([_by(1, "operator")])
-    forge.prs[_OUTSIDE] = [_pr_by(10, "eve")]
+    forge.prs[_OUTSIDE] = [_pr_by(10, "eve"), _pr_by(11, "operator")]
     doc = collect_facts(forge, _ASSOC_SCOPE, now=NOW).to_json()
     doc["schema"] = 21
-    doc["prs"][0]["title"] = "what a schema-21 writer kept"
+    for pr in doc["prs"]:
+        pr["title"] = f"what a schema-21 writer kept for #{pr['number']}"
     path = tmp_path / "facts.json"
     path.write_text(json.dumps(doc), encoding="utf-8")
-    assert [p.title for p in load_facts(path).prs] == [""]
+    titles = {p.number: p.title for p in load_facts(path).prs}
+    # The outsider's title is withheld; the viewer's (a trusted author) survives the load.
+    assert titles == {10: "", 11: "what a schema-21 writer kept for #11"}
