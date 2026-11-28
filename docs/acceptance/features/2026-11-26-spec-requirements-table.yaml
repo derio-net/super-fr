@@ -28,9 +28,9 @@ rows:
       without changing any requirement's id or text, stamps it 2, leaves a spec it cannot
       convert byte-identical and names it, and never touches an archived spec
     origin:
-    - spec:2026-11-26-spec-requirements-table#R3
     - spec:2026-11-26-spec-requirements-table#R4
     - spec:2026-11-26-spec-requirements-table#R5
+    - spec:2026-11-26-spec-requirements-table#R6
     levels: {}
     status: not-implemented
     notes: scenario named at brainstorm; written in the implementation phase
