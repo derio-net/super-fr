@@ -23,6 +23,8 @@ steps:
           tier: hard
           bound: claude-opus-5-5
           session: e0c01434-1137-4e4d-a10f-0dcc9639e6fe
+          returned: '2026-11-28T09:10:53+00:00'
+          outcome: abandoned
   plan:
     state: pending
   plan-review:
