@@ -334,3 +334,154 @@ def test_an_unbound_tier_inherits_rather_than_pinning_an_empty_model(
         assert not any(line.startswith("model:") for line in lines), (
             f"{unbound} is unbound — it must carry no model: key at all"
         )
+
+
+# ── A refusing `fr models apply` is a warning, repeated at the end ────────────
+# (spec 2026-11-28-batch-silent-failures R1, R2). The install used to run
+# `fr models apply --harness opencode || true`: the migration gate's refusal
+# (exit 2) was swallowed, and the only symptom was tier agents with no `model:`.
+
+_GATE_REFUSAL = (
+    "fr: stale artifacts in this repository, and fr will not migrate them here:",
+    "because a plan names a ceiling this fr is past (detached checkout).",
+    "detail: docs/superpowers/plans/x/_meta.yaml fr_version '>=9.0.0,<9.1.0'",
+    "carry it:  fr isolation up --branch <branch>",
+    "preview:   fr migrate artifacts",
+    "apply:     fr migrate artifacts --yes",
+    "bypass:    FR_SKIP_MIGRATION=1",
+)
+
+
+def _stub_fr(home: Path, apply_exit: int, apply_stderr: tuple[str, ...] = ()) -> None:
+    """A stub `fr`: `models apply` prints `apply_stderr` and exits `apply_exit`;
+    `--version` answers; every other subcommand succeeds silently."""
+    lines = "\n".join(f"echo {line!r} >&2" for line in apply_stderr)
+    (home / "bin" / "fr").write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "--version" ]; then echo "fr 0.0.0-stub"; exit 0; fi\n'
+        'if [ "$1 $2" = "models apply" ]; then\n'
+        f"{lines}\n"
+        f"  exit {apply_exit}\n"
+        "fi\n"
+        "exit 0\n"
+    )
+    (home / "bin" / "fr").chmod(0o755)
+
+
+def _closing_block(stdout: str) -> str:
+    assert "Installation complete." in stdout
+    return stdout.split("Installation complete.", 1)[1]
+
+
+def test_a_refusing_fr_models_apply_is_warned_with_its_whole_message(
+    home_with_opencode_config: Path,
+) -> None:
+    _stub_fr(home_with_opencode_config, 2, _GATE_REFUSAL)
+
+    result = _run_install(home_with_opencode_config)  # the install still exits 0
+
+    assert "WARNING: tier models not applied (fr models apply exit 2):" in result.stderr
+    for line in _GATE_REFUSAL:
+        assert line in result.stderr
+    assert "fr models apply --harness opencode" in result.stderr.split("exit 2):", 1)[1]
+    tail = _closing_block(result.stdout)
+    assert "fr version: fr 0.0.0-stub" in tail
+    heading = tail.index("Warnings (")
+    assert tail.index("fr version:") < heading
+    assert "tier models not applied (fr models apply exit 2)" in tail[heading:]
+    for line in _GATE_REFUSAL:
+        assert line in tail[heading:]
+
+
+def test_a_long_refusal_is_cut_to_twelve_lines_and_says_how_many_more(
+    home_with_opencode_config: Path,
+) -> None:
+    _stub_fr(home_with_opencode_config, 2, tuple(f"refusal line {n}" for n in range(1, 21)))
+
+    result = _run_install(home_with_opencode_config)
+
+    assert "refusal line 12" in result.stderr
+    assert "refusal line 13" not in result.stderr
+    assert "… 8 more lines" in result.stderr
+
+
+def test_a_clean_fr_models_apply_leaves_no_warning_and_says_so(
+    home_with_opencode_config: Path,
+) -> None:
+    _stub_fr(home_with_opencode_config, 0)
+    devcontainer = home_with_opencode_config / "bin" / "devcontainer"  # else it warns on its own
+    devcontainer.write_text("#!/bin/sh\necho 0.0.0\n")
+    devcontainer.chmod(0o755)
+    # a uv that names a tool dir holding an fr entry point, so step 10 warns of nothing
+    tools = home_with_opencode_config / "uvtools" / "fr" / "bin"
+    tools.mkdir(parents=True)
+    (tools / "fr").write_text("#!/bin/sh\nexit 0\n")
+    (tools / "fr").chmod(0o755)
+    uv = home_with_opencode_config / "bin" / "uv"
+    uv.write_text(
+        "#!/bin/sh\n"
+        f'[ "$1 $2" = "tool dir" ] && echo "{tools.parents[1]}"\n'
+        '[ "$1 $2 $3" = "tool install --help" ] && echo "--constraints"\n'
+        'if [ "$1" = "export" ]; then\n'
+        '  while [ $# -gt 1 ]; do [ "$1" = "-o" ] && echo "pkg==1" > "$2"; shift; done\n'
+        "fi\n"
+        "exit 0\n"
+    )
+    uv.chmod(0o755)
+
+    result = _run_install(home_with_opencode_config)
+
+    assert "tier models" not in result.stderr
+    assert "fr version: fr 0.0.0-stub" in result.stdout
+    assert result.stdout.rstrip().splitlines()[-1] == "No warnings."
+    assert "Warnings (" not in _closing_block(result.stdout)
+
+
+def test_fr_not_on_path_is_a_warning_repeated_in_the_summary(
+    home_with_opencode_config: Path,
+) -> None:
+    result = _run_install(home_with_opencode_config)
+
+    assert "WARNING: tier models not applied: fr is not on PATH" in result.stderr
+    tail = _closing_block(result.stdout)
+    assert "fr: not on PATH" in tail
+    assert "tier models not applied: fr is not on PATH" in tail[tail.index("Warnings (") :]
+
+
+def test_a_failing_fr_version_is_named_in_the_closing_block(
+    home_with_opencode_config: Path,
+) -> None:
+    (home_with_opencode_config / "bin" / "fr").write_text("#!/bin/sh\nexit 3\n")
+    (home_with_opencode_config / "bin" / "fr").chmod(0o755)
+
+    result = _run_install(home_with_opencode_config)
+
+    assert "fr version: unknown (fr --version failed, exit 3)" in result.stdout
+
+
+def _leftover_tmps(tmp_root: Path) -> list[str]:
+    return sorted(p.name for p in tmp_root.iterdir())
+
+
+@pytest.mark.parametrize("fails", [False, True], ids=["success", "failure"])
+def test_the_warnings_survive_a_failed_install_and_no_temp_file_survives_any(
+    home_with_opencode_config: Path, tmp_path: Path, fails: bool
+) -> None:
+    home = home_with_opencode_config
+    _stub_fr(home, 2, _GATE_REFUSAL)
+    if fails:  # the plugin delivery refuses an unparsable cli.json, after the warning
+        (home / ".config" / "opencode" / "cli.json").write_text("{ not json")
+    scratch = tmp_path / "tmpdir"
+    scratch.mkdir()
+
+    result = _run_install(home, expect_fail=fails, extra_env={"TMPDIR": str(scratch)})
+
+    assert _leftover_tmps(scratch) == []
+    if fails:
+        assert result.returncode != 0
+        lines = result.stderr.rstrip().splitlines()
+        assert lines[-1].startswith("install.sh failed (exit ")
+        assert lines[-1].endswith("). Rerun after fixing.")
+        repeat = [i for i, line in enumerate(lines) if line.startswith("Warnings (")]
+        assert repeat and repeat[-1] < len(lines) - 1
+        assert "tier models not applied" in "\n".join(lines[repeat[-1] :])

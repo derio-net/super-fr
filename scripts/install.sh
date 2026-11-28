@@ -145,6 +145,32 @@ atomic_symlink() {
   mv -f "$tmp" "$link"
 }
 
+# Every WARNING this script prints is also recorded in a file, because the
+# install is long and a warning scrolls past long before "Installation complete."
+# A file, not an array: a warning printed from a `$( … )` or a subshell must still
+# reach the closing summary. `warn` takes one argument per line of ONE warning.
+FR_INSTALL_WARNINGS="$(mktemp "${TMPDIR:-/tmp}/fr-install-warnings.XXXXXX")"
+FR_INSTALL_STDERR="$(mktemp "${TMPDIR:-/tmp}/fr-install-stderr.XXXXXX")"
+warn() {
+  local line
+  for line in "$@"; do
+    printf '%s\n' "$line" >&2
+    printf '%s\n' "$line" >> "$FR_INSTALL_WARNINGS"
+  done
+}
+# Warnings recorded so far: each starts with WARNING: (at most two spaces in).
+warning_count() {
+  grep -cE '^ {0,2}WARNING:' "$FR_INSTALL_WARNINGS" 2>/dev/null || true
+}
+# The recorded warnings under their heading (nothing when there are none).
+print_warnings() {
+  local n
+  n="$(warning_count)"
+  [ -s "$FR_INSTALL_WARNINGS" ] || return 0
+  echo "Warnings (${n:-0}):"
+  cat "$FR_INSTALL_WARNINGS"
+}
+
 # Clean up any .tmp sidecar files on failure so a rerun starts clean.
 cleanup_tmps() {
   local rc=$?
@@ -154,8 +180,10 @@ cleanup_tmps() {
     for f in "${SETTINGS:-}" "${MCP_CONFIG:-}" "${KNOWN_MARKETPLACES:-}" "${INSTALLED_PLUGINS:-}"; do
       [ -z "$f" ] || rm -f "$f.tmp" 2>/dev/null || true
     done
+    print_warnings >&2
     echo "install.sh failed (exit $rc). Rerun after fixing." >&2
   fi
+  rm -f "$FR_INSTALL_WARNINGS" "$FR_INSTALL_STDERR" 2>/dev/null || true
   release_install_lock
   exit "$rc"
 }
@@ -279,12 +307,12 @@ cleanup_vk_residue() {
     if ! (umask 077; jq 'del(.mcpServers.vibe_kanban)' "$MCP_CONFIG" > "$tmp") \
        || [ ! -s "$tmp" ] || ! jq -e . "$tmp" >/dev/null 2>&1; then
       rm -f "$tmp" 2>/dev/null || true
-      echo "$warn" >&2
+      warn "$warn"
     elif cat "$tmp" > "$MCP_CONFIG"; then
       rm -f "$tmp" 2>/dev/null || true
       echo "  Removed vibe_kanban (VibeKanban support was removed) from $MCP_CONFIG"
     else
-      echo "$warn (the edited copy is kept at $tmp)" >&2
+      warn "$warn (the edited copy is kept at $tmp)"
     fi
   fi
   [ -e "$vk_wrapper" ] && had_wrapper=1
@@ -293,7 +321,7 @@ cleanup_vk_residue() {
     if rm -f "$vk_wrapper"; then
       echo "  Removed $vk_wrapper (VibeKanban support was removed)"
     else
-      echo "WARNING: could not remove $vk_wrapper; delete it by hand" >&2
+      warn "WARNING: could not remove $vk_wrapper; delete it by hand"
     fi
   fi
   if [ "$had_wrapper" = 1 ]; then
@@ -688,7 +716,7 @@ if command -v jq &>/dev/null; then
     esac
   fi
 else
-  echo "  WARNING: jq not found — cannot register marketplace automatically" >&2
+  warn "  WARNING: jq not found — cannot register marketplace automatically"
 fi
 
 # 3. Copy plugin into marketplace directory (decoupled from source repo).
@@ -706,12 +734,12 @@ OCCUPANT_MANIFEST="$MARKETPLACE_DIR/.claude-plugin/marketplace.json"
 if [ -f "$OCCUPANT_MANIFEST" ] && command -v jq &>/dev/null; then
   occupant_name="$(jq -r '.name // empty' "$OCCUPANT_MANIFEST" 2>/dev/null || true)"
   if [ -n "$occupant_name" ] && [ "$occupant_name" != "$MARKETPLACE_NAME" ]; then
-    echo "  WARNING: foreign marketplace '$occupant_name' occupies $MARKETPLACE_DIR." >&2
-    echo "  super-fr owns '$MARKETPLACE_NAME' and is reclaiming this directory;" >&2
-    echo "  '$occupant_name' plugins installed from here will stop resolving." >&2
-    echo "  Fix on that repo's side: a marketplace name is a 1:1 namespace over one" >&2
-    echo "  source repo — use 'derio-net--<its own repo>', matching its own" >&2
-    echo "  .claude-plugin/marketplace.json 'name'." >&2
+    warn "  WARNING: foreign marketplace '$occupant_name' occupies $MARKETPLACE_DIR." \
+      "  super-fr owns '$MARKETPLACE_NAME' and is reclaiming this directory;" \
+      "  '$occupant_name' plugins installed from here will stop resolving." \
+      "  Fix on that repo's side: a marketplace name is a 1:1 namespace over one" \
+      "  source repo — use 'derio-net--<its own repo>', matching its own" \
+      "  .claude-plugin/marketplace.json 'name'."
   fi
 fi
 mkdir -p "$MARKETPLACE_DIR"
@@ -832,18 +860,20 @@ if command -v jq &>/dev/null && [ -f "$INSTALLED_PLUGINS" ]; then
                "$source_file" 2>/dev/null || true)
   done
   if [ -n "$orphans" ]; then
-    echo "" >&2
-    echo "  WARNING: orphaned plugin registration(s) in the $MARKETPLACE_NAME marketplace:" >&2
+    orphan_lines=()
     for plugin_id in $orphans; do
-      echo "    - $plugin_id  (not listed in super-fr's marketplace.json)" >&2
+      orphan_lines+=("    - $plugin_id  (not listed in super-fr's marketplace.json)")
     done
-    echo "  These stay enabled but can no longer resolve. Left in place rather than" >&2
-    echo "  silently deleted. Remove them with:" >&2
-    echo "    jq 'del(.plugins[\"<id>\"])' ~/.claude/plugins/installed_plugins.json" >&2
-    echo "    jq 'del(.enabledPlugins[\"<id>\"])' ~/.claude/settings.json" >&2
+    echo "" >&2
+    warn "  WARNING: orphaned plugin registration(s) in the $MARKETPLACE_NAME marketplace:" \
+      "${orphan_lines[@]}" \
+      "  These stay enabled but can no longer resolve. Left in place rather than" \
+      "  silently deleted. Remove them with:" \
+      "    jq 'del(.plugins[\"<id>\"])' ~/.claude/plugins/installed_plugins.json" \
+      "    jq 'del(.enabledPlugins[\"<id>\"])' ~/.claude/settings.json"
   fi
 else
-  echo "  WARNING: cannot register plugins — jq or installed_plugins.json missing" >&2
+  warn "  WARNING: cannot register plugins — jq or installed_plugins.json missing"
 fi
 
 # 7. Rules
@@ -867,16 +897,16 @@ done
 # and leave every fr-goal run mysteriously degraded to inline execution.
 if ! bash "$PLUGIN_ROOT/scripts/ensure-phase-executor-allowlist.sh" \
      "$CLAUDE_DIR/hooks/agent-worktree-required.sh"; then
-  echo "  WARNING: could not allowlist fr-phase-executor in the agent-worktree hook" >&2
-  echo "  (see the error above) — fr-goal will fall back to INLINE phase execution." >&2
+  warn "  WARNING: could not allowlist fr-phase-executor in the agent-worktree hook" \
+    "  (see the error above) — fr-goal will fall back to INLINE phase execution."
 fi
 # The read-only fr-spec-reviewer too (2026-09-24 spec §E, gh#593): the hook
 # decides by name, not by tools, and a worktree cut from `main` cannot see the
 # feature branch's spec the reviewer is dispatched to read.
 if ! bash "$PLUGIN_ROOT/scripts/ensure-phase-executor-allowlist.sh" \
      "$CLAUDE_DIR/hooks/agent-worktree-required.sh" super-fr:fr-spec-reviewer; then
-  echo "  WARNING: could not allowlist fr-spec-reviewer in the agent-worktree hook" >&2
-  echo "  (see the error above) — fr-goal's spec-review dispatch will be blocked." >&2
+  warn "  WARNING: could not allowlist fr-spec-reviewer in the agent-worktree hook" \
+    "  (see the error above) — fr-goal's spec-review dispatch will be blocked."
 fi
 
 # 7b. OpenCode skill + command + agent delivery — moved to after step 10 (fr CLI install)
@@ -887,7 +917,7 @@ cleanup_vk_residue
 
 # 9. PostToolUse hook hint
 if [ ! -f "$SETTINGS" ]; then
-  echo "  WARNING: $SETTINGS not found — skipping hook check"
+  warn "  WARNING: $SETTINGS not found — skipping hook check"
 else
   if grep -q "validate-plans" "$SETTINGS"; then
     echo "  PostToolUse hook already present — skipping"
@@ -964,7 +994,7 @@ if command -v uv &>/dev/null; then
       ;;
   esac
   if [ "${#FR_CONSTRAINTS[@]}" -eq 0 ]; then
-    echo "  WARNING: fr's dependencies are not constrained to the release's uv.lock (uv could not export it, or its \`tool install\` takes no --constraints)" >&2
+    warn "  WARNING: fr's dependencies are not constrained to the release's uv.lock (uv could not export it, or its \`tool install\` takes no --constraints)"
   fi
   fr_uv_bin="$HOME/.local/share/fr/uv-bin"
   fr_stage_root="$HOME/.cache/fr/install-stage"
@@ -990,7 +1020,7 @@ if command -v uv &>/dev/null; then
       # loading it before that env is deleted.
       sleep "${FR_INSTALL_DRAIN_SECONDS:-2}"
     else
-      echo "  WARNING: could not stage fr aside; rebuilding it in place" >&2
+      warn "  WARNING: could not stage fr aside; rebuilding it in place"
       rm -rf "$fr_stage"
       fr_stage=""
     fi
@@ -1057,12 +1087,12 @@ if command -v uv &>/dev/null; then
       done
     fi
   else
-    echo "  WARNING: fr entry point not found at $fr_bin (uv stub or unusual layout?)" >&2
+    warn "  WARNING: fr entry point not found at $fr_bin (uv stub or unusual layout?)"
   fi
 else
   echo ""
-  echo "  WARNING: uv not found — install fr CLI manually:"
-  echo "    uv tool install $PLUGIN_ROOT/packages/fr"
+  warn "  WARNING: uv not found — install fr CLI manually:" \
+    "    uv tool install $PLUGIN_ROOT/packages/fr"
 fi
 
 # 7b. OpenCode skill + command + agent delivery — opt-in only (OpenCode has no
@@ -1110,10 +1140,28 @@ if [ "${OPENCODE_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HOME/.config/opencode" ]; 
   # `fr.opencode_agents.materialize_agents` also used by `fr models set`
   # (spec 2026-09-20-opencode-tier-binding-reaches-dispatch §3.A), reached
   # through the one shell-callable entry point install.sh (bash, no Python
-  # import) can use. Tolerate any failure exactly like the old rewrite's
-  # `|| true` did — an unbound tier, a missing `fr`, or a hand-edited agent
-  # file must never fail the install.
-  fr models apply --harness opencode || true
+  # import) can use. A failure never fails the install, but it is never
+  # silent either (spec 2026-11-28-batch-silent-failures R1): an unbound tier
+  # exits 0 (the file keeps no `model:` and inherits), so a non-zero exit is a
+  # real refusal (the CLI-entry migration gate's exit 2, a hand-edited agent
+  # file) and is recorded as a warning, repeated in the closing summary.
+  if ! command -v fr &>/dev/null; then
+    warn "WARNING: tier models not applied: fr is not on PATH"
+  else
+    apply_rc=0
+    fr models apply --harness opencode 2>"$FR_INSTALL_STDERR" || apply_rc=$?
+    if [ "$apply_rc" -ne 0 ]; then
+      apply_lines=()
+      while IFS= read -r l; do apply_lines+=("    $l"); done < <(head -n 12 "$FR_INSTALL_STDERR")
+      apply_total="$(wc -l < "$FR_INSTALL_STDERR" | tr -d ' ')"
+      if [ "$apply_total" -gt 12 ]; then
+        apply_lines+=("    … $((apply_total - 12)) more lines")
+      fi
+      warn "WARNING: tier models not applied (fr models apply exit $apply_rc):" \
+        ${apply_lines[@]+"${apply_lines[@]}"} \
+        "  fix what fr names above, then run: fr models apply --harness opencode"
+    fi
+  fi
   # The plugin behind OpenCode's edit gate and idle adapter (gh#563). Without
   # this step `fr harness parity` credits both to OpenCode users who never
   # received them. A failure here fails the install: an OpenCode user
@@ -1158,10 +1206,10 @@ if [ "${HERMES_SKILLS_INSTALL:-}" = "1" ] || [ -d "$HERMES_HOME" ]; then
     if fr hermes install --source "$PLUGIN_ROOT" --home "$HERMES_HOME"; then
       echo "  Wired Hermes hooks + SOUL.md rules block"
     else
-      echo "  WARNING: fr hermes install failed — hooks/rules not wired" >&2
+      warn "  WARNING: fr hermes install failed — hooks/rules not wired"
     fi
   else
-    echo "  WARNING: fr not on PATH — skipping fr hermes install (hooks/rules not wired)" >&2
+    warn "  WARNING: fr not on PATH — skipping fr hermes install (hooks/rules not wired)"
   fi
 else
   echo ""
@@ -1187,12 +1235,12 @@ elif command -v npm &>/dev/null; then
   if npm install -g "$fr_devcontainer_cli" >/dev/null 2>&1; then
     echo "  Installed devcontainer CLI"
   else
-    echo "  WARNING: npm install -g $fr_devcontainer_cli failed — install manually if you plan to use fr isolation" >&2
+    warn "  WARNING: npm install -g $fr_devcontainer_cli failed — install manually if you plan to use fr isolation"
   fi
 else
   echo ""
-  echo "  WARNING: devcontainer CLI not found and npm not available — 'fr isolation up' will fail until"
-  echo "  you install it manually: npm install -g @devcontainers/cli"
+  warn "  WARNING: devcontainer CLI not found and npm not available — 'fr isolation up' will fail until" \
+    "  you install it manually: npm install -g @devcontainers/cli"
 fi
 
 echo ""
@@ -1201,3 +1249,22 @@ echo ""
 echo "Verify with:"
 echo "  cat ~/.claude/rules/fr-plan-override.md"
 echo "  fr --version"
+echo ""
+# The closing block (spec 2026-11-28-batch-silent-failures R2): which fr this
+# install left on PATH, then every warning again, so none scrolls away.
+if ! command -v fr &>/dev/null; then
+  echo "fr: not on PATH"
+else
+  fr_version_rc=0
+  fr_version_out="$(fr --version 2>/dev/null)" || fr_version_rc=$?
+  if [ "$fr_version_rc" -eq 0 ]; then
+    echo "fr version: $fr_version_out"
+  else
+    echo "fr version: unknown (fr --version failed, exit $fr_version_rc)"
+  fi
+fi
+if [ -s "$FR_INSTALL_WARNINGS" ]; then
+  print_warnings
+else
+  echo "No warnings."
+fi
