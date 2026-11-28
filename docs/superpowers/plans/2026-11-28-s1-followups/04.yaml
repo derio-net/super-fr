@@ -1,0 +1,101 @@
+schema_version: 2
+phase:
+  number: 4
+  title: Test sites, the repos home, the scenario and the docs (R10 scenarios, R14-R17)
+  tag: agentic
+  depends_on:
+  - 1
+  - 2
+  - 3
+  tracking_issue: null
+  acceptance:
+  - repos-manifest-home-at-call
+  tier: standard
+  files:
+  - packages/fr/src/fr/repos.py
+  - packages/fr/src/fr/commands/repos_cmd.py
+  - tests/**
+  - plugins/super-fr/rules/fr-isolation-required.md
+  - .claude/rules/fr-isolation-required.md
+  - .opencode/instructions/*.md
+  - .hermes/SOUL.d/super-fr-rules.md
+  - AGENTS.md
+  - docs/**
+  estimate_lines: 600
+tasks:
+- number: 1
+  title: The repos manifest home at call time (R15)
+  steps:
+  - id: P4.T1.S1
+    text: |-
+      RED: tests/unit/test_repos_manifest_home.py (new): after importing fr.repos, monkeypatch HOME to tmp_path and assert `fr.repos.default_manifest() == tmp_path/.config/fr/repos.yaml` and that `repos_cmd._manifest_path(None)` returns it; with FR_REPOS_MANIFEST set it wins. See it fail.
+  - id: P4.T1.S2
+    text: |-
+      GREEN: replace DEFAULT_MANIFEST with `def default_manifest() -> Path: return Path.home() / ".config" / "fr" / "repos.yaml"`; repos_cmd imports and calls it; update the module docstring. Tests pass.
+- number: 2
+  title: Per-kind variable test sites move to FR_SHIPPED_DEFAULTS_DIR, with a tripwire
+    (R14)
+  steps:
+  - id: P4.T2.S1
+    text: |-
+      RED: tests/unit/test_tripwire_shipped_env.py (new): scan tests/** (excluding tests/fixtures/transcripts/) for an assignment, `export`, `setenv(`/`monkeypatch.setenv(`, `os.environ[...] =` or an env-mapping key (`"FR_SHIPPED_WORKFLOWS_DIR":`) of the three per-kind names; `unset`/`delenv` are allowed; only tests/unit/test_shipped_defaults_resolve.py, tests/scenarios/config-homes.sh and tests/scenarios/s1-followups.sh may set them. It fails today, listing the ~20 files.
+  - id: P4.T2.S2
+    text: |-
+      GREEN: move each listed site (`grep -rn -E 'FR_SHIPPED_(WORKFLOWS|VERIFICATIONS|LENSES)_DIR' tests`) to FR_SHIPPED_DEFAULTS_DIR pointing at a tmp tree with a `workflows/`, `verifications/` or `lenses/` subdirectory holding what the old directory held (an existing directory may be symlinked or copied under `<tmp>/<kind>/`). Run each touched file and the tripwire: `uv run pytest <files> tests/unit/test_tripwire_shipped_env.py -q --no-cov -n 4`.
+  - id: P4.T2.S3
+    text: |-
+      REFACTOR: if several files build the same `<tmp>/<kind>/` tree, add one fixture helper in tests/conftest.py or a tests/ helper module and use it; otherwise record the reason.
+- number: 3
+  title: Scenarios on both sides of the gate (R10)
+  steps:
+  - id: P4.T3.S1
+    text: |-
+      Make tests/scenarios/config-homes.sh read the candidate's gate side (`fr settings paths --shell` FR_OLD_PATHS_ENDED in its fixture, or `fr --version` major.minor against 9.2) and assert today's transition behaviour only when not ended, the refusal otherwise. Add tests/scenarios/s1-followups.sh (header comment naming rows s1-old-paths-refused, s1-old-settings-copy-retired, s1-shell-readers-refuse, s1-config-argv-from-tip, same scratch-HOME, local-bare-origin, fake-gh pattern as config-homes.sh) running the installed candidate with FR_OLD_PATHS=refuse: an old plan-config and an old profiles file refuse naming migrate, then `fr migrate artifacts --yes` moves them; a per-kind variable refuses naming FR_SHIPPED_DEFAULTS_DIR; under quiet a settings write leaves `fr:settings.yaml` unchanged and `fr settings sync` exits 2; the candidate's hook library denies an edit allowed only by `.fr-isolation-allow` and keeps an old-only-switch repo gated; validate-plans.sh ignores the old plan-config; a walk under quiet with enforced stub rules runs `.fr/` scenario files from the tip; `fr run advance` refuses a cli step naming `.fr/`. Add its test in tests/integration/test_scenarios.py (`test_s1_followups`, marked scenario like the others). Run `uv run pytest -m scenario tests/integration/test_scenarios.py -k "config_homes or s1_followups" -q --no-cov`.
+- number: 4
+  title: Rules, AGENTS.md and the pages say the transition ends in fr 9.2 (R16); the
+    owed removal (R17)
+  steps:
+  - id: P4.T4.S1
+    text: |-
+      Update plugins/super-fr/rules/fr-isolation-required.md and .claude/rules/fr-isolation-required.md (manual mirror), AGENTS.md (the fr/config, Shipped defaults and fr/docs paragraphs naming per-kind variables / fr settings sync), and every page `uv run fr docs check` and `grep -rln -E 'FR_SHIPPED_(WORKFLOWS|VERIFICATIONS|LENSES)_DIR|settings sync|isolation-allow' docs/*.md docs/explainers docs/reference` name, to say the transition ends in fr 9.2 and what refuses then (FR_OLD_PATHS=refuse ends it early). Run `uv run --no-project python scripts/sync-opencode.py`, `scripts/sync-hermes.py`, `scripts/sync-readme.py`, then `uv run fr docs check` exits 0.
+  - id: P4.T4.S2
+    text: |-
+      Record the owed removal (R17): `uv run fr journal add --scope spec --slug 2026-11-28-s1-followups --kind owed --id s1-remove-transition-code --title "Remove the dormant S1 transition code once a 9.2 final has shipped" --body "<the list from R17>"`; then run the fast tier last: `uv run pytest --fr-scope -n 2 -q --no-cov`.
+state:
+  steps:
+    P4.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P4.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

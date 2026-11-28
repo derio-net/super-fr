@@ -1,0 +1,105 @@
+schema_version: 2
+phase:
+  number: 2
+  title: The shell and TypeScript readers stop reading old forms past the gate (R7-R9)
+  tag: agentic
+  depends_on:
+  - 1
+  tracking_issue: null
+  acceptance:
+  - s1-shell-readers-refuse
+  tier: hard
+  files:
+  - plugins/super-fr/hooks/lib/fr-isolation-decision.sh
+  - plugins/super-fr/hooks/fr-isolation-required.sh
+  - plugins/super-fr/hooks/hermes/fr-isolation-required.sh
+  - packages/fr-opencode-plugin/src/*.ts
+  - packages/fr-opencode-plugin/test/*.ts
+  - packages/fr-opencode-plugin/tests/*.ts
+  - scripts/deliver-opencode-plugin.sh
+  - scripts/validate-plans.sh
+  - packages/fr/src/fr/data/validate-plans.sh
+  - packages/fr/src/fr/hermes.py
+  - packages/fr/src/fr/commands/settings_cmd.py
+  - packages/fr/src/fr/settings/*.py
+  - tests/unit/*.py
+  - tests/integration/*.py
+  - tests/fixtures/isolation-decision-cases.json
+  - .opencode/plugins/*.ts
+  estimate_lines: 700
+tasks:
+- number: 1
+  title: Version sources beside every delivered copy (R7)
+  steps:
+  - id: P2.T1.S1
+    text: |-
+      RED: tests: (a) `fr settings paths --shell` prints `FR_OLD_PATHS_ENDED=0` with refusing False and `=1` with refusing True; (b) `fr hermes install` (with its existing test harness, see tests/unit/test_hermes*.py) writes `VERSION` holding `fr.__version__` into the installed hook dir; (c) running `scripts/deliver-opencode-plugin.sh` into a scratch dir (as its existing tests do) leaves `<plugin>/VERSION` equal to packages/fr-opencode-plugin/package.json's version. See them fail.
+  - id: P2.T1.S2
+    text: |-
+      GREEN: add FR_OLD_PATHS_ENDED to the paths --shell output (settings_cmd / its paths renderer), write VERSION in hermes.py after the copytree, and write VERSION in deliver-opencode-plugin.sh from package.json (jq or a sed of the `"version"` line; the script already requires its tools at the top). Tests pass.
+- number: 2
+  title: 'Edit-gate library: no old allowlist, no old-switch placement, old-only switch
+    stays gated (R7, R8)'
+  steps:
+  - id: P2.T2.S1
+    text: |-
+      RED: extend tests/fixtures/isolation-decision-cases.json / tests/unit/test_isolation_decision_cases.py with cases run against a fixture plugin tree whose `.claude-plugin/plugin.json` says 9.2.0 (and one with no plugin.json and a `../VERSION` of 9.2.0, the Hermes layout, and one with neither -> ended): an edit allowed only by `.fr-isolation-allow` is DENIED; a repo whose switch is only `refs/remotes/origin/fr:settings.yaml` naming quiet is still fr-enabled (a base-clone edit denied) but its `fr` worktree is NOT a write target (edit there denied); differing switches add no FR_SWITCH_DIFFER_NOTE. The same cases with version 9.1.0 keep today's results (the existing cases must run against a 9.1.0 fixture tree explicitly, never the real plugin.json). FR_OLD_PATHS=refuse with a 9.1.0 tree behaves as ended. See them fail.
+  - id: P2.T2.S2
+    text: |-
+      GREEN: in fr-isolation-decision.sh add `FR_REFUSE_FROM=9.2` and `_fr_transition_ended` (FR_OLD_PATHS=refuse; else the "version" of "$lib/../../.claude-plugin/plugin.json", else "$lib/../VERSION"; compare major.minor numerically; unreadable -> ended). When ended: the allowlist lookup reads only `.fr/isolation-allow`; `_fr_read_switch` reads only FR_SWITCH_NEW for placement; `_fr_placement_enabled` is still true for an old-only FR_SWITCH_OLD naming quiet; FR_SWITCH_DIFFER_NOTE is never added. Keep `.fr-isolation-allow` in the protected-name list. Tests pass; also `uv run pytest tests/unit -q --no-cov -n 4 -k isolation`.
+- number: 3
+  title: OpenCode plugin mirrors the library (R7, R8)
+  steps:
+  - id: P2.T3.S1
+    text: |-
+      RED: bun tests in packages/fr-opencode-plugin (beside the existing marker tests) for the same cases as P2.T2.S1, reading a fixture plugin dir's VERSION (9.2.0, 9.1.0, absent -> ended) and FR_OLD_PATHS=refuse. Run `cd packages/fr-opencode-plugin && bun test` and see them fail.
+  - id: P2.T3.S2
+    text: |-
+      GREEN: marker.ts gains REFUSE_FROM = [9, 2] and `transitionEnded()` reading `VERSION` beside the module (import.meta.dir / the existing way it locates itself), with the same ended-side rules as the shell library; keep the `// super-fr-parity:` markers intact. `bun test` passes; `uv run fr harness parity --check` clean.
+- number: 4
+  title: validate-plans.sh and the literal-agreement test (R7, R9)
+  steps:
+  - id: P2.T4.S1
+    text: |-
+      RED: tests/unit/test_validate_plans_paths_read.py: with a stub fr printing FR_OLD_PATHS_ENDED=1, a repo holding only docs/superpowers/plan-config.yaml is validated with the default profile and prints one line naming `fr migrate artifacts --yes`; with =0 today's read holds; with no usable fr it counts as ended. tests/unit/test_transition_gate.py: `test_the_gate_literals_agree` reads REFUSE_FROM, the shell library's FR_REFUSE_FROM and marker.ts's REFUSE_FROM and asserts one value; `test_the_gate_is_the_minor_after_s1s_release`: while `.changes/feat-event-driven-a-la-carte.yaml` exists, the predicted next release (scripts/changes.py / versions.py: current version plus the highest pending bump) has the same major and a minor exactly one below REFUSE_FROM's (skipped once the fragment is consumed). See them fail.
+  - id: P2.T4.S2
+    text: |-
+      GREEN: validate-plans.sh reads FR_OLD_PATHS_ENDED from the `fr settings paths --shell` block it already evaluates (default 1 when fr is unusable) and skips the old plan-config when 1, printing the line; copy it byte-identically to packages/fr/src/fr/data/validate-plans.sh (the existing byte-identity test enforces it). Tests pass; then the fast tier: `uv run pytest --fr-scope -n 2 -q --no-cov`.
+state:
+  steps:
+    P2.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P2.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []

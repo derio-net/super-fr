@@ -294,3 +294,9 @@ gate: developer
 
 - Removing the dormant transition code: owed after 9.2 ships (R17).
 - Default-branch protection under `repo` (#1697): a different trust question, not caused here.
+
+## Implementation Plans
+
+| Plan | Repo | File | Depends on |
+|------|------|------|------------|
+| 2026-11-28-s1-followups | `derio-net/super-fr` | `2026-11-28-s1-followups` | — |

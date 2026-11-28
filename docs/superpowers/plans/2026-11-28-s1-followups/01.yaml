@@ -1,0 +1,144 @@
+schema_version: 2
+phase:
+  number: 1
+  title: The transition gate and the Python readers (R1-R6, R10 for Python)
+  tag: agentic
+  depends_on: []
+  tracking_issue: null
+  acceptance:
+  - s1-old-paths-refused
+  - s1-old-settings-copy-retired
+  skeleton: true
+  tier: hard
+  files:
+  - packages/fr/src/fr/config/transition.py
+  - packages/fr/src/fr/config/space.py
+  - packages/fr/src/fr/settings/load.py
+  - packages/fr/src/fr/placement/quiet.py
+  - packages/fr/src/fr/placement/stealth.py
+  - packages/fr/src/fr/commands/settings_cmd.py
+  - packages/fr/src/fr/artifacts/config_migration.py
+  - packages/fr/src/fr/_shipped.py
+  - packages/fr/src/fr/workflow/resolve.py
+  - packages/fr/src/fr/verification/resolve.py
+  - packages/fr/src/fr/lenses/resolve.py
+  - packages/fr/src/fr/commands/repos_cmd.py
+  - packages/fr/src/fr/repair.py
+  - tests/unit/*.py
+  - .changes/feat-batch-s1-followups.yaml
+  estimate_lines: 900
+tasks:
+- number: 1
+  title: 'Smoke: the gate module and CI green on a trivial test'
+  steps:
+  - id: P1.T1.S1
+    text: |-
+      RED: add tests/unit/test_transition_gate.py with `test_refusing_follows_the_release_line`: monkeypatch `fr.__version__` to "9.1.0rc10" -> `fr.config.transition.refusing()` is False; "9.1.3" False; "9.2.0rc1" True; "9.2.0" True; "10.0.0" True; "not-a-version" True; with "9.1.0" and env FR_OLD_PATHS=refuse -> True; FR_OLD_PATHS=open -> False (no other value means anything). Run `uv run pytest tests/unit/test_transition_gate.py -q --no-cov` and see it fail (module missing).
+  - id: P1.T1.S2
+    text: |-
+      GREEN: create packages/fr/src/fr/config/transition.py per spec §A: REFUSE_FROM=(9, 2), ENV="FR_OLD_PATHS", `class TransitionError(SettingsError)`, `class LegacyEnvRefused(TransitionError)`, `refusing()`, `old_path_refusal(old, new) -> TransitionError` whose text names the old path, the new path and `fr migrate artifacts --yes`. Parse major/minor with the same spelling rules `fr.version_floor` uses (reuse its parser if it exposes one). Add `.changes/feat-batch-s1-followups.yaml` (`bump: minor`, summary: "From fr 9.2 the S1 transition ends: old configuration paths, the old settings copy and the per-kind FR_SHIPPED_*_DIR variables are refused (FR_OLD_PATHS=refuse ends it early); configuration argv naming .fr/ runs only from the protected tip"). Tests pass; push and confirm CI's lint/typecheck are green on the trivial addition.
+- number: 2
+  title: Old configuration paths refuse past the gate; movers keep reading them (R2,
+    R3)
+  steps:
+  - id: P1.T2.S1
+    text: |-
+      RED: in tests/unit/test_config_space_transition.py (new): with `refusing` monkeypatched True, a repo holding only `docs/superpowers/plan-config.yaml` makes `fr.config.space.located(root, "plan-config")` raise TransitionError naming both paths and `fr migrate artifacts --yes`, and `fr settings paths` exits 2 through the CLI runner; the same for `.devcontainer/fr-profiles.yaml` (profiles); under quiet with no fr-config branch, the old committed file is refused too. With `refusing` False, the existing notice behaviour holds (assert one stderr notice, the old path returned). Also: with refusing True, `fr repos sync --force` still moves the old plan-config to `.fr/plan-config.yaml` and removes the old one, and `fr migrate artifacts --yes` still moves every old path (reuse the fixture builders in the existing config-migration tests). See them fail.
+  - id: P1.T2.S2
+    text: |-
+      GREEN: in config/space.py, `legacy()` raises `old_path_refusal(old, new)` when `transition.refusing()` and only the old path exists; `located()`'s quiet/stealth read of an old committed file goes through the same path. Add `old_path(root, kind) -> Path | None` (the old file for a mover, never refusing) and use it in commands/repos_cmd.py (the plan-config move around :83-96) and repair.py:337 instead of `located`. Tests pass.
+  - id: P1.T2.S3
+    text: |-
+      REFACTOR: make `legacy()`'s docstring state both sides of the gate and drop the "the refusal is the release ... names" sentence; ruff + mypy clean on the touched files.
+- number: 3
+  title: The old settings copy is neither written nor read past the gate (R4)
+  steps:
+  - id: P1.T3.S1
+    text: |-
+      RED: tests/unit/test_settings_old_copy_transition.py (new), using the quiet and stealth fixtures of the existing settings-write tests (find them with `grep -ln write_legacy tests/unit`): with refusing True, `fr.config.space.write_settings` under quiet pushes only `fr-config:.fr/settings.yaml` (origin's `fr` branch root `settings.yaml` unchanged), and under stealth only `<branch>-config:<target>/.fr/settings.yaml`; a quiet repo whose fr-config holds a switch and whose `fr:settings.yaml` differs or is absent reads its placement without any refusal and no stderr line names `fr settings sync`; `fr settings init --stealth` and `--quiet` on a repo with the new switch and no old copy succeed (no half-written refusal); a repo whose switch is ONLY `fr:settings.yaml` refuses naming `fr migrate artifacts --yes`; the migration's refusal text (artifacts/config_migration.py:216-219) does not name `fr settings sync`. With refusing False, today's behaviour (both copies written, differing copies refused naming `fr settings sync`) holds. See them fail.
+  - id: P1.T3.S2
+    text: |-
+      GREEN: gate the old copy: `quiet._read` and `fr.settings.load._stealth` skip their old-copy fallback when refusing (old-only switch -> TransitionError naming migrate); `quiet.write_switch` skips `write_legacy` and `stealth.write_target_settings` skips `write_legacy_target`; the differing/lagging/absent/half-written checks (`legacy_lags`, `lag_refusal`, `mismatch_refusal`, `half_written`, `finish_refusal`, `init_stealth`'s old-absent check, `_settle_differing`/`settle_differing_target`) return as if in step when refusing; every message naming SYNC_COMMAND is emitted only when not refusing. Leave `switch_texts`, `target_settings_texts`, `_read_legacy` and `_create_from_old_switch` ungated (movers, R3). Update the docstrings/stderr at quiet.py:1291-1295 and stealth.py:899-904 to say the old copy is kept only before fr 9.2. Tests pass.
+  - id: P1.T3.S3
+    text: |-
+      REFACTOR: put the repeated "is the old copy still kept" test in one helper (e.g. `transition.keeps_old_copy()` = not refusing) used by both placement modules; existing settings tests stay green: `uv run pytest tests/unit -q --no-cov -n 4 -k "settings or quiet or stealth or placement"`.
+- number: 4
+  title: '`fr settings sync` retired past the gate, listed on both sides (R5, R10)'
+  steps:
+  - id: P1.T4.S1
+    text: |-
+      RED: in tests/unit/test_settings_old_copy_transition.py: with refusing True, `fr settings sync` (and with `--yes --expect x`) exits 2 with a line saying fr no longer keeps an old settings copy, so there is nothing to sync, and changes no ref; `fr settings --help` lists `sync` with the same help first line under refusing True and False. In tests/unit/test_readme_sync_gate.py (new): render the generated CLI tree (`scripts/sync-readme.py`'s renderer, imported as test_tripwire_readme_sync.py does) with `fr.__version__` monkeypatched to "9.2.0" and assert it equals the committed `docs/reference/cli.md` block. See them fail.
+  - id: P1.T4.S2
+    text: |-
+      GREEN: commands/settings_cmd.py: `sync_cmd` checks `transition.refusing()` first and exits 2 with that line; give it a constant help first line ending "(retired in fr 9.2)"; regenerate with `uv run --no-project python scripts/sync-readme.py`. Tests pass, `scripts/sync-readme.py --check` clean.
+- number: 5
+  title: Per-kind FR_SHIPPED_*_DIR refused past the gate through each kind's error
+    (R6)
+  steps:
+  - id: P1.T5.S1
+    text: |-
+      RED: in tests/unit/test_shipped_defaults_resolve.py: with refusing True and FR_SHIPPED_WORKFLOWS_DIR set, `fr workflow check` exits 2 naming FR_SHIPPED_WORKFLOWS_DIR and `FR_SHIPPED_DEFAULTS_DIR/workflows/`; likewise `fr verification list` for FR_SHIPPED_VERIFICATIONS_DIR and `fr lenses list` for FR_SHIPPED_LENSES_DIR (each through CliRunner, each a clean exit 2, no traceback); the existing notice tests force refusing False. In tests/unit/test_lenses_resolve.py the "no shipped lens manifests" message names FR_SHIPPED_DEFAULTS_DIR and not FR_SHIPPED_LENSES_DIR. See them fail.
+  - id: P1.T5.S2
+    text: |-
+      GREEN: `_shipped._legacy_dir` raises `LegacyEnvRefused` when refusing and the variable is set; workflow/resolve.py, verification/resolve.py and lenses/resolve.py catch it where they call `env_dirs`/`shipped_dirs` and re-raise as WorkflowError / StrategyError / LensError with the same text; lenses/resolve.py:46's message names FR_SHIPPED_DEFAULTS_DIR only; update the `_shipped.py` and lenses/resolve.py docstrings' order lists to say the per-kind variables work only before fr 9.2. Tests pass.
+  - id: P1.T5.S3
+    text: |-
+      REFACTOR: none expected beyond the three identical catch blocks — if they are identical, move the mapping into one `_shipped.shipped_dirs_or(err_type)` helper; then run the fast tier last: `uv run pytest --fr-scope -n 2 -q --no-cov`.
+state:
+  steps:
+    P1.T1.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T1.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T2.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T3.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T4.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S1:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S2:
+      state: ' '
+      ticked_at: null
+      note: null
+    P1.T5.S3:
+      state: ' '
+      ticked_at: null
+      note: null
+  completion:
+    at: null
+    note: null
+    observed_prs: []
