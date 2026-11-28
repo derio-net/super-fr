@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fr.triage import pr_gates
@@ -160,3 +161,77 @@ def test_a_closed_out_batchs_pr_given_as_a_loose_ledger_is_passed() -> None:
 
 def test_snapshot_has_loose_ledgers_defaulting_empty() -> None:
     assert Snapshot.__dataclass_fields__["loose_ledgers"].default == ()
+
+
+# ------------------------------------------------- the cursor must name the PR (R5)
+
+
+def _cursor_pr(checkout: Any, *, pr: str | None, extra: str | None = None) -> None:
+    """Record *pr* on the run cursor of `_ledger_repo`, and optionally copy that cursor to a
+    second run id (a second cursor naming the same branch)."""
+    import yaml
+
+    from tests.unit.test_triage_exit_gates_drive import _git
+
+    clone = checkout.path
+    path = clone / "docs/superpowers/runs/r1.yaml"
+    doc = yaml.safe_load(path.read_text())
+    if pr is None:
+        doc.pop("pr", None)
+    else:
+        doc["pr"] = pr
+    path.write_text(yaml.safe_dump(doc))
+    if extra is not None:
+        (clone / f"docs/superpowers/runs/{extra}.yaml").write_text(
+            yaml.safe_dump({**doc, "run": extra})
+        )
+    _git(clone, "add", "docs/superpowers/runs")
+    _git(clone, "commit", "--quiet", "-m", "cursor")
+    _git(clone, "push", "--quiet", "origin", "HEAD:main")
+    _git(clone, "fetch", "--quiet", "origin")
+
+
+def _read(tmp_path: Path, number: int | None, **kw: Any) -> Any:
+    from fr.triage.ledger import gated_rows_at
+
+    from tests.unit.test_triage_exit_gates_drive import _ledger_repo
+
+    checkout = _ledger_repo(tmp_path, walked=True)
+    _cursor_pr(checkout, **kw)
+    return gated_rows_at(checkout, "origin/main", "feat/batch-b1", pr=number)
+
+
+def test_a_cursor_naming_this_pr_gives_its_rows(tmp_path: Path) -> None:
+    read = _read(tmp_path, 9, pr=f"https://github.com/{REPO}/pull/9/")
+    assert [r.id for r in read.rows] == ["r-live"]
+
+
+def test_a_cursor_naming_another_pr_gives_no_rows(tmp_path: Path) -> None:
+    from fr.triage.ledger import NO_RUN
+
+    assert _read(tmp_path, 9, pr=f"https://github.com/{REPO}/pull/19") == NO_RUN
+
+
+def test_a_cursor_with_no_pr_gives_its_rows(tmp_path: Path) -> None:
+    assert [r.id for r in _read(tmp_path, 9, pr=None).rows] == ["r-live"]
+
+
+def test_two_cursors_naming_the_branch_are_unreadable_for_a_pr(tmp_path: Path) -> None:
+    import pytest
+    from fr.triage.errors import TriageError
+
+    with pytest.raises(TriageError, match="feat/batch-b1.*r1.*r2|feat/batch-b1.*r2.*r1"):
+        _read(tmp_path, 9, pr=None, extra="r2")
+
+
+def test_no_cursor_gives_no_rows_and_no_pr_keeps_the_first_match(tmp_path: Path) -> None:
+    from fr.triage.ledger import NO_RUN, gated_rows_at
+
+    from tests.unit.test_triage_exit_gates_drive import _ledger_repo
+
+    checkout = _ledger_repo(tmp_path, walked=True)
+    assert gated_rows_at(checkout, "origin/main", "fix/none", pr=9) == NO_RUN
+    _cursor_pr(checkout, pr=f"https://github.com/{REPO}/pull/19", extra="r2")
+    assert [r.id for r in gated_rows_at(checkout, "origin/main", "feat/batch-b1").rows] == [
+        "r-live"
+    ]  # pr=None: today's first match, however many cursors
