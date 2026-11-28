@@ -306,6 +306,10 @@ def test_shipped_verification_strategies(installed: Path, tmp_path: Path) -> Non
     _scenario("shipped-verification-strategies", installed, tmp_path)
 
 
+def test_spec_requirements_table(installed: Path, tmp_path: Path) -> None:
+    _scenario("spec-requirements-table", installed, tmp_path)
+
+
 def test_spec_verification_section(installed: Path, tmp_path: Path) -> None:
     _scenario("spec-verification-section", installed, tmp_path)
 

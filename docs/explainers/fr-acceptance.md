@@ -14,7 +14,7 @@ covers:
   - packages/fr/src/fr/commands/acceptance_cmd.py
   - packages/fr/src/fr/acceptance/**
   - .claude/rules/acceptance-matrix.md
-reviewed: 2026-11-25 still true; the `local` status refusals now name `.fr/profiles.yaml` (S1 R9), and the skill's fixture plumbing names `FR_SHIPPED_DEFAULTS_DIR` (R16); 2026-11-25 still true after the scaffolded GitLab debt job started logging glab in before its fr commands (gh#1691); 2026-11-19 still true after the scaffolded Gitea matrix job stopped keeping its checkout token (batch consumer-followups, gh#1553); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-18 the scaffolded CI now pins its actions and fr by commit (consumer-delivery); 2026-11-17 still true after the origin-only reword and -design fragment fixes (gh#1439, gh#1461); 2026-11-15 still true after deliver started stamping merged local rows by amendment (gh#1462)
+reviewed: 2026-11-28 a spec's `## Requirements` is now the `| ID | Requirement |` table, and `fr migrate artifacts` rewrites an `R<n>.` list into it (spec kind 2, spec-requirements-table R8); 2026-11-25 still true; the `local` status refusals now name `.fr/profiles.yaml` (S1 R9), and the skill's fixture plumbing names `FR_SHIPPED_DEFAULTS_DIR` (R16); 2026-11-25 still true after the scaffolded GitLab debt job started logging glab in before its fr commands (gh#1691); 2026-11-19 still true after the scaffolded Gitea matrix job stopped keeping its checkout token (batch consumer-followups, gh#1553); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-18 the scaffolded CI now pins its actions and fr by commit (consumer-delivery); 2026-11-17 still true after the origin-only reword and -design fragment fixes (gh#1439, gh#1461); 2026-11-15 still true after deliver started stamping merged local rows by amendment (gh#1462)
 ---
 
 ## What does the matrix record?
@@ -175,7 +175,7 @@ line number slides onto whatever test lands there next, and nothing notices.
 
 ## Where do rows come from?
 
-A row that comes from a spec's `## Requirements` list cites the requirement
+A row that comes from a spec's `## Requirements` table cites the requirement
 (`--origin spec:<slug>#R<n>`). So you can trace a claim to the sentence that demanded it.
 `fr-brainstorming` creates these rows and shows them to you at the end of the design. See
 [fr-brainstorming-and-plan](fr-brainstorming-and-plan.md).

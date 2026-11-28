@@ -28,7 +28,7 @@ standalone_style: broadsheet
 covers:
   - plugins/super-fr/skills/fr-goal/SKILL.md
   - plugins/super-fr/defaults/workflows/fr-goal.yaml
-reviewed: 2026-11-25 the shipped shapes moved to `plugins/super-fr/defaults/workflows/` (S1 R15), and a repo's own shape lives in `.fr/workflows/` in its configuration space, used under quiet or stealth only while that branch is protected (S1 R7, R9); 2026-11-24 the spec carries a design shape, the lens reviewers read the run shape file, and the PR shows it as Shape of the change (show-me-visuals); 2026-11-23 the settle check is the last deliver check, after the description read-back; a merged PR settles and a closed one is refused (lens review); the agent settles the PR before and after deliver, three fix rounds at most (R9, R10); deliver checks that the draft PR has settled, merges cleanly and has finished CI, under git.settle (pr-readiness-wait); 2026-11-21 a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
+reviewed: 2026-11-28 a spec's `## Requirements` is now the `| ID | Requirement |` table, and `fr migrate artifacts` rewrites an `R<n>.` list into it (spec kind 2, spec-requirements-table R8); 2026-11-25 the shipped shapes moved to `plugins/super-fr/defaults/workflows/` (S1 R15), and a repo's own shape lives in `.fr/workflows/` in its configuration space, used under quiet or stealth only while that branch is protected (S1 R7, R9); 2026-11-24 the spec carries a design shape, the lens reviewers read the run shape file, and the PR shows it as Shape of the change (show-me-visuals); 2026-11-23 the settle check is the last deliver check, after the description read-back; a merged PR settles and a closed one is refused (lens review); the agent settles the PR before and after deliver, three fix rounds at most (R9, R10); deliver checks that the draft PR has settled, merges cleanly and has finished CI, under git.settle (pr-readiness-wait); 2026-11-21 a devops-gated deliver hands off to fr ops gate --run (gh#1614); 2026-11-19 a repo may declare CI its default suite evidence, and a log marked advisory is refused (local-suite-cost); 2026-11-15 an owed action discharged on a branch closes its issue at merge, through the PR body (repo placement, an issue in this repo); quiet and stealth close at once
 ---
 
 ## What does fr-goal do?
@@ -861,7 +861,7 @@ The CLI errors on defects
 such as dependency cycles and manual work hidden inside an agentic phase. When
 a local Test Plan and a readable acceptance matrix are present, it also errors
 on unknown acceptance IDs. It checks that a plan naming its own workflow shape
-names one that actually resolves. When the spec carries a Requirements list,
+names one that actually resolves. When the spec carries a Requirements table,
 the CLI follows each phase's acceptance rows back to the requirements they
 cite. It errors on a phase that serves no ask of its own, or on a later phase
 with no recorded reason to exist. So the tool checks the sizing rule above; it

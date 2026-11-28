@@ -802,7 +802,7 @@ def test_an_archived_spec_journal_at_head_is_read(tmp_path: Path) -> None:
 
 def test_no_requirements_list_says_asks_cannot_be_counted(tmp_path: Path) -> None:
     repo = _sized_repo(tmp_path, [(("row-r1",), "agentic")], requirements=None)
-    assert "spec has no Requirements list; asks cannot be counted." in _phases_report(repo)
+    assert "spec has no Requirements table; asks cannot be counted." in _phases_report(repo)
 
 
 def test_a_legacy_requirements_table_counts_the_same_asks(tmp_path: Path) -> None:
@@ -822,7 +822,7 @@ def test_no_matrix_says_asks_cannot_be_derived(tmp_path: Path) -> None:
 def test_a_plan_with_no_spec_says_asks_cannot_be_counted(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     report = build_report(repo, _plan(repo), None)
-    assert "spec has no Requirements list; asks cannot be counted." in _section(report, "Phases")
+    assert "spec has no Requirements table; asks cannot be counted." in _section(report, "Phases")
 
 
 def test_r2_an_uncommitted_meta_spec_edit_does_not_change_the_report(tmp_path: Path) -> None:

@@ -1,0 +1,2 @@
+bump: minor
+summary: Spec requirements are written as an | ID | Requirement | table that renders in any Markdown previewer; fr migrate artifacts rewrites live specs' R<n>. lists into it (spec kind 2).

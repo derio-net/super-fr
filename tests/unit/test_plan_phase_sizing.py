@@ -183,7 +183,7 @@ def test_an_unparseable_requirements_list_gives_one_not_checked_warning(tmp_path
     issues = _phase_sizing_issues(plan)
     assert len(issues) == 1
     assert issues[0].severity == "warn"
-    assert "Requirements list does not parse (" in issues[0].message
+    assert "Requirements section does not parse (" in issues[0].message
     assert "R2" in issues[0].message
     assert "sizing was not checked" in issues[0].message
 

@@ -99,7 +99,7 @@ def _phase_sizing_issues(plan: Plan) -> list[ReviewIssue]:
             ReviewIssue(
                 severity="warn",
                 message=(
-                    f"spec {spec_rel}'s Requirements list does not parse ({e}), "
+                    f"spec {spec_rel}'s Requirements section does not parse ({e}), "
                     "so phase sizing was not checked — fix it and re-run self-review."
                 ),
             )

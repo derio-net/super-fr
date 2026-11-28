@@ -176,7 +176,7 @@ def self_review(plan: Plan) -> list[ReviewIssue]:
     issues.extend(_skeleton_issues(plan))
 
     # Phase sizing (2026-09-28 phase-sizing spec §B/§C): one agentic phase per
-    # ask of the spec's Requirements list, a recorded reason for any other.
+    # ask of the spec's Requirements table, a recorded reason for any other.
     issues.extend(_phase_sizing_issues(plan))
 
     # Tier gates (2026-09-20 phases-file-tier-reaches-dispatch spec, D2): the
