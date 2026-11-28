@@ -42,13 +42,32 @@ def redact(text: str) -> str:
     return _HOME.sub("~", text)
 
 
+# `fr.ghclient.UnsupportedForgeOperation`'s fixed message, as `compute` records it
+# (`<ExceptionName>: <message>`); a test builds the `why` from the real exception, so a
+# change to that message fails there and not here.
+_UNSUPPORTED = re.compile(
+    r"UnsupportedForgeOperation: `[^`]+` is not supported on the (?P<backend>.+?) backend yet "
+    r"\(tracked in (?P<issue>[^)]+)\)",
+    re.DOTALL,  # a token carrying a newline still matches, and is then refused as not fixed-shape
+)
+_BACKEND = re.compile(r"[a-z]+")
+_TRACKER = re.compile(r"gh#[0-9]+|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9]+")  # ASCII only
+
+
 def source_category(name: str, st: SourceStatus) -> str:
     """The fixed, publishable category of a source's state. The detailed reason
-    stays in `fr debt`'s terminal output and the CI log, never in a body."""
+    stays in `fr debt`'s terminal output (`fr debt issue` prints it on stderr, so
+    the CI log has it), never in a body."""
     why = st.why.lower()
     if DISABLED in why:
         return DISABLED
     if st.state == "unavailable":
+        unsupported = _UNSUPPORTED.fullmatch(st.why) if name == "forge" else None
+        if unsupported:  # the backend and issue reach a body only as fixed-shape tokens
+            backend, issue = unsupported["backend"], unsupported["issue"]
+            if _BACKEND.fullmatch(backend) and _TRACKER.fullmatch(issue):
+                return f"not supported on {backend} ({issue})"
+            return "not supported by this forge"
         if "offline" in why:
             return "offline"
         if "tracking" in why:

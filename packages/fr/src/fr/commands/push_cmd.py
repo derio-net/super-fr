@@ -151,7 +151,8 @@ def refuse_closed_pr(repo_root: Path) -> None:
     """The merged-PR push guard, inside `fr push` (#320): a push to a branch whose PR
     (the one `fr pr create` recorded) is MERGED or CLOSED orphans the commit from the
     default branch. The shell hook matches `git push` only, so `fr push` asks itself.
-    Fails open, like the hook, when the PR cannot be read."""
+    Fails open, like the hook, when the PR cannot be read, and says so on stderr."""
+    from fr.forge_body import NO_STATE, read_failure
     from fr.git_policy.push import PushRefusedError
     from fr.hostclient import FORGE_ERRORS, client_for
 
@@ -160,9 +161,13 @@ def refuse_closed_pr(repo_root: Path) -> None:
             continue
         try:
             status = client_for(repo_root).pr_status_by_url(state.pr)
-        except FORGE_ERRORS:
+        except FORGE_ERRORS as exc:
+            typer.echo(read_failure(state.pr, exc), err=True)
             continue
-        pr_state = (status or {}).get("state")
+        if not status:
+            typer.echo(read_failure(state.pr, NO_STATE), err=True)
+            continue
+        pr_state = status.get("state")
         if pr_state in ("MERGED", "CLOSED"):
             raise PushRefusedError(
                 f"this branch's PR {state.pr} is {pr_state}: pushing here orphans the commit "
