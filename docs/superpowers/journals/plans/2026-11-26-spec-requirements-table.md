@@ -332,3 +332,6 @@ Everything after a requirement line, up to the next requirement or heading, belo
 ### p1-r6-resolved · finding [fixed] · resolves p1-r6: a hash line inside a fenced or indented code block was read as a heading, splitting the fence (fold delta review) (phase 1)
 
 Heading only at column 0; a fence inside the list refuses with its own cause and fix (9b1fd954c; test_a_code_block_inside_the_list_refuses, test_an_indented_hash_line_is_text_not_a_heading).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r7 created=2026-11-28T17:56:18+00:00 phase=1 state=open review_scope=in -->
+### p1-r7 · finding [open] (reviewer: in scope) · a fenced block in the list migrated, turning a fenced R2. example into a real row (phase 1)
