@@ -58,8 +58,16 @@ rows:
     - spec:2026-11-28-alacarte-settings#R8
     - spec:2026-11-28-alacarte-settings#R9
     - spec:2026-11-28-alacarte-settings#R10
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_settings_stealth.py#test_stealth_forces_push_and_pr_to_ask
+      - super-fr:tests/unit/test_settings_stealth.py#test_stealth_push_with_a_code_commit_asks
+      - super-fr:tests/unit/test_skill_stealth_push.py
+      int:
+      - super-fr:tests/integration/test_scenarios.py#test_alacarte_settings
+    status: ci
+    notes: unit tests pin the forced ask, its source, the contrary refusal, config PRs,
+      the driven-triage text, fr push asking only for code and the skills' sentences;
+      the candidate scenario walks it
     verify: candidate
     scenario: tests/scenarios/alacarte-settings.sh
