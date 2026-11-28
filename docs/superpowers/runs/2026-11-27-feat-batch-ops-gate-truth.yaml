@@ -3,7 +3,7 @@ run: 2026-11-27-feat-batch-ops-gate-truth
 workflow: fr-goal@1
 branch: feat/batch-ops-gate-truth
 started: '2026-11-27T21:26:29+00:00'
-cursor: journal-check
+cursor: lens-review
 steps:
   brainstorm:
     state: done
@@ -157,7 +157,11 @@ steps:
           visual: none
           findings: p3-r1,p3-r2,p3-r3,p3-r4,p3-r5,p3-sec-r1
   journal-check:
-    state: pending
+    state: done
+    at: '2026-11-28T07:05:44+00:00'
+    exit: 0
+    stdout: |
+      2 out-of-scope finding(s): p2-r10, p3-r4
   lens-review:
     state: pending
   deliver:
