@@ -12,7 +12,9 @@ holds a plan whose spec has a step with no outcome (R19).
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -87,6 +89,10 @@ def outcome(
         "reads as latest (an owed one may already be filed as an fr:owed issue, so it is "
         "never overwritten silently).",
     ),
+    harness: str = typer.Option(
+        "operator", "--harness", help="--ran: the harness a named row's walk ran on."
+    ),
+    model: str = typer.Option("human", "--model", help="--ran: the model that walked it."),
 ) -> None:
     """Record one outcome for each Test Plan step in --step (R18).
 
@@ -94,6 +100,10 @@ def outcome(
     `--na --reason <text>`. A step that already has an outcome is refused, and
     nothing is written for any step of the range, unless `--supersede` is given; then a
     new entry is appended and the old one stays, as a journal is a log.
+
+    `--ran` on a step whose `(rows: …)` pointer names acceptance rows also records a
+    passing walk on each, in the same commit (spec 2026-11-27-ops-gate-truth R9):
+    harness `--harness` (default `operator`), model `--model` (default `human`).
     """
     from fr.archive import display_path, outcome_id, recorded_outcomes, spec_slug_of
     from fr.journal.model import owed_body, resolve_journal_read_path
@@ -175,22 +185,36 @@ def outcome(
                     }
                 )
             )
+    walks = (
+        _row_walks(root, run, spec_path, steps, numbers, text, harness, model)
+        if kind == "ran"
+        else None
+    )
     try:
         applied = engine.apply_record(
             root,
             None,
-            StepRecord(journal=tuple(items)),
+            StepRecord(journal=tuple(items), acceptance=walks.items if walks else ()),
             target=engine.RecordTarget(
                 journal_scope="spec",
                 journal_slug=slug,
                 journal_file=journal,
                 message=f"chore(fr): closeout {slug} — Test Plan step(s) {step} {kind}",
+                feature=walks.feature if walks else None,
             ),
         )
     except engine.RecordRefusedError as e:
         raise _refuse(str(e)) from e
     for n in numbers:
         typer.echo(f"{ids[n]}: {'n/a' if kind == 'na' else kind}")
+    if walks:
+        from fr.acceptance.walks import close_commands
+
+        for line in walks.lines:
+            typer.echo(line)
+        for before in walks.before:
+            for line in close_commands(root, before):
+                typer.echo(line)
     if not applied.committed:
         # Review p3-r3(b): the outcome is written but git does not hold it, and
         # `fr archive` refuses to move a spec journal with uncommitted outcomes.
@@ -199,6 +223,100 @@ def outcome(
             f"warning: {rel} is uncommitted — fr archive will hold the plan until it is "
             "committed (commit it on a branch, not the default branch)"
         )
+
+
+@dataclass(frozen=True)
+class _RowWalks:
+    """What `--ran` adds for the rows its steps name (R9): one acceptance item per row,
+    the fragment its amendments go to, the rows as they stood, and one line per row."""
+
+    items: tuple[Any, ...]
+    feature: str
+    before: tuple[Any, ...]
+    lines: tuple[str, ...]
+
+
+def _row_walks(
+    root: Path,
+    run: str | None,
+    spec_path: Path,
+    steps: list[Any],
+    numbers: list[int],
+    evidence: str,
+    harness: str,
+    model: str,
+) -> _RowWalks | None:
+    """A passing walk on each row the steps in *numbers* name (R9), or `None` when they
+    name none or acceptance is off (R8). Refuses, before anything is written, a named id
+    that is not a row citing the spec, and a row whose effective strategy is `none`."""
+    import datetime as _dt
+
+    from fr.acceptance.fragment import fragment_slug_for_spec
+    from fr.acceptance.model import AcceptanceError, Walk
+    from fr.acceptance.walks import walk_verified
+    from fr.archive import display_path
+    from fr.record.model import AcceptanceItem
+    from fr.requirements import load_spec_matrix, rows_citing
+    from fr.settings import SettingsError, disabled
+    from fr.verification.model import RESERVED
+    from fr.verification.rows import spec_verification
+    from fr.verification.spec_section import SectionError
+
+    named = {rid: n for n in reversed(numbers) for rid in steps[n - 1].rows}
+    if not named:
+        return None
+    try:
+        if disabled(root, "acceptance"):
+            return None
+    except SettingsError as e:
+        raise _refuse(str(e)) from e
+    spec_rel = display_path(root, spec_path)
+    try:
+        matrix, spec_ref = load_spec_matrix(root, spec_rel)
+        verification = spec_verification(root, spec_rel, _shape_default(root, run))
+    except (AcceptanceError, SectionError) as e:
+        raise _refuse(str(e)) from e
+    citing = {r.id: r for r in rows_citing(matrix, spec_ref)}
+    at = _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    items, before, lines = [], [], []
+    for rid, n in sorted(named.items(), key=lambda kv: (kv[1], kv[0])):
+        row = citing.get(rid)
+        if row is None:
+            raise _refuse(f"step {n} names row {rid!r}, which is not a row citing {spec_rel}")
+        strategy = verification.strategy(row)
+        if strategy is None or strategy == RESERVED:
+            raise _refuse(f"row {rid!r} has strategy none: there is no walk to record")
+        walk = Walk(strategy=strategy, harness=harness, model=model, outcome="pass", at=at,
+                    evidence=f"Test Plan step {n}: {evidence}")  # fmt: skip
+        after = row.model_copy(update={"walks": (*row.walks, walk)})
+        passing = {w.harness for w in after.walks if w.outcome == "pass"}
+        owed = [h for h in row.harnesses if h not in passing]
+        if walk_verified(after):
+            status, notes = "walked", f"walked by Test Plan step {n}: {evidence}"
+            lines.append(f"{rid}: walked")
+        else:
+            status = row.status
+            notes = "; ".join(x for x in (row.notes, f"walked on {harness}") if x)
+            lines.append(f"{rid}: walk recorded on {harness}; still owed: {', '.join(owed)}")
+        items.append(AcceptanceItem(id=rid, status=status, notes=notes, walk=walk))
+        before.append(row)
+    return _RowWalks(
+        tuple(items), fragment_slug_for_spec(spec_rel), tuple(before), tuple(lines)
+    )
+
+
+def _shape_default(root: Path, run: str | None) -> str | None:
+    """The run's shape default strategy, or `None` without a run (or a cursor fr cannot
+    read: the section's own `strategy:` line still applies)."""
+    if run is None:
+        return None
+    from fr.run.model import RunStateError, parse_run_state, run_path
+    from fr.verification.rows import shape_default
+
+    try:
+        return shape_default(root, parse_run_state(run_path(root, run).read_text()))
+    except RunStateError, OSError:
+        return None
 
 
 def _effective_outcomes(journal: Path) -> dict[int, str]:
