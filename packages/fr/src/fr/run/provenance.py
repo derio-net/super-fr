@@ -10,7 +10,7 @@ reads `StepRecord.answered_by` itself — both call in here.
 **What counts as a cleared gate is `answered_by`, not `gate`.** The two
 branches of `fr run resolve` record differently: clearing a `cli` step's gate
 writes `gate: cleared` and returns the step to `pending`, while a gated
-`agent` step goes straight to `done` through `_complete_step`, which writes no
+`agent` step goes straight to `done` through `fr.run.steps.complete_step`, which writes no
 `gate` at all. `answered_by` is written on *both* paths and on no other, so it
 is the one field that means "a gate was cleared here" whatever kind of step it
 was — and the gated agent step is precisely the shape of the measured failure
@@ -76,7 +76,7 @@ class ClearedGate:
 
     `at` is the record's LAST WRITE, not the moment the gate was answered
     (review r4-m2). On the `cli` path the gate is cleared, the step returns to
-    `pending`, and the next `advance` executes it — `_complete_step` then
+    `pending`, and the next `advance` executes it — `fr.run.steps.complete_step` then
     overwrites `at`, so what survives is the execution time. Render it as "last
     write to this record" or not at all; do not present it as when a human
     answered, which is a claim this field cannot support."""

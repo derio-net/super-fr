@@ -17,7 +17,7 @@ Three things this module deliberately does NOT do:
 1. **It does not fork a second way to write a run file.** It builds a
    `RunState` out of the same `fr.run.model` types `fr run start` uses and
    saves it through the same `save_run_state`. It sets an *initial* state; it
-   never reimplements a transition. `_complete_step` in `fr.commands.run_cmd`
+   never reimplements a transition. `complete_step` in `fr.run.steps`
    remains the only implementation of the done/failed cursor asymmetry, and an
    adopted run moves from here on exactly like a started one.
 2. **It does not decide anything the plan already decides.** "Is this phase

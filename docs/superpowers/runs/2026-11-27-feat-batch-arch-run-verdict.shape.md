@@ -1,5 +1,5 @@
 ```
-packages/fr/src/fr/commands/run_cmd.py   ~ 8878 -> 4093 lines: typer verbs, _say, _settle and
+packages/fr/src/fr/commands/run_cmd.py   ~ 8878 -> 4091 lines: typer verbs, _say, _settle and
                                            _refusals() (RunRefusal -> print + typer.Exit at the call site)
 packages/fr/src/fr/run/
   verdict.py         + Say, Warn, RunRefusal, Verdict[T] (the typed refusal every engine module returns)
@@ -18,7 +18,7 @@ tests/fixtures/run_verdict/{derived,steps,deliver,brief,evidence,provenance}/
                                          + stderr bytes + exit codes captured from the code BEFORE each move
 tests/unit/test_run_verdict*.py          + each moved refusal path compared byte for byte with its capture
 tests/unit/test_run_writes_layering.py   ~ the layering rule now covers all of fr/run
-tests/unit/test_tripwire_module_budget.py ~ run_cmd.py budget 8895 -> 4115
+tests/unit/test_tripwire_module_budget.py ~ run_cmd.py budget 8895 -> 4111
 tests/unit/test_run_*.py, test_deliver_*.py, …  ~ monkeypatches follow each name to its new home
 AGENTS.md                                ~ fr/run paragraph names the engine modules and the no-typer rule
 docs/reference/*.md, docs/explainers/*.md, docs/verification-strategies.md
