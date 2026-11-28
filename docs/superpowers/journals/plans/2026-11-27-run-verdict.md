@@ -243,3 +243,18 @@ a capture task: fixtures and a test, nothing pre-existing to clean
 ### no-refactor-p5-t2 · discovery · no-refactor-because P5.T2 (phase 5)
 
 a move that must keep its bytes; the only cleanup (run_cmd imports left unused, the re-pointed tests, the stale prose names) was done in the green steps
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1 created=2026-11-28T00:54:58+00:00 phase=5 state=open review_scope=in -->
+### p5-r1 · finding [open] (reviewer: in scope) · P5.T3.S1 ticked but no reviewed: stamp names slice 5 (docs/reference/cli.md, docs/reference/workflow-shapes.md cover run_cmd.py) (phase 5)
+
+Both stamps stopped at slice 2; the gate passed only because earlier slices touched the pages. Fix - stamp both naming slices 3-5.
+
+<!-- fr:journal kind=review scope=plan id=review-p5-1 created=2026-11-28T00:54:58+00:00 phase=5 -->
+### review-p5-1 · review · phase 5 reviewed by an independent reviewer; 1 in-scope finding, fixed (phase 5)
+
+Reviewer checked every moved string literal and print's markup/soft_wrap/style, warnings-before-refusal order, both exit-75 paths and every exit 2, the same unobserved notes at the same sites, R7's fold and merge rules (lenses_witness, verify_tests_log, verify_phase_tests_log, verify_lens_reviewers to verify_reviewer), _verified_evidence's settle/_refusals wiring and the gh#768 summary line pinned by a resolve fixture, layering, modules under 800 lines, budget +20, fixtures before the move with no pre-move driver, no compat re-exports, no weakened assertion, and judged the remaining old names (parity.yaml scope_note, legacy.yaml note, docs/triage) dated history. 515 focused tests pass; docs current; mypy clean. Finding p5-r1 (missing slice stamps) fixed.
+
+<!-- fr:journal kind=finding scope=plan id=p5-r1-resolved created=2026-11-28T00:54:58+00:00 phase=5 state=fixed resolves=p5-r1 -->
+### p5-r1-resolved · finding [fixed] · resolves p5-r1: P5.T3.S1 ticked but no reviewed: stamp names slice 5 (docs/reference/cli.md, docs/reference/workflow-shapes.md cover run_cmd.py) (phase 5)
+
+Stamped docs/reference/cli.md and docs/reference/workflow-shapes.md naming slices 3-5 in 7bc1b6328; fr docs check current.
