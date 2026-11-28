@@ -69,12 +69,32 @@
       "intervals": [],
       "truncated": false
     },
+    "s2-alacarte-settings": {
+      "column": "needs-reviewer",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "you",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
+    "tester-gate-auto-pass": {
+      "column": "needs-reviewer",
+      "column_since": "2026-11-28T13:42:47.572419Z",
+      "column_first_seen": true,
+      "wait": "you",
+      "wait_since": "2026-11-28T13:42:47.572419Z",
+      "wait_first_seen": true,
+      "intervals": [],
+      "truncated": false
+    },
     "triage-privacy": {
-      "column": "pr-open",
-      "column_since": "2026-11-28T14:32:15.739846Z",
+      "column": "needs-reviewer",
+      "column_since": "2026-11-28T17:11:27.853214Z",
       "column_first_seen": false,
-      "wait": "agent",
-      "wait_since": "2026-11-28T17:06:12.828027Z",
+      "wait": "you",
+      "wait_since": "2026-11-28T17:11:27.853214Z",
       "wait_first_seen": false,
       "intervals": [
         {
@@ -118,28 +138,15 @@
           "start": "2026-11-28T16:56:20.372454Z",
           "end": "2026-11-28T17:06:12.828027Z",
           "first_seen": false
+        },
+        {
+          "column": "pr-open",
+          "wait": "agent",
+          "start": "2026-11-28T17:06:12.828027Z",
+          "end": "2026-11-28T17:11:27.853214Z",
+          "first_seen": false
         }
       ],
-      "truncated": false
-    },
-    "s2-alacarte-settings": {
-      "column": "needs-reviewer",
-      "column_since": "2026-11-28T13:42:47.572419Z",
-      "column_first_seen": true,
-      "wait": "you",
-      "wait_since": "2026-11-28T13:42:47.572419Z",
-      "wait_first_seen": true,
-      "intervals": [],
-      "truncated": false
-    },
-    "tester-gate-auto-pass": {
-      "column": "needs-reviewer",
-      "column_since": "2026-11-28T13:42:47.572419Z",
-      "column_first_seen": true,
-      "wait": "you",
-      "wait_since": "2026-11-28T13:42:47.572419Z",
-      "wait_first_seen": true,
-      "intervals": [],
       "truncated": false
     },
     "board-session-state": {
