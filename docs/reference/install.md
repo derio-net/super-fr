@@ -7,7 +7,7 @@ covers:
   - scripts/bootstrap.sh
   - scripts/install.sh
   - packages/fr-opencode-plugin/src/**
-reviewed: 2026-11-25 still true; the installer's rsync carries the one `plugins/super-fr/defaults/` tree, and the OpenCode plugin reads the switch on `fr-config` and `.fr/isolation-allow` first (S1 R5, R8, R15), with no install step changed; 2026-11-24 every install path installs the newest release by default; install.sh takes --version, and a clone on main installs the newest release unless --version main (fix/install-stable-by-default). 2026-11-19 the OpenCode gates and the sentinel judge in the session directory (batch consumer-followups, gh#1552); 2026-11-19 install constrained to uv.lock, devcontainer CLI pinned, plugin spawns resolved bash and gh (batch hook-hardening). 2026-11-18 OpenCode gets the shipped rules; plugin handlers follow the session directory (batch consumer-delivery)
+reviewed: 2026-11-28 the installer repeats its warnings and names the fr version at the end, warns when fr models apply refuses, and bootstrap stops on an unreadable tag (batch silent-failures); 2026-11-25 still true; the installer's rsync carries the one `plugins/super-fr/defaults/` tree, and the OpenCode plugin reads the switch on `fr-config` and `.fr/isolation-allow` first (S1 R5, R8, R15), with no install step changed; 2026-11-24 every install path installs the newest release by default; install.sh takes --version, and a clone on main installs the newest release unless --version main (fix/install-stable-by-default). 2026-11-19 the OpenCode gates and the sentinel judge in the session directory (batch consumer-followups, gh#1552); 2026-11-19 install constrained to uv.lock, devcontainer CLI pinned, plugin spawns resolved bash and gh (batch hook-hardening). 2026-11-18 OpenCode gets the shipped rules; plugin handlers follow the session directory (batch consumer-delivery)
 ---
 
 # Install super-fr
@@ -30,6 +30,12 @@ file to `uv tool install` as constraints. The file stays as the record of what i
 If `uv` cannot export the lock, or its `tool install` has no `--constraints`, the installer
 installs without constraints and prints a warning. When it installs the devcontainer CLI with
 npm, it installs a pinned version. `FR_DEVCONTAINER_CLI_VERSION` sets a different one.
+
+The installer records each warning it prints. When the install ends, it prints the `fr`
+version on your path, then the warnings again under `Warnings (N):`, or `No warnings.`. If
+the install fails, it prints the warnings recorded so far, and the failure line stays last.
+When `fr models apply` refuses, the installer carries on. It prints a warning with the exit
+code, up to 12 lines of what `fr` said and the command to run again.
 
 For Claude Code it registers the `derio-net--super-fr` marketplace and enables
 `super-fr@derio-net--super-fr` and `super-fr-dispatch@derio-net--super-fr`.
@@ -78,6 +84,11 @@ Without `--version main`, the script does not install the clone. It gives the ch
 `bootstrap.sh`, which checks the release out in the managed clone under
 `~/.cache/fr/src/super-fr`. Your clone stays as it is. A clean clone that is detached exactly
 at a release tag installs that tag.
+
+If `bootstrap.sh` cannot list the release tags, or cannot read `scripts/install.sh` at a
+tag, it stops with exit 1 and names the tag and the `git` message. It never drops a tag
+without a message. A tag with no `scripts/install.sh`, or none with the channel marker, is
+skipped. `--version main` lists no tags, so an unreadable tag does not block it.
 
 A channel switch also removes untracked files from the managed checkout, so the
 installer's preflight does not stop on them. Ignored files, such as a virtual environment, stay.
