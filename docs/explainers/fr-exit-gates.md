@@ -16,7 +16,7 @@ covers:
   - docs/verification-strategies.md
   - docs/exit-gates-release-walk.md
   - docs/gate-backfill.md
-reviewed: 2026-11-27 still true; docs/verification-strategies.md changed only its reviewed stamp (run-verdict, #1519); 2026-11-27 still true after queue-followups (verification-strategies.md gained only a review stamp); 2026-11-26 landing-method, a pull request the log names that the forge closed unmerged counts as landed (R7); 2026-11-25 still true; the verification-strategies page it covers gained the configuration homes and the protection rule (S1), which change no gate; the page says so; 2026-11-23 still true; gate-backfill.md and verification-strategies.md were only re-stamped for the 3.14 reformat (#1589); 2026-11-23 still true; verification-strategies gained the settle override line, which sets no gate (pr-readiness-wait). 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-21 still true; release.py's protection-refusal hint now names the "require ci-ok" ruleset and setup-release-app.sh (release-app-hardening); 2026-11-19 still true; release.py staged suite passes -m "" to keep the scenario tier (local-suite-cost); 2026-11-17 still true; gate-backfill now says a tracker close reports every error kind (batch triage-intake); 2026-11-21 the queue lands a gate:devops pull request after the stage released it and holds later entries until post-merge is done; 2026-11-20 added the merge queue's hold on a release (wave merge queue); 2026-11-19 still true; release.py staged suite passes -m "" to keep the scenario tier (local-suite-cost)
+reviewed: 2026-11-28 tester-gate-auto-pass, the driver also passes a walked gate on a merged pull request outside every batch; 2026-11-27 still true; docs/verification-strategies.md changed only its reviewed stamp (run-verdict, #1519); 2026-11-27 still true after queue-followups (verification-strategies.md gained only a review stamp); 2026-11-26 landing-method, a pull request the log names that the forge closed unmerged counts as landed (R7); 2026-11-25 still true; the verification-strategies page it covers gained the configuration homes and the protection rule (S1), which change no gate; the page says so; 2026-11-23 still true; gate-backfill.md and verification-strategies.md were only re-stamped for the 3.14 reformat (#1589); 2026-11-23 still true; verification-strategies gained the settle override line, which sets no gate (pr-readiness-wait). 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-21 still true; release.py's protection-refusal hint now names the "require ci-ok" ruleset and setup-release-app.sh (release-app-hardening); 2026-11-19 still true; release.py staged suite passes -m "" to keep the scenario tier (local-suite-cost); 2026-11-17 still true; gate-backfill now says a tracker close reports every error kind (batch triage-intake); 2026-11-21 the queue lands a gate:devops pull request after the stage released it and holds later entries until post-merge is done; 2026-11-20 added the merge queue's hold on a release (wave merge queue); 2026-11-19 still true; release.py staged suite passes -m "" to keep the scenario tier (local-suite-cost)
 ---
 
 ## What work cannot finish in the pull request?
@@ -82,8 +82,9 @@ removes it. Nothing about a gate lives in a file in the repo, so passing one nee
 A person passes a gate, or a record shows that the work the gate guards is done.
 
 - **Tester.** When the gate has acceptance rows and every one of them reads `walked` on the
-  default branch, the triage driver passes the gate itself. It never does for a run-level gate
-  that no row inherits, nor for a `devops` gate added because the plan has operations: those
+  default branch, the triage driver passes the gate itself. It does so for a merged pull
+  request outside any batch too, when a run cursor on its branch names it. It never does for a
+  run-level gate that no row inherits, nor for a `devops` gate added because the plan has operations: those
   need an explicit pass. Otherwise you walk the rows
   ([fr-acceptance](fr-acceptance.md)) or record the pass by hand:
 
