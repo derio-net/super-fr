@@ -224,3 +224,45 @@ amendments:
       were cut as pre-releases while gate-labelled PRs waited. Still owed: an automatic
       final once none waits (v7.0.0 was a manual workflow_dispatch override, so it does
       not count).'
+  - row: exit-gates-release-gating
+    op: set-status
+    base: 2
+    status: walk-owed
+    notes: 'Stage B (docs/exit-gates-release-walk.md) observed on super-fr 2026-11-23..25:
+      v9.0.0-rc.1..rc.12 cut as pre-releases consuming no fragment while PRs waited
+      (rc.12 run: ''#1548, #1602, #1635, #1669, #1665 still wait on a post-merge gate'');
+      after #1686 passed them, the v9.0.0 final came from an ordinary run with no version
+      input (run 45694394385, RELEASE_VERSION empty); explicit RC and default final
+      installs are the operator''s routine. Still owed: the stage A disposable-repository
+      rehearsal (one was started and paused unfinished, not evidence) before the Tester
+      records it walked. Earlier: v6.0.0 and v7.0.0 finals were version overrides, not
+      the gated transition. tracked by derio-net/super-fr#1348'
+    why: 'Stage B (docs/exit-gates-release-walk.md) observed on super-fr 2026-11-23..25:
+      v9.0.0-rc.1..rc.12 cut as pre-releases consuming no fragment while PRs waited
+      (rc.12 run: ''#1548, #1602, #1635, #1669, #1665 still wait on a post-merge gate'');
+      after #1686 passed them, the v9.0.0 final came from an ordinary run with no version
+      input (run 45694394385, RELEASE_VERSION empty); explicit RC and default final
+      installs are the operator''s routine. Still owed: the stage A disposable-repository
+      rehearsal (one was started and paused unfinished, not evidence) before the Tester
+      records it walked. Earlier: v6.0.0 and v7.0.0 finals were version overrides, not
+      the gated transition. tracked by derio-net/super-fr#1348'
+  - row: exit-gates-collected-closeout
+    op: set-status
+    base: 1
+    status: walk-owed
+    notes: 'Observed live (wave driver, 2026-11-15..27): one collected close-out per
+      repo with one housekeeping PR the driver merged through the queue (#1743: six
+      wave 25 batches; #1582: three), and a single hand-back on a failing check, then
+      the operator (#1495, #1536, #1567). Still owed: a merged close-out that closes
+      passed batches'' Refs issues; none of the 24 merged close-out PRs #1469..#1744
+      carried a Closes line, and the only one that did (#1704, Closes #1691) was closed
+      unmerged. Unit tests: test_triage_batch_closeout, test_triage_batch_closeout_cmd,
+      test_triage_collected_closeout_drive. tracked by derio-net/super-fr#1347'
+    why: 'Observed live (wave driver, 2026-11-15..27): one collected close-out per repo
+      with one housekeeping PR the driver merged through the queue (#1743: six wave
+      25 batches; #1582: three), and a single hand-back on a failing check, then the
+      operator (#1495, #1536, #1567). Still owed: a merged close-out that closes passed
+      batches'' Refs issues; none of the 24 merged close-out PRs #1469..#1744 carried
+      a Closes line, and the only one that did (#1704, Closes #1691) was closed unmerged.
+      Unit tests: test_triage_batch_closeout, test_triage_batch_closeout_cmd, test_triage_collected_closeout_drive.
+      tracked by derio-net/super-fr#1347'

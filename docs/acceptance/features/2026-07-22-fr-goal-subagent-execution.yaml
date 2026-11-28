@@ -130,3 +130,44 @@ rows:
     status: ci
     notes: Scope enum (spec|plan|debug) + 8-kind enum + add/render/check serve both
       pipelines with no fr-goal-specific schema; unit-pinned per-PR.
+amendments:
+  - row: fr-goal-subagent-per-phase
+    op: set-status
+    base: 1
+    status: walked
+    notes: 'Walked from recorded evidence (operator-approved 2026-11-28): live fr-goal
+      run 2026-11-27-feat-batch-queue-followups dispatched each plan phase serially
+      to super-fr:fr-phase-executor (claude-code, claude-opus-5-5) on the one shared
+      batch branch; the run delivered and merged (wave 25). Same shape in every fr-goal
+      run since.'
+    walk:
+      strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-27T00:00:00Z'
+      evidence: super-fr:docs/superpowers/implemented/runs/2026-11-27-feat-batch-queue-followups.yaml
+    why: 'Walked from recorded evidence (operator-approved 2026-11-28): live fr-goal
+      run 2026-11-27-feat-batch-queue-followups dispatched each plan phase serially
+      to super-fr:fr-phase-executor (claude-code, claude-opus-5-5) on the one shared
+      batch branch; the run delivered and merged (wave 25). Same shape in every fr-goal
+      run since.'
+  - row: fr-goal-journal-handoff-complete
+    op: set-status
+    base: 1
+    status: walked
+    notes: 'Walked from recorded evidence (operator-approved 2026-11-28): in live run
+      2026-11-27-feat-batch-queue-followups, fresh fr-phase-executor subagents implemented
+      each phase from the journal render, spec and phase brief alone, and fr journal
+      check passed at journal-check before deliver; the PR merged (wave 25).'
+    walk:
+      strategy: live
+      harness: claude-code
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-27T00:00:00Z'
+      evidence: super-fr:docs/superpowers/implemented/runs/2026-11-27-feat-batch-queue-followups.yaml
+    why: 'Walked from recorded evidence (operator-approved 2026-11-28): in live run
+      2026-11-27-feat-batch-queue-followups, fresh fr-phase-executor subagents implemented
+      each phase from the journal render, spec and phase brief alone, and fr journal
+      check passed at journal-check before deliver; the PR merged (wave 25).'
