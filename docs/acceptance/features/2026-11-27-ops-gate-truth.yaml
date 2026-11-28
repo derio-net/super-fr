@@ -81,9 +81,12 @@ rows:
       the hold and its reasons when fr archive held it
     origin:
     - spec:2026-11-27-ops-gate-truth#R15
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_ops_gate.py#test_stage_8_reports_a_held_archive_and_still_publishes
+    status: ci
+    notes: 'unit tests with fake ports and fixture repos, run in this PR''s CI (spec
+      Verification: none)'
   - id: self-review-flags-uncovered-gated-rows
     capability: 'fr plan self-review: gated-row coverage'
     acceptance: 'fr plan self-review reports a devops or tester row no step of its gate
