@@ -216,3 +216,118 @@ devops_blockers became the gate_blockers wrapper and gated_steps shares _gated_s
 ### no-refactor-p2-t5 · discovery · no-refactor-because P2.T5 (phase 2)
 
 stage 5's row walk command and stage 6's recovery share row_walk_argv, and stages 6/7 share _owed_items, written once in the green step; the rest was deduped in P2.T6.S3
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1 created=2026-11-28T03:59:17+00:00 phase=2 state=open review_scope=in -->
+### p2-r1 · finding [open] (reviewer: in scope) · R12 leak: row_walked trusted the row status the PR head set, and owed_harnesses counted head walks (phase 2)
+
+Stage judged walked by row.status (walks.py:54) and counted owed harnesses over all walks (gate.py:1291, closeout_cmd.py:297).
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2 created=2026-11-28T03:59:17+00:00 phase=2 state=open review_scope=in -->
+### p2-r2 · finding [open] (reviewer: in scope) · Stage 5 skipped rows named by a ran step and stage 6's fr gate pass counted head walks, so a head-only walk passed the devops gate (phase 2)
+
+gate.py:1310,1362; holds.py:72-80.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3 created=2026-11-28T03:59:17+00:00 phase=2 state=open review_scope=in -->
+### p2-r3 · finding [open] (reviewer: in scope) · head_walks read only the run's own feature fragment (phase 2)
+
+gate.py:1253: head walks on spec-citing rows in other fragments were not excluded.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4 created=2026-11-28T03:59:17+00:00 phase=2 state=open review_scope=in -->
+### p2-r4 · finding [open] (reviewer: in scope) · _owed_items let AcceptanceError/SectionError/SettingsError escape as a traceback (phase 2)
+
+gate.py:1373-1391; holds.py:196.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5 created=2026-11-28T03:59:17+00:00 phase=2 state=open review_scope=in -->
+### p2-r5 · finding [open] (reviewer: in scope) · Stage-6 row recovery printed an operator walk that cannot discharge a row owing other harnesses (phase 2)
+
+gate.py:1291,1446.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6 created=2026-11-28T03:59:17+00:00 phase=2 state=open review_scope=in -->
+### p2-r6 · finding [open] (reviewer: in scope) · Stage 7's tester gate pass omitted --run (phase 2)
+
+gate.py:1481: run resolution could refuse on several runs or an unrelated unreadable cursor.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7 created=2026-11-28T03:59:17+00:00 phase=2 state=open review_scope=in -->
+### p2-r7 · finding [open] (reviewer: in scope) · Skill and ops.md claimed PR-head walks never count while fr gate pass counted them (phase 2)
+
+SKILL.md:109; docs/ops.md:435.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8 created=2026-11-28T03:59:17+00:00 phase=2 state=open review_scope=in -->
+### p2-r8 · finding [open] (reviewer: in scope) · fr-devops-gate SKILL.md re-wrapped into ~200-char lines to fit the 120-line budget (phase 2)
+
+SKILL.md ~100-109; fast tier was not re-run after the fix.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9 created=2026-11-28T03:59:17+00:00 phase=2 state=open review_scope=in -->
+### p2-r9 · finding [open] (reviewer: in scope) · row_walked's max-by-at broke ties to the first walk (phase 2)
+
+walks.py:56: a same-second later failing walk read as passed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10 created=2026-11-28T03:59:17+00:00 phase=2 state=open review_scope=out -->
+### p2-r10 · finding [open] (reviewer: out of scope) · The triage driver's rows-walked tester pass bypasses gate_blockers (phase 2)
+
+batch_drive.py:1632; triage_batch_cmd.py:6180.
+
+<!-- fr:journal kind=decision scope=plan id=p2-ran-vs-na-by-title-superseded created=2026-11-28T03:59:17+00:00 phase=2 -->
+### p2-ran-vs-na-by-title-superseded · decision · Supersedes p2-ran-vs-na-by-title: the ran/n-a fold was removed with ran_steps (phase 2)
+
+After p2-r2, stage 5 asks about every row not walked head-free; no step-outcome fold decides which rows are skipped.
+
+<!-- fr:journal kind=decision scope=plan id=p2-stage6-list-excludes-head-superseded created=2026-11-28T03:59:17+00:00 phase=2 -->
+### p2-stage6-list-excludes-head-superseded · decision · Supersedes p2-stage6-list-excludes-head: stage 6 refuses on head-free blockers (phase 2)
+
+After p2-r2, stage 6 computes gate_blockers with the PR head's walks excluded and fails before running fr gate pass while any remain (spec R14).
+
+<!-- fr:journal kind=review scope=plan id=review-phase-2 created=2026-11-28T03:59:17+00:00 phase=2 -->
+### review-phase-2 · review · Phase 2 review (rows and walks): nine in-scope findings fixed, one out of scope (phase 2)
+
+Independent review of the phase-2 diff (dfb5a02..HEAD) against spec R7-R16.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r1-resolved created=2026-11-28T03:59:17+00:00 phase=2 state=fixed resolves=p2-r1 -->
+### p2-r1-resolved · finding [fixed] · resolves p2-r1: R12 leak: row_walked trusted the row status the PR head set, and owed_harnesses counted head walks (phase 2)
+
+fix(acceptance)+fix(closeout)+fix(ops): head-free row_walked ignores status and requires every owed harness to have a latest passing non-head walk; closeout --pr-head counts owed harnesses over non-head walks.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r2-resolved created=2026-11-28T03:59:17+00:00 phase=2 state=fixed resolves=p2-r2 -->
+### p2-r2-resolved · finding [fixed] · resolves p2-r2: Stage 5 skipped rows named by a ran step and stage 6's fr gate pass counted head walks, so a head-only walk passed the devops gate (phase 2)
+
+fix(ops): stage 5 asks every row not walked head-free (ran_steps shortcut removed); stage 6 fails before fr gate pass while head-free blockers remain.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r3-resolved created=2026-11-28T03:59:17+00:00 phase=2 state=fixed resolves=p2-r3 -->
+### p2-r3-resolved · finding [fixed] · resolves p2-r3: head_walks read only the run's own feature fragment (phase 2)
+
+fix(ops): head_walks reads every fragment on the head, through the artifact root.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r4-resolved created=2026-11-28T03:59:17+00:00 phase=2 state=fixed resolves=p2-r4 -->
+### p2-r4-resolved · finding [fixed] · resolves p2-r4: _owed_items let AcceptanceError/SectionError/SettingsError escape as a traceback (phase 2)
+
+fix(ops): _owed_items and _gate_exit turn AcceptanceError, SectionError, SettingsError, TestPlanHeadingError and OSError into StageFailed.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r5-resolved created=2026-11-28T03:59:17+00:00 phase=2 state=fixed resolves=p2-r5 -->
+### p2-r5-resolved · finding [fixed] · resolves p2-r5: Stage-6 row recovery printed an operator walk that cannot discharge a row owing other harnesses (phase 2)
+
+fix(ops): recovery_argvs prints one walk command per owed harness; only the last sets walked.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r6-resolved created=2026-11-28T03:59:17+00:00 phase=2 state=fixed resolves=p2-r6 -->
+### p2-r6-resolved · finding [fixed] · resolves p2-r6: Stage 7's tester gate pass omitted --run (phase 2)
+
+fix(ops): stage 7's tester pass passes --run.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r7-resolved created=2026-11-28T03:59:17+00:00 phase=2 state=fixed resolves=p2-r7 -->
+### p2-r7-resolved · finding [fixed] · resolves p2-r7: Skill and ops.md claimed PR-head walks never count while fr gate pass counted them (phase 2)
+
+docs(skill)+docs(ops): skill, docs/ops.md and the explainer state the head-free rule and that stage 6 stops before the pass.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r8-resolved created=2026-11-28T03:59:17+00:00 phase=2 state=fixed resolves=p2-r8 -->
+### p2-r8-resolved · finding [fixed] · resolves p2-r8: fr-devops-gate SKILL.md re-wrapped into ~200-char lines to fit the 120-line budget (phase 2)
+
+docs(skill): re-wrap undone; the skill fits 120 lines by condensing and pointing to the fr ops guide.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r9-resolved created=2026-11-28T03:59:17+00:00 phase=2 state=fixed resolves=p2-r9 -->
+### p2-r9-resolved · finding [fixed] · resolves p2-r9: row_walked's max-by-at broke ties to the first walk (phase 2)
+
+fix(acceptance): a tie on at goes to the later walk in the list.
+
+<!-- fr:journal kind=finding scope=plan id=p2-r10-resolved created=2026-11-28T03:59:17+00:00 phase=2 state=open resolves=p2-r10 out_of_scope=true -->
+### p2-r10-resolved · finding [out-of-scope] · resolves p2-r10: The triage driver's rows-walked tester pass bypasses gate_blockers (phase 2)
+
+Pre-existing: the triage driver's rows-walked tester pass predates this change; this PR changes fr gate pass and the DevOps stage only.
