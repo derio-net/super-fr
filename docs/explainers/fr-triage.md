@@ -124,8 +124,10 @@ it only when the scope records no state repo yet. When the two differ, `fr triag
 lists the mismatch. The privacy guard still refuses to push a private issue to a public repo. When the state
 repo is public and a repo of the scope is not, the guard also reads every file the push or
 export carries. It refuses a file that names the non-public repo as `owner/name` or as
-`name#<number>`. The refusal names the file and the repo, never the matched text. A file it
-cannot read also refuses.
+`name#<number>`, in its text or in its path. It also finds the name when zero-width
+characters split it or a URL escapes its slash. A push scans the commit it is about to
+push, so a file changed after the scan cannot slip past. The refusal names the file and
+the repo, never the matched text. A file it cannot read also refuses.
 
 **Upgrading from an older fr.** Older versions kept the state in a clone, under
 `.fr/triage-state/<scope>/`. The first fr command that uses the scope from that clone moves
