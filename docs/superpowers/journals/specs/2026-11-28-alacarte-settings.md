@@ -206,3 +206,8 @@ row_kinds:
 run_gate: developer
 run_kind: candidate
 ```
+
+<!-- fr:journal kind=finding scope=spec id=s-r1-13-resolved-2 created=2026-11-28T11:14:43+00:00 state=open resolves=s-r1-13 tracked_by=https://github.com/derio-net/super-fr/issues/1770 -->
+### s-r1-13-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1770] · resolves s-r1-13: fr placement move pushes product-side branches to a stealth target without reading git.push
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1770.
