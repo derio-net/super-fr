@@ -62,9 +62,14 @@ rows:
     - spec:2026-11-27-run-verdict#R11
     - spec:2026-11-27-run-verdict#R12
     - spec:2026-11-27-run-verdict#R13
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_module_budget.py#test_module_is_within_its_budget
+      - super-fr:tests/unit/test_run_writes_layering.py#test_every_run_engine_module_imports_no_cli_layer
+    status: ci
+    notes: lookup, derived, deliver, brief, evidence and provenance live in fr/run modules;
+      run_cmd.py's budget fell from 4540 to 4115 across slices 5-6 and the layering
+      test holds the package
     verify: none
 amendments:
   - row: harness-gate-degrades-loudly
