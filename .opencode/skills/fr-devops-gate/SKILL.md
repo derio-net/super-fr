@@ -42,10 +42,10 @@ and land it by its own pull request, not on the feature branch.
 | 2 | Posts a marker comment naming the head and diff it verified, then adds the label `fr-queue:release`, only with no open pre-merge op, green required checks, the head stage 1 verified, and a confirmation naming the PR, its head and the pre-merge state. It merges nothing: the wave merge queue lands the PR as the last entry of its push (a repo with no `queue:` in `.fr/triage.yaml` has none: merge the PR by hand), and the run stops until the forge reads it merged; the driver then names `fr ops gate --run <id>` under Needs you, which resumes at stage 3 |
 | 3 | `fr isolation verify-merge`, rebases the ops branch onto the default branch, runs every `ready:` |
 | 4 | Post-merge status and apply, then a marker comment and the label `fr-queue:postmerge-done`, which together lift the queue's barrier (nothing lands behind the PR until then) |
-| 5 | Probes each `(op: <id>)` step, asks for the others' outcome, and records it (`fr closeout outcome`) |
-| 6 | `fr gate pass --gate devops --run <id>` from the ops workspace |
-| 7 | Keeps `gate:tester` and lists the steps the Tester gate owns |
-| 8 | `fr archive --branch <feature>`, then opens the ops branch as the housekeeping PR |
+| 5 | Probes each `(op: <id>)` step, asks for the others' outcome, and records it (`fr closeout outcome`); then asks about each devops row not walked that no `ran` step names (`ran <evidence>` or `owed <why>`) |
+| 6 | Lists what the devops gate still owes (ops, steps, rows), then `fr gate pass --gate devops --run <id>` from the ops workspace |
+| 7 | Keeps `gate:tester` and lists the steps and rows the Tester gate owns |
+| 8 | `fr archive --branch <feature>`, then opens the ops branch as the housekeeping PR; says `archive held`, with the reasons, when the archive held the plan |
 
 Each stage's completion is recorded in your own state outside every checkout
 (`~/.local/state/fr/ops-gate/` by default); before the merge the ops branch is only
@@ -112,6 +112,17 @@ owns are listed in the gate-pass comment and keep `gate:tester` on the PR; they 
 this stage's to walk. Its unwalked rows, and a spec that declares `gate: tester`, keep it too.
 When the Tester gate owns nothing, stage 7 passes `gate:tester` itself with a generated note:
 never pass it by hand with a note you made up.
+
+## Rows the gate owns
+
+The devops gate owns acceptance rows too, and `fr gate pass` refuses while one is not walked
+(status `walked` and a passing latest walk). A step names the rows it proves with
+`(rows: <id>, …)` after its `(op: <id>)` pointer; recording it `ran` walks them in the same
+commit (harness `operator`, model `human`; a passing probe walks as `fr-ops-probe`,
+`op:<id>`). After the steps, stage 5 asks about every devops row still not walked that no
+`ran` step names: `ran <evidence>` records your walk with `fr acceptance set-status --walk`,
+`owed <why>` sets it `walk-owed`. A walk the PR head carries never counts. A refused stage 6
+prints the `set-status --walk` command for each row still owed.
 
 ## What the stage never does
 

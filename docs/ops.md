@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/ops/**
   - packages/fr/src/fr/commands/ops_cmd.py
-reviewed: 2026-11-28 a Test Plan change at stage 6 or 7 goes back to stage 5, merged-in entries never close a reopened op, an existing pass is re-checked after a restart, a no-op merge that still differs stops (phase 1 review); 2026-11-27 stages 4 to 7 compare the ops workspace with the default branch first and merge it after a confirmation, never a rebase; changed ops are trusted again and reopened, and a refresh after stage 4 goes back to stage 4 (ops-gate-truth R1-R6, gh#1617); 2026-11-25 under quiet and stealth `.fr/ops.yaml` is read from the protected configuration branch's fetched tip or refused, and the ops gate's first stage also stops on `.fr/profiles.yaml` (S1 R7, R9); 2026-11-24 still true after ci-economy phase 1 (a cancelled check now reads as pending, never failing, in every check reader; 2026-11-24 still true; the trust tree also leaves out a run shape file as fr bookkeeping, which this page does not list (show-me-visuals R12); no claim here names how a cancelled check is read); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-21 gh#1614 a print-only apply is refused and never counted applied; a done entry says if the apply ran; 2026-11-19 a failed forge read of the default branch is an exit-2 refusal that names the error (batch consumer-followups, gh#1554); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth); 2026-11-21 stage 4 posts a marker comment beside the postmerge-done label, and the queue needs both; 2026-11-20 stage 2 adds `fr-queue:release` and merges nothing, stage 4 adds `fr-queue:postmerge-done`, `--method` removed (wave merge queue R26)
+reviewed: 2026-11-28 the rows pointer and its walk identity, a row counts as walked only when its latest walk passed, stage 5 asks about unwalked devops rows, stage 6 lists what the gate owes and prints row commands, stage 7 reads the tester gate's items, stage 8 reports a held archive (ops-gate-truth R7-R16); 2026-11-28 a Test Plan change at stage 6 or 7 goes back to stage 5, merged-in entries never close a reopened op, an existing pass is re-checked after a restart, a no-op merge that still differs stops (phase 1 review); 2026-11-27 stages 4 to 7 compare the ops workspace with the default branch first and merge it after a confirmation, never a rebase; changed ops are trusted again and reopened, and a refresh after stage 4 goes back to stage 4 (ops-gate-truth R1-R6, gh#1617); 2026-11-25 under quiet and stealth `.fr/ops.yaml` is read from the protected configuration branch's fetched tip or refused, and the ops gate's first stage also stops on `.fr/profiles.yaml` (S1 R7, R9); 2026-11-24 still true after ci-economy phase 1 (a cancelled check now reads as pending, never failing, in every check reader; 2026-11-24 still true; the trust tree also leaves out a run shape file as fr bookkeeping, which this page does not list (show-me-visuals R12); no claim here names how a cancelled check is read); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-22 gate names, runner status and timestamp refactors preserve this interface. 2026-11-21 gh#1614 a print-only apply is refused and never counted applied; a done entry says if the apply ran; 2026-11-19 a failed forge read of the default branch is an exit-2 refusal that names the error (batch consumer-followups, gh#1554); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth); 2026-11-21 stage 4 posts a marker comment beside the postmerge-done label, and the queue needs both; 2026-11-20 stage 2 adds `fr-queue:release` and merges nothing, stage 4 adds `fr-queue:postmerge-done`, `--method` removed (wave merge queue R26)
 ---
 
 # fr ops — manual operations you can check and run
@@ -247,10 +247,10 @@ The skill `fr-devops-gate` holds the judgement it needs from you.
 | 2 | Release the PR to the merge queue, only when all of these are true: no pre-merge op is open; the PR's required checks are green on that head; the head is unchanged since stage 1; the operator confirms a terminal prompt that names the PR, its head and the pre-merge state (asked even under `--yes`). It then posts a marker comment that names the head and diff it verified, adds the label `fr-queue:release` and merges nothing. The driver records the release only at that diff: a push after stage 2 is no release, and a label with no marker is none. It lands the PR as the last entry of its push. A repo with no `queue:` in `.fr/triage.yaml` has no queue: stage 2 says so, and you merge the PR by hand. The run stops until the forge reads the PR as merged. Then a Needs-you entry names `fr ops gate --run <id>`, which resumes at stage 3. If fr cannot add the label, the stage stops and names it. |
 | 3 | `fr isolation verify-merge`. Then rebase the ops branch onto the default branch (it then carries only its own evidence commits). Then every `ready:`. |
 | 4 | Post-merge status and apply. An op that a check already shows DONE still goes through `fr ops apply --yes`. That runs nothing and records the closure, so stage 6 can fold it. Then it posts a marker comment and adds the label `fr-queue:postmerge-done`. Both together lift the queue's barrier: until then nothing lands behind the PR. |
-| 5 | Each Test Plan step whose effective gate is `devops`. A pointed step's probe runs (see Test Plan probes), and the stage asks about the others. Each answer is recorded with `fr closeout outcome`: `ran`, `na`, or `owed` (stage 6 then stops on it; see below). |
-| 6 | `fr gate pass --gate devops --run <id>` from the ops workspace. It folds only recorded evidence. |
-| 7 | The Tester gate's work is listed and `gate:tester` stays. That work is its steps with no outcome, its rows that are not walked, and a spec that declares `gate: tester`. When the Tester gate owns nothing, the stage passes `gate:tester` with a generated note. |
-| 8 | `fr archive --branch <feature>`, with `--issues` to file the run's out-of-scope findings, as the close-out brief would. Under `tracking: none`, use `--no-issues`. Then open the ops branch as the housekeeping PR. |
+| 5 | Each Test Plan step whose effective gate is `devops`. A pointed step's probe runs (see Test Plan probes), and the stage asks about the others. Each answer is recorded with `fr closeout outcome`: `ran`, `na`, or `owed` (stage 6 then stops on it; see below). Then each devops row that is not walked and that no `ran` step names is asked about: `ran <evidence>` walks it, `owed <why>` sets it to `walk-owed` (see Rows a gate owns). |
+| 6 | Lists what the devops gate still owes (ops, steps and rows), then runs `fr gate pass --gate devops --run <id>` from the ops workspace. It folds only recorded evidence. A refused pass prints the command that records each open step and walks each unwalked row. |
+| 7 | The Tester gate's work is listed and `gate:tester` stays. That work is its steps with no outcome, its rows that are not walked (each with the reason), and a spec that declares `gate: tester`. When the Tester gate owns nothing, the stage passes `gate:tester` with a generated note. |
+| 8 | `fr archive --branch <feature>`, with `--issues` to file the run's out-of-scope findings, as the close-out brief would. Under `tracking: none`, use `--no-issues`. Then open the ops branch as the housekeeping PR. `fr archive` exits 0 when it holds the plan, so the stage checks that the plan directory moved: if it did not, the stage says `archive held` with each `held:` reason, writes the same in its audit record, and still opens the housekeeping PR. |
 
 ### What the stage trusts
 
@@ -426,6 +426,37 @@ run their checks, and does not have to ask.
     evidence reads `no output` instead. The mask hides known secret values only. It does not
     filter hostnames, IPs or other text that identifies a system. So end a probe
     with a plain one-line summary (`converged 3 of 3`) and keep it free of them.
+
+### Rows a gate owns
+
+A gate owns acceptance rows as well as ops and steps: each row whose effective gate is that
+gate. A row is walked when its status is `walked` and its latest walk passed. `fr gate pass`
+refuses, for `devops` and for `tester`, while a row it owns is not walked, and names why: no
+walk, a failing latest walk, or the harnesses still owed. Inside the DevOps stage, a walk
+that the PR head carries does not count.
+
+- **The pointer.** A step may name the rows it proves with `(rows: <id>, …)`, after the
+    optional gate tag and `(op: <id>)` pointer, then a space:
+    `- [devops] (op: guest-verify) (rows: guest-boots) Run the verify playbook`.
+    Under `artifacts.acceptance: off` the pointer is read and ignored.
+
+- **The walk.** `fr closeout outcome --ran --evidence <e>` on such a step also records a
+    passing walk on each named row, in the same commit. The walk's strategy is the row's
+    effective strategy, its evidence `Test Plan step <n>: <e>`. Its harness and model are
+    `operator` and `human`, or `--harness` and `--model`. A probe that passed at stage 5
+    walks as `fr-ops-probe` and `op:<id>`. A row that the walk makes walk-verified moves to
+    `walked`; any other row keeps its status, and the command names the harnesses it still
+    owes. A row that an earlier feature merged is amended into the spec's fragment. The
+    command refuses, and writes nothing, an id that is no row citing the spec, or a row whose
+    strategy is `none`.
+
+- **The question.** Stage 5 asks about each devops row that is still not walked and that no
+    `ran` step names, so also a row whose step you answered `na`. `ran <evidence>` runs
+    `fr acceptance set-status --walk` (harness `operator`, model `human`), and `owed <why>`
+    sets the row to `walk-owed` with the reason as its note.
+
+- **Self-review.** `fr plan self-review` warns about each gated row that no step of the same
+    gate names, and about each `(rows: …)` id that names no row citing the spec.
 
 ### Test Plan tags
 
