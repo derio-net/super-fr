@@ -1,0 +1,30 @@
+schema_version: 12
+run: 2026-11-28-feat-batch-silent-failures
+step: lens-review
+outcome: done
+journal:
+  - {kind: finding, id: l-docs-accuracy-r1, global: true, review_scope: in, title: "install.md said bootstrap names a tag on a listing failure and that it never drops a tag without a message, contradicted by the silent skips", body: "docs/reference/install.md:88-91 vs scripts/bootstrap.sh channel_tags / installable_tags."}
+  - {kind: finding, id: l-docs-accuracy-r2, global: true, review_scope: in, title: "install.md described the fr models apply warning as if every install ran it; it runs only in the OpenCode block, and the fr-not-on-PATH warning was not mentioned", body: "docs/reference/install.md:37-38 vs scripts/install.sh OpenCode delivery block."}
+  - {kind: finding, id: l-errors-r1, global: true, review_scope: in, title: "adopt/push warned only on a raised error; every adapter's pr_status_by_url answers None on an ordinary forge error, so the common unread case stayed silent", body: "real_ghclient.py:205-208, real_ghrestclient.py:939-944, real_glabclient.py:174-177, real_teaclient.py:131-136 fail soft; adopt.py `if not info: return None`, push_cmd.py `(status or {}).get`."}
+  - {kind: finding, id: l-errors-r2, global: true, review_scope: in, title: "install.sh ran fr --version with 2>/dev/null, discarding a failing fr's own reason, and recorded no warning, so it could close with No warnings.", body: "scripts/install.sh closing block."}
+  - {kind: finding, id: l-errors-r3, global: true, review_scope: in, title: "a tag pushed after the fetch now aborted bootstrap with a raw 'Not a valid object name' and no remedy", body: "scripts/bootstrap.sh: ls-remote lists the remote, ls-tree reads the local clone."}
+  - {kind: finding, id: l-security-r1, global: true, review_scope: in, title: "render.py _TRACKER used Unicode \\w/\\d, so the published issue token was not strictly fixed-shape", body: "packages/fr/src/fr/debt/render.py _TRACKER without re.ASCII admits fullwidth digits and homoglyphs."}
+  - {kind: finding, id: l-security-r2, global: true, review_scope: out, title: "CONTROL misses U+061C, zero-width U+200B-200D/U+2060/U+FEFF and U+2028/2029", body: "packages/fr/src/fr/forge_body.py CONTROL, moved unchanged from debt_cmd.py; the class predates this change."}
+  - {kind: finding, id: l-security-r3, global: true, review_scope: out, title: "redact covers only GitHub/GitLab token shapes and URL credentials; Gitea tokens and Authorization header values pass through", body: "packages/fr/src/fr/debt/render.py redact; predates this change, which routes more forge text through it."}
+  - kind: review
+    id: lens-review-1
+    global: true
+    title: "lens review: docs-accuracy 2, errors 3, security 3 (1 in, 2 out); every in-scope finding fixed"
+    body: "One reviewer per lens over c4e69ecd0..HEAD with the shape file; shape found consistent with the diff by all three."
+resolves:
+  - {id: l-docs-accuracy-r1, state: fixed, body: "install.md: the listing failure shows git's message; a read failure shows the tag and git's message; never drops an unreadable tag; silent skips stated as such; the not-yet-fetched note added."}
+  - {id: l-docs-accuracy-r2, state: fixed, body: "install.md scopes the warning to OpenCode delivery and names the fr-not-on-PATH warning."}
+  - {id: l-errors-r1, state: fixed, body: "adopt.py and push_cmd.py warn on a None answer with fr.forge_body.NO_STATE; spec R5 states both paths; tests test_default_pr_state_warns_when_the_adapter_answers_none and test_a_recorded_pr_the_adapter_answers_none_for_is_named_too."}
+  - {id: l-errors-r2, state: fixed, body: "install.sh keeps fr --version's stderr and records a warning (and one for fr not on PATH); spec R2 says so; test_a_failing_fr_version_is_named_in_the_closing_block and test_fr_not_on_path_is_a_warning_repeated_in_the_summary extended."}
+  - {id: l-errors-r3, state: fixed, body: "bootstrap.sh: a remote-listed tag missing locally is skipped with a note naming the rerun; spec R3 says so; test_a_tag_pushed_after_the_fetch_is_skipped_with_a_note."}
+  - {id: l-security-r1, state: fixed, body: "_TRACKER spelled as ASCII classes; fullwidth-digit and Cyrillic-homoglyph cases added to test_a_token_that_is_not_fixed_shape_never_reaches_the_category."}
+  - {id: l-security-r2, state: out-of-scope, body: "The character class was moved verbatim from debt_cmd.py; widening it changes every existing echo site and is its own change. Filed as a follow-up."}
+  - {id: l-security-r3, state: out-of-scope, body: "redact's token shapes predate this change; adding Gitea and header shapes is a redaction change of its own across every caller. Filed as a follow-up."}
+evidence:
+  review: lens-review-1
+  reviewer: "docs-accuracy=a7c7b26962f869d3d,errors=a0e42e5efdcdabd0c,security=a4ec833cb0e27433e"
