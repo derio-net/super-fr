@@ -12432,6 +12432,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-28T04:29:52.631106Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -13893,6 +13900,8 @@ batches:
     pr: 1737
     head: 3f236d77f20d3fda6b69d6c7b36fa7f66981161a
     patch_id: 73b7ad6c4cbcc23e1d4484f9d58d8c99e0b65ba6
+  - kind: post_merge
+    at: '2026-11-28T04:29:34.885238Z'
 - id: arch-isolation-gc
   title: '#1318: isolation/local.py garbage collection moves to a collaborator'
   ids:
@@ -15594,6 +15603,21 @@ queues:
     patch_id: 73b7ad6c4cbcc23e1d4484f9d58d8c99e0b65ba6
     base: e978355719e30a116be3effddbc8b64e47063407
     parent: e978355719e30a116be3effddbc8b64e47063407
+  - kind: queue_land
+    at: '2026-11-28T04:29:11.917426Z'
+    main: 57eefe069780f09c8d513fa97a0fa0c5f73f19c4
+    entries:
+    - batch: arch-run-verdict
+  - kind: queue_built
+    at: '2026-11-28T04:29:43.203047Z'
+    slot: 1
+    sha: fdaf6e5b8bf6e3467bec3fa70e013b68bc090c33
+    entry:
+      batch: board-session-state
+    head: 0306bb13eb6c261debfccee2edf9227765aa0060
+    patch_id: ebf9b513957be0b00f3636eda65f72ee0e085a63
+    base: 57eefe069780f09c8d513fa97a0fa0c5f73f19c4
+    parent: 57eefe069780f09c8d513fa97a0fa0c5f73f19c4
 queue_requests:
 - kind: queue_add
   at: '2026-11-27T15:25:05.595235Z'
