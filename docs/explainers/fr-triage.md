@@ -148,9 +148,10 @@ It always exits 0 and prints sets, not verdicts:
 - **untrusted**: open issues whose author is an outside account that no operator admitted,
   each with its reason. Collect does not store their title or body. You never judge, rank
   or batch one. An operator admits one with `fr triage admit <key>`. It adds the `ready-fr`
-  label and a comment that fixes the issue's current text, and every comment an outside
-  account has written on it. If the author edits the issue later, or an outside account adds
-  or edits a comment, the admission no longer counts. An admission made before this check
+  label and a comment that fixes the issue's current text, and every comment on it by an
+  account that is neither an owner, member or collaborator nor listed in `pr_authors`. If
+  the author edits the issue later, or such an account adds or edits a comment, the
+  admission no longer counts. An admission made before this check
   covered comments needs a new `fr triage admit`. A pull request by an outside author keeps
   its title out of the facts;
 - **ignored claims**: claim markers written by an account that is not trusted. They hold
