@@ -21,6 +21,7 @@ __all__ = [
     "close_commands",
     "holds_open",
     "issues_now_closable",
+    "owed_harnesses",
     "row_walked",
     "walk_verified",
 ]
@@ -37,6 +38,13 @@ def walk_verified(row: Row) -> bool:
     if row.harnesses:
         return all(h in passing for h in row.harnesses)
     return bool(passing)
+
+
+def owed_harnesses(row: Row, walks: tuple[Walk, ...] | list[Walk] | None = None) -> list[str]:
+    """The harnesses *row* names that no passing walk in *walks* (default: the row's own)
+    covers yet, in the row's order (ops-gate-truth R9, R10)."""
+    passing = {w.harness for w in (row.walks if walks is None else walks) if w.outcome == "pass"}
+    return [h for h in row.harnesses if h not in passing]
 
 
 def row_walked(row: Row, exclude: frozenset[Walk] | set[Walk] = frozenset()) -> bool:

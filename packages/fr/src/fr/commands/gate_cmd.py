@@ -42,6 +42,7 @@ from fr.verification.labels import (
 if TYPE_CHECKING:
     from fr.gatebackfill.close import TrackerRead
     from fr.run.model import RunState
+    from fr.spec import StepGate
 
 gate_app = typer.Typer(
     help="Post-merge gates: record that a gate passed on its PR (the gate ledger).",
@@ -130,7 +131,7 @@ def _devops_evidence(run: str | None, head_ref: str, *, no_run_evidence: bool) -
     return False
 
 
-def _refuse_on_blockers(root: Path, state: RunState, gate: str) -> None:
+def _refuse_on_blockers(root: Path, state: RunState, gate: StepGate) -> None:
     """R11 (spec 2026-11-27-ops-gate-truth): refuse, listing them, while `gate_blockers`
     for *state*'s *gate* is not empty."""
     from fr.acceptance.model import AcceptanceError
@@ -140,7 +141,7 @@ def _refuse_on_blockers(root: Path, state: RunState, gate: str) -> None:
     from fr.verification.spec_section import SectionError
 
     try:
-        blockers = gate_blockers(root, state, gate)  # type: ignore[arg-type]
+        blockers = gate_blockers(root, state, gate)
     except OpsLoadError as exc:
         _refuse(f"run {state.run}: the plan's ops cannot be read: {exc}")
     except TestPlanHeadingError as exc:  # never a traceback, never "nothing held" (#1315)

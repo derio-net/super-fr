@@ -253,7 +253,7 @@ def _row_walks(
 
     from fr.acceptance.fragment import fragment_slug_for_spec
     from fr.acceptance.model import AcceptanceError, Walk
-    from fr.acceptance.walks import walk_verified
+    from fr.acceptance.walks import owed_harnesses, walk_verified
     from fr.archive import display_path
     from fr.record.model import AcceptanceItem
     from fr.requirements import load_spec_matrix, rows_citing
@@ -289,8 +289,7 @@ def _row_walks(
         walk = Walk(strategy=strategy, harness=harness, model=model, outcome="pass", at=at,
                     evidence=f"Test Plan step {n}: {evidence}")  # fmt: skip
         after = row.model_copy(update={"walks": (*row.walks, walk)})
-        passing = {w.harness for w in after.walks if w.outcome == "pass"}
-        owed = [h for h in row.harnesses if h not in passing]
+        owed = owed_harnesses(after)
         if walk_verified(after):
             status, notes = "walked", f"walked by Test Plan step {n}: {evidence}"
             lines.append(f"{rid}: walked")

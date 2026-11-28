@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     from fr.ops.load import LoadedOp
     from fr.run.model import RunState
     from fr.spec import Step as TestPlanStep
+    from fr.spec import StepGate
     from fr.verification.exit import Exit
 
 STAGE_PREFIX = "gate-stage-"
@@ -1281,17 +1282,13 @@ def _gate_exit(tree: OpsTree, run: RunState) -> Exit:
         raise StageFailed(f"the run's exit cannot be read: {exc}") from exc
 
 
-def _would_verify(row: Row, harness: str) -> bool:
-    """Whether one more passing walk on *harness* makes *row* walk-verified."""
-    passing = {w.harness for w in row.walks if w.outcome == "pass"} | {harness}
-    return all(h in passing for h in row.harnesses) if row.harnesses else True
-
-
 def row_walk_argv(run: RunState, row: Row, strategy: str, evidence: str) -> list[str]:
     """`fr acceptance set-status --walk` recording an operator's walk of *row* in the
     DevOps stage (ops-gate-truth R13): `walked` when it makes the row walk-verified,
     else its current status."""
-    status = "walked" if _would_verify(row, "operator") else row.status
+    from fr.acceptance.walks import owed_harnesses
+
+    status = row.status if set(owed_harnesses(row)) - {"operator"} else "walked"
     return ["acceptance", "set-status", "--id", row.id, "--status", status, "--walk", evidence,
             "--harness", "operator", "--model", "human", "--strategy", strategy,
             "--notes", f"walked in the DevOps stage of run {run.run}",
@@ -1373,7 +1370,7 @@ def stage_6(gate: Gate) -> None:
     gate.finish(tree, 6, "gate:devops passed")
 
 
-def _owed_items(gate: Gate, tree: OpsTree, gate_name: str) -> list[GateItem]:
+def _owed_items(gate: Gate, tree: OpsTree, gate_name: StepGate) -> list[GateItem]:
     """What *gate_name* still owes in the ops workspace (`gate_items`), the PR head's own
     outcomes and walks excluded (R12)."""
     from fr.ops.holds import gate_items
@@ -1384,7 +1381,7 @@ def _owed_items(gate: Gate, tree: OpsTree, gate_name: str) -> list[GateItem]:
     spec_slug = _spec_slug(t.run)
     at_head = head_entry_ids(tree, head, "spec", spec_slug) if spec_slug else set()
     try:
-        items = gate_items(tree.path, t.run, gate_name,  # type: ignore[arg-type]
+        items = gate_items(tree.path, t.run, gate_name,
                            exclude_walks=head_walks(tree, head, _feature(t.run)),
                            exclude_outcomes=at_head)  # fmt: skip
     except OpsLoadError as exc:
@@ -1394,7 +1391,7 @@ def _owed_items(gate: Gate, tree: OpsTree, gate_name: str) -> list[GateItem]:
     return [i for i in items if not i.discharged]
 
 
-def _say_owed(gate: Gate, tree: OpsTree, gate_name: str) -> None:
+def _say_owed(gate: Gate, tree: OpsTree, gate_name: StepGate) -> None:
     """R14: before the pass, what the gate still owes by `gate_blockers`."""
     owed = _owed_items(gate, tree, gate_name)
     if owed:

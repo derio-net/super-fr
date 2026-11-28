@@ -412,11 +412,10 @@ def _gated_row_coverage_issues(plan: Plan) -> list[ReviewIssue]:
     under `acceptance`, `test_plan` or `gates` off, or for a cross-repo spec; an
     unreadable input skips the check (its own check reports it)."""
     from fr.acceptance.model import AcceptanceError
-    from fr.gates import POST_MERGE_GATES
     from fr.ops.load import OpsLoadError, plan_has_ops
     from fr.ops.testplan import steps_gated
     from fr.settings import SettingsError, disabled
-    from fr.spec import TestPlanHeadingError, test_plan_steps
+    from fr.spec import StepGate, TestPlanHeadingError, test_plan_steps
     from fr.verification.effective import effective_shape_default
     from fr.verification.exit import exit_for_spec
     from fr.workflow.model import WorkflowError
@@ -441,7 +440,8 @@ def _gated_row_coverage_issues(plan: Plan) -> list[ReviewIssue]:
             TestPlanHeadingError):  # fmt: skip
         return []
     issues: list[ReviewIssue] = []
-    for gate in sorted(POST_MERGE_GATES):
+    order: tuple[StepGate, ...] = ("devops", "tester")
+    for gate in order:
         named = {rid for s in steps_gated(steps, gates, gate) for rid in s.rows}
         for r in exit_.gated_rows:
             if exit_.row_gates[r.id] == gate and r.id not in named:

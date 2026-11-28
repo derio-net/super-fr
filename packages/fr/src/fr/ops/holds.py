@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fr.acceptance.model import Row, Walk
-from fr.acceptance.walks import row_walked
+from fr.acceptance.walks import owed_harnesses, row_walked
 from fr.artifacts.paths import emitted_path
 from fr.journal.model import JournalEntry
 from fr.ops.testplan import steps_gated
@@ -134,8 +134,7 @@ def _row_reason(row: Row, walks: list[Walk]) -> str:
     latest = max(walks, key=lambda w: w.at)
     if latest.outcome != "pass":
         return f"its latest walk failed ({latest.harness}, {latest.at})"
-    passing = {w.harness for w in walks if w.outcome == "pass"}
-    owed = [h for h in row.harnesses if h not in passing]
+    owed = owed_harnesses(row, walks)
     if owed:
         return f"walk still owed on {', '.join(owed)} (status {row.status})"
     return f"status {row.status}, not walked"
