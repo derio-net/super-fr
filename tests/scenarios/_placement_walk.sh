@@ -310,9 +310,20 @@ EOF
     # The code goes first, on the operator's approval (R9, R10) ...
     fr_approved out push
     require_exit 0 "$out"
-    # ... then the PR. This fixture's origin is a local path, which names no forge
-    # repository, so `fr pr create` cannot reach the forge here: what it does once the
-    # forge answers (record the PR on the cursor and commit it) is done the same way.
+    # ... then the PR, which asks for its own approval (R7): refused with a request
+    # first, and past the ask once the operator approves it.
+    printf '%s\n' 'A plain summary of the change.' > "$WALK_TMP/$run-pr-body.md"
+    run_fr out pr create --title "Walk the change" --body-file "$WALK_TMP/$run-pr-body.md"
+    require_exit 2 "$out"
+    expect_grep 'git\.pr: ask' "$(printf '%s' "$out" | tr '\n' ' ')" \
+      "under stealth fr pr create asks first"
+    fr_approved out pr create --title "Walk the change" --body-file "$WALK_TMP/$run-pr-body.md"
+    require_exit 2 "$out"
+    # Past the approval it stops at the forge: this fixture's origin is a local path,
+    # which names no forge repository. What it does once the forge answers (record the
+    # PR on the cursor and commit it) is done here the same way.
+    expect_grep 'cannot read the forge repository' "$(printf '%s' "$out" | tr '\n' ' ')" \
+      "an approved fr pr create goes past the ask to the forge"
     "$(candidate_python)" -P - "$run" "https://github.com/derio-net/$repo_id/pull/1" <<'PY' \
       || fail "record the PR on the cursor"
 import sys
