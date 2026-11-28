@@ -3,11 +3,14 @@ run: 2026-11-28-feat-batch-tester-gate-auto-pass
 workflow: fr-goal@1
 branch: feat/batch-tester-gate-auto-pass
 started: '2026-11-28T11:40:19+00:00'
-cursor: brainstorm
+cursor: spec-review
 steps:
   brainstorm:
-    state: blocked
-    at: '2026-11-28T11:40:47+00:00'
+    state: done
+    at: '2026-11-28T11:47:18+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-28-tester-gate-auto-pass-design.md
   spec-review:
     state: pending
   plan:

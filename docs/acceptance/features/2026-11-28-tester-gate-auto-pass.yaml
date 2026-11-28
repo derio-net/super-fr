@@ -1,0 +1,47 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-28-tester-gate-auto-pass
+repo: derio-net/super-fr
+rows:
+  - id: loose-gated-pr-rows-walked-pass
+    capability: Triage driver
+    acceptance: A whole-scope drive pass passes each held post-merge gate of a merged
+      PR outside any batch once every row that gate holds reads walked on the default
+      branch, swapping its label, commenting why and closing its owed trackers, under
+      the same rules as a batch
+    origin:
+    - spec:2026-11-28-tester-gate-auto-pass#R1
+    - spec:2026-11-28-tester-gate-auto-pass#R2
+    - spec:2026-11-28-tester-gate-auto-pass#R4
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: loose-gated-pr-awaiting-live
+    capability: Triage driver
+    acceptance: A whole-scope drive pass labels each open issue cited by a non-batch
+      gated PR's held rows fr:awaiting-live, at most once per issue per pass across
+      batches and such PRs
+    origin:
+    - spec:2026-11-28-tester-gate-auto-pass#R3
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
+  - id: loose-gated-pr-no-pass-without-evidence
+    capability: Triage driver
+    acceptance: The driver passes nothing for a non-batch gated PR whose branch no run
+      cursor names, whose rows cannot be read (reported once), or in a drive narrowed
+      with --batch; a failed write is reported and retried next pass
+    origin:
+    - spec:2026-11-28-tester-gate-auto-pass#R5
+    - spec:2026-11-28-tester-gate-auto-pass#R6
+    - spec:2026-11-28-tester-gate-auto-pass#R7
+    levels: {}
+    status: not-implemented
+    notes: ''
+    verify: none
