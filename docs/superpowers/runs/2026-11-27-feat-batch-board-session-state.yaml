@@ -1,0 +1,167 @@
+schema_version: 12
+run: 2026-11-27-feat-batch-board-session-state
+workflow: fr-goal@1
+branch: feat/batch-board-session-state
+started: '2026-11-27T17:03:24+00:00'
+cursor: deliver
+steps:
+  brainstorm:
+    state: done
+    at: '2026-11-27T19:57:09+00:00'
+    answered_by: operator
+    emitted:
+      spec: docs/superpowers/specs/2026-11-27-board-session-state-design.md
+  spec-review:
+    state: done
+    at: '2026-11-27T20:05:08+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-27T19:57:13+00:00'
+          agent: a621ec576eea55588
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          model: claude-opus-5-5
+          tier: hard
+          bound: claude-opus-5-5
+          session: 164db869-0dd1-4fdb-8624-054c412af9ff
+          returned: '2026-11-27T20:05:06+00:00'
+          outcome: done
+        evidence:
+          review: spec-review
+          reviewer: a621ec576eea55588
+          findings: s1,s2,s3,s4,s5,s6,s7,s8,s9
+  plan:
+    state: done
+    at: '2026-11-27T20:08:09+00:00'
+    emitted:
+      plan: docs/superpowers/plans/2026-11-27-board-session-state
+    units:
+      step/plan:
+        attempts:
+        - dispatched: '2026-11-27T20:05:19+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 164db869-0dd1-4fdb-8624-054c412af9ff
+          returned: '2026-11-27T20:08:09+00:00'
+          outcome: done
+  plan-review:
+    state: done
+    at: '2026-11-27T20:08:14+00:00'
+    exit: 0
+    stdout: |
+      self-review passed
+  implement:
+    state: done
+    at: '2026-11-27T21:18:36+00:00'
+    members:
+    - implement-phase
+    - review-phase
+    units:
+      phase/1/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-27T20:08:14+00:00'
+          agent: a055012852f82ad0b
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-sonnet-5-5
+          tier: standard
+          bound: claude-sonnet-5
+          session: 164db869-0dd1-4fdb-8624-054c412af9ff
+          returned: '2026-11-27T20:36:28+00:00'
+          outcome: done
+        evidence:
+          visual: batch-card-waits-for:2:b6fd247b9e26,batch-lane-owners:3:7dbdddc1dfbf
+      phase/1/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-27T20:36:29+00:00'
+          agent: afc54c0486df2998c
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 164db869-0dd1-4fdb-8624-054c412af9ff
+          returned: '2026-11-27T20:45:36+00:00'
+          outcome: done
+        evidence:
+          review: review-p1
+          reviewer: afc54c0486df2998c
+          visual: batch-card-waits-for:2:7663dfd5d45a,batch-lane-owners:1:81c5f0888a69
+          findings: p1-r1,p1-r2,p1-r3,p1-r4,p1-r5
+      phase/2/implement-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-27T20:45:37+00:00'
+          agent: ab78d61fd4c760532
+          agent_type: super-fr:fr-phase-executor
+          harness: claude-code
+          model: claude-opus-5-5
+          tier: hard
+          bound: claude-opus-5-5
+          session: 164db869-0dd1-4fdb-8624-054c412af9ff
+          returned: '2026-11-27T21:05:30+00:00'
+          outcome: done
+        evidence:
+          visual: batch-card-dwell-line:2:4e6d9e381b13,batch-wave-time-summary:4:2e55cb7502ce
+      phase/2/review-phase:
+        state: done
+        attempts:
+        - dispatched: '2026-11-27T21:05:31+00:00'
+          agent: a397a1f23f79e85f4
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 164db869-0dd1-4fdb-8624-054c412af9ff
+          returned: '2026-11-27T21:18:36+00:00'
+          outcome: done
+        evidence:
+          review: review-p2
+          reviewer: a397a1f23f79e85f4
+          visual: batch-card-dwell-line:1:9aa4bc05c8a4,batch-wave-time-summary:2:ef634fffbbad
+          findings: p2-r1,p2-r2,p2-r3,p2-r4,p2-r5,p2-r6
+  journal-check:
+    state: done
+    at: '2026-11-27T21:18:38+00:00'
+    exit: 0
+    stdout: |
+      1 out-of-scope finding(s): p2-r6
+  lens-review:
+    state: done
+    at: '2026-11-27T21:25:23+00:00'
+    units:
+      step/lens-review:
+        attempts:
+        - dispatched: '2026-11-27T21:18:39+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 164db869-0dd1-4fdb-8624-054c412af9ff
+          returned: '2026-11-27T21:25:23+00:00'
+          outcome: done
+        evidence:
+          review: lens-review
+          reviewer: docs-accuracy=a83ae227dfe29124d,errors=ab4cca248db046c3c
+          findings: l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4,l-errors-r5,l-errors-r6,l-docs-accuracy-r1,l-docs-accuracy-r2
+          lenses: docs-accuracy=18:l-docs-accuracy-r1,l-docs-accuracy-r2;errors=11:l-errors-r1,l-errors-r2,l-errors-r3,l-errors-r4,l-errors-r5,l-errors-r6
+  deliver:
+    state: done
+    at: '2026-11-27T21:57:31+00:00'
+    emitted:
+      pr: https://github.com/derio-net/super-fr/pull/1747
+    units:
+      step/deliver:
+        attempts:
+        - dispatched: '2026-11-27T21:25:24+00:00'
+          harness: claude-code
+          model: claude-opus-5-5
+          session: 164db869-0dd1-4fdb-8624-054c412af9ff
+          returned: '2026-11-27T21:57:00+00:00'
+          outcome: done
+        evidence:
+          tests: ci:656457eeed13ee00eac71906561ed0770fc3a897+unknown;tree=3cf932bcb50c0a076900cbb0acc5ed5cc436d373d66f9c3386e8a2f2756689c2
+          walk: 20261127T214453Z.log@2ebb1eabd955
+          proportionality: 085d1cbe90373c257709f84c72243d3b778480c4:4b4627cf7c89c8fc8aa52d39313c1b7defcc4116f8f747d4f7e5f68c45266bfb
+          docs: 085d1cbe90373c257709f84c72243d3b778480c4:f5cff4bd40642273853329941c8cdef2758295f816cff74af5c7b06b25392eea
+          visual: batch-card-waits-for:2:1967282e1ad0,batch-lane-owners:2:f4ba7bedee02,batch-card-dwell-line:1:9aa4bc05c8a4,batch-wave-time-summary:2:84524878ef9f
+          settle: managed
+fr_version: 9.1.0rc9
+issue: 1731
+pr: https://github.com/derio-net/super-fr/pull/1747

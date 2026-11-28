@@ -5886,6 +5886,7 @@ class _Driver:
                 # the repos this pass judged `ci none`, as the walk did (p1-r2)
                 ci_none=frozenset(r for r, none in self._ci.items() if none),
                 checkouts=self.checkout_paths,
+                writer=True,  # this driver holds drive.lock: the dwell ledger's writer
             )
         except Exception as exc:  # noqa: BLE001 - the board is a view; it never fails a pass
             cause = triage_kanban_cmd.one_line(exc)
