@@ -313,3 +313,68 @@ Budget set to 4111 for the 4091-line module (+20) in 64771b649; the comment name
 ### p6-r2-resolved · finding [fixed] · resolves p6-r2: run_cmd.py imported the moved provenance names unprefixed, against spec R11's _-prefixed spelling (phase 6)
 
 run_cmd.py now imports all ten provenance names as _<name> and its call sites use them (64771b649); ruff and mypy are clean, and 414 focused tests pass (budget, provenance capture, question rounds, run CLI, layering, stamp offset).
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-28T02:31:20+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · shape file said run_cmd.py is 4093 lines with budget 4115; the file has 4091 lines and the budget is 4111
+
+The shape file's numbers predated the p6-r1/p6-r2 fix that shrank run_cmd.py and lowered the budget.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-28T02:31:20+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · run/adopt.py:20 docstring still said _complete_step lives in fr.commands.run_cmd; it moved to fr.run.steps.complete_step
+
+Comments in run/provenance.py and run/model.py also used the old private name.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-28T02:31:20+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · shape file said run_cmd.py is 4093 lines with a 4115 budget; the code is 4091 lines and the budget test says 4111
+
+Same defect as l-docs-accuracy-r1, raised independently under the tests lens.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-28T02:31:20+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · acceptance row run-cmd-clusters-in-fr-run cited only the budget ceiling and the layering test, neither of which proves the clusters live in fr/run; its note said 4115
+
+Neither cited test fails if a cluster stayed in run_cmd.py within the budget. The slice capture tests import each moved name from its fr/run module, so they do.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-28T02:31:20+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · shape file stated run_cmd.py is 4093 lines with budget 4115; the diff has 4091 lines and budget 4111
+
+Same defect as l-docs-accuracy-r1, raised independently under the errors lens.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-28T02:31:20+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · Verdict warnings print only at settle, so an unexpected exception after a queued warning (run_report in proportionality_witness, evaluate in docs_witness) lost it
+
+Before the move the fallback-base warning printed as it was raised; a crash then still showed it above the traceback.
+
+<!-- fr:journal kind=review scope=plan id=review-lens-1 created=2026-11-28T02:31:20+00:00 -->
+### review-lens-1 · review · feature reviewed under the docs-accuracy, errors and tests lenses by three independent reviewers; 6 in-scope findings, all fixed
+
+docs-accuracy checked AGENTS.md's fr/run paragraph, the fr-show-me skill and its two mirrors, and every page stamped by the change against the code (no page claim made false). errors traced every RunRefusal raiser to a call site inside _refusals(), every Verdict witness to _settle/_witness, derive's typer.Exit aggregation, exit 75, and the broad excepts in deliver.py, and found no refusal text, markup, order or exit code changed. tests confirmed that each slice's fixtures were committed before its move and never regenerated, that no capture driver is left, that no re-pointed monkeypatch is dead, and that no assertion was weakened. Findings: the shape's line counts (raised by all three), a stale docstring, a row whose evidence did not prove its claim, and a warning lost on a crash. All are fixed.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-28T02:31:20+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: shape file said run_cmd.py is 4093 lines with budget 4115; the file has 4091 lines and the budget is 4111
+
+Shape file now says 8878 -> 4091 lines and budget 8895 -> 4111 (4c7e2e9d6).
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-28T02:31:20+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: run/adopt.py:20 docstring still said _complete_step lives in fr.commands.run_cmd; it moved to fr.run.steps.complete_step
+
+adopt.py names complete_step in fr.run.steps; provenance.py and model.py comments name fr.run.steps.complete_step (4c7e2e9d6). units.py's mention narrates finding f7's history and stays.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-28T02:31:20+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: shape file said run_cmd.py is 4093 lines with a 4115 budget; the code is 4091 lines and the budget test says 4111
+
+Fixed with l-docs-accuracy-r1 in 4c7e2e9d6.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-28T02:31:20+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: acceptance row run-cmd-clusters-in-fr-run cited only the budget ceiling and the layering test, neither of which proves the clusters live in fr/run; its note said 4115
+
+The row now cites the five slice capture tests (steps, deliver, brief, evidence, provenance) as unit levels, and its note says 4111 (5284fd070).
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-28T02:31:20+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: shape file stated run_cmd.py is 4093 lines with budget 4115; the diff has 4091 lines and budget 4111
+
+Fixed with l-docs-accuracy-r1 in 4c7e2e9d6.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-28T02:31:20+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: Verdict warnings print only at settle, so an unexpected exception after a queued warning (run_report in proportionality_witness, evaluate in docs_witness) lost it
+
+fr.run.verdict.noted_on_crash attaches the queued warnings to an unexpected exception as notes, so the traceback shows them; proportionality_witness and docs_witness wrap their post-warning calls in it. Test test_a_crash_after_a_queued_warning_carries_the_warning failed first, then passed (44e211bc8).
