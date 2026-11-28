@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from fr.ops.model import Op
     from fr.run.cost import PhaseRow, Summary
     from fr.run.model import RunState
+    from fr.settings.model import Settings
     from fr.verification.exit import Exit
     from fr.verification.model import StrategyManifest
     from fr.verification.rows import SpecVerification
@@ -51,6 +52,7 @@ __all__ = [
     "UnreadableDischargeError",
     "FR_MARKER_PREFIXES",
     "PR_BODY_NAME",
+    "PR_SECTION_HEADINGS",
     "REQUIRED_SECTIONS",
     "Leftover",
     "PrematureClose",
@@ -71,6 +73,7 @@ __all__ = [
     "render_out_of_scope",
     "render_owed_discharged",
     "render_pr_body",
+    "required_sections",
     "run_held_issues",
     "run_narrowings",
     "shared_closing_keywords",
@@ -102,6 +105,37 @@ before it, each with its exact walk command; `Manual operations` (spec
 it has none; `PR settle` (spec 2026-11-23-pr-readiness-wait R7) each `git.settle` key's
 effective mode, its source and an override's reason; `Shape of the change` (spec
 2026-11-24-show-me-visuals R10) the run's shape file, or why there is none."""
+
+PR_SECTION_HEADINGS: Mapping[str, str] = {
+    "proportionality": "## Proportionality",
+    "cost": "## Cost",
+    "settle": "## PR settle",
+}
+"""The `forge.pr_sections` keys and the one heading each turns off (spec
+2026-11-28-alacarte-settings R4). No other heading is configurable."""
+
+
+def required_sections(settings: Settings) -> tuple[str, ...]:
+    """`REQUIRED_SECTIONS` minus the headings `forge.pr_sections` turns off, in order (R5)."""
+    off = {
+        heading
+        for key, heading in PR_SECTION_HEADINGS.items()
+        if getattr(settings.forge.pr_sections, key) == "off"
+    }
+    return tuple(h for h in REQUIRED_SECTIONS if h not in off)
+
+
+def _body_settings(repo_root: Path) -> Settings:
+    """The settings the render reads, built-in defaults when they cannot be read: the
+    settings' own gates refuse an unreadable file, never the render."""
+    from fr.settings import SettingsError, load_settings
+    from fr.settings.model import parse_settings
+
+    try:
+        return load_settings(repo_root).settings
+    except SettingsError:
+        return parse_settings({}, source="defaults")
+
 
 HEADING_REVIEW_LENSES = "## Review lenses"
 """Rendered after the findings sections, never required: a live body older than the
@@ -1563,6 +1597,7 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
     above it; it may not drop a section."""
     from fr.shape import shape_section
 
+    required = set(required_sections(_body_settings(repo_root)))
     inside, outside = _findings(repo_root, state)
     parts = [
         f"{_RENDER_MARKER}{state.run}; edit above this line only -->",
@@ -1586,18 +1621,18 @@ def render_pr_body(repo_root: Path, state: RunState) -> str:
         _post_merge_owed(repo_root, state),
         "## Manual operations",
         _manual_operations(repo_root, state),
-        "## PR settle",
-        _settle_section(repo_root, state),
+    ]
+    if "## PR settle" in required:
+        parts += ["## PR settle", _settle_section(repo_root, state)]
+    parts += [
         HEADING_OWED_DISCHARGED,
         _owed_discharged(repo_root, state),
     ]
     tests = _tests(repo_root, state)
     if tests is not None:
         parts += ["## Tests", tests]
-    parts += [
-        "## Proportionality",
-        _proportionality(repo_root, state),
-        "## Cost",
-        _cost(repo_root, state),
-    ]
+    if "## Proportionality" in required:
+        parts += ["## Proportionality", _proportionality(repo_root, state)]
+    if "## Cost" in required:
+        parts += ["## Cost", _cost(repo_root, state)]
     return "\n\n".join(parts) + "\n"

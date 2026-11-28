@@ -262,12 +262,12 @@ def deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None, warn: Warn
     from fr.record.model import records_dir
     from fr.record.pr_body import (
         PR_BODY_NAME,
-        REQUIRED_SECTIONS,
         PrBodyRefused,
         durable_pr_body_path,
         fr_markers,
         missing_sections,
         render_pr_body,
+        required_sections,
         shared_closing_keywords,
     )
     from fr.settings import load_settings
@@ -277,7 +277,8 @@ def deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None, warn: Warn
         raise RunRefusal((Say(f"refused: {shape}", markup=False, soft_wrap=True),), 2)
     deliver_pr_ask_gate(repo_root, state, pr)
     pr = pr or state.pr
-    minimal = load_settings(repo_root).settings.forge.pr_body == "minimal"
+    settings = load_settings(repo_root).settings
+    minimal = settings.forge.pr_body == "minimal"
     if minimal:
         body_path = durable_pr_body_path(repo_root, state.run)
     else:
@@ -329,11 +330,8 @@ def deliver_pr_gate(repo_root: Path, state: RunState, pr: str | None, warn: Warn
             )
         missing: list[str] = []
     else:
-        required = (
-            (*REQUIRED_SECTIONS, HISTORICAL_HEADING)
-            if historical_reviews(state)
-            else REQUIRED_SECTIONS
-        )
+        sections = required_sections(settings)  # alacarte R5: an off section is not owed
+        required = (*sections, HISTORICAL_HEADING) if historical_reviews(state) else sections
         missing = missing_sections(live, required=required)
         # Review p2-r1: the heading alone is not the control — the operator's ok
         # is given against the LIST, so every historical review must be named.
