@@ -27,6 +27,7 @@ __all__ = ["approved_asks", "stealth_home"]
 def _asks_approved(approved_asks: None) -> None:
     """Stealth asks before every code push and PR (alacarte R7): taken as approved here."""
 
+
 STATE = "local--origin/features/feat__s/docs/superpowers/runs/r1.stealth.json"
 
 
