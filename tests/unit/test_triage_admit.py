@@ -9,6 +9,7 @@ from fr.cli import app
 from fr.triage.admit import (
     ADMIT_PREFIX,
     admit_marker,
+    canonical_comment,
     content_digest,
     latest_admit,
     parse_admit,
@@ -21,6 +22,15 @@ def test_the_digest_reads_crlf_as_lf_and_starts_sha256() -> None:
     assert content_digest("t", "a\nb").startswith("sha256:")
 
 
+def test_the_v2_digest_text_starts_with_its_version_line() -> None:
+    import hashlib
+
+    v1 = "sha256:" + hashlib.sha256(b"t\n\nb").hexdigest()
+    v2 = "sha256:" + hashlib.sha256(b"fr-admit-v2\nt\n\nb").hexdigest()
+    assert content_digest("t", "b") != v1
+    assert content_digest("t", "b") == v2
+
+
 def test_the_digest_moves_with_the_title_and_with_the_body() -> None:
     base = content_digest("t", "b")
     assert content_digest("t2", "b") != base
@@ -30,7 +40,7 @@ def test_the_digest_moves_with_the_title_and_with_the_body() -> None:
 def test_the_digest_is_over_title_a_blank_line_and_body() -> None:
     import hashlib
 
-    want = hashlib.sha256(b"title\n\nbody").hexdigest()
+    want = hashlib.sha256(b"fr-admit-v2\ntitle\n\nbody").hexdigest()
     assert content_digest("title", "body") == f"sha256:{want}"
 
 
@@ -45,7 +55,7 @@ _HEX = "a" * 64  # a well-formed digest body: each case below is wrong in one wa
 
 
 def test_the_well_formed_marker_the_cases_below_vary_parses() -> None:
-    assert parse_admit(f'<!-- fr-admit:{{"v":1,"digest":"sha256:{_HEX}"}} -->') == (
+    assert parse_admit(f'<!-- fr-admit:{{"v":2,"digest":"sha256:{_HEX}"}} -->') == (
         f"sha256:{_HEX}"
     )
 
@@ -54,13 +64,14 @@ def test_the_well_formed_marker_the_cases_below_vary_parses() -> None:
     "body",
     [
         "<!-- fr-admit:{not json} -->",
-        f'<!-- fr-admit:{{"v":2,"digest":"sha256:{_HEX}"}} -->',  # the version
-        '<!-- fr-admit:{"v":1} -->',  # no digest
-        f'<!-- fr-admit:{{"v":1,"digest":"md5:{_HEX}"}} -->',  # the algorithm
-        '<!-- fr-admit:{"v":1,"digest":"sha256:ab"} -->',  # the length
-        f'<!-- fr-admit:{{"v":1,"digest":"sha256:{"A" * 64}"}} -->',  # upper-case hex
-        f'<!-- fr-admit:{{"v":1,"digest":"sha256:{_HEX}","x":1}} -->',  # an extra key
-        f'<!-- fr-admit:{{"v":1,"digest":"sha256:{_HEX}"}}',  # no closing -->
+        f'<!-- fr-admit:{{"v":1,"digest":"sha256:{_HEX}"}} -->',  # a version-1 marker
+        f'<!-- fr-admit:{{"v":3,"digest":"sha256:{_HEX}"}} -->',  # another version
+        '<!-- fr-admit:{"v":2} -->',  # no digest
+        f'<!-- fr-admit:{{"v":2,"digest":"md5:{_HEX}"}} -->',  # the algorithm
+        '<!-- fr-admit:{"v":2,"digest":"sha256:ab"} -->',  # the length
+        f'<!-- fr-admit:{{"v":2,"digest":"sha256:{"A" * 64}"}} -->',  # upper-case hex
+        f'<!-- fr-admit:{{"v":2,"digest":"sha256:{_HEX}","x":1}} -->',  # an extra key
+        f'<!-- fr-admit:{{"v":2,"digest":"sha256:{_HEX}"}}',  # no closing -->
         "just a comment",
     ],
 )
@@ -114,6 +125,88 @@ def test_latest_admit_trusts_a_member_association() -> None:
 def test_latest_admit_is_none_without_a_marker() -> None:
     comments = [{"author": "operator", "body": "lgtm", "created_at": "2026-11-01T00:00:00Z"}]
     assert latest_admit(comments, frozenset({"operator"})) is None
+
+
+def test_latest_admit_ignores_a_newer_v1_marker_over_an_older_v2_one() -> None:
+    v2 = content_digest("t", "1")
+    v1_body = f'<!-- fr-admit:{{"v":1,"digest":"sha256:{_HEX}"}} -->\nold'
+    comments = [
+        _comment(v2, "operator", "2026-11-01T00:00:00Z"),
+        {**_comment(v2, "operator", "2026-11-09T00:00:00Z"), "body": v1_body},
+    ]
+    assert latest_admit(comments, frozenset({"operator"})) == v2
+
+
+def test_the_marker_writes_v2_and_names_outside_comments() -> None:
+    body = admit_marker(content_digest("t", "b"))
+    assert body.splitlines()[0].startswith('<!-- fr-admit:{"v":2,')
+    assert "comment" in body.splitlines()[1]
+
+
+# ----------------------------------------------------- pinned comments (R1)
+
+
+def _c(
+    body: str = "hi",
+    *,
+    author: str = "eve",
+    association: str = "NONE",
+    at: str | None = "2026-11-01T10:00:00Z",
+    id: int | None = 1,
+) -> dict[str, object]:
+    return {
+        "author": author,
+        "association": association,
+        "body": body,
+        "created_at": at,
+        "id": id,
+    }
+
+
+def test_a_trusted_comment_does_not_change_the_digest() -> None:
+    base = content_digest("t", "b")
+    for assoc in ("OWNER", "MEMBER", "COLLABORATOR"):
+        assert content_digest("t", "b", [_c(association=assoc)], ()) == base
+    assert content_digest("t", "b", [_c(author="Op")], ("op",)) == base
+
+
+def test_an_outside_comment_changes_the_digest_and_so_does_editing_it() -> None:
+    base = content_digest("t", "b")
+    for assoc in ("NONE", "CONTRIBUTOR"):
+        one = content_digest("t", "b", [_c(association=assoc)], ())
+        assert one != base
+        assert content_digest("t", "b", [_c("edited", association=assoc)], ()) != one
+
+
+def test_the_two_adapters_spellings_of_one_comment_give_one_digest() -> None:
+    gql = _c(author="renovate", at="2026-11-01T10:00:00Z")
+    rest = _c(author="renovate[bot]", at="2026-11-01T10:00:00+00:00")
+    assert content_digest("t", "b", [gql], ()) == content_digest("t", "b", [rest], ())
+    assert canonical_comment(_c(author=""))[0] == "ghost"
+    assert canonical_comment(_c(author=None))[0] == "ghost"  # type: ignore[arg-type]
+
+
+def test_canonical_comment_normalises_each_field() -> None:
+    assert canonical_comment(_c("a\r\nb", author="Eve[BOT]", id=None)) == (
+        "eve",
+        "2026-11-01T10:00:00Z",
+        -1,
+        "a\nb",
+    )
+    assert canonical_comment(_c(at="not a time"))[1] == ""
+    assert canonical_comment(_c(at=None))[1] == ""
+    assert canonical_comment(_c(at="2026-11-01T12:00:00+02:00"))[1] == "2026-11-01T10:00:00Z"
+
+
+def test_comments_with_one_time_sort_stably_whatever_their_ids_or_order() -> None:
+    a, b = _c("x", id=None), _c("y", id=7)
+    assert content_digest("t", "b", [a, b], ()) == content_digest("t", "b", [b, a], ())
+
+
+def test_crlf_in_a_comment_body_reads_as_lf() -> None:
+    assert content_digest("t", "b", [_c("a\r\nb")], ()) == content_digest(
+        "t", "b", [_c("a\nb")], ()
+    )
 
 
 # ------------------------------------------------------------- `fr triage admit` (R2)
