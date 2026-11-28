@@ -67,3 +67,11 @@ def test_forge_body_does_not_import_the_debt_package() -> None:
 
     code = "import sys, fr.forge_body; sys.exit(1 if 'fr.debt' in sys.modules else 0)"
     assert subprocess.run([sys.executable, "-I", "-c", code]).returncode == 0
+
+
+def test_read_failure_sanitises_the_url_too() -> None:
+    from fr.forge_body import read_failure
+
+    line = read_failure("https://user:tok@host/o/r/pull/7\x1b[31m", RuntimeError("boom"))
+    assert "user:tok" not in line and "\x1b" not in line
+    assert line.endswith(": boom")

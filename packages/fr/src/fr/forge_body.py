@@ -41,7 +41,10 @@ def read_failure(url: str, exc: BaseException) -> str:
     imported here, not at module level: this module is a leaf the adapters import."""
     from fr.debt.render import redact
 
+    def clean(text: str) -> str:
+        return CONTROL.sub("?", redact(text))[:_READ_FAILURE_LIMIT]
+
     lines = str(exc).splitlines()
-    reason = lines[0] if lines else type(exc).__name__
-    reason = CONTROL.sub("?", redact(reason))[:_READ_FAILURE_LIMIT]
-    return f"warning: could not read the state of PR {url}: {reason}"
+    reason = clean(lines[0] if lines else type(exc).__name__)
+    # The url comes from the run cursor (forge-returned text): same treatment.
+    return f"warning: could not read the state of PR {clean(url.splitlines()[0] if url else '')}: {reason}"

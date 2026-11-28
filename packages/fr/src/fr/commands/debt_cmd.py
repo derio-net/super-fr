@@ -174,6 +174,9 @@ def issue_cmd(
     try:
         client = _client(root)
         report = _compute(root, client, slug, stale_days)
+        for source, status in report.sources.items():  # R8: the reason a body never carries
+            if status.state == "unavailable":
+                typer.echo(f"unavailable: {source}: {_clean(status.why, 300)}", err=True)
         capped = False
         try:
             found = client.list_open_issues_with_body(

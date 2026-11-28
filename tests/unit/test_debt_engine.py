@@ -153,6 +153,21 @@ def test_a_forge_that_raises_is_unavailable_not_fatal(repo: Path) -> None:
     assert report.sources["forge"].state == "unavailable" and "401" in report.sources["forge"].why
 
 
+def test_an_unsupported_forge_operation_is_published_by_name(repo: Path) -> None:
+    from fr.debt import render
+    from fr.ghclient import UnsupportedForgeOperation
+
+    class Gitea(FakeForge):
+        def owed_issues(self) -> list[dict[str, Any]]:
+            raise UnsupportedForgeOperation("list_issues", "gitea")
+
+    _write_plan(repo, "old", [("agentic", False)])
+    _publish_at(repo, "2026-09-01T12:00:00+00:00")
+    report = compute(repo, forge=Gitea(), now=NOW, stale_days=14)
+
+    assert "forge: not supported on gitea (gh#611)" in render.markdown(report)
+
+
 def test_stale_days_from_config_override_and_unknown_key(repo: Path) -> None:
     assert load_stale_days(repo, None) == 14
     (repo / ".fr").mkdir()
