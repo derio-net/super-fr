@@ -212,3 +212,8 @@ row_kinds:
 run_gate: developer
 run_kind: none
 ```
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-28-triage-privacy-p2 created=2026-11-28T14:43:20+00:00 -->
+### phase-split-2026-11-28-triage-privacy-p2 · decision · ask: #1634, the carried-state scan, is its own ask; it reads the state directory, not facts
+
+Phase 2 serves R8-R9 (#1634), independent of phase 1's facts changes.
