@@ -48,7 +48,7 @@ journal:
   review_scope: in
   title: validate_spec reading the stamp risks an import cycle
   body: See the independent spec review (spec-review).
-- kind: discovery
+- kind: review
   id: spec-review
   title: 'independent spec review: 9 findings, all in scope'
   body: fr-spec-reviewer (hard tier) checked the spec against the three operator decisions, the codebase and itself; all three decisions honoured. Additionally found live spec 2026-11-27-triage-leaves-split
