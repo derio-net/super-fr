@@ -198,3 +198,6 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-28-s1-followups-p2 created=2026-11-28T08:22:17+00:00 -->
 ### tier-2026-11-28-s1-followups-p2 · decision · hard: phase 2 changes the edit gate's fail-closed decision on three harnesses
+
+<!-- fr:journal kind=decision scope=spec id=phase-split-2026-11-28-s1-followups-p2 created=2026-11-28T08:22:19+00:00 -->
+### phase-split-2026-11-28-s1-followups-p2 · decision · ask: the shell and TypeScript readers are operator decision q3's own ask (R7-R9), reviewed apart from the Python side
