@@ -9,7 +9,12 @@ three-column `| id | requirement | source |` table, taking `id` and
 from __future__ import annotations
 
 import pytest
-from fr.requirements import RequirementsError, has_requirements, parse_requirements
+from fr.requirements import (
+    RequirementsError,
+    has_requirements,
+    list_layout,
+    parse_requirements,
+)
 
 LIST_SPEC = """# spec
 
@@ -170,3 +175,55 @@ def test_the_id_errors_fire_for_table_rows(rows: str, match: str) -> None:
     spec = "# spec\n\n## Requirements\n\n| ID | Requirement |\n|----|----|\n" + rows + "\n"
     with pytest.raises(RequirementsError, match=match):
         parse_requirements(spec)
+
+
+# --- continuation lines, id-like prefixes, the shared layout (R3) -------------
+
+
+def test_continuation_lines_join_the_requirement_with_single_spaces() -> None:
+    spec = "## Requirements\n\nR1. first\n  second line\nthird\nR2. next\n"
+    assert _pairs(spec) == [("R1", "first second line third"), ("R2", "next")]
+
+
+def test_a_blank_line_between_requirements_is_not_prose() -> None:
+    spec = "## Requirements\n\nR1. a\n\nR2. b\n"
+    assert _pairs(spec) == [("R1", "a"), ("R2", "b")]
+    layout = list_layout(spec)
+    assert layout is not None and layout.prose == ()
+
+
+def test_prose_between_requirements_is_ignored_by_the_reader_but_named_by_the_layout() -> None:
+    spec = "## Requirements\n\nR1. a\n\nsome prose\n\nR2. b\n\ntrailing prose\n"
+    assert _pairs(spec) == [("R1", "a"), ("R2", "b")]
+    layout = list_layout(spec)
+    assert layout is not None
+    assert layout.prose == (5,), "only the prose before a later requirement counts"
+
+
+@pytest.mark.parametrize(
+    ("line", "rid"), [("R9a. text", "R9a"), ("- R9a. text", "R9a"), ("R0. x", "R0")]
+)
+def test_an_id_like_line_with_a_malformed_id_names_the_line(line: str, rid: str) -> None:
+    spec = f"## Requirements\n\nR1. a\n{line}\n"
+    with pytest.raises(RequirementsError, match=rf"line 4: malformed requirement id '{rid}'"):
+        parse_requirements(spec)
+    with pytest.raises(RequirementsError, match=r"line 4"):
+        list_layout(spec)
+
+
+def test_the_layout_spans_each_requirement() -> None:
+    spec = "# s\n\n## Requirements\n\nintro\n\nR1. one\ntwo\n\nR2. three\n\n## Design\n"
+    layout = list_layout(spec)
+    assert layout is not None
+    a, b = layout.items
+    assert (a.id, a.text, a.first, a.last, a.line_no) == ("R1", "one two", 3, 4, 7)
+    assert (b.id, b.text, b.first, b.last, b.line_no) == ("R2", "three", 6, 6, 10)
+    assert (layout.start, layout.end) == (3, 6)
+    assert spec.splitlines()[layout.base + a.first] == "R1. one"
+
+
+def test_the_layout_is_none_for_a_table_or_no_section() -> None:
+    assert list_layout(TWO_COL_SPEC) is None
+    assert list_layout(TWO_COL_LEGACY) is None
+    assert list_layout(TABLE_SPEC) is None
+    assert list_layout("# spec\n\n## Design\n") is None

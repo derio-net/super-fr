@@ -75,6 +75,9 @@ _TABLE_HEADER = ["id", "requirement"]
 _ID_RE = re.compile(r"^R[1-9][0-9]*$")
 _LIST_ITEM_RE = re.compile(r"^(?:[-*]\s+)?(R[1-9][0-9]*)\.\s+(\S.*)$")
 """`R<n>. <text>`, optionally behind a Markdown `-`/`*` bullet."""
+_ID_LIKE_RE = re.compile(r"^(?:[-*]\s+)?(R\S*)\.\s")
+"""A line that starts like a requirement id (R3): an optional bullet, `R`,
+non-space characters, then `. `. One `_LIST_ITEM_RE` rejects is an error."""
 
 
 def _locate_section(text: str) -> tuple[list[str], int] | None:
@@ -142,15 +145,105 @@ def _table_rows(lines: list[str], first_line_no: int) -> list[tuple[str, str, in
     return rows
 
 
-def _list_rows(lines: list[str], first_line_no: int) -> list[tuple[str, str, int]]:
-    """The `R<n>. <text>` lines, in order. Any other line is prose and is
-    left alone."""
-    rows: list[tuple[str, str, int]] = []
-    for offset, line in enumerate(lines):
-        m = _LIST_ITEM_RE.match(line.strip())
+@dataclass(frozen=True)
+class ListItem:
+    """One `R<n>.` requirement: its id, its text with continuation lines joined,
+    the 0-based indices of its first and last line within the section, and the
+    1-based file line number of its first line (for messages)."""
+
+    id: str
+    text: str
+    first: int
+    last: int
+    line_no: int
+
+
+@dataclass(frozen=True)
+class ListLayout:
+    """The `R<n>.` list of a `## Requirements` section, as one walk sees it.
+    `base` is the 0-based file index of the section's first line, so
+    `base + item.first` indexes the file's lines. `prose` holds the 1-based line
+    numbers of the prose between requirements. The reader and the spec 1 -> 2
+    rewrite share this walk, so they agree on which lines belong to a
+    requirement."""
+
+    items: tuple[ListItem, ...]
+    prose: tuple[int, ...]
+    base: int
+
+    @property
+    def start(self) -> int:
+        """The section index of the first requirement line (-1 when none)."""
+        return self.items[0].first if self.items else -1
+
+    @property
+    def end(self) -> int:
+        """The section index of the last requirement or continuation line (-1 when none)."""
+        return self.items[-1].last if self.items else -1
+
+
+def _walk_list(lines: list[str], first_line_no: int) -> ListLayout:
+    """Classify the section's lines (R3): a requirement line opens an item, the
+    non-blank lines directly after it continue it, a blank line closes it, and a
+    non-blank line after a blank line is prose: between requirements when a
+    later requirement line follows it."""
+    items: list[ListItem] = []
+    prose: list[int] = []
+    pending: list[int] = []
+    current: tuple[str, list[str], int] | None = None  # (id, text parts, first) while open
+    last_idx = -1
+
+    def close() -> None:
+        nonlocal current
+        if current is not None:
+            rid, parts, first = current
+            items.append(ListItem(rid, " ".join(parts), first, last_idx, first_line_no + first))
+            current = None
+
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        m = _LIST_ITEM_RE.match(stripped)
         if m:
-            rows.append((m.group(1), m.group(2).strip(), first_line_no + offset))
-    return rows
+            close()
+            prose.extend(pending)
+            pending = []
+            current = (m.group(1), [m.group(2).strip()], idx)
+            last_idx = idx
+            continue
+        like = _ID_LIKE_RE.match(stripped)
+        if like:
+            raise RequirementsError(
+                f"line {first_line_no + idx}: malformed requirement id {like.group(1)!r} "
+                "(expected `R` + a positive integer)"
+            )
+        if not stripped:
+            close()
+            continue
+        if current is not None:
+            current[1].append(stripped)
+            last_idx = idx
+        elif items:
+            pending.append(first_line_no + idx)
+    close()
+    return ListLayout(items=tuple(items), prose=tuple(prose), base=first_line_no - 1)
+
+
+def list_layout(spec_text: str) -> ListLayout | None:
+    """The `R<n>.` list layout of the spec's `## Requirements` section, or `None`
+    when there is no such section or it is a table (either form). Raises
+    `RequirementsError` for a line that starts like an id but is malformed."""
+    section = _locate_section(spec_text)
+    if section is None or _legacy_rows(*section) is not None:
+        return None
+    if _table_rows(*section) is not None:
+        return None
+    return _walk_list(*section)
+
+
+def _list_rows(lines: list[str], first_line_no: int) -> list[tuple[str, str, int]]:
+    """The `R<n>. <text>` requirements, in order, continuation lines joined.
+    Prose between them is left alone."""
+    return [(i.id, i.text, i.line_no) for i in _walk_list(lines, first_line_no).items]
 
 
 def _rows(spec_text: str) -> list[tuple[str, str, int]]:
