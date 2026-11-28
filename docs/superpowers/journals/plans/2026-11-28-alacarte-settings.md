@@ -104,3 +104,258 @@ Added "Fewer PR-body sections" and "Fewer workflow shapes" bullets to the settin
 ### p1-r5-resolved · finding [fixed] · resolves p1-r5: 01-fr-goal.md says stealth never pushes the target's branch, which is loose beside `fr push` (phase 1)
 
 Reworded the sentence. fr never commits its own files on the target's branch, and pushes it only through `fr push`, on the operator's approval.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r1 · finding [open] (reviewer: in scope) · Stealth phase evidence is described as always a local log, but a declared tests: ci still briefs the fast tier with tests_log: none
+
+01-fr-goal.md and the fr-goal skill. See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r2 · finding [open] (reviewer: in scope) · The Repo settings table row, edited by this change, gives the pre-S1 quiet and stealth settings paths
+
+01-fr-goal.md:1385. See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-docs-accuracy-r3 · finding [open] (reviewer: in scope) · The shape file names WorkflowsSettings and ForgeSettings.pr_sections; the classes are Workflows and PrSections
+
+See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4 created=2026-11-28T10:39:06+00:00 state=open review_scope=out -->
+### l-docs-accuracy-r4 · finding [open] (reviewer: out of scope) · 01-fr-goal.md's quiet and stealth passages still describe the settings as a root settings.yaml on origin/fr or the tracking branch
+
+Older S1 staleness this change did not cause. See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-errors-r1 · finding [open] (reviewer: in scope) · Stealth _driven_triage reads an unfetched tracking config branch as no driven scope, silently
+
+settings/check.py. See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-errors-r2 · finding [open] (reviewer: in scope) · A disabled default shape refuses adopt and migrate's adopt without naming --workflow
+
+workflow/available.py. See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-errors-r3 · finding [open] (reviewer: in scope) · The disabled-shape refusal says this repo's settings; under stealth the value lives in the tracking repo
+
+workflow/available.py. See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-errors-r4 · finding [open] (reviewer: in scope) · fr run start's disabled refusal fires before the existing-run check and hides the resume path
+
+commands/run_cmd.py. See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-errors-r5 · finding [open] (reviewer: in scope) · Stealth nothing-to-push uses _code_pending, true for a branch absent on the remote with no code
+
+commands/push_cmd.py. See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-errors-r6 · finding [open] (reviewer: in scope) · The shape file's stealth push diagram puts the scans before the code-pending return
+
+See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r7 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-errors-r7 · finding [open] (reviewer: in scope) · _body_settings swallows SettingsError into defaults with no signal
+
+record/pr_body.py. See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-errors-r8 · finding [open] (reviewer: in scope) · STEALTH_GIT was inserted between SERVABLE_PLACEMENTS and its docstring
+
+settings/load.py. See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-security-r1 · finding [open] (reviewer: in scope) · Stealth nothing-to-push is decided from remote-tracking refs, not the remote
+
+A stale or hand-made ref makes fr push report nothing to push while the target would move (fails safe, misreports). See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-security-r2 · finding [open] (reviewer: in scope) · The shape file's push diagram contradicts the code's order
+
+Same as l-errors-r6. See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-security-r3 · finding [open] (reviewer: in scope) · Orphaned SERVABLE_PLACEMENTS docstring in settings/load.py
+
+Same as l-errors-r8. See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4 created=2026-11-28T10:39:06+00:00 state=open review_scope=out -->
+### l-security-r4 · finding [open] (reviewer: out of scope) · The transcript approval stealth relies on can be supplied by any process that sets FR_TRANSCRIPT_ROOT and the session id
+
+Predates this change (run/telemetry.py); this change makes it the only stealth gate. See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r5 created=2026-11-28T10:39:06+00:00 state=open review_scope=out -->
+### l-security-r5 · finding [open] (reviewer: out of scope) · Other product-repo writers (triage batch publish and create_pr, debt create_pr, the ops gate push) never consult git.push/git.pr
+
+Each needs an operator --yes; none is new here. See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-tests-r1 · finding [open] (reviewer: in scope) · The stealth fr pr create ask has no unit test, and the approved_asks docstring misnames where approval is pinned
+
+See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-tests-r2 · finding [open] (reviewer: in scope) · The alacarte scenario never shows another shape still starts
+
+See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-tests-r3 · finding [open] (reviewer: in scope) · Row s2-stealth-confirm cites only alacarte-settings.sh, which never runs fr pr create
+
+See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-tests-r4 · finding [open] (reviewer: in scope) · R6's stealth init rendering push and pr at ask is untested
+
+See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-tests-r5 · finding [open] (reviewer: in scope) · R7's explicit git.pr auto contrary refusal is untested
+
+See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-tests-r6 · finding [open] (reviewer: in scope) · No test shows a push refused by its checks leaves no request
+
+See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-tests-r7 · finding [open] (reviewer: in scope) · The advance/resolve/reshape test patches refuse_disabled instead of disabling the shape in settings
+
+See l-review.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r8 created=2026-11-28T10:39:06+00:00 state=open review_scope=in -->
+### l-tests-r8 · finding [open] (reviewer: in scope) · A test named for the durable copy asserts nothing about it
+
+See l-review.
+
+<!-- fr:journal kind=review scope=plan id=l-review created=2026-11-28T10:39:06+00:00 -->
+### l-review · review · lens review (docs-accuracy, errors, security, tests): 24 findings, 20 in scope, 4 out of scope
+
+One dispatched reviewer per lens over the whole feature diff. Security found no way for code to reach a stealth target without a verified approval. In scope: 19 fixed and 1 refuted (l-errors-r7). Out of scope: l-docs-accuracy-r4, l-security-r4 and l-security-r5, each filed at deliver. l-security-r2 and r3 duplicate l-errors-r6 and r8.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r1-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-docs-accuracy-r1 -->
+### l-docs-accuracy-r1-resolved · finding [fixed] · resolves l-docs-accuracy-r1: Stealth phase evidence is described as always a local log, but a declared tests: ci still briefs the fast tier with tests_log: none
+
+01-fr-goal.md and the fr-goal skill (and mirrors) now say no phase uses tests: ci as its own evidence. A phase's evidence is a local log, or under a declared tests: ci its fast tier with tests_log: none.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r2-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-docs-accuracy-r2 -->
+### l-docs-accuracy-r2-resolved · finding [fixed] · resolves l-docs-accuracy-r2: The Repo settings table row, edited by this change, gives the pre-S1 quiet and stealth settings paths
+
+The row now gives .fr/settings.yaml on fr-config (quiet) and <target-dir>/.fr/settings.yaml on <branch>-config (stealth). Lines 1505 and 1600 are corrected too.
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r3-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-docs-accuracy-r3 -->
+### l-docs-accuracy-r3-resolved · finding [fixed] · resolves l-docs-accuracy-r3: The shape file names WorkflowsSettings and ForgeSettings.pr_sections; the classes are Workflows and PrSections
+
+The shape file names Workflows.disabled and Forge.pr_sections (PrSections).
+
+<!-- fr:journal kind=finding scope=plan id=l-docs-accuracy-r4-resolved created=2026-11-28T10:39:06+00:00 state=open resolves=l-docs-accuracy-r4 out_of_scope=true -->
+### l-docs-accuracy-r4-resolved · finding [out-of-scope] · resolves l-docs-accuracy-r4: 01-fr-goal.md's quiet and stealth passages still describe the settings as a root settings.yaml on origin/fr or the tracking branch
+
+The policy-key lines (1505, 1600) are fixed here. The quiet switch passage (init --quiet and the origin/fr switch) describes S1's switch move, which this change did not touch and which needs its own check against config/space.py.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r1-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-errors-r1 -->
+### l-errors-r1-resolved · finding [fixed] · resolves l-errors-r1: Stealth _driven_triage reads an unfetched tracking config branch as no driven scope, silently
+
+Under stealth, an unfetched tracking config branch now prints a notice naming git fetch origin <branch>-config. It still reads no driven scope, because a first stealth run's branch may not exist yet. Pinned in test_settings_stealth.py.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r2-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-errors-r2 -->
+### l-errors-r2-resolved · finding [fixed] · resolves l-errors-r2: A disabled default shape refuses adopt and migrate's adopt without naming --workflow
+
+refuse_disabled now names --workflow and an available shape (fr run adopt <plan> --workflow <s>, fr run start <s>). Migrate's adopt prints that message per plan.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r3-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-errors-r3 -->
+### l-errors-r3-resolved · finding [fixed] · resolves l-errors-r3: The disabled-shape refusal says this repo's settings; under stealth the value lives in the tracking repo
+
+The message names where workflows.disabled is read for the placement. Under stealth that is the tracking repo's settings file, not the target's.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r4-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-errors-r4 -->
+### l-errors-r4-resolved · finding [fixed] · resolves l-errors-r4: fr run start's disabled refusal fires before the existing-run check and hides the resume path
+
+fr run start's disabled refusal adds the line: a run already on this branch keeps going: fr run status, fr run advance <id>.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r5-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-errors-r5 -->
+### l-errors-r5-resolved · finding [fixed] · resolves l-errors-r5: Stealth nothing-to-push uses _code_pending, true for a branch absent on the remote with no code
+
+fr push uses git_policy.push.push_moves_remote, so a branch absent on the remote whose HEAD adds no commit is nothing to push. Pinned in tests/unit/test_push_moves_remote.py.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r6-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-errors-r6 -->
+### l-errors-r6-resolved · finding [fixed] · resolves l-errors-r6: The shape file's stealth push diagram puts the scans before the code-pending return
+
+The shape file's diagram follows the code's order.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r7-resolved created=2026-11-28T10:39:06+00:00 state=refuted resolves=l-errors-r7 -->
+### l-errors-r7-resolved · finding [refuted] · resolves l-errors-r7: _body_settings swallows SettingsError into defaults with no signal
+
+The fallback renders every section (a superset of what settings could switch off), so it fails toward more required sections, never fewer. deliver loads the settings itself and refuses an unreadable file with its cause, so no cause is hidden.
+
+<!-- fr:journal kind=finding scope=plan id=l-errors-r8-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-errors-r8 -->
+### l-errors-r8-resolved · finding [fixed] · resolves l-errors-r8: STEALTH_GIT was inserted between SERVABLE_PLACEMENTS and its docstring
+
+The docstrings are back under their constants.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r1-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-security-r1 -->
+### l-security-r1-resolved · finding [fixed] · resolves l-security-r1: Stealth nothing-to-push is decided from remote-tracking refs, not the remote
+
+push_moves_remote reads the remote live (commits_the_push_adds and ls-remote of the branch). A stale or hand-made remote-tracking ref no longer reads as nothing to push. Pinned in test_push_moves_remote.py (stale ref, fast-forward onto main).
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r2-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-security-r2 -->
+### l-security-r2-resolved · finding [fixed] · resolves l-security-r2: The shape file's push diagram contradicts the code's order
+
+Same fix as l-errors-r6.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r3-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-security-r3 -->
+### l-security-r3-resolved · finding [fixed] · resolves l-security-r3: Orphaned SERVABLE_PLACEMENTS docstring in settings/load.py
+
+Same fix as l-errors-r8.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4-resolved created=2026-11-28T10:39:06+00:00 state=open resolves=l-security-r4 out_of_scope=true -->
+### l-security-r4-resolved · finding [out-of-scope] · resolves l-security-r4: The transcript approval stealth relies on can be supplied by any process that sets FR_TRANSCRIPT_ROOT and the session id
+
+The transcript reader and its environment overrides predate this change, and protecting them needs a design of its own (where fr may trust a transcript).
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r5-resolved created=2026-11-28T10:39:06+00:00 state=open resolves=l-security-r5 out_of_scope=true -->
+### l-security-r5-resolved · finding [out-of-scope] · resolves l-security-r5: Other product-repo writers (triage batch publish and create_pr, debt create_pr, the ops gate push) never consult git.push/git.pr
+
+These writers predate this change, each needs an operator --yes, and none is reachable from fr-goal's stealth path. Making them read the git policy is its own change.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r1-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-tests-r1 -->
+### l-tests-r1-resolved · finding [fixed] · resolves l-tests-r1: The stealth fr pr create ask has no unit test, and the approved_asks docstring misnames where approval is pinned
+
+Added test_stealth_pr_create_asks_and_stores_a_pr_request (no stub). The approved_asks docstring names where the request and the approval are pinned.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r2-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-tests-r2 -->
+### l-tests-r2-resolved · finding [fixed] · resolves l-tests-r2: The alacarte scenario never shows another shape still starts
+
+alacarte-settings.sh now starts fr-goal on another branch after the refusal and checks its cursor was written.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r3-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-tests-r3 -->
+### l-tests-r3-resolved · finding [fixed] · resolves l-tests-r3: Row s2-stealth-confirm cites only alacarte-settings.sh, which never runs fr pr create
+
+s2-stealth-confirm gains the placement-stealth scenario (which walks fr pr create's ask) and unit levels for the pr-create ask, pr auto and push_moves_remote.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r4-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-tests-r4 -->
+### l-tests-r4-resolved · finding [fixed] · resolves l-tests-r4: R6's stealth init rendering push and pr at ask is untested
+
+The stealth init test asserts push and pr render at ask.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-tests-r5 -->
+### l-tests-r5-resolved · finding [fixed] · resolves l-tests-r5: R7's explicit git.pr auto contrary refusal is untested
+
+An explicit git.pr auto is pinned as stealth-forge-explicit.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r6-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-tests-r6 -->
+### l-tests-r6-resolved · finding [fixed] · resolves l-tests-r6: No test shows a push refused by its checks leaves no request
+
+A stealth push refused by its subject check leaves no request and prints no ask.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r7-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-tests-r7 -->
+### l-tests-r7-resolved · finding [fixed] · resolves l-tests-r7: The advance/resolve/reshape test patches refuse_disabled instead of disabling the shape in settings
+
+The test disables fr-goal-light in real schema-3 settings on origin's default branch and checks the setting is in force first.
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r8-resolved created=2026-11-28T10:39:06+00:00 state=fixed resolves=l-tests-r8 -->
+### l-tests-r8-resolved · finding [fixed] · resolves l-tests-r8: A test named for the durable copy asserts nothing about it
+
+Renamed to ..._on_the_live_pr. The durable copy is asserted by test_the_durable_render_lacks_an_off_section.
