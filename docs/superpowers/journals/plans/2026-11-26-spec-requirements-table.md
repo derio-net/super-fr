@@ -340,3 +340,6 @@ Heading only at column 0; a fence inside the list refuses with its own cause and
 ### p1-r7-resolved · finding [fixed] · resolves p1-r7: a fenced block in the list migrated, turning a fenced R2. example into a real row (phase 1)
 
 A fence after the first requirement refuses (9b1fd954c); the pinning test became refusal cases for backtick, tilde and indented fences.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r8 created=2026-11-28T17:56:21+00:00 phase=1 state=open review_scope=in -->
+### p1-r8 · finding [open] (reviewer: in scope) · numbered lists, plus bullets, quotes and nested bullets were flattened into running text (phase 1)
