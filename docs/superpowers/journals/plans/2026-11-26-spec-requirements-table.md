@@ -359,3 +359,8 @@ _part() drops one trailing backslash before joining, in the reader and so in the
 
 <!-- fr:journal kind=finding scope=plan id=p1-r10 created=2026-11-28T17:56:27+00:00 phase=1 state=open review_scope=in -->
 ### p1-r10 · finding [open] (reviewer: in scope) · ListItem docstring and a migration test name described the old behaviour; heading-after-list untested (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=p1-r10-resolved created=2026-11-28T17:56:28+00:00 phase=1 state=fixed resolves=p1-r10 -->
+### p1-r10-resolved · finding [fixed] · resolves p1-r10: ListItem docstring and a migration test name described the old behaviour; heading-after-list untested (phase 1)
+
+Docstrings updated, test renamed, test_a_heading_after_the_last_requirement_keeps_its_text_byte_identical added (9b1fd954c).
