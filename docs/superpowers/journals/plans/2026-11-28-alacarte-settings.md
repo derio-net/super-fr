@@ -364,3 +364,8 @@ Renamed to ..._on_the_live_pr. The durable copy is asserted by test_the_durable_
 ### l-docs-accuracy-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1767] · resolves l-docs-accuracy-r4: 01-fr-goal.md's quiet and stealth passages still describe the settings as a root settings.yaml on origin/fr or the tracking branch
 
 Filed at deliver as https://github.com/derio-net/super-fr/issues/1767.
+
+<!-- fr:journal kind=finding scope=plan id=l-security-r4-resolved-2 created=2026-11-28T10:40:02+00:00 state=open resolves=l-security-r4 tracked_by=https://github.com/derio-net/super-fr/issues/1768 -->
+### l-security-r4-resolved-2 · finding [deferred → https://github.com/derio-net/super-fr/issues/1768] · resolves l-security-r4: The transcript approval stealth relies on can be supplied by any process that sets FR_TRANSCRIPT_ROOT and the session id
+
+Filed at deliver as https://github.com/derio-net/super-fr/issues/1768.
