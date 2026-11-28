@@ -1189,3 +1189,32 @@ def test_a_stamped_spec_with_a_lettered_list_line_is_refused_and_a_lettered_row_
     path = _stamped_spec(tmp_path, "| ID | Requirement |\n|----|----|\n| R9a | a |\n\nR9b. x\n")
     [problem] = validate_spec(path)
     assert problem.startswith(f"line {_line_of(path, 'R9b. x')}: stamped fr_schema 2")
+
+
+def test_a_stamped_spec_with_a_broken_row_inside_the_table_is_refused(tmp_path: Path) -> None:
+    from fr.artifacts.structure import validate_spec
+
+    path = _stamped_spec(
+        tmp_path, "| ID | Requirement |\n|----|----|\n| R1 | a |\n| R2 | b\n| R3 | c |\n"
+    )
+    [problem] = validate_spec(path)
+    assert problem.startswith(f"line {_line_of(path, '| R2 | b')}:")
+    assert "not a whole row" in problem
+
+
+def test_a_stamped_spec_whose_header_has_no_delimiter_row_is_refused(tmp_path: Path) -> None:
+    from fr.artifacts.structure import validate_spec
+
+    path = _stamped_spec(tmp_path, "| ID | Requirement |\n| R1 | a |\n")
+    [problem] = validate_spec(path)
+    assert problem.startswith(f"line {_line_of(path, '| R1 | a |')}:")
+    assert "delimiter row" in problem
+
+
+def test_a_stamped_table_spec_with_r_word_prose_is_valid(tmp_path: Path) -> None:
+    from fr.artifacts.structure import validate_spec
+
+    path = _stamped_spec(
+        tmp_path, "Rationale. see below\n\n| ID | Requirement |\n|----|----|\n| R1 | a |\n"
+    )
+    assert validate_spec(path) == []

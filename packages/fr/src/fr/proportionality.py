@@ -183,8 +183,11 @@ def _phases(repo_root: Path, plan: Plan, phases: list[PhaseHeader]) -> list[str]
             raise RequirementsError("no spec at HEAD")
         spec_rel, spec_text = found
         requirements = parse_requirements(spec_text)
-    except RequirementsError:
-        return ["spec has no Requirements table; asks cannot be counted."]
+    except RequirementsError as e:
+        return [
+            f"spec's Requirements do not parse ({e}); write an `| ID | Requirement |` table "
+            "or an `R<n>.` list; asks cannot be counted."
+        ]
 
     try:
         if quiet_root(repo_root) is not None:

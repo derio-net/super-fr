@@ -112,8 +112,9 @@ def test_a_crlf_spec_keeps_crlf_on_every_line(tmp_path: Path) -> None:
         "| ID | Requirement |\n|----|----|\n| R1 | a \\| b |\n",
         "| id | requirement | source |\n|---|---|---|\n| R1 | a | input |\n",
         "The widget should count.\n",
+        "Rationale. see below\n",
     ],
-    ids=["two-column", "legacy", "prose-only"],
+    ids=["two-column", "legacy", "prose-only", "r-word-prose"],
 )
 def test_a_table_legacy_or_prose_only_section_is_only_stamped(tmp_path: Path, body: str) -> None:
     text = f"# X\n\n## Requirements\n\n{body}\n## Design\n"

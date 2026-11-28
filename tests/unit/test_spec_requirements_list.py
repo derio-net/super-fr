@@ -152,15 +152,45 @@ def test_a_three_cell_row_names_its_line() -> None:
         parse_requirements(spec)
 
 
-def test_a_row_without_outer_pipes_ends_the_table() -> None:
-    spec = TWO_COL_SPEC.replace("| R1 | text a |", "R1 | text a").replace(
-        "| R2 | b `x \\| y` |", "R2 | b"
+@pytest.mark.parametrize("bad", ["| R2 | b", "R2 | b |", "R2 | b"])
+def test_a_line_inside_the_table_that_is_not_a_whole_row_raises(bad: str) -> None:
+    """Review p1-r2 (R2 amended): a broken row no longer ends the table silently."""
+    spec = (
+        "# spec\n\n## Requirements\n\n| ID | Requirement |\n|----|----|\n"
+        f"| R1 | a |\n{bad}\n| R3 | c |\n"
     )
-    assert has_requirements(spec) is False
-    with pytest.raises(RequirementsError, match=r"holds no") as e:
+    with pytest.raises(RequirementsError, match=r"line 8: .*not a whole row"):
         parse_requirements(spec)
-    assert "| ID | Requirement |" in str(e.value)
-    assert "R<n>. <text>" in str(e.value)
+    assert has_requirements(spec), "requirement-shaped but invalid still counts (p1-r1)"
+
+
+def test_the_table_ends_at_a_blank_line_or_a_line_with_no_pipe() -> None:
+    blank = "## Requirements\n\n| ID | Requirement |\n|----|----|\n| R1 | a |\n\nAfter.\n"
+    no_pipe = "## Requirements\n\n| ID | Requirement |\n|----|----|\n| R1 | a |\nAfter.\n"
+    assert _pairs(blank) == [("R1", "a")]
+    assert _pairs(no_pipe) == [("R1", "a")]
+
+
+def test_a_header_without_a_delimiter_row_raises_naming_the_line() -> None:
+    """Review p1-r3: the line after the header was skipped unchecked, losing R1."""
+    spec = "## Requirements\n\n| ID | Requirement |\n| R1 | a |\n| R2 | b |\n"
+    with pytest.raises(RequirementsError, match=r"line 4: .*delimiter row"):
+        parse_requirements(spec)
+
+
+@pytest.mark.parametrize("delim", ["|---|---|", "| :-- | --: |", "|:-:|:---:|", "| - | - |"])
+def test_any_gfm_delimiter_row_is_accepted(delim: str) -> None:
+    spec = f"## Requirements\n\n| ID | Requirement |\n{delim}\n| R1 | a |\n"
+    assert _pairs(spec) == [("R1", "a")]
+
+
+@pytest.mark.parametrize("prose", ["Rationale. see below", "Rather. than this", "- Rationale. x"])
+def test_prose_starting_with_an_r_word_is_not_id_like(prose: str) -> None:
+    """Review p1-r4 (R3 amended): an id-like prefix needs a digit after `R`."""
+    spec = f"## Requirements\n\n{prose}\n"
+    assert has_requirements(spec) is False
+    layout = list_layout(spec)
+    assert layout is not None and layout.items == ()
 
 
 @pytest.mark.parametrize(

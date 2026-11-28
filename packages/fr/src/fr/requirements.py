@@ -81,9 +81,11 @@ _ID_RE = re.compile(rf"^{_ID_PATTERN}$")
 _LIST_ITEM_RE = re.compile(rf"^(?:[-*]\s+)?({_ID_PATTERN})\.\s+(\S.*)$")
 """`R<n>[a-z]. <text>`, optionally behind a Markdown `-`/`*` bullet."""
 _ID_EXPECTED = "expected `R` + a positive integer, optionally + one lowercase letter"
-_ID_LIKE_RE = re.compile(r"^(?:[-*]\s+)?(R\S*)\.\s")
-"""A line that starts like a requirement id (R3): an optional bullet, `R`,
-non-space characters, then `. `. One `_LIST_ITEM_RE` rejects is an error."""
+_ID_LIKE_RE = re.compile(r"^(?:[-*]\s+)?(R[0-9]\S*)\.\s")
+"""A line that starts like a requirement id (R3): an optional bullet, `R` and a
+digit, any non-space characters, then `. `. One `_LIST_ITEM_RE` rejects is an
+error; prose such as `Rationale. ...` is not id-like."""
+_DELIMITER_CELL_RE = re.compile(r"^:?-+:?$")
 
 
 def _locate_section(text: str) -> tuple[list[str], int] | None:
@@ -127,21 +129,53 @@ def _legacy_rows(lines: list[str], first_line_no: int) -> list[tuple[str, str, i
     return rows
 
 
-def _table_body(lines: list[str], first_line_no: int) -> list[tuple[list[str], int]] | None:
-    """A two-column table's rows as `(cells, line)`, or `None` when the section
-    holds no `| ID | Requirement |` header (any case). The rows run from the line
-    after the delimiter row to the first line that is not a row."""
+def _is_delimiter(line: str) -> bool:
+    return _is_row(line) and all(_DELIMITER_CELL_RE.match(c) for c in _split_row(line))
+
+
+def _table_body(
+    lines: list[str], first_line_no: int
+) -> tuple[list[tuple[list[str], int]], list[tuple[int, str]]] | None:
+    """A two-column table's rows as `(cells, line)` and its structural problems
+    as `(line, message)`, or `None` when the section holds no `| ID | Requirement |`
+    header (any case). The header must be followed by a GFM delimiter row; the
+    table ends at a blank line or a line holding no `|`, and any other line in it
+    that is not a whole row (`|` first and last) is a problem (R2)."""
     for idx, line in enumerate(lines):
         if _is_row(line) and [c.lower() for c in _split_row(line)] == _TABLE_HEADER:
             break
     else:
         return None
+    problems: list[tuple[int, str]] = []
+    start = idx + 1
+    if start < len(lines) and _is_delimiter(lines[start]):
+        start += 1
+    else:
+        n = first_line_no + start
+        problems.append(
+            (
+                n,
+                f"line {n}: requirements table header is not followed by a delimiter row "
+                "(|----|----|)",
+            )
+        )
     rows: list[tuple[list[str], int]] = []
-    for offset, line in enumerate(lines[idx + 2 :], start=idx + 2):
-        if not _is_row(line):
+    for offset, line in enumerate(lines[start:], start=start):
+        stripped = line.strip()
+        if not stripped or "|" not in stripped:
             break
-        rows.append((_split_row(line), first_line_no + offset))
-    return rows
+        n = first_line_no + offset
+        if _is_row(line):
+            rows.append((_split_row(line), n))
+        else:
+            problems.append(
+                (
+                    n,
+                    f"line {n}: requirements table line is not a whole row "
+                    "(start and end it with |)",
+                )
+            )
+    return rows, problems
 
 
 def _cell_count_error(cells: list[str], line_no: int) -> str:
@@ -157,10 +191,11 @@ def _table_rows(lines: list[str], first_line_no: int) -> list[tuple[str, str, in
     body = _table_body(lines, first_line_no)
     if body is None:
         return None
-    for cells, line_no in body:
-        if len(cells) != 2:
-            raise RequirementsError(_cell_count_error(cells, line_no))
-    return [(cells[0], cells[1], line_no) for cells, line_no in body]
+    rows, problems = body
+    problems = problems + [(n, _cell_count_error(c, n)) for c, n in rows if len(c) != 2]
+    if problems:
+        raise RequirementsError(min(problems)[1])
+    return [(cells[0], cells[1], line_no) for cells, line_no in rows]
 
 
 @dataclass(frozen=True)
@@ -279,9 +314,11 @@ def table_form_problems(spec_text: str, stamp: int) -> list[str]:
                     "R<n>. list form; write it as an | ID | Requirement | table row",
                 )
             )
-    for cells, line_no in _table_body(lines, first_line_no) or []:
-        if len(cells) != 2:
-            found.append((line_no, _cell_count_error(cells, line_no)))
+    body = _table_body(lines, first_line_no)
+    if body is not None:
+        rows, problems = body
+        found.extend(problems)
+        found.extend((n, _cell_count_error(c, n)) for c, n in rows if len(c) != 2)
     return [message for _, message in sorted(found)]
 
 
@@ -313,8 +350,13 @@ def requirement_order(rid: str) -> tuple[int, str]:
 def has_requirements(spec_text: str) -> bool:
     """Does the spec's `## Requirements` section hold a requirement, in either
     form? A section of prose alone does not — it predates both forms, and
-    phase sizing skips such a spec silently."""
-    return bool(_rows(spec_text))
+    phase sizing skips such a spec silently. A section holding something
+    requirement-shaped but invalid (a malformed id, a broken table row) does:
+    `parse_requirements` then names the defect (review p1-r1)."""
+    try:
+        return bool(_rows(spec_text))
+    except RequirementsError:
+        return True
 
 
 def parse_requirements(spec_text: str) -> Requirements:
