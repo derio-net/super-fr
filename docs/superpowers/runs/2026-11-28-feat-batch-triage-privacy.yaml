@@ -12,7 +12,17 @@ steps:
     emitted:
       spec: docs/superpowers/specs/2026-11-28-triage-privacy-design.md
   spec-review:
-    state: pending
+    state: running
+    at: '2026-11-28T14:29:55+00:00'
+    units:
+      step/spec-review:
+        attempts:
+        - dispatched: '2026-11-28T14:29:55+00:00'
+          agent_type: super-fr:fr-spec-reviewer
+          harness: claude-code
+          tier: hard
+          bound: claude-opus-5-5
+          session: 801d27fb-7199-425c-a6fc-89e3dd21e1b9
   plan:
     state: pending
   plan-review:
