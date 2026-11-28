@@ -110,6 +110,10 @@ rows:
     - spec:2026-11-27-ops-gate-truth#R18
     - spec:2026-11-27-ops-gate-truth#R19
     - spec:2026-11-27-ops-gate-truth#R20
-    levels: {}
-    status: not-implemented
-    notes: ''
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_dod.py#test_the_gate_groups_hold_their_gate_items_discharged_ones_included
+      - super-fr:tests/unit/test_dod_cmd.py#test_an_owed_run_prints_each_group_and_exits_1
+    status: ci
+    notes: 'unit tests with fake ports and fixture repos, run in this PR''s CI (spec
+      Verification: none)'
