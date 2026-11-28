@@ -458,18 +458,29 @@ def test_fr_not_on_path_is_a_warning_repeated_in_the_summary(
     assert "WARNING: tier models not applied: fr is not on PATH" in result.stderr
     tail = _closing_block(result.stdout)
     assert "fr: not on PATH" in tail
+    assert "WARNING: fr is not on PATH after the install" in tail[tail.index("Warnings (") :]
     assert "tier models not applied: fr is not on PATH" in tail[tail.index("Warnings (") :]
 
 
 def test_a_failing_fr_version_is_named_in_the_closing_block(
     home_with_opencode_config: Path,
 ) -> None:
-    (home_with_opencode_config / "bin" / "fr").write_text("#!/bin/sh\nexit 3\n")
+    (home_with_opencode_config / "bin" / "fr").write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "--version" ]; then echo "fr: identity mismatch (simulated)" >&2; exit 3; fi\n'
+        "exit 0\n"
+    )
     (home_with_opencode_config / "bin" / "fr").chmod(0o755)
 
     result = _run_install(home_with_opencode_config)
 
     assert "fr version: unknown (fr --version failed, exit 3)" in result.stdout
+    # Lens l-errors-r2: fr's own reason is kept, as a warning repeated in the summary.
+    tail = _closing_block(result.stdout)
+    assert "No warnings." not in tail
+    summary = tail[tail.index("Warnings (") :]
+    assert "WARNING: fr --version failed (exit 3):" in summary
+    assert "fr: identity mismatch (simulated)" in summary
 
 
 def _leftover_tmps(tmp_root: Path) -> list[str]:

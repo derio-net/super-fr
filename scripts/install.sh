@@ -1257,13 +1257,19 @@ echo ""
 # install left on PATH, then every warning again, so none scrolls away.
 if ! command -v fr &>/dev/null; then
   echo "fr: not on PATH"
+  warn "WARNING: fr is not on PATH after the install; open a new shell, or install it as the warnings above say"
 else
   fr_version_rc=0
-  fr_version_out="$(fr --version 2>/dev/null)" || fr_version_rc=$?
+  fr_version_out="$(fr --version 2>"$FR_INSTALL_STDERR")" || fr_version_rc=$?
   if [ "$fr_version_rc" -eq 0 ]; then
     echo "fr version: $fr_version_out"
   else
     echo "fr version: unknown (fr --version failed, exit $fr_version_rc)"
+    # Its own stderr is usually the reason (an identity or migration refusal): keep it.
+    fr_version_lines=()
+    while IFS= read -r l; do fr_version_lines+=("    $l"); done < <(head -n 12 "$FR_INSTALL_STDERR")
+    warn "WARNING: fr --version failed (exit $fr_version_rc):" \
+      ${fr_version_lines[@]+"${fr_version_lines[@]}"}
   fi
 fi
 if [ -s "$FR_INSTALL_WARNINGS" ]; then

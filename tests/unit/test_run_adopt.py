@@ -1388,6 +1388,26 @@ def test_default_pr_state_warns_with_the_read_failure_line(
     assert calls == [f"warning: could not read the state of PR {pr}: login page: SSO"]
 
 
+class _SoftFailingForge:
+    def pr_status_by_url(self, url: str) -> None:
+        return None  # how every adapter answers an ordinary forge error
+
+
+def test_default_pr_state_warns_when_the_adapter_answers_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Lens l-errors-r1: the adapters fail soft, so `None` is the common unread state."""
+    from fr.forge_body import NO_STATE
+    from fr.run.adopt import default_pr_state
+
+    monkeypatch.setattr("fr.hostclient.client_for", lambda root: _SoftFailingForge())
+    calls: list[str] = []
+    pr = "https://github.com/derio-net/super-fr/pull/3"
+
+    assert default_pr_state(tmp_path, warn=calls.append)(pr) is None
+    assert calls == [f"warning: could not read the state of PR {pr}: {NO_STATE}"]
+
+
 def test_adopt_run_forwards_warn_to_the_default_pr_state(
     tmp_path: Path, repo_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -292,6 +292,20 @@ def test_a_failing_tag_listing_is_named_never_read_as_no_versions(tmp_path: Path
         assert not marker.exists()
 
 
+def test_a_tag_pushed_after_the_fetch_is_skipped_with_a_note(tmp_path: Path) -> None:
+    """Lens l-errors-r3: a tag the remote lists but this clone has not fetched yet is
+    not an unreadable tag. It is skipped, never silently, and the rest install."""
+    origin = _fixture_remote(tmp_path)
+    _git_stub(tmp_path, "rev-parse --verify -q refs/tags/v1.2.0-rc.10", "", code=1)
+    res, _ = _bootstrap(tmp_path, origin, "--version", "9.9.9")
+    assert res.returncode == 1, res.stdout + res.stderr  # 9.9.9 does not exist
+    assert "note: skipped v1.2.0-rc.10: not in this clone yet" in res.stderr
+    assert "rerun to include it" in res.stderr
+    listed = [ln.strip() for ln in res.stderr.splitlines() if ln.strip().startswith("v")]
+    assert listed == ["v1.1.0", "v1.2.0-rc.1", "v1.2.0-rc.2", "v1.2.0-rc.9", "v1.2.0"]
+    assert "could not read" not in res.stderr
+
+
 def test_a_tag_without_an_install_sh_is_skipped_without_a_message(tmp_path: Path) -> None:
     res, _ = _bootstrap(tmp_path, _fixture_remote(tmp_path), "--version", "9.9.9")
     assert "v0.8.0" not in res.stderr

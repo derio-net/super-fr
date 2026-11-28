@@ -794,6 +794,10 @@ def default_pr_state(repo_root: Path, warn: Callable[[str], None] | None = None)
                 warn(read_failure(url, exc))
             return None
         if not info:
+            if warn is not None:
+                from fr.forge_body import NO_STATE, read_failure
+
+                warn(read_failure(url, NO_STATE))
             return None
         state = info.get("state")
         return state if isinstance(state, str) else None

@@ -32,7 +32,12 @@ CONTROL = re.compile("[\x00-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]
 _READ_FAILURE_LIMIT = 300
 
 
-def read_failure(url: str, exc: BaseException) -> str:
+NO_STATE = "the forge returned no state (an error the adapter does not name, or no such PR)"
+"""The reason for a `pr_status_by_url` that answered `None`: most adapters fail soft
+on an ordinary error, so that answer is itself an unread state (lens l-errors-r1)."""
+
+
+def read_failure(url: str, exc: BaseException | str) -> str:
     """The one warning line for a PR whose state could not be read (adopt and push).
 
     The reason is the error's own first line, redacted and with control and bidi
@@ -45,7 +50,8 @@ def read_failure(url: str, exc: BaseException) -> str:
         return CONTROL.sub("?", redact(text))[:_READ_FAILURE_LIMIT]
 
     lines = str(exc).splitlines()
-    reason = clean(lines[0] if lines else type(exc).__name__)
+    fallback = exc if isinstance(exc, str) else type(exc).__name__
+    reason = clean(lines[0] if lines else fallback)
     # The url comes from the run cursor (forge-returned text): same treatment.
     shown = clean(url.splitlines()[0] if url else "")
     return f"warning: could not read the state of PR {shown}: {reason}"

@@ -141,6 +141,12 @@ installable_tags() {
   while IFS= read -r t; do
     [ -n "$t" ] || continue
     rc=0
+    # Listed on the remote but not in this clone: pushed after this run's fetch.
+    # Not an unreadable tag; skipped, but never without a message (R3).
+    if ! git -C "$SRC" rev-parse --verify -q "refs/tags/$t^{commit}" </dev/null >/dev/null; then
+      echo "note: skipped $t: not in this clone yet (pushed after this run's fetch); rerun to include it" >&2
+      continue
+    fi
     listing="$(git -C "$SRC" ls-tree --name-only "refs/tags/$t" -- scripts/install.sh </dev/null 2>"$err_file")" || rc=$?
     if [ "$rc" -eq 0 ] && [ -n "$listing" ]; then
       content="$(git -C "$SRC" show "refs/tags/$t:scripts/install.sh" </dev/null 2>"$err_file")" || rc=$?

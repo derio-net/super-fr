@@ -512,6 +512,31 @@ def test_an_unreadable_recorded_pr_is_named_on_stderr_and_does_not_refuse_the_pu
     assert "orphans the commit" not in result.output
 
 
+def test_a_recorded_pr_the_adapter_answers_none_for_is_named_too(
+    tmp_path: Path, argv: list[list[str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Lens l-errors-r1: an adapter that fails soft answers None; still named."""
+    from fr.forge_body import NO_STATE
+
+    class Forge:
+        def pr_status_by_url(self, url: str) -> None:
+            return None
+
+    monkeypatch.setattr("fr.hostclient.client_for", lambda root: Forge())
+    repo = _feature(make_repo(tmp_path))
+    _seed_run(repo)
+    cursor = repo / "docs" / "superpowers" / "runs" / "r1.yaml"
+    cursor.write_text(cursor.read_text() + "pr: https://example.com/o/r/pull/7\n")
+    git(repo, "commit", "-qam", "chore(fr): run r1 — pr create")
+
+    result = _push(repo)
+
+    assert f"could not read the state of PR https://example.com/o/r/pull/7: {NO_STATE}" in (
+        result.output
+    )
+    assert "orphans the commit" not in result.output
+
+
 def test_squash_composes_through_a_template_that_names_no_type(
     tmp_path: Path, argv: list[list[str]]
 ) -> None:

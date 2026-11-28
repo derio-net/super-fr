@@ -90,7 +90,8 @@ at a release tag installs that tag.
 If `bootstrap.sh` cannot list the release tags, it stops with exit 1 and shows the `git`
 message. If it cannot read `scripts/install.sh` at a tag, it stops with exit 1 and shows the
 tag and the `git` message. It never drops an unreadable tag without a message. It skips a tag
-with no `scripts/install.sh`, or with no channel marker, and shows no message.
+with no `scripts/install.sh`, or with no channel marker, and shows no message. If a tag was
+pushed after the fetch, it skips that tag and shows a note: run it again to include the tag.
 `--version main` lists no tags, so an unreadable tag does not block it.
 
 A channel switch also removes untracked files from the managed checkout, so the
