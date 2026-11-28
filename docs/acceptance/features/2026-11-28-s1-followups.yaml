@@ -20,8 +20,9 @@ rows:
     - spec:2026-11-28-s1-followups#R6
     levels: {}
     status: not-implemented
-    notes: ''
+    notes: scenario tests/scenarios/s1-followups.sh is built in plan phase 4
     verify: candidate
+    scenario: tests/scenarios/s1-followups.sh
   - id: s1-old-settings-copy-retired
     capability: configuration homes
     acceptance: From fr 9.2, under quiet and stealth fr writes and reads only the configuration
