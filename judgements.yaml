@@ -13641,6 +13641,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-28T17:43:08.822002Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-28T17:44:03.204682Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -15018,6 +15033,13 @@ batches:
     patch_id: e6ac19c7d072647a8f1c72c00966571269ad6cac
   - kind: post_merge
     at: '2026-11-28T17:34:04.259655Z'
+  - kind: claims_released
+    at: '2026-11-28T17:44:03.204682Z'
+    keys:
+    - super-fr#1631
+    - super-fr#1632
+    - super-fr#1633
+    - super-fr#1634
 - id: ops-gate-truth
   title: 'Ops gate truth: no stale ops workspace; every gate walks the rows it verifies'
   ids:
@@ -15228,6 +15250,12 @@ batches:
   wave: 27
   after:
   - arch-plan-ops-split
+  events:
+  - kind: dispatch
+    at: '2026-11-28T17:43:20.503219Z'
+    runner: herdr
+    handle: w43:p1
+    branch: feat/batch-arch-plan-ops-record
 - id: tester-gate-walker
   title: An interactive, idempotent fr tester gate walker
   ids:

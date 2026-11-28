@@ -1,14 +1,22 @@
 {
   "schema": 1,
   "batches": {
-    "arch-plan-ops-record": {
+    "arch-triage-ports": {
       "column": "proposed",
-      "column_since": "2026-11-28T13:42:47.572419Z",
-      "column_first_seen": true,
+      "column_since": "2026-11-28T17:44:07.462352Z",
+      "column_first_seen": false,
       "wait": "queue",
-      "wait_since": "2026-11-28T13:42:47.572419Z",
-      "wait_first_seen": true,
-      "intervals": [],
+      "wait_since": "2026-11-28T17:44:07.462352Z",
+      "wait_first_seen": false,
+      "intervals": [
+        {
+          "column": "waiting",
+          "wait": "dependency",
+          "start": "2026-11-28T13:42:47.572419Z",
+          "end": "2026-11-28T17:44:07.462352Z",
+          "first_seen": true
+        }
+      ],
       "truncated": false
     },
     "gitea-ci": {
@@ -49,14 +57,22 @@
       ],
       "truncated": false
     },
-    "arch-triage-ports": {
-      "column": "waiting",
-      "column_since": "2026-11-28T13:42:47.572419Z",
-      "column_first_seen": true,
-      "wait": "dependency",
-      "wait_since": "2026-11-28T13:42:47.572419Z",
-      "wait_first_seen": true,
-      "intervals": [],
+    "arch-plan-ops-record": {
+      "column": "running",
+      "column_since": "2026-11-28T17:44:07.462352Z",
+      "column_first_seen": false,
+      "wait": "agent",
+      "wait_since": "2026-11-28T17:44:07.462352Z",
+      "wait_first_seen": false,
+      "intervals": [
+        {
+          "column": "proposed",
+          "wait": "queue",
+          "start": "2026-11-28T13:42:47.572419Z",
+          "end": "2026-11-28T17:44:07.462352Z",
+          "first_seen": true
+        }
+      ],
       "truncated": false
     },
     "s1-followups": {
@@ -87,66 +103,6 @@
       "wait_since": "2026-11-28T13:42:47.572419Z",
       "wait_first_seen": true,
       "intervals": [],
-      "truncated": false
-    },
-    "triage-privacy": {
-      "column": "needs-reviewer",
-      "column_since": "2026-11-28T17:11:27.853214Z",
-      "column_first_seen": false,
-      "wait": "you",
-      "wait_since": "2026-11-28T17:11:27.853214Z",
-      "wait_first_seen": false,
-      "intervals": [
-        {
-          "column": "proposed",
-          "wait": "queue",
-          "start": "2026-11-28T13:42:47.572419Z",
-          "end": "2026-11-28T14:15:55.466701Z",
-          "first_seen": true
-        },
-        {
-          "column": "running",
-          "wait": "agent",
-          "start": "2026-11-28T14:15:55.466701Z",
-          "end": "2026-11-28T14:23:17.312646Z",
-          "first_seen": false
-        },
-        {
-          "column": "running",
-          "wait": "you",
-          "start": "2026-11-28T14:23:17.312646Z",
-          "end": "2026-11-28T14:27:54.397029Z",
-          "first_seen": false
-        },
-        {
-          "column": "running",
-          "wait": "agent",
-          "start": "2026-11-28T14:27:54.397029Z",
-          "end": "2026-11-28T14:32:15.739846Z",
-          "first_seen": false
-        },
-        {
-          "column": "pr-open",
-          "wait": "agent",
-          "start": "2026-11-28T14:32:15.739846Z",
-          "end": "2026-11-28T16:56:20.372454Z",
-          "first_seen": false
-        },
-        {
-          "column": "pr-open",
-          "wait": "ci",
-          "start": "2026-11-28T16:56:20.372454Z",
-          "end": "2026-11-28T17:06:12.828027Z",
-          "first_seen": false
-        },
-        {
-          "column": "pr-open",
-          "wait": "agent",
-          "start": "2026-11-28T17:06:12.828027Z",
-          "end": "2026-11-28T17:11:27.853214Z",
-          "first_seen": false
-        }
-      ],
       "truncated": false
     },
     "board-session-state": {
@@ -225,6 +181,73 @@
       "wait_since": "2026-11-28T13:42:47.572419Z",
       "wait_first_seen": true,
       "intervals": [],
+      "truncated": false
+    },
+    "triage-privacy": {
+      "column": "closing-out",
+      "column_since": "2026-11-28T17:44:07.462352Z",
+      "column_first_seen": false,
+      "wait": "agent",
+      "wait_since": "2026-11-28T17:44:07.462352Z",
+      "wait_first_seen": false,
+      "intervals": [
+        {
+          "column": "proposed",
+          "wait": "queue",
+          "start": "2026-11-28T13:42:47.572419Z",
+          "end": "2026-11-28T14:15:55.466701Z",
+          "first_seen": true
+        },
+        {
+          "column": "running",
+          "wait": "agent",
+          "start": "2026-11-28T14:15:55.466701Z",
+          "end": "2026-11-28T14:23:17.312646Z",
+          "first_seen": false
+        },
+        {
+          "column": "running",
+          "wait": "you",
+          "start": "2026-11-28T14:23:17.312646Z",
+          "end": "2026-11-28T14:27:54.397029Z",
+          "first_seen": false
+        },
+        {
+          "column": "running",
+          "wait": "agent",
+          "start": "2026-11-28T14:27:54.397029Z",
+          "end": "2026-11-28T14:32:15.739846Z",
+          "first_seen": false
+        },
+        {
+          "column": "pr-open",
+          "wait": "agent",
+          "start": "2026-11-28T14:32:15.739846Z",
+          "end": "2026-11-28T16:56:20.372454Z",
+          "first_seen": false
+        },
+        {
+          "column": "pr-open",
+          "wait": "ci",
+          "start": "2026-11-28T16:56:20.372454Z",
+          "end": "2026-11-28T17:06:12.828027Z",
+          "first_seen": false
+        },
+        {
+          "column": "pr-open",
+          "wait": "agent",
+          "start": "2026-11-28T17:06:12.828027Z",
+          "end": "2026-11-28T17:11:27.853214Z",
+          "first_seen": false
+        },
+        {
+          "column": "needs-reviewer",
+          "wait": "you",
+          "start": "2026-11-28T17:11:27.853214Z",
+          "end": "2026-11-28T17:44:07.462352Z",
+          "first_seen": false
+        }
+      ],
       "truncated": false
     },
     "arch-card-clip": {
