@@ -142,3 +142,8 @@ run_kind: candidate
 
 <!-- fr:journal kind=decision scope=spec id=tier-2026-11-26-spec-requirements-table-p1 created=2026-11-28T09:29:29+00:00 -->
 ### tier-2026-11-26-spec-requirements-table-p1 · decision · hard: the single phase carries the spec 1->2 body-rewrite migration, which every consumer repo runs on upgrade and whose refusal blocks every fr command there
+
+<!-- fr:journal kind=decision scope=spec id=lettered-requirement-ids created=2026-11-28T11:33:38+00:00 -->
+### lettered-requirement-ids · decision · operator: accept R<n><letter> ids (R9a) in reader, migration and validator rather than renumber or archive triage-leaves-split
+
+Phase 1 blocked: the 1->2 rewrite refused docs/superpowers/specs/2026-11-27-triage-leaves-split-design.md:57 (R9a). Asked the operator; answer: Accept R<n><letter> ids (recommended). Spec R1 amended: an id is R<n>, optionally followed by one lowercase letter; R3 refuses an id-like line that is not an R1 id. Consumer repos using the same insert-without-renumbering habit no longer hit a whole-repo refusal.
