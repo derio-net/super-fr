@@ -39,7 +39,7 @@ def test_yaml_booleans_read_as_on_off() -> None:
         ({"forge": {"pr_body": "tiny"}}, "forge.pr_body"),
         ({"git": {"push": "never"}}, "git.push"),
         ({"artifacts": {"gates": "maybe"}}, "artifacts.gates"),
-        ({"schema": 3}, "schema"),
+        ({"schema": 4}, "schema"),
         ({"schema": True}, "schema"),
         ({"schema": "1"}, "schema"),
         ({"artifacts": {"spec": "off"}}, "artifacts.spec"),
@@ -68,3 +68,69 @@ def test_the_vocabularies_are_stated_once() -> None:
     assert model.PLACEMENTS == frozenset({"repo", "quiet", "stealth"})
     assert model.ON_OFF == frozenset({"on", "off"})
     assert model.PLACEHOLDERS == frozenset({"type", "scope", "summary", "issue"})
+
+
+# --- schema 3: workflows.disabled and forge.pr_sections (spec 2026-11-28-alacarte-settings R1, R4)
+
+
+def test_schema_3_reads_workflows_disabled_and_pr_sections() -> None:
+    s = parse_settings(
+        {
+            "schema": 3,
+            "workflows": {"disabled": ["fr-goal-light"]},
+            "forge": {"pr_sections": {"cost": "off"}},
+        },
+        source="t",
+    )
+    assert s.schema_ == 3
+    assert s.workflows.disabled == ["fr-goal-light"]
+    assert s.forge.pr_sections.cost == "off"
+    assert s.forge.pr_sections.proportionality == "on"
+    assert s.forge.pr_sections.settle == "on"
+
+
+def test_the_new_sections_default_to_nothing_disabled_and_every_section_on() -> None:
+    s = parse_settings({}, source="t")
+    assert s.workflows.disabled == []
+    ps = s.forge.pr_sections
+    assert (ps.cost, ps.proportionality, ps.settle) == ("on", "on", "on")
+
+
+@pytest.mark.parametrize("schema", [None, 1, 2])
+@pytest.mark.parametrize(
+    ("data", "key"),
+    [
+        ({"workflows": {}}, "workflows"),
+        ({"workflows": {"disabled": []}}, "workflows"),
+        ({"forge": {"pr_sections": {}}}, "forge.pr_sections"),
+        ({"forge": {"pr_sections": {"cost": "on"}}}, "forge.pr_sections"),
+    ],
+)
+def test_naming_a_schema_3_key_at_all_needs_schema_3(
+    schema: int | None, data: dict[str, Any], key: str
+) -> None:
+    raw = dict(data)
+    if schema is not None:
+        raw["schema"] = schema
+    with pytest.raises(SettingsError) as e:
+        parse_settings(raw, source=".fr/settings.yaml")
+    assert key in str(e.value)
+    assert "schema: 3" in str(e.value)
+
+
+def test_an_unknown_pr_section_is_refused_naming_the_three() -> None:
+    with pytest.raises(SettingsError) as e:
+        parse_settings({"schema": 3, "forge": {"pr_sections": {"findings": "off"}}}, source="t")
+    msg = str(e.value)
+    assert "findings" in msg
+    assert "cost, proportionality, settle" in msg
+
+
+def test_schema_4_is_still_newer_than_this_fr() -> None:
+    with pytest.raises(SettingsError, match="newer than this fr"):
+        parse_settings({"schema": 4}, source="t")
+
+
+def test_a_bare_yaml_off_reads_as_off_in_pr_sections() -> None:
+    s = parse_settings({"schema": 3, "forge": {"pr_sections": {"settle": False}}}, source="t")
+    assert s.forge.pr_sections.settle == "off"

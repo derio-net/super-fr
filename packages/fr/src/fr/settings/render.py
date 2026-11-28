@@ -14,7 +14,7 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
-from fr.settings.model import PLACEHOLDERS, Settings
+from fr.settings.model import PLACEHOLDERS, SCHEMA_VERSION, Settings
 
 _PLAIN = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -22,6 +22,8 @@ _PLAIN = re.compile(r"^[A-Za-z0-9_-]+$")
 def _scalar(value: Any) -> str:
     if value is None:
         return "null"
+    if isinstance(value, list):
+        return "[" + ", ".join(_scalar(v) for v in value) + "]"
     if isinstance(value, int):
         return str(value)
     return str(value) if _PLAIN.match(str(value)) else json.dumps(str(value))
@@ -35,14 +37,15 @@ def _allowed(name: str, field: FieldInfo) -> str | None:
         usable = PLACEHOLDERS if name == "with_issue" else PLACEHOLDERS - {"issue"}
         return "text using " + " ".join(f"{{{p}}}" for p in sorted(usable))
     if name == "schema_":
-        return "1, 2 (2 is needed only by the triage section)"
+        return "1, 2, 3 (2 is needed by the triage section, 3 by workflows and forge.pr_sections)"
     return None
 
 
 def _emit(model: type[BaseModel], instance: BaseModel, depth: int, out: list[str]) -> None:
     pad = "  " * depth
     for name, field in model.model_fields.items():
-        value = getattr(instance, name)
+        # The schema line shows the current schema, so a file uncommented whole still parses.
+        value = SCHEMA_VERSION if name == "schema_" else getattr(instance, name)
         key = field.alias or name
         out.append("##")
         allowed = _allowed(name, field)
