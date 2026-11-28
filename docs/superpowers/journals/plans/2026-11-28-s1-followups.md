@@ -148,3 +148,98 @@ c99c4a13d, 3270370a6, e94edc898: fixtures moved to the new forms, old-form behav
 s1_open / s1_open_subprocess, and `pytest --fr-ended` (tests/conftest.py) runs the suite past the gate.
 The --fr-ended run found 139 red in 23 files; those files then passed on both sides (discovery
 p1-fr-ended-option). CI on 1da6bd65c: all seven test shards green (docs-check red until phase 4).
+
+<!-- fr:journal kind=decision scope=plan id=p2-version-sources created=2026-11-28T16:39:05+00:00 phase=2 -->
+### p2-version-sources · decision · Each reader reads its own release, and an unreadable one is ended (phase 2)
+
+The shell library finds itself through `BASH_SOURCE` (`FR_DECISION_LIB_DIR`) and reads
+`$lib/../../.claude-plugin/plugin.json`'s `"version"` line, else `$lib/../VERSION`, with a
+plain read loop (no parser, no subprocess, so a stripped PATH cannot change the answer);
+no parseable major.minor is ended. marker.ts reads `VERSION` beside the module, and in
+the source tree falls back to `../package.json` only when its `name` is
+`@derio-net/fr-opencode-plugin`: a delivered plugin's parent is OpenCode's config dir,
+whose own package.json must never count. Without that fallback this repo's own OpenCode
+sessions (`.opencode/plugins/fr-isolation-required.ts` re-exports the source tree) would
+read as ended today. `FR_OLD_PATHS=refuse` ends every reader; no value extends one.
+`validate-plans.sh` takes `FR_OLD_PATHS_ENDED` from `fr settings paths --shell`; an
+absent key (no fr, a failing fr, an fr too old to print it) is ended. The key is printed
+only inside a git repo (outside one the output stays `FR_PLACEMENT=none` alone).
+
+<!-- fr:journal kind=decision scope=plan id=p2-old-only-switch-text created=2026-11-28T16:39:05+00:00 phase=2 -->
+### p2-old-only-switch-text · decision · Past the end an old-only switch reads as a fail-closed text, whatever it says (phase 2)
+
+R8 says an old-only quiet switch stays fr-enabled and is never a write target. Both
+engines return the text `placement: only the old switch` without reading the old blob,
+which `_fr_switch_enabled` / `switchEnabled` call fr-enabled and never canonical quiet.
+So an old-only switch saying `placement: repo` is ALSO fr-enabled past the end (new
+shared case `old-only-repo`): the Python side refuses an old-only switch whatever it
+says (R4), and the gate fails closed to match rather than read a file the transition
+has stopped trusting. When the new switch exists the old one is ignored (no differing
+state, no note).
+
+<!-- fr:journal kind=decision scope=plan id=p2-side-forced-hook-tests created=2026-11-28T16:39:05+00:00 phase=2 -->
+### p2-side-forced-hook-tests · decision · Hook and plugin tests pin a side by the version source they read (phase 2)
+
+`tests/unit/hooks_tree.py` copies the shipped hook tree under a chosen layout (`claude`
+with a plugin.json, `hermes` with VERSION, `none`) and version; `open_hooks()` is one
+process-wide 9.1.0 copy, `side_env()` drops an inherited `FR_OLD_PATHS`. The old-form
+modules (test_isolation_decision_core, test_hooks_isolation_required,
+test_hermes_isolation_hook_edits) drive the 9.1.0 copy and drop `FR_OLD_PATHS` in an
+autouse fixture, so they pass with and without `--fr-ended` and will not turn red when
+plugin.json moves to 9.2. The shared switch cases carry an `ended` answer each and run
+on both sides in both engines. The bun suite preloads `test/setup.ts`
+(`bunfig.toml`), which points marker.ts at a 9.1.0 VERSION via `setVersionDir`; the
+transition tests point it at their own fixtures.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-docs-for-phase-4 created=2026-11-28T16:39:05+00:00 phase=2 -->
+### p2-docs-for-phase-4 · discovery · Pages and rules that describe the old forms without "before fr 9.2" (phase 4) (phase 2)
+
+Still true today, false once fr is 9.2: `plugins/super-fr/rules/fr-isolation-required.md`
+(step 5 and the Escapes list: `.fr-isolation-allow` read while `.fr/isolation-allow` is
+absent) and its manual mirror `.claude/rules/fr-isolation-required.md`;
+`docs/explainers/fr-isolation.md`, `docs/reference/hermes.md`,
+`docs/reference/dispatch-lifecycle.md` and `docs/explainers/01-fr-goal.md` name the old
+allowlist, `fr settings sync` or the validator. `docs/reference/hermes.md` could also
+name the `VERSION` file `fr hermes install` now writes. Left for phase 4's docs pass.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-gate-literal-test-order created=2026-11-28T16:39:05+00:00 phase=2 -->
+### p2-gate-literal-test-order · discovery · The R9 literal-agreement test was written after the literals, so it passed first time (phase 2)
+
+P2.T4.S1's `test_the_gate_literals_agree` and `test_the_gate_is_the_minor_after_s1s_release`
+were written after Tasks 2 and 3 had added `FR_REFUSE_FROM=9.2` and `REFUSE_FROM = [9, 2]`,
+so they were never seen red; the validator tests of the same step were (3 failed before
+GREEN). The literal regexes require each value exactly once with its `fr-refuse-from`
+tag, so a drift or a second copy fails them.
+
+<!-- fr:journal kind=discovery scope=plan id=p2-fast-tier-legacy-validator-tests created=2026-11-28T16:39:05+00:00 phase=2 -->
+### p2-fast-tier-legacy-validator-tests · discovery · The fast tier caught three open-side validator tests that relied on "no fr reads the old file" (phase 2)
+
+`uv run pytest --fr-scope origin/main -n 6 -q --no-cov` (1:26:04 on a host at load ~100):
+3 failed, 20149 passed, 130 skipped. The three were
+tests/unit/test_config_legacy_paths.py's `test_validate_plans_reads_the_old_plan_config_with_a_notice`
+and `test_validate_plans_ignores_the_old_plan_config_under_quiet_and_stealth[quiet|stealth]`:
+with no fr, or a stub fr that printed no `FR_OLD_PATHS_ENDED`, the validator now counts
+the transition as ended (R7). They now give the validator a stub fr printing
+`FR_OLD_PATHS_ENDED=0`, the validator's own version source, so they stay on the open
+side whatever fr's version; the module passes with and without `--fr-ended`. The other
+v-r2 tests there (no fr beside a configuration branch) hold on both sides unchanged.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t1 created=2026-11-28T16:39:05+00:00 phase=2 -->
+### no-refactor-p2-t1 · discovery · no-refactor-because P2.T1 (phase 2)
+
+three one-line additions (a key in paths_answers, a VERSION write after the copytree, a jq line in the delivery script); nothing to simplify
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t2 created=2026-11-28T16:39:05+00:00 phase=2 -->
+### no-refactor-p2-t2 · discovery · no-refactor-because P2.T2 (phase 2)
+
+the end is one new function beside the switch locations and three guarded branches in the readers it changes; the old-form tests moved to a shared 9.1.0 hook-tree helper rather than gaining per-module copies
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t3 created=2026-11-28T16:39:05+00:00 phase=2 -->
+### no-refactor-p2-t3 · discovery · no-refactor-because P2.T3 (phase 2)
+
+marker.ts mirrors the shell library one-for-one (same guard points, same fail-closed text); nothing further to clean
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p2-t4 created=2026-11-28T16:39:05+00:00 phase=2 -->
+### no-refactor-p2-t4 · discovery · no-refactor-because P2.T4 (phase 2)
+
+the validator change is one key read and one branch; restructured the branch once in GREEN (an if around the old case) instead of overloading FR_PLACEMENT_SEEN
