@@ -1139,6 +1139,8 @@ def _record_outcome(
             flag[0], flag[1], text]  # fmt: skip
     if walker is not None:
         argv += ["--harness", walker[0], "--model", walker[1]]
+    if how == "ran":  # R12: a walk it writes counts owed harnesses over head-free walks
+        argv += ["--pr-head", gate.pinned_head()]
     if kind is not None:  # an outcome the PR carries, or an owed one: record over it
         argv.append("--supersede")
     code, out = tree.fr(argv)
@@ -1227,7 +1229,7 @@ def stage_5(gate: Gate) -> None:
             gate.trust(tree)
             probed = True
         _probe_step(gate, tree, step, kind)
-    asked = _ask_rows(gate, tree, at_head)
+    asked = _ask_rows(gate, tree)
     body = "devops Test Plan steps recorded"
     gate.finish(tree, 5, body + (f"; rows {', '.join(asked)} answered" if asked else ""))
 
@@ -1241,86 +1243,111 @@ def _feature(run: RunState) -> str | None:
     return fragment_slug_for_spec(spec) if spec else None
 
 
-def head_walks(tree: OpsTree, head: str, feature: str | None) -> dict[str, set[Walk]]:
-    """Row id -> the walks the PR head's own fragment of *feature* carries, on its rows
-    and in its amendments: PR-controlled, so none of them walks a row inside the stage
-    (ops-gate-truth R12). Unreadable is a refusal, never an empty exclusion."""
-    from fr.acceptance.fragment import FRAGMENTS_DIR, SetStatus, parse_fragment
+def head_walks(tree: OpsTree, head: str) -> dict[str, set[Walk]]:
+    """Row id -> the walks the PR head carries, read from every acceptance fragment there,
+    since a row citing the spec may live in another feature's fragment: PR-controlled, so
+    none of them walks a row inside the stage (ops-gate-truth R12). An unreadable fragment
+    is a refusal, never an empty exclusion."""
+    from fr.acceptance.fragment import FRAGMENTS_DIR
     from fr.acceptance.model import AcceptanceError
+    from fr.acceptance.walks import fragment_walks
 
-    if feature is None:
-        return {}
-    rel = (FRAGMENTS_DIR / f"{feature}.yaml").as_posix()
-    text = tree.show(head, rel)
-    if not text:
-        return {}
+    texts: list[tuple[str, str]] = []
+    for path in sorted((tree.path / FRAGMENTS_DIR).glob("*.yaml")):
+        rel = (FRAGMENTS_DIR / path.name).as_posix()
+        text = tree.show(head, rel)
+        if text:
+            texts.append((rel, text))
     try:
-        fragment = parse_fragment(text, source=rel)
+        return fragment_walks(texts)
     except AcceptanceError as exc:
         raise StageFailed(
-            f"the PR head's fragment {rel} cannot be read ({exc}); its walks cannot be told "
-            "apart from the ops branch's own",
+            f"the PR head's acceptance fragments cannot be read ({exc}); their walks cannot "
+            "be told apart from the ops branch's own",
             code=2,
         ) from exc
-    out: dict[str, set[Walk]] = {}
-    for r in fragment.rows:
-        out.setdefault(r.id, set()).update(r.walks)
-    for a in fragment.amendments:
-        if isinstance(a, SetStatus) and a.walk is not None:
-            out.setdefault(a.row, set()).add(a.walk)
-    return out
 
 
 def _gate_exit(tree: OpsTree, run: RunState) -> Exit:
     from fr.acceptance.model import AcceptanceError
+    from fr.settings import SettingsError
     from fr.verification.exit import run_exit
     from fr.verification.spec_section import SectionError
 
     try:
         return run_exit(tree.path, run)
-    except (AcceptanceError, SectionError, OSError) as exc:
+    except (AcceptanceError, SectionError, SettingsError, OSError) as exc:
         raise StageFailed(f"the run's exit cannot be read: {exc}") from exc
 
 
-def row_walk_argv(run: RunState, row: Row, strategy: str, evidence: str) -> list[str]:
-    """`fr acceptance set-status --walk` recording an operator's walk of *row* in the
-    DevOps stage (ops-gate-truth R13): `walked` when it makes the row walk-verified,
-    else its current status."""
+def row_walk_argv(
+    run: RunState,
+    row: Row,
+    strategy: str,
+    evidence: str,
+    *,
+    walks: Sequence[Walk] | None = None,
+    harness: str = "operator",
+    model: str = "human",
+) -> list[str]:
+    """`fr acceptance set-status --walk` recording a walk of *row* on *harness* in the
+    DevOps stage (ops-gate-truth R13): `walked` when no other harness is still owed over
+    *walks* (the head-free walks, R12), else its current status."""
     from fr.acceptance.walks import owed_harnesses
 
-    status = row.status if set(owed_harnesses(row)) - {"operator"} else "walked"
+    status = row.status if set(owed_harnesses(row, walks)) - {harness} else "walked"
     return ["acceptance", "set-status", "--id", row.id, "--status", status, "--walk", evidence,
-            "--harness", "operator", "--model", "human", "--strategy", strategy,
+            "--harness", harness, "--model", model, "--strategy", strategy,
             "--notes", f"walked in the DevOps stage of run {run.run}",
             "--feature", _feature(run) or ""]  # fmt: skip
 
 
-def _ask_rows(gate: Gate, tree: OpsTree, at_head: set[str]) -> list[str]:
-    """R13: each devops row not walked (head walks excluded, R12) that no `ran` devops
-    step names is asked about: `ran <evidence>` walks it, `owed <why>` sets `walk-owed`.
-    Returns the rows asked about."""
-    from fr.acceptance.walks import row_walked
-    from fr.ops.holds import gated_rows, ran_steps
+def recovery_argvs(
+    run: RunState, row: Row, strategy: str, walks: Sequence[Walk]
+) -> list[list[str]]:
+    """R14: the walk commands that discharge *row*, one per harness it still owes over
+    the head-free *walks*; the last one moves it to `walked`."""
+    from fr.acceptance.walks import owed_harnesses
+
+    owed = owed_harnesses(row, walks) if row.harnesses else ["operator"]
+    out: list[list[str]] = []
+    for i, h in enumerate(owed):
+        later = owed[i + 1 :]
+        argv = row_walk_argv(run, row, strategy, "<what it showed>", walks=walks, harness=h,
+                             model="human" if h == "operator" else "<model>")  # fmt: skip
+        if later:  # an earlier command keeps the status: the later harnesses still owe it
+            argv[argv.index("--status") + 1] = row.status
+        out.append(argv)
+    return out
+
+
+def _ask_rows(gate: Gate, tree: OpsTree) -> list[str]:
+    """R13: each devops row that is not walked, judged head-free (R12), is asked about
+    after the steps; a walk this stage's own `fr closeout outcome` wrote has already
+    discharged it when it is walked. `ran <evidence>` walks it, `owed <why>` sets
+    `walk-owed`. Returns the rows asked about."""
+    from fr.acceptance.walks import head_free_walks, row_walked
+    from fr.ops.holds import gated_rows
 
     t = gate.target
     rows = gated_rows(tree.path, _gate_exit(tree, t.run), "devops")
     if not rows:
         return []
-    head = head_walks(tree, gate.pinned_head(), _feature(t.run))
-    named = {rid for s in ran_steps(tree.path, t.run, "devops", exclude=at_head) for rid in s.rows}
+    head = head_walks(tree, gate.pinned_head())
     asked: list[str] = []
     for r, strategy in rows:
-        if r.id in named or row_walked(r, exclude=head.get(r.id, set())):
+        skip = head.get(r.id, set())
+        if row_walked(r, skip):
             continue
         how, text = _ask_outcome(
             gate,
             f"Acceptance row {r.id} (devops): {r.acceptance}\n"
-            "No devops step that ran walks it. Walk it, then answer `ran <evidence>` or "
-            "`owed <why>`:",
+            "No walk this stage recorded discharges it. Walk it, then answer "
+            "`ran <evidence>` or `owed <why>`:",
             ("ran", "owed"),
         )
         if how == "ran":
-            argv = row_walk_argv(t.run, r, strategy, text)
+            argv = row_walk_argv(t.run, r, strategy, text, walks=head_free_walks(r, skip))
         else:
             argv = ["acceptance", "set-status", "--id", r.id, "--status", "walk-owed",
                     "--notes", text, "--feature", _feature(t.run) or ""]  # fmt: skip
@@ -1354,7 +1381,12 @@ def stage_6(gate: Gate) -> None:
     if _pass_labelled(gate.refreshed()):
         _existing_pass(gate, tree)
         return
-    _say_owed(gate, tree, "devops")
+    if owed_now := _say_owed(gate, tree, "devops"):  # R14: never a pass on head-only evidence
+        raise StageFailed(
+            f"the devops gate of run {t.run.run} still owes, with the PR head's own walks and "
+            f"outcomes excluded ({'; '.join(i.line for i in owed_now)}); `fr gate pass` was "
+            "not run" + _recovery(gate, tree)
+        )
     notes = f"DevOps stage of run {t.run.run}: ops and devops steps recorded on {t.ops_branch}"
     owed = tester_steps(gate, tree)
     if owed:
@@ -1373,31 +1405,39 @@ def stage_6(gate: Gate) -> None:
 def _owed_items(gate: Gate, tree: OpsTree, gate_name: StepGate) -> list[GateItem]:
     """What *gate_name* still owes in the ops workspace (`gate_items`), the PR head's own
     outcomes and walks excluded (R12)."""
+    from fr.acceptance.model import AcceptanceError
     from fr.ops.holds import gate_items
     from fr.ops.load import OpsLoadError
+    from fr.settings import SettingsError
+    from fr.spec import TestPlanHeadingError
+    from fr.verification.spec_section import SectionError
 
     t = gate.target
     head = gate.pinned_head()
     spec_slug = _spec_slug(t.run)
     at_head = head_entry_ids(tree, head, "spec", spec_slug) if spec_slug else set()
+    excluded = head_walks(tree, head)
     try:
-        items = gate_items(tree.path, t.run, gate_name,
-                           exclude_walks=head_walks(tree, head, _feature(t.run)),
+        items = gate_items(tree.path, t.run, gate_name, exclude_walks=excluded,
                            exclude_outcomes=at_head)  # fmt: skip
     except OpsLoadError as exc:
         raise StageFailed(f"the plan's ops cannot be read: {exc}") from exc
-    except OSError as exc:
+    except TestPlanHeadingError as exc:
+        raise StageFailed(str(exc)) from exc
+    except (AcceptanceError, SectionError, SettingsError, OSError) as exc:  # p2-r4
         raise StageFailed(f"the run's exit cannot be read: {exc}") from exc
     return [i for i in items if not i.discharged]
 
 
-def _say_owed(gate: Gate, tree: OpsTree, gate_name: StepGate) -> None:
-    """R14: before the pass, what the gate still owes by `gate_blockers`."""
+def _say_owed(gate: Gate, tree: OpsTree, gate_name: StepGate) -> list[GateItem]:
+    """R14: before the pass, what the gate still owes by `gate_blockers`, judged
+    head-free (R12); the owed items."""
     owed = _owed_items(gate, tree, gate_name)
     if owed:
         gate.say(f"stage 6: the {gate_name} gate still owes:")
         for item in owed:
             gate.say(f"  {item.line}")
+    return owed
 
 
 def _existing_pass(gate: Gate, tree: OpsTree) -> None:
@@ -1423,15 +1463,17 @@ def _existing_pass(gate: Gate, tree: OpsTree) -> None:
 def _recovery(gate: Gate, tree: OpsTree) -> str:
     """p4-r3: for each devops step that is not closed, the command that records it in the
     ops workspace; a rerun then retries the gate pass."""
-    from fr.acceptance.walks import row_walked
+    from fr.acceptance.walks import head_free_walks, row_walked
     from fr.ops.holds import gated_rows, gated_steps
 
     t = gate.target
     open_steps = [
         (s, kind) for s, kind in gated_steps(tree.path, t.run, "devops") if kind != "discovery"
     ]
-    rows = [(r, k) for r, k in gated_rows(tree.path, _gate_exit(tree, t.run), "devops")
-            if not row_walked(r)]  # fmt: skip
+    head = head_walks(tree, gate.pinned_head())
+    rows = [(r, k, head_free_walks(r, head.get(r.id, set())))
+            for r, k in gated_rows(tree.path, _gate_exit(tree, t.run), "devops")
+            if not row_walked(r, head.get(r.id, set()))]  # fmt: skip
     if not open_steps and not rows:
         return ""
     exec_ = f"  fr isolation exec --repo {t.primary} --branch {t.ops_branch} -- fr "
@@ -1442,8 +1484,8 @@ def _recovery(gate: Gate, tree: OpsTree) -> str:
         "'<what it showed>'" + (" --supersede" if kind is not None else "")
         for s, kind in open_steps
     ]
-    # R14: each unwalked devops row, by the command stage 5 itself runs
-    lines += [exec_ + shlex.join(row_walk_argv(t.run, r, k, "<what it showed>")) for r, k in rows]
+    # R14: each unwalked devops row, one command per harness it still owes (head-free)
+    lines += [exec_ + shlex.join(a) for r, k, w in rows for a in recovery_argvs(t.run, r, k, w)]
     return (
         "; record each devops step that is not closed (or `--na --reason …`) and walk each "
         "devops row that is not walked, then re-run `fr ops gate`:\n" + "\n".join(lines)
@@ -1479,7 +1521,8 @@ def stage_7(gate: Gate) -> None:
             "the Tester gate"
         )
         code, out = tree.fr(["gate", "pass", "--repo", t.repo, "--pr", str(t.pr), "--gate",
-                             "tester", "--notes", notes, "--yes"])  # fmt: skip
+                             "tester", "--run", t.run.run, "--notes", notes,
+                             "--yes"])  # fmt: skip
         if out.strip():
             gate.say(out.rstrip())
         if code != 0:
