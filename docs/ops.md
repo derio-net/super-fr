@@ -221,9 +221,9 @@ fr init scaffold --profile <name> --purpose "<line>" --ops --force   # an existi
 
 A run whose plan carries any op (or whose spec declares `gate: devops`) is held by
 `gate:devops` before merge as well as after it. `fr pickup --run <id>` prints a DevOps
-brief for it. When the stage record on the host holds all 8 stages, the brief says that the
-stage is complete and names `fr isolation down --branch <branch>` only when the run's
-Definition of Done (`fr run dod <run-id>`) is discharged. Otherwise it names each item still
+brief for it. The stage record on the host can hold all 8 stages. Then, if the run's
+Definition of Done (`fr run dod <run-id>`) is discharged, the brief says that the stage is
+complete and names `fr isolation down --branch <branch>`. If not, it names each item still
 owed. The brief's one command is:
 
 ```bash
