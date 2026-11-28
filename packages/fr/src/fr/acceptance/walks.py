@@ -10,13 +10,24 @@ fr only prints the commands that close such an issue; it never closes one.
 
 from __future__ import annotations
 
+from collections.abc import Collection, Iterable, Sequence
 from pathlib import Path
 
-from fr.acceptance.model import Matrix, Row
+from fr.acceptance.model import Matrix, Row, Walk
 from fr.artifacts.paths import KIND_DIRS
 from fr.labels import FR_AWAITING_LIVE
 
-__all__ = ["AWAITING_LIVE_LABEL", "holds_open", "issues_now_closable", "walk_verified"]
+__all__ = [
+    "AWAITING_LIVE_LABEL",
+    "close_commands",
+    "holds_open",
+    "issues_now_closable",
+    "fragment_walks",
+    "head_free_walks",
+    "owed_harnesses",
+    "row_walked",
+    "walk_verified",
+]
 
 AWAITING_LIVE_LABEL = FR_AWAITING_LIVE.name
 """The label an issue carries while a post-merge row citing it waits for its
@@ -30,6 +41,67 @@ def walk_verified(row: Row) -> bool:
     if row.harnesses:
         return all(h in passing for h in row.harnesses)
     return bool(passing)
+
+
+def owed_harnesses(row: Row, walks: Sequence[Walk] | None = None) -> list[str]:
+    """The harnesses *row* names whose latest walk in *walks* (default: the row's own)
+    did not pass, or that have none, in the row's order (ops-gate-truth R9, R10, R12)."""
+    pool = list(row.walks if walks is None else walks)
+    owed = []
+    for h in row.harnesses:
+        on = [w for w in pool if w.harness == h]
+        if not on or _latest(on).outcome != "pass":
+            owed.append(h)
+    return owed
+
+
+def _latest(walks: list[Walk]) -> Walk:
+    """The latest walk by `at`; a tie goes to the later one in the list (p2-r9)."""
+    return max(enumerate(walks), key=lambda iw: (iw[1].at, iw[0]))[1]
+
+
+def row_walked(row: Row, exclude_walks: Collection[Walk] | None = None) -> bool:
+    """The one rule for a walked row (spec 2026-11-27-ops-gate-truth R10): its status
+    is `walked` and its latest walk (by `at`, ties to the later one) passed.
+
+    With *exclude_walks* (R12, the DevOps stage's head-free judgement: the walks the
+    pinned PR head carries) the status never counts, since the head may have written it:
+    the row is walked only when every harness it owes has a latest passing walk among the
+    walks that remain (any one harness when it names none)."""
+    if exclude_walks is None:
+        return (
+            row.status == "walked"
+            and bool(row.walks)
+            and _latest(list(row.walks)).outcome == "pass"
+        )
+    walks = [w for w in row.walks if w not in exclude_walks]
+    if not walks:
+        return False
+    if not row.harnesses:
+        return _latest(walks).outcome == "pass"
+    return not owed_harnesses(row, walks)
+
+
+def head_free_walks(row: Row, exclude_walks: Collection[Walk]) -> list[Walk]:
+    """*row*'s walks with *exclude_walks* (the PR head's) taken out (R12)."""
+    return [w for w in row.walks if w not in exclude_walks]
+
+
+def fragment_walks(texts: Iterable[tuple[str, str]]) -> dict[str, set[Walk]]:
+    """Row id -> every walk the fragments in *texts* (`(path, text)`) carry, on their rows
+    and in their set-status amendments: what the DevOps stage excludes as PR-carried
+    (R12). An unreadable fragment raises `AcceptanceError` naming its path."""
+    from fr.acceptance.fragment import SetStatus, parse_fragment
+
+    out: dict[str, set[Walk]] = {}
+    for rel, text in texts:
+        fragment = parse_fragment(text, source=rel)
+        for r in fragment.rows:
+            out.setdefault(r.id, set()).update(r.walks)
+        for a in fragment.amendments:
+            if isinstance(a, SetStatus) and a.walk is not None:
+                out.setdefault(a.row, set()).add(a.walk)
+    return out
 
 
 def _spec_of(row: Row, repo_root: Path) -> str | None:
@@ -76,3 +148,32 @@ def issues_now_closable(matrix: Matrix, before: Row, after: Row, repo_root: Path
             r.id != after.id and issue in r.issues and holds_open(r, repo_root) for r in matrix.rows
         )
     ]
+
+
+def close_commands(root: Path, before: Row) -> list[str]:
+    """The lines naming each issue the latest walk on *before*'s row freed (R16), with
+    the forge's close and unlabel commands; empty when forge issues are off
+    (`forge.issues: off` or `tracking: none`). Reads the effective matrix in *root*
+    after the write. fr never closes the issues (ops-gate-truth R9: one printer for
+    `set-status --walk` and `closeout outcome`)."""
+    from fr.acceptance.fold import load_effective
+    from fr.hostclient import issue_command
+    from fr.settings import forge_allows
+
+    matrix = load_effective(root)
+    after = next((r for r in matrix.rows if r.id == before.id), None)
+    if after is None or not after.walks:
+        return []
+    freed = issues_now_closable(matrix, before, after, root)
+    if not freed or not forge_allows(root, "issues", lenient=True):
+        return []
+    w = after.walks[-1]
+    comment = f"Walk-verified ({w.strategy}, {w.harness}, {w.model}): {w.evidence}"
+    lines: list[str] = []
+    for ref in freed:
+        lines.append(f"{ref}: every row citing it is walk-verified — close it:")
+        lines.append("  " + issue_command(root, "issue-close", ref=ref, comment=comment))
+        lines.append(
+            "  " + issue_command(root, "issue-unlabel", ref=ref, label=AWAITING_LIVE_LABEL)
+        )
+    return lines

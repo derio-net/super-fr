@@ -249,9 +249,46 @@ def test_an_unknown_run_is_refused(repo: Path, forge: Any) -> None:
     assert res.exit_code == 2 and "nope" in res.output
 
 
-def test_the_tester_gate_behaves_as_today(repo: Path, forge: Any) -> None:
+def test_the_tester_pass_refuses_naming_an_unrecorded_tester_step(repo: Path, forge: Any) -> None:
+    """ops-gate-truth R11: `--gate tester` refuses on `gate_blockers` for the run."""
     forge(["gate:tester"])
     res = _pass("--gate", "tester", "--run", "run-1")
+    assert res.exit_code == 2, res.output
+    assert "step 2" in res.output and "click the page" in res.output
+
+
+def _tester_row(root: Path, **extra: object) -> None:
+    text = (
+        (root / SPEC)
+        .read_text()
+        .replace("gate: developer\n", "gate: developer\n- r1: live — the tester walks it\n")
+    )
+    (root / SPEC).write_text(text)
+    write_matrix(root, [{**row(SPEC, rid="r1", status="walk-owed"), **extra}])
+
+
+def test_the_tester_pass_refuses_naming_an_unwalked_tester_row(repo: Path, forge: Any) -> None:
+    _tester_row(repo)
+    _outcome(repo, 2)
+    forge(["gate:tester"])
+    res = _pass("--gate", "tester", "--run", "run-1")
+    assert res.exit_code == 2, res.output
+    assert "row r1 (tester)" in res.output and "step 2" not in res.output
+
+
+def test_the_tester_pass_passes_once_its_rows_and_steps_are_closed(repo: Path, forge: Any) -> None:
+    walk = {"strategy": "live", "harness": "a", "model": "m", "outcome": "pass",
+            "at": "2026-11-27T10:00:00Z", "evidence": "e"}  # fmt: skip
+    _tester_row(repo, status="walked", walks=[walk])
+    _outcome(repo, 2)
+    forge(["gate:tester"])
+    res = _pass("--gate", "tester", "--run", "run-1")
+    assert res.exit_code == 0, res.output
+
+
+def test_the_tester_pass_with_no_run_behaves_as_today(repo: Path, forge: Any) -> None:
+    forge(["gate:tester"], head_ref="feat/other")
+    res = _pass("--gate", "tester")
     assert res.exit_code == 0, res.output
 
 
@@ -280,3 +317,19 @@ def test_a_near_miss_test_plan_heading_is_a_refusal_not_a_traceback(repo: Path, 
     assert res.exit_code == 2, res.output
     assert res.exception is None or isinstance(res.exception, SystemExit)
     assert 'rename it to "## Test Plan"' in " ".join(res.output.split())
+
+
+def test_l_errors_r6_an_unreadable_setting_is_a_refusal_not_a_traceback(
+    repo: Path, forge: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.settings import SettingsError
+
+    forge(["gate:devops"])
+
+    def broken(root: Path, feature: str) -> bool:
+        raise SettingsError(".fr/settings.yaml: not a mapping")
+
+    monkeypatch.setattr("fr.settings.disabled", broken)
+    res = _pass("--gate", "devops", "--run", "run-1")
+    assert res.exit_code == 2, res.output
+    assert "its exit cannot be read" in res.output and "not a mapping" in res.output

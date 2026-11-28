@@ -6,7 +6,7 @@ standalone_style: broadsheet
 covers:
   - packages/fr/src/fr/acceptance/**
   - packages/fr/src/fr/commands/acceptance_cmd.py
-reviewed: 2026-11-25 still true; the `local` status refusals now name `.fr/profiles.yaml` (S1 R9); 2026-11-25 the scaffolded GitLab debt job logs glab in before its fr commands (gh#1691); 2026-11-19 the scaffolded Gitea matrix job keeps no checkout token (batch consumer-followups, gh#1553); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-18 scaffolded CI pins every action and fr by commit, the stale-pin warning, per-forge debt credentials (consumer-delivery); 2026-11-17 an origin-only reword keeps the row's statement, and the -design fragment repair (gh#1439, gh#1461); 2026-11-15 deliver refuses a stale fresh log and stamps a merged local row by amendment (gh#1454, gh#1462)
+reviewed: 2026-11-28 a walked row needs a passing latest walk; `fr closeout outcome` walks the rows a step names; the close commands come from one place (ops-gate-truth R9, R10); 2026-11-25 still true; the `local` status refusals now name `.fr/profiles.yaml` (S1 R9); 2026-11-25 the scaffolded GitLab debt job logs glab in before its fr commands (gh#1691); 2026-11-19 the scaffolded Gitea matrix job keeps no checkout token (batch consumer-followups, gh#1553); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-18 scaffolded CI pins every action and fr by commit, the stale-pin warning, per-forge debt credentials (consumer-delivery); 2026-11-17 an origin-only reword keeps the row's statement, and the -design fragment repair (gh#1439, gh#1461); 2026-11-15 deliver refuses a stale fresh log and stamps a merged local row by amendment (gh#1454, gh#1462)
 ---
 
 # The acceptance matrix
@@ -107,6 +107,15 @@ nag say "disabled by repo setting" and report no debt.
 | `walk-owed` | A live or post-merge walk is still owed. Debt. |
 | `not-implemented` | Nothing exists yet. Debt. |
 | `failing` | Known red. Fails CI on purpose until fixed or reclassified with a reason. |
+
+A gate counts a row as walked only when its status is `walked` and its latest walk passed.
+The latest walk is the walk with the latest `at`. If a later walk failed, the row is not
+walked, and the gate stays held.
+
+A Test Plan step can name the rows it proves: `(rows: <id>, …)`. When you record the step
+with `fr closeout outcome --ran`, fr also adds a passing walk to each row that the step
+names, in the same commit. When that walk frees an issue, the command prints the close
+commands, the same as `set-status --walk`.
 
 ### The `local` status
 

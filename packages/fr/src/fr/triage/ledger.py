@@ -23,6 +23,7 @@ from pathlib import Path
 
 import yaml
 
+from fr.acceptance.walks import row_walked
 from fr.artifacts.paths import KIND_DIRS, LEGACY_CONFIG
 from fr.config.space import SPACE_DIR
 from fr.triage.batch_drive import RUNS_DIR, find_run
@@ -205,7 +206,7 @@ def gated_rows_at(
         for r in exit_.rows
     )
     rows = tuple(
-        GatedRow(r.id, exit_.row_gates[r.id], r.status == "walked", tuple(r.issues))
+        GatedRow(r.id, exit_.row_gates[r.id], row_walked(r), tuple(r.issues))
         for r in exit_.gated_rows
     )
     return LedgerRead(rows, exit_.run_gate, inherited, exit_.ops_promoted)

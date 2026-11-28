@@ -42,6 +42,16 @@ def _prompt() -> Any:
     return TtyPrompt()
 
 
+def head_files(cwd: Path, ref: str, folder: str) -> list[str]:
+    """The paths of the files directly in *folder* at *ref* (`git ls-tree`), sorted; `[]`
+    when *ref* has no such folder. An unknown *ref* is a `GitError`."""
+    from fr.triage.gitseam import git_bytes
+
+    out = git_bytes(["ls-tree", "-z", "--name-only", "--end-of-options", ref, "--",
+                     f"{folder.rstrip('/')}/"], cwd)  # fmt: skip
+    return sorted(p.decode("utf-8", "surrogateescape") for p in out.split(b"\0") if p)
+
+
 class OpsWorkspace:
     """The ops workspace on the host: git through `gitseam.Worktree`, and this `fr`
     with the workspace as its checkout."""
@@ -58,6 +68,9 @@ class OpsWorkspace:
     def show(self, ref: str, path: str) -> str | None:
         return self._tree.show(ref, path)
 
+    def list_files(self, ref: str, folder: str) -> list[str]:
+        return head_files(self.path, ref, folder)
+
     def fr(self, args: Sequence[str], *, terminal: bool = False) -> tuple[int, str]:
         from fr.triage.gitseam import run_this_fr
 
@@ -71,6 +84,34 @@ class OpsWorkspace:
 
         git(["fetch", "--quiet", "origin"], self.path)
         self._tree.rebase_onto(new_base, upstream)
+
+    def is_ancestor(self, sha: str) -> bool:
+        from fr.ops.gate import SHA_RE
+        from fr.triage.gitseam import GitError, git, git_ok
+
+        if not SHA_RE.match(sha or ""):
+            raise GitError(f"{sha!r} is not a full commit sha")
+        git(["fetch", "--quiet", "origin"], self.path)  # objects only, as merge_commit
+        return git_ok(["merge-base", "--is-ancestor", sha, "HEAD"], self.path)
+
+    def merge_commit(self, sha: str, message: str) -> str:
+        from fr.ops.gate import SHA_RE, MergeConflict
+        from fr.triage.gitseam import GitError, git, git_ok
+
+        if not SHA_RE.match(sha or ""):
+            raise GitError(f"{sha!r} is not a full commit sha; nothing merged")
+        # objects only: the merge takes the pinned sha, never whatever origin points at now
+        git(["fetch", "--quiet", "origin"], self.path)
+        if not git_ok(["cat-file", "-e", f"{sha}^{{commit}}"], self.path):
+            raise GitError(f"{sha} is not a commit here; nothing merged")
+        conflicted = self._tree.merge(sha)
+        if conflicted:
+            self._tree.abort_merge()
+            raise MergeConflict(conflicted)
+        if not git_ok(["rev-parse", "--quiet", "--verify", "MERGE_HEAD"], self.path):
+            return self._tree.head()  # *ref* is already in the ops branch: nothing to merge
+        git(["commit", "--no-verify", "--quiet", "--no-edit", "-m", message], self.path)
+        return self._tree.head()
 
     def push(self, branch: str, lease: str | None = None) -> None:
         """fr owns the ops branch and stage 3 rebases it, so a later push replaces it, but
@@ -98,12 +139,14 @@ class HostCheckout:
 
         return run_this_fr(list(args), self.primary, terminal=terminal)
 
-    def fetch(self, ref: str) -> None:
+    def fetch(self, ref: str, *, strict: bool = False) -> None:
         from fr.triage.gitseam import GitError, git
 
         try:
             git(["fetch", "--quiet", "origin", "--end-of-options", ref], self.primary)
         except GitError as exc:  # a deleted branch: the PR head may still be here
+            if strict:
+                raise
             typer.echo(f"fr ops gate: warning: {exc}", err=True)
 
     def materialise(self, ref: str, paths: Sequence[str]) -> Path:

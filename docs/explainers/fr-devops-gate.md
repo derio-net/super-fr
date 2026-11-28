@@ -13,7 +13,9 @@ covers:
   - packages/fr/src/fr/ops/gate.py
   - packages/fr/src/fr/commands/ops_gate_cmd.py
   - packages/fr/src/fr/commands/gate_cmd.py
-reviewed: 2026-11-25 under quiet and stealth the gate reads `.fr/triage.yaml` and `.fr/ops.yaml` at the configuration branch's fetched tip and needs its protection for a `queue:` (S1 R7); 2026-11-24 still true after ci-economy phase 1 (a cancelled check now reads as pending, never failing, in every check reader; no claim here names how a cancelled check is read); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-21 stage 4 needs a marker comment beside the label; 2026-11-20 stage 2 releases the PR to the merge queue by label and merges nothing, stage 4 lifts the queue's barrier (wave merge queue R26); 2026-11-19 still true after a failed forge read of the default branch became a named refusal (batch consumer-followups, gh#1554); 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
+  - packages/fr/src/fr/run/dod.py
+  - packages/fr/src/fr/commands/dod_cmd.py
+reviewed: 2026-11-28 the Definition of Done, derived from the gates, manual phases and owed entries, `fr run dod` and the pickup briefs and the DevOps stage's final line that read it (ops-gate-truth R17-R20); 2026-11-28 inside the stage the PR head's walks and statuses never discharge a row, stage 6 stops before the pass while anything is owed and prints one walk command per owed harness, stage 7 passes with --run (phase 2 review); 2026-11-28 the stage walks the rows the devops gate owns (a step's rows pointer, a row question at stage 5, the owed list and the row commands at stage 6, the tester list at stage 7, a held archive at stage 8, ops-gate-truth R7-R16); 2026-11-28 a Test Plan change at stage 6 or 7 goes back to stage 5; merged-in entries never close a reopened op; an existing pass is re-checked after a restart; a no-op merge that still differs stops (phase 1 review); 2026-11-27 stages 4 to 7 first bring a stale ops workspace up to date with the default branch (a confirmed merge, never a rebase); changed ops are trusted again and reopened, and a refresh after stage 4 goes back to stage 4 (ops-gate-truth R1-R6, gh#1617); 2026-11-25 under quiet and stealth the gate reads `.fr/triage.yaml` and `.fr/ops.yaml` at the configuration branch's fetched tip and needs its protection for a `queue:` (S1 R7); 2026-11-24 still true after ci-economy phase 1 (a cancelled check now reads as pending, never failing, in every check reader; no claim here names how a cancelled check is read); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-21 stage 4 needs a marker comment beside the label; 2026-11-20 stage 2 releases the PR to the merge queue by label and merges nothing, stage 4 lifts the queue's barrier (wave merge queue R26); 2026-11-19 still true after a failed forge read of the default branch became a named refusal (batch consumer-followups, gh#1554); 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
 ---
 
 ## Why can a delivered PR still have work left?
@@ -74,10 +76,10 @@ Land it by its own pull request, so it does not ride the feature pull request
 | 2 | Adds the label `fr-queue:release` to the PR, only with no open pre-merge op, green required checks and the head stage 1 verified. It merges nothing. The run stops until the forge reads the PR as merged |
 | 3 | Verifies the merge, rebases the ops branch onto the default branch, and runs every op's `ready:` probe |
 | 4 | Post-merge status and apply. An op whose check already passes is still recorded, so stage 6 can count it. Then it adds the label `fr-queue:postmerge-done` |
-| 5 | Probes each Test Plan step that points at an op, asks you about the rest, and records the outcomes |
-| 6 | `fr gate pass --gate devops --run <id>`, from the ops workspace |
-| 7 | Keeps `gate:tester` and lists what the Tester gate owns, or passes `gate:tester` when it owns nothing |
-| 8 | `fr archive --branch <feature>`, then opens the ops branch as the housekeeping PR |
+| 5 | Probes each Test Plan step that points at an op, asks you about the rest, and records the outcomes. Then asks you about each devops row that is not walked |
+| 6 | Lists what the devops gate still owes and stops while anything is owed. Otherwise it runs `fr gate pass --gate devops --run <id>` from the ops workspace |
+| 7 | Keeps `gate:tester` and lists the steps and rows the Tester gate owns, or passes `gate:tester` when it owns nothing |
+| 8 | `fr archive --branch <feature>`, then opens the ops branch as the housekeeping PR. It says `archive held` when the archive held the plan |
 
 fr records each stage's completion in a state directory outside every checkout. By
 default that is `~/.local/state/fr/ops-gate/`. fr commits pre-merge evidence only to the
@@ -87,6 +89,38 @@ is done only when the forge reads the PR as merged. fr never records it. A repo 
 hand. A PR you merged by hand counts as stage 2 done. Under the quiet and stealth placements
 that file is on the configuration branch. The gate releases to a `queue:` there only while
 the forge enforces a pull-request rule on that branch, and refuses otherwise.
+
+## What if the default branch moves after the merge?
+
+Stage 3 moves the ops workspace onto the default branch once. A fix can land on the default
+branch after that, for example a corrected op. Without a check, a rerun of a failed stage would
+still apply the old op, and the old trust grant would still match it. So stages 4, 5, 6 and 7
+first compare the ops workspace with `origin/<default>`, every time they run. They compare two
+things: each op of the run's plan, on its whole definition, and the run's Test Plan steps.
+
+When both match, the stage goes on and says nothing. When something differs, the stage names
+each op added, removed or changed, and says whether the Test Plan changed. Then it asks you to
+confirm, even under `--yes`. If you say no, the stage stops and nothing changes. If you say
+yes, fr commits the stage records in the workspace, merges the default branch into the ops
+branch and pushes it. It merges the exact commit it compared, which the question names, so
+a push to the default branch while you read the question changes nothing. A merge that conflicts is undone, and the stage names the files and the
+commands to merge by hand.
+
+fr merges and never rebases here, because the ops branch is already pushed. A merge only adds
+a commit on top, so the next push still matches the sha fr last pushed. A rebase would rewrite
+the commits that hold your evidence.
+
+After the merge, fr asks you to trust the op set again before any probe runs, so you see the
+new commands. Each changed or added op is reopened: a closure recorded before the merge no
+longer closes it. Only its live check, or evidence recorded after the merge, does. Journal entries that the merge
+brings in from the default branch do not count either. If this happens at stage 5, 6 or 7,
+the run goes back to stage 4 and applies those ops again before anything later runs. If only
+the Test Plan changed at stage 6 or 7, the run goes back to stage 5 and asks about the steps
+again. A `gate:devops-passed` label from before such a restart counts only when nothing on
+the updated workspace still holds the gate; otherwise stage 6 stops and names what holds it.
+If the ops branch already has the commit and still differs from it, the stage stops and asks
+you to fix it by hand. If the plan directory is not on the default branch, the stage stops and
+names it.
 
 ## How does the merge queue land the PR?
 
@@ -139,13 +173,56 @@ At stage 5, the stage probes each step that points at an op. A pass goes on reco
 asks `retry`, `na <reason>` or `owed <why>`; it refuses `ran`. You walk a step with no
 pointer yourself and answer `ran <evidence>`, `na <reason>` or `owed <why>`.
 
+A step can also name the acceptance rows it proves, with `(rows: <id>, …)` after the
+optional `(op: <id>)` pointer. When the step is recorded `ran`, fr records a passing walk on
+each of those rows in the same commit. You are the walker of a step you walked: harness
+`operator`, model `human`. A step whose probe passed is walked by the probe: harness
+`fr-ops-probe`, model `op:<id>`. A row that the walk makes walk-verified moves to `walked`.
+
+The devops gate owns rows too, not only ops and steps. After the steps, stage 5 asks you
+about each devops row that is still not walked, unless a walk the stage wrote discharged it.
+That includes a row whose step you answered `na`. Answer `ran <evidence>` to record your
+walk, or `owed <why>` to set the row to `walk-owed`. Inside the stage, a walk or a row status
+that the PR head carries never counts, for the same reason that the head's step outcomes do
+not count: the PR controls the head, so its records prove nothing. A row is walked only when
+each harness it owes has a latest passing walk that the head does not carry.
+
 fr records an `owed` answer, but it does not close the step. So stage 6 refuses, and
 prints the `fr closeout outcome` command to record the outcome once you have walked it.
+Stage 6 first lists everything the devops gate still owes: ops, steps and rows, with the
+head's records left out. While anything is owed, it stops without running `fr gate pass`.
+It prints the commands that close each item: one `fr acceptance set-status --walk` for each
+harness a row still owes. A `fr gate pass` that you run by hand judges the checkout as it is.
 Steps the Tester gate owns keep `gate:tester` on the PR, and this stage does not walk
 them. Rows that are not walked, and a spec that declares `gate: tester`, keep it too. When
-the Tester gate owns nothing, stage 7 passes `gate:tester`, so the release does not wait on
-a gate that nobody owes. Once all eight stages are on record, `fr pickup --run` says the
-stage is complete and does not print the DevOps brief again.
+the Tester gate owns nothing, stage 7 passes `gate:tester` for the run, so the release does not wait on
+a gate that nobody owes. Stage 8 says `archived` only when the plan moved. `fr archive`
+exits 0 when it holds a plan, for example over an unticked manual phase. Then stage 8 says
+`archive held` with each reason, and still opens the housekeeping PR.
+
+## When is the stage complete?
+
+Eight stages on record do not make the work done. A tester row can still wait for a walk,
+and a held archive can still wait for a manual phase. So the last line of `fr ops gate`
+reads the run's **Definition of Done**. fr derives it, and nobody writes it: it holds the
+items of each post-merge gate, the plan's `[manual]` phases, and the open `owed` entries of
+the run's journals. The stage says `the DevOps stage is complete` only when every item is
+discharged. Otherwise it says `every stage ran; still owed:` and lists each owed item. Rerun
+it, and it says the same, after `every stage is already done; nothing ran`. Owed items do
+not change the exit code, because tester walks are owed by design after the stage. If the
+Definition of Done cannot be read, the stage says so and exits 2.
+
+`fr pickup --run` follows the same rule. Once all eight stages are on record, it does not
+print the DevOps brief again. It says the stage is complete only when the Definition of Done
+is discharged, and otherwise names what is still owed. Every brief ends with the Definition
+of Done. To read it at any time, run `fr run dod <run-id>` on the host (add `--json` for a
+script). It writes no file itself. Like every `fr run` command, fr may first migrate stale
+files. It exits 0 when every item is discharged, 1 when one is owed, and 2 when it cannot
+read the run, for example a plan the run recorded that is no longer there.
+
+Inside the stage, the pull request's own records prove nothing here either. A walk, an
+outcome, a resolved `owed` entry or a ticked manual phase that the PR head carries does not
+discharge an item. Tick the phase or resolve the entry on the ops branch instead.
 
 ## What does the stage never do?
 

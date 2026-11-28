@@ -1,0 +1,2 @@
+bump: minor
+summary: "fr ops gate brings a stale ops workspace up to date with the default branch before stages 4-7 (a confirmed merge, changed ops reopened and re-trusted), and every gate walks the acceptance rows it verifies"

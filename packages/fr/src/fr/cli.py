@@ -27,6 +27,7 @@ from fr import __version__
 from fr.artifacts.trigger import ensure_artifacts_current
 from fr.binary_identity import current_identity
 from fr.binary_identity import enforce as enforce_binary_identity
+from fr.commands import dod_cmd as _dod_cmd  # noqa: F401 — `fr run dod` on run_app (R18)
 from fr.commands.acceptance_cmd import acceptance_app
 from fr.commands.apply_cmd import apply_command
 from fr.commands.archive_cmd import archive_command

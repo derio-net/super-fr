@@ -79,3 +79,34 @@ def test_raw_keeps_the_items_lines_as_written_fences_included() -> None:
     assert first.raw == tuple(lines)
     assert second.raw == ("- next",)
     assert first.op is None
+
+
+# --- the rows pointer (spec 2026-11-27-ops-gate-truth R7) ------------------------------
+
+
+def test_a_rows_pointer_after_the_tag_and_op_names_the_rows() -> None:
+    (step,) = _steps("- [devops] (op: x) (rows: a, b) text")
+    assert (step.gate, step.op, step.rows, step.text) == ("devops", "x", ("a", "b"), "text")
+
+
+def test_a_rows_pointer_alone_names_the_rows() -> None:
+    (step,) = _steps("- (rows: a) text")
+    assert (step.gate, step.op, step.rows, step.text) == (None, None, ("a",), "text")
+
+
+def test_a_rows_pointer_mid_text_stays_text() -> None:
+    (step,) = _steps("- run (rows: a) later")
+    assert (step.rows, step.text) == ((), "run (rows: a) later")
+
+
+def test_a_blank_rows_pointer_stays_text() -> None:
+    (empty,) = _steps("- (rows: ) text")
+    assert (empty.rows, empty.text) == ((), "(rows: ) text")
+    (gap,) = _steps("- (rows: a,,b) text")
+    assert (gap.rows, gap.text) == ((), "(rows: a,,b) text")
+
+
+def test_step_equality_includes_rows() -> None:
+    assert Step(1, "t", rows=("a",)) != Step(1, "t")
+    (step,) = _steps("- [tester] (rows: r1) t")
+    assert step == Step(1, "t", gate="tester", rows=("r1",))
