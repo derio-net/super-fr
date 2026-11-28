@@ -771,6 +771,9 @@ def _leaks(tmp_path: Path, text: str, look_for: list[str], vis: dict[str, str | 
         "please look at secret#12 now",
         "it is in example-org/secret.",
         "EXAMPLE-ORG/SECRET",
+        "clone https://github.com/example-org/secret.wiki.git",
+        "see example-org/se\u200bcret",  # zero-width space: a reader sees the name
+        "see example-org%2Fsecret",  # percent-encoded, as in a URL
     ],
 )
 def test_carried_text_naming_a_private_repo_is_a_leak(tmp_path: Path, text: str) -> None:
@@ -794,6 +797,58 @@ def test_a_public_repo_sharing_the_name_keeps_its_issue_refs_out_of_the_private_
     assert _leaks(tmp_path, "see bob/docs", ["acme/docs", "bob/docs"], vis) == [
         ("f.txt", "bob/docs")
     ]
+
+
+def test_a_carried_path_naming_a_private_repo_is_a_leak(tmp_path: Path) -> None:
+    """The ref carries each file's path as well as its text: a clean body under a path
+    that names the private repo still leaks it."""
+    from fr.triage.privacy import carried_text_leaks
+
+    path = tmp_path / "architecture" / "example-org" / "secret.md"
+    path.parent.mkdir(parents=True)
+    path.write_text("nothing here", encoding="utf-8")
+    rel = "architecture/example-org/secret.md"
+    assert carried_text_leaks([rel], [SECRET], {SECRET: "private"}, root=tmp_path) == [
+        (rel, SECRET)
+    ]
+
+
+def test_a_reader_given_is_what_the_scan_reads(tmp_path: Path) -> None:
+    """The bytes scanned come from *read* when it is given, not from the directory."""
+    from fr.triage.privacy import carried_text_leaks
+
+    (tmp_path / "f.txt").write_text("clean on disk", encoding="utf-8")
+    got = carried_text_leaks(
+        ["f.txt"], [SECRET], {SECRET: "private"}, root=tmp_path,
+        read=lambda _rel: b"example-org/secret#4",
+    )  # fmt: skip
+    assert got == [("f.txt", SECRET)]
+
+
+def test_a_push_scans_the_bytes_it_commits_not_the_directory_again(
+    tmp_path: Path, origin: Path, gh: FakeGhClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A carried file rewritten clean after the commit is built cannot hide the private
+    name the commit holds: the guard reads the commit's blobs."""
+    from fr.triage import gitseam
+
+    state = _workspace(tmp_path, origin)
+    state.mkdir(parents=True, exist_ok=True)
+    (state / "judgements.yaml").write_text(PUBLIC_ONLY, encoding="utf-8")
+    (state / "facts.json").write_text(json.dumps(_facts().to_json()), "utf-8")
+    write_durable(state, ScopeDurable(state_repo=OPEN_REPO))
+    (state / "merge-stops.json").write_text("example-org/secret#4", encoding="utf-8")
+    built = gitseam.commit_tree_from_paths
+
+    def build_then_clean(*args: Any, **kw: Any) -> str:
+        sha = built(*args, **kw)
+        (state / "merge-stops.json").write_text("{}", encoding="utf-8")
+        return sha
+
+    monkeypatch.setattr(gitseam, "commit_tree_from_paths", build_then_clean)
+    with pytest.raises(PrivacyError, match="merge-stops.json"):
+        _push(state, origin, OPEN_REPO, gh)
+    assert _ref(origin) == ""
 
 
 def test_an_unreadable_carried_file_raises_naming_it(tmp_path: Path) -> None:

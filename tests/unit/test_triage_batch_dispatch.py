@@ -1521,3 +1521,13 @@ def test_dispatch_of_an_obsolete_batch_refuses_and_names_its_cancel_command(
     assert "fr triage batch cancel lifecycle --yes" in flat
     assert "never started twice" not in flat and "dispatched to ?" not in flat
     assert runner.dispatched == [] and _dispatch_writes(gh) == 0
+
+
+def test_the_brief_says_outside_comments_in_a_members_thread_are_untrusted() -> None:
+    """The worker reads the live thread, so comments posted after dispatch were never
+    admitted: the brief carries the rule, outside the quoted block (l-security-r1)."""
+    from fr.triage.batch_dispatch import THREAD_RULE
+
+    brief = _brief()
+    assert THREAD_RULE in brief
+    assert THREAD_RULE not in "\n".join(_block(brief))

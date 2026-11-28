@@ -358,12 +358,23 @@ def push_state(
     repo's issue."""
     from fr.triage.privacy import guard_state
 
-    guard_state(state_dir, scope=scope, state_repo=state_repo, client_for=lambda _r: client)
     cwd = _repo(state_dir, repo)
     ref = ref_name(scope_id)
     parent = expected_old if expected_old and gitseam.has_commit(cwd, expected_old) else None
     sha = gitseam.commit_tree_from_paths(
         cwd, state_dir, ref_entries(state_dir), parent=parent, message=f"fr triage state {ref}"
+    )
+    # The guard scans the commit just built, not the directory again: a write to a carried
+    # file after the scan cannot reach the ref unscanned. The commit is only local until
+    # the push below, so a refusal leaves the remote untouched.
+    blobs = {rel: blob for _mode, blob, rel in gitseam.tree_files(cwd, sha)}
+    guard_state(
+        state_dir,
+        scope=scope,
+        state_repo=state_repo,
+        client_for=lambda _r: client,
+        carried=sorted(blobs),
+        read=lambda rel: gitseam.blob_bytes(cwd, blobs[rel]),
     )
     try:
         landed = gitseam.push_ref_cas(cwd, remote_repo, sha, ref, expected_old=expected_old)

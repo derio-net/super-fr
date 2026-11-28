@@ -33,8 +33,9 @@ state stays in the workspace.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from fr.triage.errors import TriageError
@@ -271,13 +272,16 @@ def guard_state(
     state_repo: str,
     client_for: ClientFor,
     carried: Sequence[str] | None = None,
+    read: Callable[[str], bytes] | None = None,
 ) -> None:
     """Refuse to push or export *state_dir* to *state_repo* when that would leak (R8). The
     state repo's visibility is read live first, and unreadable refuses; only when it is
     public are the keys read, their repos' visibility taken from facts (when present and
     for this scope) or read live. Then every file the write *carries* (default: the
     `REF_FILES` walk; an export passes its durable set) is scanned for a mention of a repo
-    that is not public (R8, R9); nothing is read when every look-for repo is public."""
+    that is not public (R8, R9); nothing is read when every look-for repo is public.
+    *read* gives each carried file's bytes: a push passes the blobs of the commit it built,
+    so the bytes scanned are the bytes pushed (no window for a write in between)."""
     now = live_visibility(client_for(state_repo), state_repo)
     if now is None:
         raise VisibilityUnreadable(unreadable(state_repo))
@@ -302,7 +306,7 @@ def guard_state(
     if all(is_public(vis.get(r)) for r in look_for):
         return
     files = carried_files(state_dir) if carried is None else list(carried)
-    found = carried_text_leaks(files, look_for, vis, root=state_dir)
+    found = carried_text_leaks(files, look_for, vis, root=state_dir, read=read)
     certain = [(f, r) for f, r in found if vis.get(r) is not None or _unnamed(r)]
     if certain:
         raise PrivacyError("; ".join(refusal_file(f, r, state_repo) for f, r in certain))
@@ -330,7 +334,7 @@ def repo_patterns(
         if is_public(visibility.get(repo)):
             continue
         owner, _, name = repo.partition("/")
-        alts = [] if _unnamed(repo) else [re.escape(repo) + r"(?:\.git)?"]
+        alts = [] if _unnamed(repo) else [re.escape(repo) + r"(?:\.wiki)?(?:\.git)?"]
         if name and name.lower() not in public_names:
             alts.append(rf"{re.escape(name)}#\d+")
         if alts:
@@ -344,25 +348,45 @@ def carried_text_leaks(
     visibility: Mapping[str, str | None],
     *,
     root: Path | None = None,
+    read: Callable[[str], bytes] | None = None,
 ) -> list[tuple[str, str]]:
-    """`(file, repo)` for each carried file naming a look-for repo that is not public
-    (R8), files as given, repos as the look-for set spells them. A file that cannot be read
-    is a `PrivacyError` naming it: what cannot be read cannot be shown safe."""
+    """`(file, repo)` for each carried file whose path or text names a look-for repo that
+    is not public (R8), files as given, repos as the look-for set spells them. The text is
+    scanned as written and again with format characters removed and percent-escapes
+    decoded, so `acme/se<ZWSP>cret` and `acme%2Fsecret` are found too. *read* gives a file's
+    bytes (default: read from *root*); a file that cannot be read is a `PrivacyError`
+    naming it: what cannot be read cannot be shown safe."""
     patterns = repo_patterns(look_for, visibility)
     found: list[tuple[str, str]] = []
     if not patterns:
         return found
     for file in files:
-        path = root / file if root is not None else Path(file)
         try:
-            text = path.read_bytes().decode("utf-8", errors="replace")
+            if read is not None:
+                raw = read(str(file))
+            else:
+                raw = (root / file if root is not None else Path(file)).read_bytes()
         except OSError as exc:
             raise PrivacyError(
                 f"{file} in the state directory cannot be read ({exc.strerror or 'error'}); "
                 "refusing to write state that may name a non-public repo (cloud-triage R8)"
             ) from exc
-        found += [(str(file), repo) for repo, pat in patterns.items() if pat.search(text)]
+        text = raw.decode("utf-8", errors="replace")
+        # The path rides the ref too; its suffix is dropped so `acme/secret.md` names it.
+        where = str(PurePosixPath(str(file)).with_suffix(""))
+        views = (where, _normalised(where), text, _normalised(text))
+        found += [
+            (str(file), repo) for repo, pat in patterns.items() if any(pat.search(v) for v in views)
+        ]
     return found
+
+
+def _normalised(text: str) -> str:
+    """*text* with format characters (Unicode Cf: zero-width, bidi) removed and
+    percent-escapes decoded: how a reader or a browser would see the name."""
+    from urllib.parse import unquote
+
+    return unquote("".join(c for c in text if unicodedata.category(c) != "Cf"))
 
 
 def carried_files(state_dir: Path) -> list[str]:

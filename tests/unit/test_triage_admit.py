@@ -633,3 +633,22 @@ def test_admit_writes_nothing_where_the_repo_turns_labels_or_comments_off(
         assert out.exit_code == 2, out.output
         assert f"forge.{kind}: off" in " ".join(out.output.split())
         assert client.writes == []
+
+
+@pytest.mark.parametrize("listed", ["fr-bot", "fr-bot[bot]", "FR-Bot[bot]"])
+@pytest.mark.parametrize("login", ["fr-bot", "fr-bot[bot]"])
+def test_a_pr_author_is_unpinned_whichever_bot_spelling_is_listed_or_read(
+    listed: str, login: str
+) -> None:
+    """REST reports `x[bot]`, GraphQL `x`; either spelling in `pr_authors` must give the
+    same verdict and the same digest for both (R1)."""
+    from fr.triage.admit import pinned
+
+    comment = {"author": login, "association": "NONE", "id": 1, "body": "hi",
+               "created_at": "2026-11-01T00:00:00Z"}  # fmt: skip
+    assert not pinned(comment, [listed])
+    rest = content_digest("t", "b", comments=[{**comment, "author": "fr-bot[bot]"}],
+                          pinned_authors=[listed])  # fmt: skip
+    graphql = content_digest("t", "b", comments=[{**comment, "author": "fr-bot"}],
+                             pinned_authors=[listed])  # fmt: skip
+    assert rest == graphql
