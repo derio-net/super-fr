@@ -13612,6 +13612,13 @@ batches:
     - super-fr#1308
     - super-fr#1186
     - super-fr#1271
+  - kind: closeout
+    at: '2026-11-28T17:21:58.389937Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -16999,6 +17006,16 @@ queues:
     main: 608d55585be96efd744e7b5168472832a6aebd7d
     entries:
     - batch: ops-gate-truth
+  - kind: queue_built
+    at: '2026-11-28T17:21:43.833576Z'
+    slot: 1
+    sha: 81e8412e762fc84211ad0f1600f720d2a02501d0
+    entry:
+      batch: triage-privacy
+    head: 491fc138ba3822555d9a8a257e29844f49bed1b8
+    patch_id: e6ac19c7d072647a8f1c72c00966571269ad6cac
+    base: 608d55585be96efd744e7b5168472832a6aebd7d
+    parent: 608d55585be96efd744e7b5168472832a6aebd7d
 queue_requests:
 - kind: queue_add
   at: '2026-11-27T15:25:05.595235Z'
