@@ -1,0 +1,15 @@
+schema_version: 12
+run: 2026-11-28-feat-batch-silent-failures
+step: implement-phase
+item: phase/1
+outcome: done
+ticks: [P1.T1.S1, P1.T1.S2, P1.T1.S3, P1.T1.S4, P1.T2.S1, P1.T2.S2, P1.T2.S3, P1.T3.S1, P1.T3.S2, P1.T4.S1, P1.T4.S2, P1.T5.S1, P1.T5.S2, P1.T5.S3]
+refactor:
+  "P1.T3": "forge_body.read_failure and the shared CONTROL class were written once, with debt_cmd importing it; nothing duplicated to clean."
+  "P1.T4": "the change is one anchored regex in source_category and one loop in issue_cmd; no duplication left."
+  "P1.T5": "docs, fragment and acceptance rows only; no code to clean."
+journal:
+  - {kind: discovery, id: p1-d1, title: "install sandbox needs devcontainer and uv stubs to reach No warnings.", body: "The install test sandbox always warns (no devcontainer or npm, uv stub exports no lock, no fr entry point), so the No warnings. case stubs devcontainer, a uv that names a tool dir with fr, and an export.", phase: 1}
+  - {kind: decision, id: p1-d2, title: "read_failure sanitises the url as well as the reason", body: "Per the coordinator's security note, the url (from the run cursor) is redacted, control/bidi-replaced and bounded like the reason.", phase: 1}
+resolves: []
+evidence: {}
