@@ -13597,6 +13597,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-28T17:16:33.796512Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-28T17:16:40.363038Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -14967,6 +14982,11 @@ batches:
     runner: herdr
     handle: w3X:pC
     branch: feat/batch-triage-privacy
+  - kind: approval
+    at: '2026-11-28T17:15:48.183156Z'
+    pr: 1782
+    head: 491fc138ba3822555d9a8a257e29844f49bed1b8
+    patch_id: e6ac19c7d072647a8f1c72c00966571269ad6cac
 - id: ops-gate-truth
   title: 'Ops gate truth: no stale ops workspace; every gate walks the rows it verifies'
   ids:
