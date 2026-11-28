@@ -46,7 +46,7 @@ def redact(text: str) -> str:
 # (`<ExceptionName>: <message>`); a test builds the `why` from the real exception, so a
 # change to that message fails there and not here.
 _UNSUPPORTED = re.compile(
-    r"^UnsupportedForgeOperation: `[^`]+` is not supported on the (?P<backend>\S+) backend yet "
+    r"^UnsupportedForgeOperation: `[^`]+` is not supported on the (?P<backend>.+?) backend yet "
     r"\(tracked in (?P<issue>[^)]+)\)$"
 )
 _BACKEND = re.compile(r"^[a-z]+$")
