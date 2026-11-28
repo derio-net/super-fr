@@ -331,3 +331,54 @@ fix(acceptance): a tie on at goes to the later walk in the list.
 ### p2-r10-resolved · finding [out-of-scope] · resolves p2-r10: The triage driver's rows-walked tester pass bypasses gate_blockers (phase 2)
 
 Pre-existing: the triage driver's rows-walked tester pass predates this change; this PR changes fr gate pass and the DevOps stage only.
+
+<!-- fr:journal kind=decision scope=plan id=p3-owed-left-out-only-when-reported created=2026-11-28T05:35:58+00:00 phase=3 -->
+### p3-owed-left-out-only-when-reported · decision · The owed group leaves out a step outcome or manual-phase entry only when another group reports that step or phase (phase 3)
+
+R17 says an owed entry already reported elsewhere is left out. A `test-plan-step-<n>[-k]`
+owed entry is dropped only when step n is an item of a gate group (GateItem gained an
+optional `step`), and a `manual-phase-<n>` entry only when phase n is in the manual
+group. An owed outcome of a step no post-merge gate owns (a developer step) stays in
+the owed group, so it is never hidden.
+
+<!-- fr:journal kind=decision scope=plan id=p3-final-line-head-free created=2026-11-28T05:35:58+00:00 phase=3 -->
+### p3-final-line-head-free · decision · The DevOps stage's final line reads the DoD with the PR head's walks and outcomes excluded (phase 3)
+
+`run()` builds the DoD on the ops workspace through `_head_exclusions` (the same R12
+exclusions `_owed_items` uses, now one helper), so a walk or outcome the PR author wrote
+cannot make the stage say complete. `fr run dod` and the pickup briefs read the checkout
+as it is. An unreadable DoD (or no recorded head) says "every stage ran; the Definition
+of Done cannot be read", never complete. GateResult's ok and exit code are unchanged.
+
+<!-- fr:journal kind=decision scope=plan id=p3-cli-import-order created=2026-11-28T05:35:58+00:00 phase=3 -->
+### p3-cli-import-order · decision · cli.py's dod_cmd import sits where ruff's isort puts it, before run_cmd (phase 3)
+
+The plan said "right after the run_cmd import"; ruff's import sorting moves it. The order
+is immaterial: dod_cmd imports run_app from commands.run_cmd itself, so the command is
+registered whichever import runs first. run_cmd.py is untouched.
+
+<!-- fr:journal kind=decision scope=plan id=p3-finished-owed-brief created=2026-11-28T05:35:58+00:00 phase=3 -->
+### p3-finished-owed-brief · decision · A finished DevOps stage with owed items gets its own brief heading and lists them; no reap line (phase 3)
+
+The finished devops_brief keeps its "DevOps stage complete ... Nothing is left" text only
+when the DoD is discharged. Otherwise it is headed "every stage ran, work still owed",
+lists `dod.owed()` and points at `fr run dod <run>`; it does not tell the operator to reap
+the workspace while work is owed. Every brief form ends with the DoD section.
+
+<!-- fr:journal kind=discovery scope=plan id=p3-dod-needs-a-readable-exit created=2026-11-28T05:35:58+00:00 phase=3 -->
+### p3-dod-needs-a-readable-exit · discovery · A repo whose acceptance identity cannot be resolved has an unreadable DoD (phase 3)
+
+run_exit raises AcceptanceError ("cannot resolve repo identity") in a repo with no
+fragment and no github origin, so the DoD is a DodError there and the brief prints
+"Definition of Done — cannot be read". The test fixtures for the closeout brief write a
+matrix; the old gh#1275 test now builds a real plan folder and a closed op.
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t1 created=2026-11-28T05:35:58+00:00 phase=3 -->
+### no-refactor-p3-t1 · discovery · no-refactor-because P3.T1 (phase 3)
+
+dod.py reuses gate_items, run_exit, the plan parser and the owed fold; the only new code is the grouping, and the text renderer it shares was folded in P3.T3.S3
+
+<!-- fr:journal kind=discovery scope=plan id=no-refactor-p3-t2 created=2026-11-28T05:35:58+00:00 phase=3 -->
+### no-refactor-p3-t2 · discovery · no-refactor-because P3.T2 (phase 3)
+
+dod_cmd is one command over definition_of_done and dod_lines, loading the run through run_cmd's own _load_or_exit; nothing repeated to fold
