@@ -491,6 +491,12 @@ def rebind_shape(
     errors = check_workflow(rebound, repo_root)
     if errors:
         raise RunStateError(f"shape: {target!r} refused — not a valid workflow: {errors[0]}")
+    from fr.workflow.available import refuse_disabled
+
+    try:
+        refuse_disabled(target, repo_root)
+    except WorkflowError as e:
+        raise RunStateError(f"shape: {target!r} refused — {e}") from e
     return rebound
 
 

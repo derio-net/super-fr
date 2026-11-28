@@ -1211,6 +1211,17 @@ def _refuse_incoherent_settings(repo_root: Path) -> None:
         raise typer.Exit(2)
 
 
+def _refuse_disabled_shape(workflow: str, repo_root: Path) -> None:
+    """`workflows.disabled` withdraws a shape from `fr run start` (alacarte R2)."""
+    from fr.workflow.available import refuse_disabled
+
+    try:
+        refuse_disabled(workflow, repo_root)
+    except WorkflowError as e:
+        err_console.print(f"[red]{escape(str(e))}[/red]", soft_wrap=True)
+        raise typer.Exit(2) from e
+
+
 def _stealth_ref_or_exit(cwd: Path, stealth: str | None, target: Path | None) -> Any:
     """`--stealth`/`--target` as a `StealthRef` (R24, chosen per run), or None."""
     from fr.placement.stealth import from_tracking_repo, parse_ref
@@ -1343,6 +1354,8 @@ def start_cmd(
         # Under a requested stealth the policy is the tracking repo's, read once the
         # workspace records it: checked below, inside the workspace.
         _refuse_incoherent_settings(repo_root)
+        # A disabled shape provisions nothing (alacarte R2).
+        _refuse_disabled_shape(workflow, repo_root)
 
     try:
         workspace = ensure_run_workspace(
@@ -1382,6 +1395,8 @@ def start_cmd(
             raise typer.Exit(2)
     if stealth_ref is not None:
         _refuse_incoherent_settings(workspace)
+    # Always in the workspace too: under stealth it reads the tracking space's settings.
+    _refuse_disabled_shape(workflow, workspace)
 
     try:
         # `--run-id` is operator input and becomes a path segment

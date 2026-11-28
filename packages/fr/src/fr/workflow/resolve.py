@@ -100,6 +100,25 @@ def shipped_workflow_dirs(shipped_root: Path | None = None) -> list[Path]:
     )
 
 
+def search_dirs(repo_root: Path, shipped_dir: Path | None = None) -> list[Path]:
+    """Every directory `resolve_workflow` would look in, in the same order.
+
+    Derived from `shipped_workflow_dirs` rather than restated, so discovery
+    and resolution cannot disagree about where a shape lives.
+    """
+    return [repo_workflows_dir(repo_root), *shipped_workflow_dirs(shipped_dir)]
+
+
+def discover_names(repo_root: Path, shipped_dir: Path | None = None) -> list[str]:
+    """Every shape name `resolve_workflow` could resolve, sorted: the one list
+    `fr workflow check --all`, `fr settings check` and the disabled refusal read."""
+    names: set[str] = set()
+    for d in search_dirs(repo_root, shipped_dir):
+        if d.is_dir():
+            names |= {p.stem for p in d.glob("*.yaml")}
+    return sorted(names)
+
+
 def resolve_workflow(
     name: str, repo_root: Path, *, shipped_root: Path | None = None
 ) -> WorkflowManifest:

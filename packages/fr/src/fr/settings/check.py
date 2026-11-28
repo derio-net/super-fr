@@ -97,6 +97,27 @@ def _stealth_forge_explicit(root: Path, settings: Settings) -> tuple[str, ...]:
     return load_settings(root).contrary
 
 
+def _unknown_disabled(root: Path, settings: Settings) -> tuple[str, ...]:
+    """alacarte R3: a `workflows.disabled` entry no shipped or repo shape carries."""
+    if not settings.workflows.disabled:
+        return ()
+    from fr.workflow.resolve import discover_names
+
+    known = set(discover_names(root))
+    return tuple(n for n in settings.workflows.disabled if n not in known)
+
+
+def _every_shape_disabled(root: Path, settings: Settings) -> tuple[str, ...]:
+    """alacarte R3: a list that leaves no shape to start a run on."""
+    if not settings.workflows.disabled:
+        return ()
+    from fr.workflow.resolve import discover_names
+
+    names = discover_names(root)
+    left = [n for n in names if n not in settings.workflows.disabled]
+    return () if left else tuple(names)
+
+
 RULES: Final[tuple[tuple[str, Predicate, str], ...]] = (
     (
         "gates-off-with-ops",
@@ -127,6 +148,17 @@ RULES: Final[tuple[tuple[str, Predicate, str], ...]] = (
         "{detail} is set explicitly in the tracking repo's settings file, to a value other "
         "than stealth's own (labels, comments and issues off, pr_body minimal): stealth sets "
         "those keys itself and refuses a contrary value rather than ignoring it",
+    ),
+    (
+        "unknown-disabled-shape",
+        _unknown_disabled,
+        "workflows.disabled names {detail}, which no shipped or repo workflow shape carries "
+        "(`fr workflow check --all` lists them)",
+    ),
+    (
+        "every-shape-disabled",
+        _every_shape_disabled,
+        "workflows.disabled disables every workflow shape ({detail}): no run could start",
     ),
 )
 

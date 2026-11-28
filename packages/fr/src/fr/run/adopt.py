@@ -952,6 +952,16 @@ def adopt_run(
             old_state = _owning_old_cursor(repo_root, existing, plan_rel)
             _refuse_live_step_records(repo_root, existing)
 
+    # A disabled shape binds no NEW run (alacarte R2); superseding a run onto its own
+    # shape is that run continuing, so it is allowed.
+    if old_state is None or name != old_state.workflow.partition("@")[0]:
+        from fr.workflow.available import refuse_disabled
+
+        try:
+            refuse_disabled(name, repo_root)
+        except WorkflowError as e:
+            raise AdoptError(str(e)) from e
+
     if pr_url is not None and plan is not None:
         _check_pr_repo(pr_url, plan.meta.target_repo)
 
