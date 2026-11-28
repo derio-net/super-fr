@@ -247,6 +247,8 @@ docs/
 
 strategy: none
 gate: developer
+settle.conflicts: report — batch arch-run-verdict: the wave driver owns this PR's mergeability
+settle.ci: report — batch arch-run-verdict: the wave driver owns this PR's CI
 
 - run-verdict-refusals-preserved: none — CI unit tests compare each moved function's refusal bytes and exit code with captures taken before the move, and the existing refusal-text CLI tests run unchanged
 - run-engine-cli-free: none — a CI unit test reads every `fr/run` module's syntax tree, with planted-source cases
