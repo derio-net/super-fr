@@ -5,9 +5,16 @@ the environment), so a release into 9.2 turns none of them red."""
 
 from __future__ import annotations
 
+import re
+import sys
+import tomllib
+from pathlib import Path
+
 import fr
 import pytest
 from fr.config import transition
+
+pytestmark = pytest.mark.own_artifacts
 
 
 @pytest.mark.parametrize(
@@ -62,3 +69,49 @@ def test_the_transition_errors_are_settings_errors() -> None:
 
     assert issubclass(transition.TransitionError, SettingsError)
     assert issubclass(transition.LegacyEnvRefused, transition.TransitionError)
+
+
+# --- R9: one `9.2` per language, and it is the minor after S1's release -------------------
+
+REPO = Path(__file__).resolve().parents[2]
+SHELL_LIB = REPO / "plugins" / "super-fr" / "hooks" / "lib" / "fr-isolation-decision.sh"
+MARKER_TS = REPO / "packages" / "fr-opencode-plugin" / "src" / "marker.ts"
+S1_FRAGMENT = REPO / ".changes" / "feat-event-driven-a-la-carte.yaml"
+
+
+def _shell_refuse_from() -> tuple[int, int]:
+    found = re.findall(
+        r"^FR_REFUSE_FROM=(\d+)\.(\d+) # fr-refuse-from$", SHELL_LIB.read_text(), re.M
+    )
+    assert len(found) == 1, "the shell library names FR_REFUSE_FROM exactly once"
+    return int(found[0][0]), int(found[0][1])
+
+
+def _ts_refuse_from() -> tuple[int, int]:
+    found = re.findall(
+        r"^export const REFUSE_FROM = \[(\d+), (\d+)\] as const; // fr-refuse-from$",
+        MARKER_TS.read_text(),
+        re.M,
+    )
+    assert len(found) == 1, "marker.ts names REFUSE_FROM exactly once"
+    return int(found[0][0]), int(found[0][1])
+
+
+def test_the_gate_literals_agree() -> None:
+    assert _shell_refuse_from() == transition.REFUSE_FROM
+    assert _ts_refuse_from() == transition.REFUSE_FROM
+
+
+@pytest.mark.skipif(not S1_FRAGMENT.exists(), reason="S1's fragment was consumed by a release")
+def test_the_gate_is_the_minor_after_s1s_release() -> None:
+    sys.path.insert(0, str(REPO / "scripts"))
+    try:
+        import changes
+        from versions import Version
+    finally:
+        sys.path.remove(str(REPO / "scripts"))
+    current = tomllib.loads((REPO / "packages" / "fr" / "pyproject.toml").read_text())
+    pending = changes.aggregate(changes.load_pending(REPO))
+    release = Version.parse(changes.bumped(current["project"]["version"], pending))
+    major, minor = transition.REFUSE_FROM
+    assert (release.major, release.minor + 1) == (major, minor), (str(release), (major, minor))

@@ -81,22 +81,29 @@ if [ -z "$FR_PLACEMENT_SEEN" ]; then
   done
 fi
 : "${FR_PLAN_CONFIG_FILE:=$REPO_ROOT/.fr/plan-config.yaml}"
-# The plan format moved to `.fr/plan-config.yaml` (S1 R9); until the release named by
-# the owed entry s1-refuse-old-paths, the old path is read while only it exists (R13).
-# Under quiet and stealth the format lives in the configuration space, and the product
-# worktree's old file is never read (`fr.config.space.located`, lens review l-tests-r1):
-# a feature branch must not shadow the space.
+# The plan format moved to `.fr/plan-config.yaml` (S1 R9); before fr 9.2 the old path is
+# read while only it exists (R13). Under quiet and stealth the format lives in the
+# configuration space, and the product worktree's old file is never read
+# (`fr.config.space.located`, lens review l-tests-r1): a feature branch must not shadow
+# the space. Whether the transition has ended is fr's own answer, `FR_OLD_PATHS_ENDED`
+# (spec 2026-11-28-s1-followups R7); with no fr to ask, or an fr too old to say, it has.
+FR_OLD_PATHS_ENDED_SEEN="$(printf '%s\n' "$FR_PATHS" | sed -n 's/^FR_OLD_PATHS_ENDED=//p' | head -n 1)"
+[ "$FR_OLD_PATHS_ENDED_SEEN" = 0 ] || FR_OLD_PATHS_ENDED_SEEN=1
 _fr_old_plan_config="$REPO_ROOT/docs/superpowers/plan-config.yaml"
 if [ ! -f "$FR_PLAN_CONFIG_FILE" ] && [ -f "$_fr_old_plan_config" ]; then
-  case "$FR_PLACEMENT_SEEN" in
-    ""|repo)
-      FR_PLAN_CONFIG_FILE="$_fr_old_plan_config"
-      echo "fr: $FR_PLAN_CONFIG_FILE is at its old location; run fr migrate artifacts --yes" >&2
-      ;;
-    *)
-      echo "fr: $_fr_old_plan_config is ignored under placement $FR_PLACEMENT_SEEN: the plan format is read from $FR_PLAN_CONFIG_FILE" >&2
-      ;;
-  esac
+  if [ "$FR_OLD_PATHS_ENDED_SEEN" = 1 ]; then
+    echo "fr: $_fr_old_plan_config is ignored: since fr 9.2 the plan format is read only from $FR_PLAN_CONFIG_FILE; move it with fr migrate artifacts --yes" >&2
+  else
+    case "$FR_PLACEMENT_SEEN" in
+      ""|repo)
+        FR_PLAN_CONFIG_FILE="$_fr_old_plan_config"
+        echo "fr: $FR_PLAN_CONFIG_FILE is at its old location; run fr migrate artifacts --yes" >&2
+        ;;
+      *)
+        echo "fr: $_fr_old_plan_config is ignored under placement $FR_PLACEMENT_SEEN: the plan format is read from $FR_PLAN_CONFIG_FILE" >&2
+        ;;
+    esac
+  fi
 fi
 : "${FR_PLANS_DIR:=$REPO_ROOT/docs/superpowers/plans}"
 : "${FR_ARCHIVED_PLANS_DIR:=$REPO_ROOT/docs/superpowers/implemented/plans}"
