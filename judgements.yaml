@@ -12831,6 +12831,21 @@ batches:
     run: 2026-11-18-feat-batch-consumer-delivery
     archive: chore/closeout-2026-11-25-2
     archived: 0
+  - kind: closeout
+    at: '2026-11-28T09:15:05.610684Z'
+    runner: herdr
+    handle: w3N:p3
+    run: 2026-11-18-feat-batch-consumer-delivery
+    archive: chore/closeout-2026-11-25-2
+    archived: 0
+  - kind: claims_released
+    at: '2026-11-28T09:16:58.601108Z'
+    keys:
+    - super-fr#1402
+    - super-fr#1375
+    - super-fr#1308
+    - super-fr#1186
+    - super-fr#1271
 - id: docs-wording
   title: Docs, help and skill wording sweep
   ids:
@@ -14223,6 +14238,12 @@ batches:
   - super-fr#1592
   - super-fr#1689
   wave: 26
+  events:
+  - kind: dispatch
+    at: '2026-11-28T09:15:17.664428Z'
+    runner: herdr
+    handle: w3X:p9
+    branch: feat/batch-silent-failures
 - id: ci-hygiene
   title: CI hygiene sweep
   ids:
@@ -14440,6 +14461,10 @@ batches:
     patch_id: ccc2cecebf702fbc73afd129efe2d761c597671d
   - kind: post_merge
     at: '2026-11-28T09:06:34.188946Z'
+  - kind: claims_released
+    at: '2026-11-28T09:16:58.601108Z'
+    keys:
+    - super-fr#1731
 - id: s1-followups
   title: 'S1 follow-ups: refuse old paths, config-branch executables, test sites, import-time home'
   ids:
