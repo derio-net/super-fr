@@ -137,16 +137,16 @@ def test_a_body_already_a_table_under_an_old_stamp_is_finished_in_place(tmp_path
 
 
 PROSE_BETWEEN = "# X\n\n## Requirements\n\nR1. a\n\nsome prose\n\nR2. b\n"
-BAD_ID = "# X\n\n## Requirements\n\nR1. a\nR9a. b\n"
+BAD_ID = "# X\n\n## Requirements\n\nR1. a\nR9ab. b\n"
 
 
 @pytest.mark.parametrize(
     ("text", "line", "cause", "fix"),
     [
         (PROSE_BETWEEN, 7, "prose between requirements", "move the prose out of"),
-        (BAD_ID, 6, "malformed requirement id 'R9a'", "fix the requirement id"),
+        (BAD_ID, 6, "malformed requirement id 'R9ab'", "fix the requirement id"),
     ],
-    ids=["prose-between", "R9a"],
+    ids=["prose-between", "R9ab"],
 )
 def test_an_unconvertible_spec_is_left_byte_identical_and_named(
     tmp_path: Path, text: str, line: int, cause: str, fix: str
@@ -184,3 +184,14 @@ def test_an_archived_spec_is_never_located(tmp_path: Path) -> None:
     report = _migrate(tmp_path)
     assert not report.applied and not report.failed
     assert path.read_bytes() == LIST_SPEC.encode()
+
+
+def test_a_lettered_id_is_converted(tmp_path: Path) -> None:
+    text = "# X\n\n## Requirements\n\nR9. nine\nR9a. inserted\nwrapped\nR10. ten\n"
+    path = _spec(tmp_path, text)
+    before = parse_requirements(text)
+    assert not _migrate(tmp_path).failed
+    out = path.read_text()
+    assert "| R9a | inserted wrapped |\n" in out
+    assert parse_requirements(out) == before
+    assert validate_artifact(artifact_kind("spec"), path) == ()

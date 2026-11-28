@@ -1179,3 +1179,13 @@ def test_an_unstamped_list_spec_is_not_checked_for_the_form(tmp_path: Path) -> N
 
     path = _stamped_spec(tmp_path, "R1. x\nR2. y\n", stamp=False)
     assert validate_spec(path) == []
+
+
+def test_a_stamped_spec_with_a_lettered_list_line_is_refused_and_a_lettered_row_is_not(
+    tmp_path: Path,
+) -> None:
+    from fr.artifacts.structure import validate_spec
+
+    path = _stamped_spec(tmp_path, "| ID | Requirement |\n|----|----|\n| R9a | a |\n\nR9b. x\n")
+    [problem] = validate_spec(path)
+    assert problem.startswith(f"line {_line_of(path, 'R9b. x')}: stamped fr_schema 2")

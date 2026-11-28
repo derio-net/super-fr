@@ -14,7 +14,7 @@ covers:
   - plugins/super-fr/skills/fr-execute/SKILL.md
   - packages/fr/src/fr/commands/plan_cmd.py
   - packages/fr/src/fr/commands/pickup_cmd.py
-reviewed: 2026-11-28 a spec's `## Requirements` is now the `| ID | Requirement |` table, and `fr migrate artifacts` rewrites an `R<n>.` list into it (spec kind 2, spec-requirements-table R8); 2026-11-27 still true; run-verdict slice 2 re-points an import to fr/run/steps.py, no behaviour change (#1519); 2026-11-27 still true, import-only change (plan_ops split); 2026-11-24 the spec carries a `## Design shape`, drawn with fr-show-me (show-me-visuals R7, R14); 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-14 still true after VK support was removed; fr-execute's PR-format note names runners, not VK
+reviewed: 2026-11-28 a spec's `## Requirements` is now the `| ID | Requirement |` table, and `fr migrate artifacts` rewrites an `R<n>.` list into it (spec kind 2, spec-requirements-table R8), and an id may carry one lowercase letter (R9a); 2026-11-27 still true; run-verdict slice 2 re-points an import to fr/run/steps.py, no behaviour change (#1519); 2026-11-27 still true, import-only change (plan_ops split); 2026-11-24 the spec carries a `## Design shape`, drawn with fr-show-me (show-me-visuals R7, R14); 2026-11-20 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-19 batch docs-wording changes help text and docstrings only (bracketed help renders, first lines shortened for STE, `fr ops gate` hint names the full scaffold command); still true; 2026-11-14 still true after VK support was removed; fr-execute's PR-format note names runners, not VK
 ---
 
 ## Why write the idea down twice?
@@ -121,7 +121,8 @@ It adds five things to a plain brainstorm:
 - **A `## Requirements` section** before `## Design`: a two-column table, `| ID | Requirement |`,
   one row per requirement (`| R1 | ... |`), so it renders as rows in any Markdown previewer.
   A literal `|` in the text is written `\|`, and the spec starts with front matter
-  `fr_schema: 2`. Plans and acceptance rows cite these ids. An older spec's `R1. ...` list
+  `fr_schema: 2`. An id is `R1`, `R2`, ...; a letter after the number (`R9a`) inserts a
+  requirement without renumbering the rest. Plans and acceptance rows cite these ids. An older spec's `R1. ...` list
   is rewritten into the table by `fr migrate artifacts --yes`.
 - **A `## Design shape` section**: a small picture of the change, drawn with
   [fr-show-me](fr-show-me.md)'s views, such as the files it touches as an annotated tree.

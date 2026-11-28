@@ -201,7 +201,15 @@ def test_prose_between_requirements_is_ignored_by_the_reader_but_named_by_the_la
 
 
 @pytest.mark.parametrize(
-    ("line", "rid"), [("R9a. text", "R9a"), ("- R9a. text", "R9a"), ("R0. x", "R0")]
+    ("line", "rid"),
+    [
+        ("R9ab. text", "R9ab"),
+        ("- R9ab. text", "R9ab"),
+        ("R0. x", "R0"),
+        ("R09. x", "R09"),
+        ("R9A. x", "R9A"),
+        ("R9-a. x", "R9-a"),
+    ],
 )
 def test_an_id_like_line_with_a_malformed_id_names_the_line(line: str, rid: str) -> None:
     spec = f"## Requirements\n\nR1. a\n{line}\n"
@@ -227,3 +235,56 @@ def test_the_layout_is_none_for_a_table_or_no_section() -> None:
     assert list_layout(TWO_COL_LEGACY) is None
     assert list_layout(TABLE_SPEC) is None
     assert list_layout("# spec\n\n## Design\n") is None
+
+
+# --- lettered ids (spec 2026-11-26-spec-requirements-table R1, decision
+# lettered-requirement-ids): `R<n>` plus one optional lowercase letter --------
+
+
+def test_a_lettered_id_is_read_in_the_list() -> None:
+    spec = "## Requirements\n\nR9. nine\nR9a. inserted\n- R9b. bulleted\nR10. ten\n"
+    assert _pairs(spec) == [
+        ("R9", "nine"),
+        ("R9a", "inserted"),
+        ("R9b", "bulleted"),
+        ("R10", "ten"),
+    ]
+
+
+def test_a_lettered_id_is_read_in_the_table() -> None:
+    spec = (
+        "## Requirements\n\n| ID | Requirement |\n|----|----|\n"
+        "| R9 | nine |\n| R9a | inserted |\n| R10 | ten |\n"
+    )
+    assert _pairs(spec) == [("R9", "nine"), ("R9a", "inserted"), ("R10", "ten")]
+
+
+@pytest.mark.parametrize("rid", ["R9ab", "R09", "R9A", "R9-a"])
+def test_a_table_row_with_a_non_r1_id_raises(rid: str) -> None:
+    spec = f"## Requirements\n\n| ID | Requirement |\n|----|----|\n| R1 | a |\n| {rid} | b |\n"
+    with pytest.raises(RequirementsError, match=rf"line 6: malformed requirement id '{rid}'"):
+        parse_requirements(spec)
+
+
+@pytest.mark.parametrize("ids", [("R9a", "R9"), ("R9a", "R9a"), ("R9b", "R9a"), ("R10", "R9a")])
+def test_lettered_ids_must_increase(ids: tuple[str, str]) -> None:
+    a, b = ids
+    spec = f"## Requirements\n\n{a}. one\n{b}. two\n"
+    if (a, b) == ("R10", "R9a"):
+        match = r"line 4: requirement id R9a is repeated or out of order \(it follows R10\)"
+    else:
+        match = rf"line 4: requirement id {b} is repeated or out of order \(it follows {a}\)"
+    with pytest.raises(RequirementsError, match=match):
+        parse_requirements(spec)
+
+
+def test_requirement_order_puts_a_lettered_id_between_its_neighbours() -> None:
+    from fr.requirements import requirement_order
+
+    assert sorted(["R10", "R9b", "R9", "R9a", "R2"], key=requirement_order) == [
+        "R2",
+        "R9",
+        "R9a",
+        "R9b",
+        "R10",
+    ]

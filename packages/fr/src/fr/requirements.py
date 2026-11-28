@@ -11,12 +11,14 @@ Authors write a two-column table, one row per requirement:
 
 Every row starts and ends with `|`; a `\\|` inside a cell is a literal `|`, and
 a row of other than two cells is an error naming its line. The header is read
-in any case.
+in any case. An id is `R<n>` (`n` from 1, no leading zero), optionally followed
+by one lowercase letter (`R9a`, inserted between `R9` and `R10` without
+renumbering); ids increase down the section.
 
 Two older forms still read to the same ids and text, so archived and
 unmigrated specs keep their meaning:
 
-- the `R<n>. <text>` list (optionally behind a `-`/`*` bullet), where the
+- the `R<n>. <text>` list (`R<n>[a-z]`, optionally behind a `-`/`*` bullet), where the
   non-blank lines directly after a requirement line are its continuation,
   joined with single spaces, and a line that starts like an id but is
   malformed (`R9a. ...`) is an error;
@@ -72,9 +74,13 @@ class RequirementsError(Exception):
 _REQUIREMENTS_HEADING = "## Requirements"
 _LEGACY_HEADER = ["id", "requirement", "source"]
 _TABLE_HEADER = ["id", "requirement"]
-_ID_RE = re.compile(r"^R[1-9][0-9]*$")
-_LIST_ITEM_RE = re.compile(r"^(?:[-*]\s+)?(R[1-9][0-9]*)\.\s+(\S.*)$")
-"""`R<n>. <text>`, optionally behind a Markdown `-`/`*` bullet."""
+_ID_PATTERN = r"R[1-9][0-9]*[a-z]?"
+"""A requirement id (R1): `R<n>`, `n` from 1 with no leading zero, optionally followed
+by one lowercase letter (`R9a`), which inserts a requirement without renumbering."""
+_ID_RE = re.compile(rf"^{_ID_PATTERN}$")
+_LIST_ITEM_RE = re.compile(rf"^(?:[-*]\s+)?({_ID_PATTERN})\.\s+(\S.*)$")
+"""`R<n>[a-z]. <text>`, optionally behind a Markdown `-`/`*` bullet."""
+_ID_EXPECTED = "expected `R` + a positive integer, optionally + one lowercase letter"
 _ID_LIKE_RE = re.compile(r"^(?:[-*]\s+)?(R\S*)\.\s")
 """A line that starts like a requirement id (R3): an optional bullet, `R`,
 non-space characters, then `. `. One `_LIST_ITEM_RE` rejects is an error."""
@@ -226,7 +232,7 @@ def _walk_list(lines: list[str], first_line_no: int) -> ListLayout:
         if like:
             raise RequirementsError(
                 f"line {first_line_no + idx}: malformed requirement id {like.group(1)!r} "
-                "(expected `R` + a positive integer)"
+                f"({_ID_EXPECTED})"
             )
         if not stripped:
             close()
@@ -296,6 +302,14 @@ def _rows(spec_text: str) -> list[tuple[str, str, int]]:
     return table if table is not None else _list_rows(*section)
 
 
+def requirement_order(rid: str) -> tuple[int, str]:
+    """The sort key of a well-formed requirement id: `R9` < `R9a` < `R9b` < `R10`."""
+    m = re.match(r"R([0-9]+)([a-z]?)$", rid)
+    if m is None:
+        raise ValueError(f"not a requirement id: {rid!r}")
+    return int(m.group(1)), m.group(2)
+
+
 def has_requirements(spec_text: str) -> bool:
     """Does the spec's `## Requirements` section hold a requirement, in either
     form? A section of prose alone does not — it predates both forms, and
@@ -316,20 +330,19 @@ def parse_requirements(spec_text: str) -> Requirements:
             "(an `| ID | Requirement |` table row or an `R<n>. <text>` line)"
         )
     items: list[Requirement] = []
-    last = 0
+    last, last_id = (0, ""), "R0"
     for rid, text, line_no in rows:
         if not _ID_RE.match(rid):
             raise RequirementsError(
-                f"line {line_no}: malformed requirement id {rid!r} "
-                "(expected `R` + a positive integer)"
+                f"line {line_no}: malformed requirement id {rid!r} ({_ID_EXPECTED})"
             )
-        number = int(rid[1:])
-        if number <= last:
+        key = requirement_order(rid)
+        if key <= last:
             raise RequirementsError(
                 f"line {line_no}: requirement id {rid} is repeated or out of order "
-                f"(it follows R{last})"
+                f"(it follows {last_id})"
             )
-        last = number
+        last, last_id = key, rid
         if not text:
             raise RequirementsError(f"line {line_no}: requirement {rid} has no text")
         items.append(Requirement(id=rid, text=text))
