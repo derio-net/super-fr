@@ -147,3 +147,24 @@ amendments:
       named anchors resolve. Post-merge candidate walk 2026-11-28: the row''s scenario
       (tests/scenarios/triage-closed-recovery.sh, fake-backed, temp dirs) passed against
       the installed candidate built from main 9aefd594f.'
+  - row: triage-closed-recovery-repair
+    op: set-status
+    base: 1
+    status: ci
+    notes: 'Fault injection and installed cross-store repair prove no replay or false
+      ownership; named anchors resolve. Post-merge candidate walk 2026-11-28: the row''s
+      scenario (tests/scenarios/triage-closed-recovery.sh, fake-backed, temp dirs) passed
+      against the installed candidate built from main 9aefd594f.'
+    walk:
+      strategy: candidate
+      harness: claude
+      model: claude-opus-5-5
+      outcome: pass
+      at: '2026-11-28T14:28:42Z'
+      evidence: tests/integration/test_scenarios.py::test_triage_closed_recovery passed
+        2026-11-28 (scenario tests/scenarios/triage-closed-recovery.sh against fr 9.1.0rc10
+        installed from main 9aefd594f), 1 passed in 8.81s
+    why: 'Fault injection and installed cross-store repair prove no replay or false
+      ownership; named anchors resolve. Post-merge candidate walk 2026-11-28: the row''s
+      scenario (tests/scenarios/triage-closed-recovery.sh, fake-backed, temp dirs) passed
+      against the installed candidate built from main 9aefd594f.'
