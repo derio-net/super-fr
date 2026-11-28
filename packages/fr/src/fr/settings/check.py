@@ -169,7 +169,7 @@ RULES: Final[tuple[tuple[str, Predicate, Message], ...]] = (
         "{detail} is set explicitly in the tracking repo's settings file, to a value other "
         "than stealth's own (forge labels, comments and issues off, pr_body minimal; git "
         "push and pr ask): stealth sets those keys itself and refuses a contrary value "
-        "rather than ignoring it",
+        "rather than ignoring it; remove the key from the tracking repo's settings file",
     ),
     (
         "unknown-disabled-shape",
