@@ -367,3 +367,8 @@ Docstrings updated, test renamed, test_a_heading_after_the_last_requirement_keep
 
 <!-- fr:journal kind=discovery scope=plan id=p1-validator-fence-example created=2026-11-28T17:56:29+00:00 phase=1 -->
 ### p1-validator-fence-example · discovery · table_form_problems does not skip fenced blocks: an R1. example inside a fence in a stamped spec's Requirements section would be flagged as list form; no live spec does this (phase 1)
+
+<!-- fr:journal kind=finding scope=plan id=l-tests-r5-resolved-2 created=2026-11-28T17:56:50+00:00 state=refuted resolves=l-tests-r5 -->
+### l-tests-r5-resolved-2 · finding [refuted] · resolves l-tests-r5: the R8 prose test checks only that wording is present
+
+Not a defect: the lens reviewer itself judged it acceptable. R8 is a prose requirement, and presence of the required wording is the only thing a test can check for it.
