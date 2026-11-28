@@ -42,7 +42,7 @@ rows:
       holds an R<n>. list line or a table row that is not exactly two cells, naming
       the line
     origin:
-    - spec:2026-11-26-spec-requirements-table#R6
+    - spec:2026-11-26-spec-requirements-table#R7
     levels: {}
     status: not-implemented
     notes: ''
