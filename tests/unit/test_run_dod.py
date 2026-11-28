@@ -182,3 +182,27 @@ def test_an_unreadable_ops_file_is_a_dod_error(tmp_path: Path) -> None:
     (root / PLAN / "ops.yaml").write_text("ops: [\n")
     with pytest.raises(DodError):
         definition_of_done(root, _state())
+
+
+def test_p3_r3_a_recorded_plan_that_cannot_be_found_is_a_dod_error(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    shutil.rmtree(root / PLAN)
+    with pytest.raises(DodError, match="plan"):
+        definition_of_done(root, _state())
+
+
+def test_p3_r1_excluded_resolution_records_do_not_close_an_owed_entry(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    _owed(root, "plan", "p", "walk-the-dog", "plan:p#p1", "walk the dog after merge")
+    _entry(root, "plan", "p", kind="finding", id="dog-walked", resolves="walk-the-dog",
+           state="fixed", title="walked", body="done")  # fmt: skip
+    assert _group(definition_of_done(root, _state()), "owed") == {}
+    held = definition_of_done(root, _state(), exclude_entries={"plan": {"dog-walked"}})
+    assert "owed walk-the-dog (plan journal)" in _group(held, "owed")
+
+
+def test_p3_r1_an_excluded_manual_tick_reads_unticked(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    dod = definition_of_done(root, _state(), exclude_manual_ticks={3})
+    discharged, why = _group(dod, "manual phases")["phase 3 [manual]"]
+    assert not discharged and "PR head" in why

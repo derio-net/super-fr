@@ -1438,17 +1438,67 @@ def _head_exclusions(gate: Gate, tree: OpsTree) -> tuple[set[str], dict[str, set
     return at_head, head_walks(tree, head)
 
 
+def head_manual_ticks(tree: OpsTree, head: str, run: RunState, plan_rel: str) -> set[int]:
+    """The `[manual]` phases whose tick the pinned PR head itself carries (R20): complete in
+    the head's own phase file, with the same step and completion state there as in the ops
+    workspace. PR-controlled, so such a tick counts as not there inside the stage; one the
+    ops branch makes (or re-records) after the head changes the state and counts."""
+    import yaml
+
+    from fr.verification.exit import run_plan_dir
+
+    plan_dir = run_plan_dir(tree.path, run)  # live, or archived by stage 8
+    if plan_dir is None:
+        return set()
+    out: set[int] = set()
+    for local in sorted(plan_dir.glob("[0-9][0-9].yaml")):
+        text = tree.show(head, f"{plan_rel}/{local.name}")
+        if not text:
+            continue
+        try:
+            at_head, here = yaml.safe_load(text), yaml.safe_load(local.read_text())
+        except yaml.YAMLError as exc:  # never an empty exclusion: a refusal
+            raise StageFailed(
+                f"the PR head's {plan_rel}/{local.name} cannot be read ({exc})", code=2
+            ) from exc
+        phase = (at_head or {}).get("phase") or {}
+        state = (at_head or {}).get("state")
+        if phase.get("tag") == "manual" and _ticked(state) and state == (here or {}).get("state"):
+            out.add(int(phase.get("number", 0)))
+    return out
+
+
+def _ticked(state: Any) -> bool:
+    """`plan_locally_complete` over a raw phase file's `state` block."""
+    if not isinstance(state, dict):
+        return False
+    if (state.get("completion") or {}).get("at"):
+        return True
+    steps = state.get("steps") or {}
+    return bool(steps) and all(
+        isinstance(v, dict) and v.get("state") in ("x", "-") for v in steps.values()
+    )
+
+
 def _say_done(gate: Gate) -> None:
     """R20: the stage is complete only while the run's Definition of Done, read on the ops
     workspace with the PR head's own evidence excluded, is discharged; otherwise every item
     still owed, from every group."""
     from fr.run.dod import DodError, definition_of_done
 
+    t = gate.target
     try:
         tree = gate.tree()
         at_head, excluded = _head_exclusions(gate, tree)
-        dod = definition_of_done(tree.path, gate.target.run, exclude_walks=excluded,
-                                 exclude_outcomes=at_head)  # fmt: skip
+        head = gate.pinned_head()
+        dod = definition_of_done(
+            tree.path,
+            t.run,
+            exclude_walks=excluded,
+            exclude_outcomes=at_head,
+            exclude_entries={"spec": at_head, "plan": head_entry_ids(tree, head, "plan", t.slug)},
+            exclude_manual_ticks=head_manual_ticks(tree, head, t.run, t.plan_rel),
+        )
     except (DodError, StageFailed) as exc:
         why = exc.why if isinstance(exc, StageFailed) else str(exc)
         gate.say(f"every stage ran; the Definition of Done cannot be read: {why}")

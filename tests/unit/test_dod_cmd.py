@@ -82,3 +82,14 @@ def test_an_unreadable_input_exits_2(tmp_path: Path) -> None:
     result = _invoke(root, ["run", "dod", "run-1"])
     assert result.exit_code == 2, result.output
     assert "cannot be read" in result.output
+
+
+def test_p3_r3_a_recorded_but_missing_plan_exits_2(tmp_path: Path) -> None:
+    import shutil
+
+    root = _repo(tmp_path)
+    save_run_state(root, _state())
+    shutil.rmtree(root / PLAN)
+    result = _invoke(root, ["run", "dod", "run-1"])
+    assert result.exit_code == 2, result.output
+    assert "cannot be read" in result.output

@@ -88,10 +88,15 @@ def definition_of_done(
     *,
     exclude_walks: Mapping[str, Collection[Walk]] | None = None,
     exclude_outcomes: Set[str] = frozenset(),
+    exclude_entries: Mapping[str, Set[str]] | None = None,
+    exclude_manual_ticks: Set[int] = frozenset(),
 ) -> DefinitionOfDone:
-    """The Definition of Done of *run* as *repo_root* records it (R17). *exclude_walks* and
-    *exclude_outcomes* pass to `gate_items` (the DevOps stage's PR-head exclusions, R12).
-    Raises `DodError` when an input cannot be read."""
+    """The Definition of Done of *run* as *repo_root* records it (R17). The exclusions are
+    the DevOps stage's (R12, R20: what the pinned PR head carries discharges nothing):
+    *exclude_walks* and *exclude_outcomes* pass to `gate_items`; a resolution record whose
+    id is in *exclude_entries[scope]* does not close an owed entry of that journal; a
+    `[manual]` phase in *exclude_manual_ticks* reads unticked. Raises `DodError` when an
+    input cannot be read, a recorded plan that cannot be found included (R20)."""
     from fr.acceptance.model import AcceptanceError
     from fr.journal.model import JournalParseError
     from fr.ops.load import OpsLoadError
@@ -101,7 +106,14 @@ def definition_of_done(
     from fr.verification.spec_section import SectionError
 
     try:
-        return _derive(repo_root, run, exclude_walks, exclude_outcomes)
+        return _derive(
+            repo_root,
+            run,
+            exclude_walks,
+            exclude_outcomes,
+            exclude_entries or {},
+            exclude_manual_ticks,
+        )
     except (
         AcceptanceError,
         JournalParseError,
@@ -121,6 +133,8 @@ def _derive(
     run: RunState,
     exclude_walks: Mapping[str, Collection[Walk]] | None,
     exclude_outcomes: Set[str],
+    exclude_entries: Mapping[str, Set[str]],
+    exclude_manual_ticks: Set[int],
 ) -> DefinitionOfDone:
     from fr.ops.holds import gate_items
     from fr.verification.exit import run_exit, run_plan_dir
@@ -136,14 +150,25 @@ def _derive(
         dod_items = tuple(DodItem(i.what, i.discharged, i.why) for i in items)
         groups.append(DodGroup(f"gate:{gate}", dod_items))
     plan_dir = run_plan_dir(repo_root, run)
-    manual = _manual_phases(plan_dir) if plan_dir is not None else []
+    recorded = _recorded_plan(run)
+    if recorded is not None and plan_dir is None:
+        raise DodError(f"the run recorded the plan {recorded}, which is neither live nor archived")
+    manual = _manual_phases(plan_dir, exclude_manual_ticks) if plan_dir is not None else []
     groups.append(DodGroup(MANUAL_GROUP, tuple(item for _, item in manual)))
     phases = {n for n, _ in manual}
-    groups.append(DodGroup(OWED_GROUP, tuple(_owed(repo_root, run, plan_dir, steps, phases))))
+    owed = _owed(repo_root, run, plan_dir, steps, phases, exclude_entries)
+    groups.append(DodGroup(OWED_GROUP, tuple(owed)))
     return DefinitionOfDone(tuple(groups))
 
 
-def _manual_phases(plan_dir: Path) -> list[tuple[int, DodItem]]:
+def _recorded_plan(run: RunState) -> str | None:
+    return next(
+        (r.emitted["plan"] for r in run.steps.values() if r.emitted and r.emitted.get("plan")),
+        None,
+    )
+
+
+def _manual_phases(plan_dir: Path, head_ticked: Set[int]) -> list[tuple[int, DodItem]]:
     from fr.parser import parse
     from fr.render import plan_locally_complete
 
@@ -153,16 +178,25 @@ def _manual_phases(plan_dir: Path) -> list[tuple[int, DodItem]]:
         if p.phase.tag != "manual":
             continue
         done = plan_locally_complete(p)
-        why = ("ticked" if done else "not ticked") + f" — {p.phase.title}"
+        if done and p.phase.number in head_ticked:
+            done, why = False, f"ticked only on the PR head, which proves nothing — {p.phase.title}"
+        else:
+            why = ("ticked" if done else "not ticked") + f" — {p.phase.title}"
         out.append((p.phase.number, DodItem(f"phase {p.phase.number} [manual]", done, why)))
     return out
 
 
 def _owed(
-    repo_root: Path, run: RunState, plan_dir: Path | None, steps: Set[int], phases: Set[int]
+    repo_root: Path,
+    run: RunState,
+    plan_dir: Path | None,
+    steps: Set[int],
+    phases: Set[int],
+    exclude_entries: Mapping[str, Set[str]],
 ) -> list[DodItem]:
     """Each open `owed` entry of the run's spec and plan journals, less those a gate group
-    reports (its Test Plan step) or the manual group does (its phase)."""
+    reports (its Test Plan step) or the manual group does (its phase); a resolution record
+    in *exclude_entries* closes nothing."""
     from fr.journal.model import (
         open_owed_ids,
         parse_journal,
@@ -182,7 +216,10 @@ def _owed(
         path = resolve_journal_read_path(repo_root, scope, slug)  # type: ignore[arg-type]
         if not path.is_file():
             continue
-        entries = parse_journal(path.read_text())
+        skip = exclude_entries.get(scope, frozenset())
+        entries = [
+            e for e in parse_journal(path.read_text()) if e.resolves is None or e.id not in skip
+        ]
         titles = {e.id: e.title for e in entries if e.resolves is None}
         pattern = _STEP_OUTCOME if scope == "spec" else _MANUAL_OWED
         for eid in open_owed_ids(entries):

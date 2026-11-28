@@ -2209,3 +2209,56 @@ def test_r20_an_unreadable_dod_never_says_complete(ops_root: Path) -> None:
 
     assert "the DevOps stage is complete" not in said
     assert any("Definition of Done cannot be read" in line for line in said), said
+
+
+def test_p3_r1_a_head_carried_owed_resolution_never_makes_the_stage_complete(
+    ops_root: Path,
+) -> None:
+    _real_plan(ops_root, manual="x")
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _all_recorded(ops_root, tree)
+    jp = journal_path(ops_root, "plan", "p")
+    for entry in (
+        JournalEntry(kind="owed", scope="plan", id="walk-the-dog", created="2026-10-22T10:00:00+00:00",
+                     title="walk the dog", body="what: w\nwhy: y\nhow: h\nowed_key: plan:p#p1"),
+        JournalEntry(kind="finding", scope="plan", id="dog-walked", resolves="walk-the-dog",
+                     state="fixed", created="2026-10-22T11:00:00+00:00", title="walked", body="b"),
+    ):  # fmt: skip
+        append_journal_entry(jp, "p", entry)
+    tree.head_files[jp.relative_to(ops_root).as_posix()] = jp.read_text()  # the PR head wrote both
+
+    run(gate)
+
+    assert "the DevOps stage is complete" not in said
+    assert any(line.startswith("  owed: owed walk-the-dog (plan journal)") for line in said), said
+
+
+def test_p3_r1_a_manual_tick_the_head_carries_never_makes_the_stage_complete(
+    ops_root: Path,
+) -> None:
+    _real_plan(ops_root, manual="x")
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _all_recorded(ops_root, tree)
+    rel = f"{PLAN}/02.yaml"
+    tree.head_files[rel] = (ops_root / rel).read_text()  # the tick arrived with the PR head
+
+    run(gate)
+
+    assert "the DevOps stage is complete" not in said
+    assert any(line.startswith("  manual phases: phase 2 [manual]") for line in said), said
+
+
+def test_p3_r1_a_manual_tick_made_on_the_ops_branch_counts(ops_root: Path) -> None:
+    _real_plan(ops_root, manual="x")
+    _record_stages(ops_root, 1, 2, 3, 4, 5, 6, 7, 8)
+    gate, host, tree, forge, _, said = _gate(ops_root, up=True, forge=FakeForge(state="MERGED"))
+    _all_recorded(ops_root, tree)
+    from tests.unit.test_run_dod import MANUAL
+
+    tree.head_files[f"{PLAN}/02.yaml"] = MANUAL.format(n=2, tick=" ")  # unticked on the head
+
+    run(gate)
+
+    assert "the DevOps stage is complete" in said, said
