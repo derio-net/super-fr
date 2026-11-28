@@ -234,12 +234,13 @@ def test_shipped_fr_goal_light_evidence_carries_no_input_gate() -> None:
 
 
 def test_run_resolve_knows_no_input_gate() -> None:
-    from fr.commands import run_cmd
+    from fr.run.evidence import target
+    from fr.workflow.artifacts import DERIVED_EVIDENCE
 
     for name in _INPUT_GATES:
-        assert name not in run_cmd._VERIFIABLE_EVIDENCE
-        assert name not in run_cmd._DERIVED_EVIDENCE
-        assert name not in run_cmd._DERIVED_FROM
+        assert name not in target.VERIFIABLE_EVIDENCE
+        assert name not in DERIVED_EVIDENCE
+        assert name not in target.DERIVED_FROM
 
 
 # The removals, undone — the 4.29–4.40 shape an in-flight cursor was started against.
@@ -263,8 +264,8 @@ _WITH_THE_GATES = (
 def test_a_cursor_started_with_the_input_gates_does_not_drift(tmp_path: Path) -> None:
     """Drift compares step and member ids only: every removal is a field, so a run
     started on the 4.29–4.40 shape keeps advancing on this one (R8)."""
-    from fr.commands.run_cmd import _check_step_drift
     from fr.run.model import load_run_state
+    from fr.run.steps import check_step_drift
 
     from tests.unit.test_run_cli import _invoke, _repo
 
@@ -281,7 +282,7 @@ def test_a_cursor_started_with_the_input_gates_does_not_drift(tmp_path: Path) ->
     )
     assert started.exit_code == 0, started.output
 
-    _check_step_drift(load_run_state(repo, "r1"), _shipped_fr_goal())  # raises on drift
+    check_step_drift(load_run_state(repo, "r1"), _shipped_fr_goal())  # raises on drift
 
 
 def test_shipped_fr_goal_declares_visual_on_the_three_ui_stages() -> None:

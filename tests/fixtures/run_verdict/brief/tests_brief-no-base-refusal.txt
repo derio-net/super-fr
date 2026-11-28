@@ -1,0 +1,1 @@
+[31mdeliver: refused — .fr/ci.yaml's fast_tier needs {base}, the run's default ref, and git cannot name it: several remotes. Fix: `git remote set-head <remote> --auto` (a remote with no HEAD), or `git config checkout.defaultRemote <remote>` (several remotes).[0m

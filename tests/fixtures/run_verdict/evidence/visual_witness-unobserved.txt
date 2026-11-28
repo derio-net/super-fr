@@ -1,0 +1,1 @@
+[33mphase/1/implement-phase: could not verify that the screenshots were opened — no transcript [0m[33m; recorded as checked on disk, unverified (evidence: unobserved=visual).[0m

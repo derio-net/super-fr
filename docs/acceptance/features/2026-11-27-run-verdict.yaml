@@ -1,0 +1,88 @@
+# Acceptance rows owned by one feature (spec 2026-11-04-repo-feature-settings R16).
+# The effective matrix is a fold over every fragment in this directory
+# (`fr acceptance status`); it is never stored. Write rows with
+# `fr acceptance add` / `set-status`, never by hand. Keep `rows:` before
+# `amendments:`.
+schema_version: 2
+feature: 2026-11-27-run-verdict
+repo: derio-net/super-fr
+rows:
+  - id: run-verdict-refusals-preserved
+    capability: run refusals
+    acceptance: After the lookup, provenance, brief, deliver and evidence code moves
+      out of run_cmd.py, every refusal those paths print keeps its wording, markup,
+      wrapping, line order and exit code, and every warning prints in the same place
+      relative to it
+    origin:
+    - spec:2026-11-27-run-verdict#R1
+    - spec:2026-11-27-run-verdict#R2
+    - spec:2026-11-27-run-verdict#R7
+    - spec:2026-11-27-run-verdict#R9
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_verdict.py#test_refusals_prints_lines_and_exits_keeping_the_cause
+      - super-fr:tests/unit/test_run_verdict_steps.py#test_the_moved_lookup_prints_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_derived.py#test_the_moved_verifier_prints_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_brief.py#test_the_moved_briefs_print_and_return_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_deliver.py#test_the_moved_gates_print_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_evidence.py#test_the_moved_verifiers_print_and_return_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_evidence.py#test_two_derived_refusals_print_the_summary_line
+      - super-fr:tests/unit/test_run_verdict_provenance.py#test_the_moved_gate_provenance_prints_and_returns_the_captured_bytes
+    status: ci
+    notes: every refusal and warning of the moved lookup, derived, brief, deliver, evidence
+      and provenance code is driven through fr/run onto a recording console and compared
+      byte for byte with a capture taken before each move
+    verify: none
+  - id: run-engine-cli-free
+    capability: run engine layering
+    acceptance: No module under fr/run imports a CLI framework, a console library other
+      than markup escaping, or a command module (one named allowance), and CI fails
+      a planted import of any of them
+    origin:
+    - spec:2026-11-27-run-verdict#R10
+    levels:
+      unit:
+      - super-fr:tests/unit/test_run_writes_layering.py#test_every_run_engine_module_imports_no_cli_layer
+      - super-fr:tests/unit/test_run_writes_layering.py#test_the_helper_reports_planted_cli_imports_and_accepts_clean_ones
+    status: ci
+    notes: every fr/run module checked by its syntax tree; the one allowance is fr/run/workspace.py's
+      import of fr.commands.isolation_cmd (slice 2 removed the temporary adopt.py one)
+    verify: none
+  - id: run-cmd-clusters-in-fr-run
+    capability: run engine layering
+    acceptance: The lookup, provenance, brief, deliver-gate and evidence code lives
+      in fr/run modules that importers and tests use directly, and run_cmd.py's line
+      budget falls with each move
+    origin:
+    - spec:2026-11-27-run-verdict#R3
+    - spec:2026-11-27-run-verdict#R4
+    - spec:2026-11-27-run-verdict#R5
+    - spec:2026-11-27-run-verdict#R6
+    - spec:2026-11-27-run-verdict#R8
+    - spec:2026-11-27-run-verdict#R11
+    - spec:2026-11-27-run-verdict#R12
+    - spec:2026-11-27-run-verdict#R13
+    levels:
+      unit:
+      - super-fr:tests/unit/test_tripwire_module_budget.py#test_module_is_within_its_budget
+      - super-fr:tests/unit/test_run_writes_layering.py#test_every_run_engine_module_imports_no_cli_layer
+      - super-fr:tests/unit/test_run_verdict_steps.py#test_the_moved_lookup_prints_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_deliver.py#test_the_moved_gates_print_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_brief.py#test_the_moved_briefs_print_and_return_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_evidence.py#test_the_moved_verifiers_print_and_return_the_captured_bytes
+      - super-fr:tests/unit/test_run_verdict_provenance.py#test_the_moved_gate_provenance_prints_and_returns_the_captured_bytes
+    status: ci
+    notes: 'lookup, derived, deliver, brief, evidence and provenance live in fr/run
+      modules: each slice''s capture test drives its moved names from the fr/run module
+      (a cluster left in run_cmd fails its import); run_cmd.py''s budget fell from 4540
+      to 4111 across slices 5-6 and the layering test holds the package'
+    verify: none
+amendments:
+  - row: harness-gate-degrades-loudly
+    op: set-status
+    base: 0
+    status: ci
+    notes: Spec 3.D.1. fr.run.provenance.gate_degradation_notice() reads the matrix
+      scope_note live (never hardcoded). Live verification on OpenCode/Hermes is Test
+      Plan items 1-2, post-merge.
+    why: run-verdict slice 6 moved the function

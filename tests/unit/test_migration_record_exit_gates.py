@@ -209,8 +209,8 @@ def test_the_validator_accepts_both_fields(tmp_path: Path) -> None:
 
 
 def _decider(text: str, narrows: tuple[str, ...], identity=("derio-net", "super-fr")):
-    from fr.commands.run_cmd import GateAnswer
     from fr.record.apply import _Context, _stamped_decider
+    from fr.run.provenance import GateAnswer
     from fr.run.telemetry import Round
 
     ctx = _Context(

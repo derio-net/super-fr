@@ -1181,13 +1181,14 @@ def test_a_sidechain_notification_is_ignored(tmp_path: Path, attachment: bool) -
 def test_a_backgrounded_suite_passes_the_deliver_gate_end_to_end(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Spec 5.1 through `_verify_tests_log`: a log written inside the background
+    """Spec 5.1 through `verify_tests_log`: a log written inside the background
     window is accepted; one written after the notification is refused."""
     import datetime as dt
 
     import click
     import typer
-    from fr.commands.run_cmd import _verify_tests_log
+    from fr.commands import run_cmd
+    from fr.run.evidence.suite import verify_tests_log
 
     from tests.unit.transcript_sessions import ORCHESTRATOR, background_rows, records, write_session
 
@@ -1216,7 +1217,8 @@ def test_a_backgrounded_suite_passes_the_deliver_gate_end_to_end(
         os.utime(log, (t, t))
 
     _touch("2026-09-21T16:08:30+00:00")
-    assert _verify_tests_log("deliver", str(log), tmp_path, opened=opened).startswith("suite.log@")
+    found = run_cmd._witness(verify_tests_log("deliver", str(log), tmp_path, opened=opened))
+    assert found.startswith("suite.log@")
     _touch("2026-09-21T16:20:00+00:00")
     with pytest.raises((typer.Exit, click.exceptions.Exit)):
-        _verify_tests_log("deliver", str(log), tmp_path, opened=opened)
+        run_cmd._witness(verify_tests_log("deliver", str(log), tmp_path, opened=opened))

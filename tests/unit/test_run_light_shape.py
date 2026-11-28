@@ -247,18 +247,18 @@ def test_a_rebind_after_the_first_step_is_refused(tmp_path: Path) -> None:
 
 
 def test_the_rebind_helper_refuses_when_another_step_left_pending(tmp_path: Path) -> None:
-    from fr.commands.run_cmd import _rebind_shape, _resolve_manifest_for_state
     from fr.run.model import RunStateError
+    from fr.run.steps import rebind_shape, resolve_manifest_for_state
 
     root = _at_brainstorm(tmp_path)
     state = load_run_state(root, RUN)
-    manifest = _resolve_manifest_for_state(root, state)
+    manifest = resolve_manifest_for_state(root, state)
     steps = dict(state.steps)
     steps["plan"] = steps["plan"].model_copy(update={"state": "running"})
     moved = state.model_copy(update={"steps": steps})
 
     with pytest.raises(RunStateError, match="plan"):
-        _rebind_shape(moved, manifest, "brainstorm", "fr-goal-light", root)
+        rebind_shape(moved, manifest, "brainstorm", "fr-goal-light", root)
 
 
 # --- single-phase (R2) -----------------------------------------------------------

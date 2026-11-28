@@ -1,0 +1,2 @@
+refused: the PR body closes an issue whose promise is not verified until after merge, or that a decision narrowed. Mention it without closing (`Refs <ref>`); the close command is printed when the walk is recorded (`fr acceptance set-status --walk`):
+  'Closes #7' closes o/r#7, which row r-1 still holds open (post-merge or gated by a post-merge gate, and not yet walk-verified) and decision d-1 narrows it and the operator did not answer it (`decided_by=operator`) and owed row t-1 names it as the issue tracking what it still owes — write instead: Refs o/r#7

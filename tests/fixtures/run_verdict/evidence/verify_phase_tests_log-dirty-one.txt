@@ -1,0 +1,1 @@
+[31mphase/1/implement-phase: --evidence tests=suite.log: 1 code path uncommitted (e.g. src/a.py) — the witness is HEAD's tree, which is not what the suite ran. Commit your code before recording the suite log, then run the full suite again and name the new log.[0m

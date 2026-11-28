@@ -1,0 +1,4 @@
+{
+  "returned": "raised RunStateError: --emitted plan='/nowhere/p' is outside the repo (<ROOT>) \u2014 a run records repo-relative artifact paths",
+  "unobserved": {}
+}

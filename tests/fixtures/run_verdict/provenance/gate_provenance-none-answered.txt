@@ -1,0 +1,1 @@
+[31mbrainstorm: no answered question in this session's transcript since the gate blocked at 2026-01-01T00:00:00+00:00. Put the questions to the operator with your harness's question tool (AskUserQuestion on Claude Code) and resolve again once they answer — or clear it without asking, on the record: `--no-questions --reason "<why no operator decision was needed>"`.[0m

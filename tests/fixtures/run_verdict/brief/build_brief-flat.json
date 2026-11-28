@@ -1,0 +1,34 @@
+{
+  "agent": null,
+  "binding_offers": null,
+  "commit_templates": {
+    "issue": 7,
+    "use": "with_issue",
+    "with_issue": "{type}({scope}): {summary} (#{issue})",
+    "without_issue": "{type}({scope}): {summary}"
+  },
+  "dead_bindings": null,
+  "emits": [
+    "plan"
+  ],
+  "evidence": [],
+  "for_each": null,
+  "gate": null,
+  "kind": "agent",
+  "needs": [],
+  "record": {
+    "path": "RECORD",
+    "template": "t"
+  },
+  "run": "r1",
+  "skill": "fr-plan",
+  "step": "plan",
+  "steps": [],
+  "tier": "standard",
+  "unbound_tiers": [
+    "mechanical",
+    "standard",
+    "hard"
+  ],
+  "workflow": "fr-goal@1"
+}

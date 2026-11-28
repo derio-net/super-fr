@@ -1,0 +1,4 @@
+refused: the PR body shares one closing keyword across several issues, and only the first would close on merge. Give each reference its own keyword, one per line (move a non-closing mention to a line with no keyword), then resolve again:
+  'Closes #1 and #2' — write instead:
+    Closes #1
+    Closes #2

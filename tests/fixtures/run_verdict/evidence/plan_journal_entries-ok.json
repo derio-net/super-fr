@@ -1,0 +1,9 @@
+{
+  "returned": [
+    "p",
+    [
+      "kind='review' scope='plan' id='r-p1' created='2026-01-01T00:00:00+00:00' phase=1 title='reviewed' body='clean' state=None resolves=None tracked_by=None out_of_scope=False input=False review_scope=None answered_by=None filed_as=None gate=None narrows=() decided_by=None remainder_tracked_by=None lens=None step=None"
+    ]
+  ],
+  "unobserved": {}
+}

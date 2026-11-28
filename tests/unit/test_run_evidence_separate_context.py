@@ -785,16 +785,16 @@ def test_an_unobservable_reviewer_names_dispatches_not_questions(
     """#815: the reviewer gate reads subagent dispatches, so its reason must
     not borrow the operator gate's `questions` wording. (OpenCode has a reader
     now; its wording names the missing session export — below.)"""
-    from fr.commands import run_cmd
+    from fr.run import unobserved
 
     for key in ("CLAUDECODE", "CLAUDE_PLUGIN_ROOT"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("FR_HARNESS", harness)
 
-    assert run_cmd._why_unobservable("subagent dispatches") == (
+    assert unobserved.why_unobservable("subagent dispatches") == (
         f"fr has no transcript reader for {harness}'s subagent dispatches"
     )
-    assert run_cmd._why_unobservable("questions") == (
+    assert unobserved.why_unobservable("questions") == (
         f"fr has no transcript reader for {harness}'s questions"
     )
 
@@ -805,7 +805,7 @@ def test_an_unobservable_opencode_reviewer_names_dispatches_not_questions(
 ) -> None:
     """#815 on OpenCode: whether the session export is missing or names a
     session fr could not read, the reason names the gate's own noun."""
-    from fr.commands import run_cmd
+    from fr.run import unobserved
 
     for key in (
         "CLAUDECODE",
@@ -818,6 +818,6 @@ def test_an_unobservable_opencode_reviewer_names_dispatches_not_questions(
     if exported is not None:
         monkeypatch.setenv("FR_OPENCODE_SESSION_ID", exported)
 
-    dispatches = run_cmd._why_unobservable("subagent dispatches")
+    dispatches = unobserved.why_unobservable("subagent dispatches")
     assert "subagent dispatches" in dispatches and "questions" not in dispatches
     assert "OPENCODE_SESSION_ID" in dispatches

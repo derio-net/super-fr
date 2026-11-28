@@ -1,0 +1,5 @@
+refused: the run leaves work unaccounted for. File each leftover, gate it, or track it, then resolve again:
+  row r-1 — owed
+    fix: fr acceptance set-status --id r-1
+  finding f-1 — out of scope
+    fix: fr journal resolve f-1

@@ -1,0 +1,1 @@
+refused: under `git.pr: ask` deliver accepts only a PR `fr pr create` opened, and this run's cursor records none. Open it with `fr pr create --title <t> --body-file <f>` (it asks the operator first), then resolve again

@@ -1,0 +1,1 @@
+[33mbrainstorm: could not verify this gate — fr has no transcript reader for hermes's questions, so `answered_by: agent` is recorded as claimed, unverified (evidence: unobserved=operator-gate).[0m

@@ -1,0 +1,4 @@
+warning: fetch skipped
+refused: the branch's acceptance amendments cannot merge as they stand:
+  edited in place: r-1
+  r-2 is stale

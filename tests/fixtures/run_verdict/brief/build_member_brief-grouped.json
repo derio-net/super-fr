@@ -1,0 +1,35 @@
+{
+  "agent": "super-fr:fr-phase-executor",
+  "binding_offers": null,
+  "commit_templates": {
+    "issue": 7,
+    "use": "with_issue",
+    "with_issue": "{type}({scope}): {summary} (#{issue})",
+    "without_issue": "{type}({scope}): {summary}"
+  },
+  "dead_bindings": null,
+  "emits": [],
+  "evidence": [],
+  "for_each": "phase",
+  "gate": null,
+  "group": "implement",
+  "item": "phase/1",
+  "kind": "agent",
+  "long_commands": "A command that may run past ~2 minutes (the full test suite, a build): a foreground Bash call over ~120 s is moved to the background anyway, so start it with run_in_background deliberately and wait on it with a bounded loop.",
+  "needs": [],
+  "record": {
+    "path": "RECORD",
+    "template": "t"
+  },
+  "resolved_tier": "standard",
+  "run": "r1",
+  "skill": null,
+  "step": "implement-phase",
+  "steps": [],
+  "tests": {
+    "fast_tier": "pytest origin/main -q",
+    "mode": "ci"
+  },
+  "tier": "from_phase",
+  "workflow": "fr-goal@1"
+}

@@ -313,7 +313,7 @@ def test_archive_moves_run_state_file_alongside_its_plan(tmp_path, monkeypatch):
     plan its `plan` step emitted, mirroring `_archive_journal`.
 
     The run id and the plan slug are DELIBERATELY UNRELATED here — a run id
-    is `<date>-<flattened-branch>` (fr.commands.run_cmd.derive_run_id) while
+    is `<date>-<flattened-branch>` (fr.run.steps.derive_run_id) while
     a plan slug is authored independently, so this fixture would fail
     against a name-keyed lookup even though it is exactly the realistic
     case (spec §4.B, corrected in the Phase 7 review: a name-equality

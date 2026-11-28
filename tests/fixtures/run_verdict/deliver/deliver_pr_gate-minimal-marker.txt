@@ -1,0 +1,1 @@
+refused: under `forge.pr_body: minimal` the live PR carries no fr marker, and it has: <!-- a -->; <!-- b -->. Replace the body with a plain summary (`EDIT-PR`); the full render stays at kept.md — and resolve again

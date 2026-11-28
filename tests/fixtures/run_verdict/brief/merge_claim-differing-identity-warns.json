@@ -1,0 +1,13 @@
+{
+  "agent": "a1",
+  "agent_type": "super-fr:fr-phase-executor",
+  "bound": null,
+  "dispatched": "2026-01-01T00:00:00Z",
+  "harness": "claude-code",
+  "model": "m2",
+  "outcome": null,
+  "returned": null,
+  "session": "s-9",
+  "synthesized": null,
+  "tier": null
+}

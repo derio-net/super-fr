@@ -1,0 +1,58 @@
+schema_version: 2
+phase:
+  number: 3
+  title: Deliver gates (H) move to fr/run/deliver.py
+  tag: agentic
+  depends_on:
+  - 2
+  tracking_issue: null
+  acceptance:
+  - run-cmd-clusters-in-fr-run
+  - run-verdict-refusals-preserved
+  tier: standard
+  files:
+  - packages/fr/src/fr/run/deliver.py
+  - packages/fr/src/fr/run/*.py
+  - packages/fr/src/fr/commands/run_cmd.py
+  - packages/fr/src/fr/record/apply.py
+  - tests/unit/*.py
+  - tests/fixtures/run_verdict/**
+  - docs/reference/*.md
+  estimate_lines: 1800
+tasks:
+- number: 1
+  title: Capture H's refusals (R9)
+  steps:
+  - id: P3.T1.S1
+    text: |-
+      RED: capture from the CURRENT code every refusal path of the H cluster (`_repo_relative` through `_answered_by_or_exit`: label sync, PR ask gate, PR gate, unclosed owed, premature closes, placement, acceptance, leftovers, local-stamp plan, answered-by, the `--question-rounds` refusals with `style="red"`, and any warning printed before a refusal) into tests/fixtures/run_verdict/deliver/<function>-<case>.txt with exit codes, using the recording console with colour on so `style="red"` shows. Commit. Add tests/unit/test_run_verdict_deliver.py driving each through `fr.run.deliver` and `run_cmd._refusals()` and comparing. Fails: module absent.
+- number: 2
+  title: Move H (R5, R11)
+  steps:
+  - id: P3.T2.S1
+    text: |-
+      GREEN: move cluster H into packages/fr/src/fr/run/deliver.py with `_RECORD_ROWS` (ContextVar name string unchanged), names public. Each refusal raises RunRefusal; each warning that does not stop the command goes to a `warn` parameter. `_repo_relative` takes `repo_root` instead of calling `resolve_repo_root()`. Forge and git reads keep their current adapters (no fr.commands import). `_resolve_body` stays in run_cmd.py and calls the moved gates in the order it calls them today, each inside `with _refusals():`; `resolve_in_process` sets the moved `RECORD_ROWS` as it does today. Re-point record/apply.py and every test naming a moved name (attribute, import, setattr, patch-string). Run `uv run pytest tests/unit/test_deliver*.py tests/unit/test_run_*.py tests/unit/test_record_*.py -q --no-cov -n 2`: green.
+- number: 3
+  title: Budget, docs, quality gate (R12)
+  steps:
+  - id: P3.T3.S1
+    text: |-
+      REFACTOR + quality gate: lower the run_cmd.py budget (comment names slice 3); `uv run fr docs check` and bump named pages' `reviewed:` naming slice 3; ruff format, ruff check, mypy. Commit, then run the fast tier the brief names last.
+state:
+  steps:
+    P3.T1.S1:
+      state: x
+      ticked_at: '2026-11-27T20:01:02+00:00'
+      note: null
+    P3.T2.S1:
+      state: x
+      ticked_at: '2026-11-27T20:01:02+00:00'
+      note: null
+    P3.T3.S1:
+      state: x
+      ticked_at: '2026-11-27T20:01:02+00:00'
+      note: null
+  completion:
+    at: '2026-11-27T20:01:02+00:00'
+    note: null
+    observed_prs: []
