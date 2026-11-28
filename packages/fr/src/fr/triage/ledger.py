@@ -74,17 +74,15 @@ def _plan_paths(state: object) -> tuple[str, ...]:
     return (plan.rstrip("/"), (IMPLEMENTED_PLANS_REL / Path(plan).name).as_posix())
 
 
-def _run_text(
-    checkout: Checkout, ref: str, branch: str, *, pr: int | None = None
-) -> tuple[str, str] | None:
-    """`(run id, cursor text)` of the cursor at *ref* naming *branch*; None when none does.
-    Both the live and the archived runs directories are read (gh#1399): the close-out
-    archives a run before its post-merge gate passes, and the rows it gates still owe.
+Cursors = list[tuple[str, object]]
+"""Every run cursor at a ref, live and archived, as `(text, parsed document)`."""
 
-    With *pr* (a merged PR outside a batch, spec 2026-11-28-tester-gate-auto-pass R5) the
-    cursor must be the ONE naming the branch, and its recorded `pr`, when it has one, must
-    end in `/<pr>`: more than one cursor raises `TriageError`, one naming another PR is None."""
-    texts: list[tuple[str, object]] = []
+
+def read_cursors(checkout: Checkout, ref: str) -> Cursors:
+    """Every live and archived run cursor at *ref* (gh#1399: the close-out archives a run
+    before its post-merge gate passes, and the rows it gates still owe). A caller reading
+    many branches at one ref reads them once (spec 2026-11-28-tester-gate-auto-pass)."""
+    texts: Cursors = []
     for runs_dir in (RUNS_DIR, ARCHIVED_RUNS_DIR):
         for name in checkout.list_dir(ref, runs_dir):
             if not name.endswith(".yaml"):
@@ -96,12 +94,32 @@ def _run_text(
                 texts.append((text, yaml.safe_load(text)))
             except yaml.YAMLError:
                 continue
+    return texts
+
+
+def _run_text(
+    checkout: Checkout,
+    ref: str,
+    branch: str,
+    *,
+    pr: int | None = None,
+    texts: Cursors | None = None,
+) -> tuple[str, str] | None:
+    """`(run id, cursor text)` of the cursor at *ref* naming *branch*; None when none does.
+    *texts*: `read_cursors(checkout, ref)`, when the caller already holds it.
+
+    With *pr* (a merged PR outside a batch, spec 2026-11-28-tester-gate-auto-pass R5) the
+    cursor must be the ONE run naming the branch (a run's live and archived copies are one),
+    and its recorded `pr`, when it has one, must end in `/<pr>`: more than one run raises
+    `TriageError`, one naming another PR is None."""
+    if texts is None:
+        texts = read_cursors(checkout, ref)
     if pr is not None:
-        named = [
-            (str(doc.get("run")), text, doc)
+        named = list({
+            str(doc.get("run")): (str(doc.get("run")), text, doc)
             for text, doc in texts
             if isinstance(doc, dict) and doc.get("branch") == branch and doc.get("run")
-        ]
+        }.values())  # fmt: skip
         if len(named) > 1:
             runs = ", ".join(sorted(r for r, _, _ in named))
             raise TriageError(f"more than one run cursor names branch {branch}: {runs}")
@@ -125,12 +143,18 @@ def _run_text(
 
 
 def gated_rows_at(
-    checkout: Checkout, ref: str, branch: str, *, pr: int | None = None
+    checkout: Checkout,
+    ref: str,
+    branch: str,
+    *,
+    pr: int | None = None,
+    texts: Cursors | None = None,
 ) -> LedgerRead:
     """The ledger read for the run on *branch* at *ref* (the default branch's tip). No
     cursor naming the branch (a debug batch, a run that left none) is no row and no run
     gate: such a gate passes only explicitly. An exit that cannot be read raises
-    `TriageError`. *pr* narrows the read to the cursor of that merged PR (`_run_text`)."""
+    `TriageError`. *pr* narrows the read to the cursor of that merged PR, and *texts* reuses
+    a `read_cursors` read (`_run_text`)."""
     from fr.acceptance.model import AcceptanceError, archive_twin
     from fr.requirements import run_spec
     from fr.run.model import RunStateError, parse_run_state
@@ -139,7 +163,7 @@ def gated_rows_at(
     from fr.verification.rows import spec_section_at
     from fr.verification.spec_section import SectionError
 
-    found = _run_text(checkout, ref, branch, pr=pr)
+    found = _run_text(checkout, ref, branch, pr=pr, texts=texts)
     if found is None:
         return NO_RUN
     run, text = found

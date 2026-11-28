@@ -154,9 +154,24 @@ def test_a_loose_ledger_with_unread_rows_plans_nothing() -> None:
     assert [a for a in plan.actions if a.kind in ("awaiting-live", "gate-pass")] == []
 
 
-def test_a_closed_out_batchs_pr_given_as_a_loose_ledger_is_passed() -> None:
-    plan = _pass(loose_ledgers=(_loose(10, (_walked(),)),))
-    assert [a.kind for a in plan.actions if a.kind == "gate-pass"] == ["gate-pass"]
+def test_r8_a_closed_out_batchs_gated_pr_is_passed_once_through_the_loose_route() -> None:
+    from dataclasses import replace
+
+    f, jd = _with_batch(closeout=True)
+    (loose,) = pr_gates.loose_prs(f, jd.batches)
+    walked = replace(loose.ledger, rows=(_walked(),))
+    (batch,) = jd.batches
+    plan = drive_pass(
+        _snap(
+            [batch],
+            {batch.id: "merged"},
+            merged_at={batch.id: NOW},
+            ledgers={batch.id: walked},  # the batch route sees it too, and skips it
+            loose_ledgers=(replace(loose, ledger=walked),),
+        )
+    )
+    passes = [(a.batch, a.repo, a.pr) for a in plan.actions if a.kind == "gate-pass"]
+    assert passes == [("", REPO, 10)]
 
 
 def test_snapshot_has_loose_ledgers_defaulting_empty() -> None:
@@ -166,9 +181,12 @@ def test_snapshot_has_loose_ledgers_defaulting_empty() -> None:
 # ------------------------------------------------- the cursor must name the PR (R5)
 
 
-def _cursor_pr(checkout: Any, *, pr: str | None, extra: str | None = None) -> None:
+def _cursor_pr(
+    checkout: Any, *, pr: str | None, extra: str | None = None, archived: bool = False
+) -> None:
     """Record *pr* on the run cursor of `_ledger_repo`, and optionally copy that cursor to a
-    second run id (a second cursor naming the same branch)."""
+    second run id (a second cursor naming the same branch) or, *archived*, the same run's
+    copy under `docs/superpowers/implemented/runs/`."""
     import yaml
 
     from tests.unit.test_triage_exit_gates_drive import _git
@@ -185,7 +203,11 @@ def _cursor_pr(checkout: Any, *, pr: str | None, extra: str | None = None) -> No
         (clone / f"docs/superpowers/runs/{extra}.yaml").write_text(
             yaml.safe_dump({**doc, "run": extra})
         )
-    _git(clone, "add", "docs/superpowers/runs")
+    if archived:
+        twin = clone / "docs/superpowers/implemented/runs/r1.yaml"
+        twin.parent.mkdir(parents=True, exist_ok=True)
+        twin.write_text(yaml.safe_dump(doc))
+    _git(clone, "add", "docs/superpowers")
     _git(clone, "commit", "--quiet", "-m", "cursor")
     _git(clone, "push", "--quiet", "origin", "HEAD:main")
     _git(clone, "fetch", "--quiet", "origin")
@@ -235,3 +257,8 @@ def test_no_cursor_gives_no_rows_and_no_pr_keeps_the_first_match(tmp_path: Path)
     assert [r.id for r in gated_rows_at(checkout, "origin/main", "feat/batch-b1").rows] == [
         "r-live"
     ]  # pr=None: today's first match, however many cursors
+
+
+def test_a_runs_live_and_archived_cursors_are_one_cursor_for_a_pr(tmp_path: Path) -> None:
+    read = _read(tmp_path, 9, pr=f"https://github.com/{REPO}/pull/9", archived=True)
+    assert [r.id for r in read.rows] == ["r-live"]

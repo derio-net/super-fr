@@ -103,7 +103,7 @@ from fr.commands.triage_drive_loop import _supervise as _supervise
 from fr.commands.triage_drive_loop import _wait as _wait
 from fr.commands.triage_drive_loop import drive_log_attached as drive_log_attached
 from fr.commands.triage_drive_loop import wait_out as wait_out
-from fr.commands.triage_drive_loose import _pr_kw, act_loose, loose_ledgers
+from fr.commands.triage_drive_loose import act_loose, loose_ledgers
 from fr.commands.triage_kanban_cmd import load_runner as kanban_load_runner
 from fr.commands.triage_kanban_cmd import probe_item, try_load
 from fr.config.space import LEGACY_PROFILES, PROFILES
@@ -4256,7 +4256,7 @@ class _Driver:
         self._cursors: dict[tuple[str, str], CursorAnswer] = {}
         # (repo, default-branch tip, batch branch) -> its gated rows there (R13, R14): they
         # move only when the default branch does
-        self._ledger_rows: dict[tuple[str, str, str, int | None], LedgerRead] = {}
+        self._ledger_rows: dict[tuple[str, str, str], LedgerRead] = {}
         self._fetched: set[str] = set()  # per pass: repos whose origin was fetched (p4-r7)
         self._patch_ids: dict[str, PatchIdOf] = {}  # per pass: each repo's patch-id reader
         # per pass: a repo's failed fetch, re-raised by every later read (R19)
@@ -4797,16 +4797,14 @@ class _Driver:
                 )
         return ledgers
 
-    def _gated_rows(
-        self, repo: str, branch: str, label: str, pr: int | None = None
-    ) -> LedgerRead | None:
-        """*branch*'s gated rows at `origin/<default>` (R14); *pr*: its cursor must name it."""
+    def _gated_rows(self, repo: str, branch: str, label: str) -> LedgerRead | None:
+        """*branch*'s gated rows at `origin/<default>` (R14); *label* names it in a report."""
         try:
             checkout = self._fetched_reader(repo)
             tip = f"origin/{checkout.default_branch()}"
-            key = (repo, checkout.rev_parse(tip), branch, pr)
+            key = (repo, checkout.rev_parse(tip), branch)
             if key not in self._ledger_rows:
-                self._ledger_rows[key] = gated_rows_at(checkout, tip, branch, **_pr_kw(pr))
+                self._ledger_rows[key] = gated_rows_at(checkout, tip, branch)
             return self._ledger_rows[key]
         except TriageError as exc:
             self._report_once(
