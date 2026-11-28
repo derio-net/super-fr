@@ -88,3 +88,10 @@ amendments:
       launches the attached root TUI with --auto; the durable fresh-session identity
       contract is unit-pinned. No live recovery walk was performed.
     why: record the post-merge candidate walk
+  - row: triage-closed-recovery-refusals
+    op: set-status
+    base: 0
+    status: ci
+    notes: Captured-roster variants and disposable CLI tests prove preview/refusal safety;
+      named anchors resolve.
+    why: record the post-merge candidate walk
