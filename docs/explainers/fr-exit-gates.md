@@ -143,6 +143,15 @@ is never released. When the queue is done, the release clears the hold. A hold t
 refreshed for a day is ignored. `fr release status` lists what is waiting, and says when a
 hold is the reason that nothing is cut.
 
+## How do you see what a run still owes?
+
+Run `fr run dod <run-id>`. It prints the run's **Definition of Done**: each item that a
+held gate owns (ops, Test Plan steps and rows), the plan's `[manual]` phases, and the open
+`owed` entries of the run's journals. Each item is either discharged or owed, with a reason.
+fr derives this list from what the spec, plan and journals already say, so you never write
+it. The command changes nothing and exits 1 while any item is owed. The close-out brief that
+`fr pickup --run` prints ends with the same list.
+
 ## What about old work, and the DevOps stage?
 
 Work that merged before gates existed has its asks scattered in rows, manual phases and

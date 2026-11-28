@@ -13,6 +13,8 @@ covers:
   - packages/fr/src/fr/ops/gate.py
   - packages/fr/src/fr/commands/ops_gate_cmd.py
   - packages/fr/src/fr/commands/gate_cmd.py
+  - packages/fr/src/fr/run/dod.py
+  - packages/fr/src/fr/commands/dod_cmd.py
 reviewed: 2026-11-28 inside the stage the PR head's walks and statuses never discharge a row, stage 6 stops before the pass while anything is owed and prints one walk command per owed harness, stage 7 passes with --run (phase 2 review); 2026-11-28 the stage walks the rows the devops gate owns (a step's rows pointer, a row question at stage 5, the owed list and the row commands at stage 6, the tester list at stage 7, a held archive at stage 8, ops-gate-truth R7-R16); 2026-11-28 a Test Plan change at stage 6 or 7 goes back to stage 5; merged-in entries never close a reopened op; an existing pass is re-checked after a restart; a no-op merge that still differs stops (phase 1 review); 2026-11-27 stages 4 to 7 first bring a stale ops workspace up to date with the default branch (a confirmed merge, never a rebase); changed ops are trusted again and reopened, and a refresh after stage 4 goes back to stage 4 (ops-gate-truth R1-R6, gh#1617); 2026-11-25 under quiet and stealth the gate reads `.fr/triage.yaml` and `.fr/ops.yaml` at the configuration branch's fetched tip and needs its protection for a `queue:` (S1 R7); 2026-11-24 still true after ci-economy phase 1 (a cancelled check now reads as pending, never failing, in every check reader; no claim here names how a cancelled check is read); 2026-11-23 still true; the Python 3.14 floor reformats covered code (unparenthesised `except A, B:`, PEP 695 generics), syntax only (#1589); 2026-11-21 stage 4 needs a marker comment beside the label; 2026-11-20 stage 2 releases the PR to the merge queue by label and merges nothing, stage 4 lifts the queue's barrier (wave merge queue R26); 2026-11-19 still true after a failed forge read of the default branch became a named refusal (batch consumer-followups, gh#1554); 2026-11-15 stage 4 records a live-DONE op; stage 7 passes a gate:tester nothing owns; pickup reports a finished stage (batch gate-truth)
 ---
 
@@ -196,8 +198,23 @@ them. Rows that are not walked, and a spec that declares `gate: tester`, keep it
 the Tester gate owns nothing, stage 7 passes `gate:tester` for the run, so the release does not wait on
 a gate that nobody owes. Stage 8 says `archived` only when the plan moved. `fr archive`
 exits 0 when it holds a plan, for example over an unticked manual phase. Then stage 8 says
-`archive held` with each reason, and still opens the housekeeping PR. Once all eight stages are on record, `fr pickup --run` says the
-stage is complete and does not print the DevOps brief again.
+`archive held` with each reason, and still opens the housekeeping PR.
+
+## When is the stage complete?
+
+Eight stages on record do not make the work done. A tester row can still wait for a walk,
+and a held archive can still wait for a manual phase. So the last line of `fr ops gate`
+reads the run's **Definition of Done**. fr derives it, and nobody writes it: it holds the
+items of each post-merge gate, the plan's `[manual]` phases, and the open `owed` entries of
+the run's journals. The stage says `the DevOps stage is complete` only when every item is
+discharged. Otherwise it says `every stage ran; still owed:` and lists each owed item. Rerun
+it, and it says the same, after `every stage is already done; nothing ran`.
+
+`fr pickup --run` follows the same rule. Once all eight stages are on record, it does not
+print the DevOps brief again. It says the stage is complete only when the Definition of Done
+is discharged, and otherwise names what is still owed. Every brief ends with the Definition
+of Done. To read it at any time, run `fr run dod <run-id>` (add `--json` for a script). It
+changes nothing, and exits 0 when every item is discharged, 1 when one is owed.
 
 ## What does the stage never do?
 
