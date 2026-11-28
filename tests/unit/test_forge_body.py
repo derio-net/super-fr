@@ -34,9 +34,7 @@ def test_read_failure_redacts_and_replaces_control_and_bidi_characters() -> None
     from fr.forge_body import read_failure
 
     token = "ghp_" + "a" * 24
-    exc = RuntimeError(
-        f"https://user:tok@host/x {token} /Users/jane/work \x1b[31mred‮ end"
-    )
+    exc = RuntimeError(f"https://user:tok@host/x {token} /Users/jane/work \x1b[31mred‮ end")
     line = read_failure("https://example.com/o/r/pull/7", exc)
     for leaked in ("user:tok", token, "/Users/jane", "\x1b", "‮"):
         assert leaked not in line

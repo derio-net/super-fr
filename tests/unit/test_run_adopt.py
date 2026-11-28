@@ -1378,10 +1378,14 @@ def test_default_pr_state_warns_with_the_read_failure_line(
     monkeypatch.setattr("fr.hostclient.client_for", lambda root: _RaisingForge())
     calls: list[str] = []
 
-    assert default_pr_state(tmp_path, warn=calls.append)("https://github.com/derio-net/super-fr/pull/3") is None
-    assert calls == [
-        "warning: could not read the state of PR https://github.com/derio-net/super-fr/pull/3: login page: SSO"
-    ]
+    assert (
+        default_pr_state(tmp_path, warn=calls.append)(
+            "https://github.com/derio-net/super-fr/pull/3"
+        )
+        is None
+    )
+    pr = "https://github.com/derio-net/super-fr/pull/3"
+    assert calls == [f"warning: could not read the state of PR {pr}: login page: SSO"]
 
 
 def test_adopt_run_forwards_warn_to_the_default_pr_state(
@@ -1417,11 +1421,22 @@ def test_the_adopt_command_prints_the_read_failure_on_stderr(
     env = {**os.environ, "FR_REPO_ROOT": str(repo), "FR_SHIPPED_WORKFLOWS_DIR": str(shipped)}
     result = cli.invoke(
         app,
-        ["run", "adopt", str(plan_dir), "--branch", BRANCH, "--pr", "https://github.com/derio-net/super-fr/pull/3"],
+        [
+            "run",
+            "adopt",
+            str(plan_dir),
+            "--branch",
+            BRANCH,
+            "--pr",
+            "https://github.com/derio-net/super-fr/pull/3",
+        ],
         env=env,
     )
 
-    assert "warning: could not read the state of PR https://github.com/derio-net/super-fr/pull/3" in result.stderr
+    assert (
+        "warning: could not read the state of PR https://github.com/derio-net/super-fr/pull/3"
+        in result.stderr
+    )
 
 
 def test_migrate_adoption_prints_the_read_failure_on_stderr(

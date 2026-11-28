@@ -152,8 +152,8 @@ def refuse_closed_pr(repo_root: Path) -> None:
     (the one `fr pr create` recorded) is MERGED or CLOSED orphans the commit from the
     default branch. The shell hook matches `git push` only, so `fr push` asks itself.
     Fails open, like the hook, when the PR cannot be read, and says so on stderr."""
-    from fr.git_policy.push import PushRefusedError
     from fr.forge_body import read_failure
+    from fr.git_policy.push import PushRefusedError
     from fr.hostclient import FORGE_ERRORS, client_for
 
     for state in branch_runs(repo_root):

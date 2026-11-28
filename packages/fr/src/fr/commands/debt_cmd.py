@@ -235,8 +235,6 @@ def issue_cmd(
 LEGACY_MARKER = "<!-- fr-acceptance-digest -->"
 
 
-
-
 def _clean(value: object, limit: int = 120) -> str:
     """A forge-returned string made safe to echo: no control characters."""
     from fr.debt.render import redact

@@ -47,4 +47,5 @@ def read_failure(url: str, exc: BaseException) -> str:
     lines = str(exc).splitlines()
     reason = clean(lines[0] if lines else type(exc).__name__)
     # The url comes from the run cursor (forge-returned text): same treatment.
-    return f"warning: could not read the state of PR {clean(url.splitlines()[0] if url else '')}: {reason}"
+    shown = clean(url.splitlines()[0] if url else "")
+    return f"warning: could not read the state of PR {shown}: {reason}"

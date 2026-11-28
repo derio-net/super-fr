@@ -1,0 +1,2 @@
+bump: patch
+summary: install.sh and bootstrap.sh name the failures they used to hide; adopt, push and fr debt name forge read failures and unsupported operations
