@@ -77,3 +77,107 @@ the validator delegates to one new fr.requirements.table_form_problems, which re
 ### no-refactor-p1-t5 · discovery · no-refactor-because P1.T5 (phase 1)
 
 prose, mirrors, a scenario and acceptance rows; no code structure to refactor
+
+<!-- fr:journal kind=review scope=plan id=review-p1-1 created=2026-11-28T14:17:00+00:00 phase=1 -->
+### review-p1-1 · review · phase 1 code review (requesting-code-review): 5 in-scope findings p1-r1..p1-r5, all fixed (phase 1)
+
+Independent reviewer (hard tier) over the phase-1 diff against spec R1-R8 and the
+artifact-versioning migration discipline. Migration safety, round trip on every live
+spec, CRLF, code-span pipes and imports all checked clean. Findings: has_requirements
+raising inside sizing's handler (r1), silent table truncation on a broken row (r2) or a
+missing delimiter row (r3), an id-like prefix matching prose (r4, spec R3 amended), and
+proportionality hiding the cause (r5). All fixed in 5ecc797fa with tests.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1 created=2026-11-28T14:17:00+00:00 phase=1 state=open review_scope=in -->
+### p1-r1 · finding [open] (reviewer: in scope) · sizing calls has_requirements inside its except RequirementsError, and has_requirements can now raise (phase 1)
+
+`fr.plan_review.sizing` (lines 93-97) calls `has_requirements()` in its `except RequirementsError`
+clause, and `has_requirements` can now raise through `_rows`, so `fr plan self-review` crashes on a
+section like `R1. a` / `R9ab. b` or on a table holding `| R1 | a | b |`.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2 created=2026-11-28T14:17:00+00:00 phase=1 state=open review_scope=in -->
+### p1-r2 · finding [open] (reviewer: in scope) · a table row missing an outer pipe silently ends the table and drops every later row (phase 1)
+
+In `_table_body`, `| R1 | a |` / `| R2 | b` / `| R3 | c |` reads as [R1] alone and
+`table_form_problems` is silent. Amended R2: the table ends only at a blank line or a line holding no
+`|`; any other non-blank line in it that is not a whole row raises naming the line, and the validator
+reports it.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3 created=2026-11-28T14:17:00+00:00 phase=1 state=open review_scope=in -->
+### p1-r3 · finding [open] (reviewer: in scope) · the line after the table header is skipped unchecked, so a missing delimiter row loses R1 (phase 1)
+
+`_table_body` skipped line idx+1 without checking it, so a header followed straight by `| R1 | a |`
+lost R1. A GFM delimiter row (cells of `:?-+:?`) is now required there, else a RequirementsError
+naming the line; the validator reports it too.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4 created=2026-11-28T14:17:00+00:00 phase=1 state=open review_scope=in -->
+### p1-r4 · finding [open] (reviewer: in scope) · the id-like prefix matches ordinary prose such as `Rationale. ...` (phase 1)
+
+`_ID_LIKE_RE = ^(?:[-*]\s+)?R\S*\.\s` matched `Rationale. ...` and `Rather. than`, so a prose-only
+spec refused to migrate and the validator called the prose list form. Amended R3: a digit must follow
+`R`.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5 created=2026-11-28T14:17:00+00:00 phase=1 state=open review_scope=in -->
+### p1-r5 · finding [open] (reviewer: in scope) · proportionality drops the reader's error and names only the table form (phase 1)
+
+`fr.proportionality` (lines 186-187) reported "spec has no Requirements table; asks cannot be
+counted" for any RequirementsError, losing the named line and cause, and named one form only.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-legacy-table-reader-unchanged created=2026-11-28T14:17:00+00:00 phase=1 -->
+### p1-legacy-table-reader-unchanged · discovery · the pre-5.0 three-column table reader still skips the line after its header unchecked and ends at the first non-row (phase 1)
+
+`fr.requirements._legacy_rows` has the p1-r2/p1-r3 shape (no delimiter check, a broken row ends the
+table silently). It was left alone on purpose: it reads old, archived specs only, no live spec uses
+it, and R2 keeps its meaning unchanged.
+
+<!-- fr:journal kind=discovery scope=plan id=p1-review-fast-tier created=2026-11-28T14:17:00+00:00 phase=1 -->
+### p1-review-fast-tier · discovery · fast tier after the review fixes: 9 failed, 12275 passed; none in this diff (phase 1)
+
+`uv run pytest --fr-scope origin/main -n 2 -q --no-cov`: 9 failed, 12275 passed, 137 skipped. Five are
+the devcontainer failures seen before (run_idle_guard, four isolation_decision_core relative-PATH
+cases). Four pass when run alone (44 passed): three xdist worker crashes (test_run_suite_reuse,
+test_tripwire_own_artifacts, test_tripwire_artifact_paths) and test_install_channels'
+channel-switch case. `fr migrate artifacts --yes` changed nothing; `fr validate artifacts`: all valid.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r1-resolved created=2026-11-28T14:17:00+00:00 phase=1 state=fixed resolves=p1-r1 -->
+### p1-r1-resolved · finding [fixed] · resolves p1-r1: sizing calls has_requirements inside its except RequirementsError, and has_requirements can now raise (phase 1)
+
+`has_requirements` returns True when `_rows` raises: something requirement-shaped but invalid still
+counts, so sizing reaches its "does not parse" warning. Test:
+tests/unit/test_plan_phase_sizing.py::test_an_invalid_requirement_shape_warns_instead_of_crashing (bad
+id and three-cell row), plus the has_requirements assertion in
+test_a_line_inside_the_table_that_is_not_a_whole_row_raises.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r2-resolved created=2026-11-28T14:17:00+00:00 phase=1 state=fixed resolves=p1-r2 -->
+### p1-r2-resolved · finding [fixed] · resolves p1-r2: a table row missing an outer pipe silently ends the table and drops every later row (phase 1)
+
+`_table_body` now returns rows and problems; the table ends at a blank or pipe-less line and any other
+line that is not a whole row is a problem that `_table_rows` raises and `table_form_problems` reports.
+Tests: test_spec_requirements_list.py::test_a_line_inside_the_table_that_is_not_a_whole_row_raises
+(replaces test_a_row_without_outer_pipes_ends_the_table), ::test_the_table_ends_at_a_blank_line_or_a_line_with_no_pipe,
+test_validate_artifacts.py::test_a_stamped_spec_with_a_broken_row_inside_the_table_is_refused.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r3-resolved created=2026-11-28T14:17:00+00:00 phase=1 state=fixed resolves=p1-r3 -->
+### p1-r3-resolved · finding [fixed] · resolves p1-r3: the line after the table header is skipped unchecked, so a missing delimiter row loses R1 (phase 1)
+
+`_is_delimiter` (every cell `:?-+:?`) is required on the line after the header, else a problem naming
+that line. Tests: test_spec_requirements_list.py::test_a_header_without_a_delimiter_row_raises_naming_the_line,
+::test_any_gfm_delimiter_row_is_accepted,
+test_validate_artifacts.py::test_a_stamped_spec_whose_header_has_no_delimiter_row_is_refused.
+
+<!-- fr:journal kind=finding scope=plan id=p1-r4-resolved created=2026-11-28T14:17:00+00:00 phase=1 state=fixed resolves=p1-r4 -->
+### p1-r4-resolved · finding [fixed] · resolves p1-r4: the id-like prefix matches ordinary prose such as `Rationale. ...` (phase 1)
+
+`_ID_LIKE_RE` is now `^(?:[-*]\s+)?(R[0-9]\S*)\.\s`. Tests:
+test_spec_requirements_list.py::test_prose_starting_with_an_r_word_is_not_id_like,
+test_spec_requirements_table_migration.py::test_a_table_legacy_or_prose_only_section_is_only_stamped[r-word-prose],
+test_validate_artifacts.py::test_a_stamped_table_spec_with_r_word_prose_is_valid; R0., R09., R9A., R9-a.
+and R9ab. still raise (test_an_id_like_line_with_a_malformed_id_names_the_line).
+
+<!-- fr:journal kind=finding scope=plan id=p1-r5-resolved created=2026-11-28T14:17:00+00:00 phase=1 state=fixed resolves=p1-r5 -->
+### p1-r5-resolved · finding [fixed] · resolves p1-r5: proportionality drops the reader's error and names only the table form (phase 1)
+
+The line is now "spec's Requirements do not parse (<error>); write an `| ID | Requirement |` table or
+an `R<n>.` list; asks cannot be counted." Tests:
+test_plan_proportionality.py::test_an_invalid_requirements_section_names_the_line_and_cause and the two
+updated no-section / no-spec tests.
