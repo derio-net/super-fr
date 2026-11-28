@@ -1218,3 +1218,17 @@ def test_a_stamped_table_spec_with_r_word_prose_is_valid(tmp_path: Path) -> None
         tmp_path, "Rationale. see below\n\n| ID | Requirement |\n|----|----|\n| R1 | a |\n"
     )
     assert validate_spec(path) == []
+
+
+def test_a_spec_stamped_past_two_is_still_refused_for_a_list_line(tmp_path: Path) -> None:
+    """Lens l-tests-r3: the form check runs at `stamp >= 2`, not `== 2`. Through
+    `fr validate artifacts` a stamp newer than this fr is reported by the stamp check
+    alone, which stops there; `validate_spec` itself still refuses the list line."""
+    from fr.artifacts.structure import validate_spec
+
+    path = tmp_path / "s-design.md"
+    path.write_text("---\nfr_schema: 3\n---\n# S\n\n## Requirements\n\nR1. x\n")
+    [problem] = validate_spec(path)
+    assert problem.startswith(f"line {_line_of(path, 'R1. x')}: stamped fr_schema 3")
+    [issue] = [str(i) for i in validate_artifact(artifact_kind("spec"), path)]
+    assert "written for spec artifact version 3" in issue and "upgrade fr" in issue

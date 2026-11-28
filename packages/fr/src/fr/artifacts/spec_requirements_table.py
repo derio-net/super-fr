@@ -16,12 +16,15 @@ the table renders as rows. The rewrite:
   then writes once, through `write_text_atomic`. The runner writes the stamp.
 
 A spec it cannot convert — prose between requirements, a `RequirementsError`
-(an id-like line such as `R9a.`), or a failed round trip — raises before a
-byte moves, so the file stays byte-identical and unstamped, and the error
-names the file, the line, the cause and the hand fix. Every other spec still
-migrates.
+(an id-like line with a malformed id such as `R09.`, or ids out of order), a
+table header inside the list, or a failed round trip — raises before a byte
+moves, so the file stays byte-identical and unstamped, and the error names the
+file, the line, the cause and a hand fix chosen for that cause. Every other
+spec still migrates.
 
-A section that is already a two-column table, a pre-5.0 three-column table, a
+The form is judged by the section's first requirement-shaped line. A section
+already in table form (even with a malformed row or delimiter, which the stamp-2
+validator then names), a two-column table, a pre-5.0 three-column table, a
 section with no requirement line and a spec with no section are left alone:
 the runner only stamps them. That also covers the crash window between this
 `fn` writing the body and the runner writing the stamp: on the next run the
@@ -67,11 +70,55 @@ def _is_blank(line: str) -> bool:
     return not line.strip()
 
 
+_RERUN = "then re-run fr migrate artifacts --yes"
+_ID_FIX = f"fix the requirement id (`R<n>`, optionally one lowercase letter: R9a), {_RERUN}"
+_ORDER_FIX = (
+    "renumber the requirements so each id is greater than the one before "
+    f"(insert with a letter, R9a), {_RERUN}"
+)
+_HEADER_FIX = (
+    "delete the header line, or finish the table by hand and add `fr_schema: 2` "
+    f"front matter, {_RERUN}"
+)
+_PROSE_FIX = f"move the prose out of the requirements list, {_RERUN}"
+_JOIN_FIX = f"join the requirement's lines into one line in the spec, {_RERUN}"
+_GENERIC_FIX = f"fix that line of the requirements list, {_RERUN}"
+
+
+def _fix_for(message: str) -> str:
+    """The hand fix for a `RequirementsError` raised by the list reader (l-errors-r1)."""
+    if "malformed requirement id" in message:
+        return _ID_FIX
+    if "repeated or out of order" in message:
+        return _ORDER_FIX
+    return _GENERIC_FIX
+
+
 def build(path: Path, text: str) -> str | None:
     """The rewritten text, `None` when the spec is only stamped. Raises
-    `SpecRewriteRefusedError` with the R5 message; writes nothing."""
-    from fr.requirements import RequirementsError, list_layout, parse_requirements
+    `SpecRewriteRefusedError` with the R5 message; writes nothing.
 
+    The section's form is judged by its first requirement-shaped line
+    (`requirements_form`): a section in table form is only stamped even when a row
+    or the delimiter is malformed (R4); the stamp-2 validator (R7) names that line."""
+    from fr.requirements import (
+        RequirementsError,
+        list_layout,
+        parse_requirements,
+        requirements_form,
+        table_header_line,
+    )
+
+    if requirements_form(text) != "list":
+        return None
+    header = table_header_line(text)
+    if header is not None:
+        raise _refuse(
+            path,
+            header,
+            "an `| ID | Requirement |` header inside the requirements list",
+            _HEADER_FIX,
+        )
     try:
         layout = list_layout(text)
         if layout is None or not layout.items:
@@ -80,18 +127,10 @@ def build(path: Path, text: str) -> str | None:
     except RequirementsError as e:
         message = str(e)
         raise _refuse(
-            path,
-            _line_of(message),
-            message.partition(": ")[2] or message,
-            "fix the requirement id in the spec, then re-run fr migrate artifacts --yes",
+            path, _line_of(message), message.partition(": ")[2] or message, _fix_for(message)
         ) from e
     if layout.prose:
-        raise _refuse(
-            path,
-            layout.prose[0],
-            "prose between requirements",
-            "move the prose out of the requirements list, then re-run fr migrate artifacts --yes",
-        )
+        raise _refuse(path, layout.prose[0], "prose between requirements", _PROSE_FIX)
     lines = text.splitlines(keepends=True)
     first = layout.base + layout.start
     last = layout.base + layout.end
@@ -102,6 +141,8 @@ def build(path: Path, text: str) -> str | None:
         table.insert(0, nl)
     if after and not _is_blank(after[0]):
         table.append(nl)
+    if not after and lines[last] == lines[last].rstrip("\r\n"):
+        table[-1] = table[-1].rstrip("\r\n")  # no final newline stays none
     new = "".join([*before, *table, *after])
     try:
         new_reqs = parse_requirements(new)
@@ -120,11 +161,6 @@ def build(path: Path, text: str) -> str | None:
             path, bad, "round trip failed: the table reads to other requirements", _JOIN_FIX
         )
     return new
-
-
-_JOIN_FIX = (
-    "join the requirement's lines into one line in the spec, then re-run fr migrate artifacts --yes"
-)
 
 
 def _line_of(message: str) -> int:

@@ -869,13 +869,15 @@ def test_r2_a_spec_archived_at_head_is_found_under_its_archive_root(tmp_path: Pa
 
 
 def test_a_lettered_requirement_is_served_and_ordered(tmp_path: Path) -> None:
-    """Spec 2026-11-26-spec-requirements-table R1: `R9a` sorts between `R9` and `R10`."""
-    reqs = "## Requirements\n\nR9. nine\nR9a. inserted\nR10. ten\n"
+    """Spec 2026-11-26-spec-requirements-table R1: `R9a` sorts between `R9` and `R10`.
+    Lens l-tests-r1: R9b and R9a tie on the integer part, so only the letter can order
+    them; a key on the number alone would leave set order."""
+    reqs = "## Requirements\n\nR9. nine\nR9a. inserted\nR9b. also\nR10. ten\n"
+    origins = "".join(f"    - own:{SIZED_SPEC}#{r}\n" for r in ("R9b", "R10", "R9a", "R9"))
     matrix = (
         "org: derio-net\nrepo: own\nrows:\n"
-        "  - id: row-a\n    capability: C\n    acceptance: A\n    origin:\n"
-        f"    - own:{SIZED_SPEC}#R10\n    - own:{SIZED_SPEC}#R9a\n    - own:{SIZED_SPEC}#R9\n"
+        f"  - id: row-a\n    capability: C\n    acceptance: A\n    origin:\n{origins}"
         "    levels: {}\n    status: not-implemented\n    notes: ''\n"
     )
     repo = _sized_repo(tmp_path, [(("row-a",), "agentic")], requirements=reqs, matrix=matrix)
-    assert "1 agentic phase serves 3 of 3 requirements (R9, R9a, R10)." in _phases_report(repo)
+    assert "1 agentic phase serves 4 of 4 requirements (R9, R9a, R9b, R10)." in _phases_report(repo)

@@ -123,7 +123,9 @@ It adds five things to a plain brainstorm:
   A literal `|` in the text is written `\|`, and the spec starts with front matter
   `fr_schema: 2`. An id is `R1`, `R2`, ...; a letter after the number (`R9a`) inserts a
   requirement without renumbering the rest. Plans and acceptance rows cite these ids. An older spec's `R1. ...` list
-  is rewritten into the table by `fr migrate artifacts --yes`.
+  is rewritten into the table by `fr migrate artifacts --yes`. If the rewrite cannot convert
+  a spec, for example because prose sits between two requirements or an id is malformed, it
+  leaves that spec unchanged. The error names the line to fix, and you run the command again.
 - **A `## Design shape` section**: a small picture of the change, drawn with
   [fr-show-me](fr-show-me.md)'s views, such as the files it touches as an annotated tree.
   When no picture would help, the section is one line, `none — <reason>`. fr refuses a

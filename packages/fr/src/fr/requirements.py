@@ -281,6 +281,40 @@ def _walk_list(lines: list[str], first_line_no: int) -> ListLayout:
     return ListLayout(items=tuple(items), prose=tuple(prose), base=first_line_no - 1)
 
 
+def _is_header(line: str) -> bool:
+    return _is_row(line) and [c.lower() for c in _split_row(line)] in (
+        _TABLE_HEADER,
+        _LEGACY_HEADER,
+    )
+
+
+def requirements_form(spec_text: str) -> str | None:
+    """Which form the `## Requirements` section is written in, judged by its
+    first requirement-shaped line: `"table"` for an `| ID | Requirement |` or
+    pre-5.0 `| id | requirement | source |` header, `"list"` for an `R<n>.` (or
+    id-like) line, `None` when the section is absent or holds neither. Never
+    raises, so a malformed table still reads as a table."""
+    section = _locate_section(spec_text)
+    if section is None:
+        return None
+    for line in section[0]:
+        if _is_header(line):
+            return "table"
+        stripped = line.strip()
+        if _LIST_ITEM_RE.match(stripped) or _ID_LIKE_RE.match(stripped):
+            return "list"
+    return None
+
+
+def table_header_line(spec_text: str) -> int | None:
+    """The 1-based line of the first table header in `## Requirements`, if any."""
+    section = _locate_section(spec_text)
+    if section is None:
+        return None
+    lines, first_line_no = section
+    return next((first_line_no + i for i, line in enumerate(lines) if _is_header(line)), None)
+
+
 def list_layout(spec_text: str) -> ListLayout | None:
     """The `R<n>.` list layout of the spec's `## Requirements` section, or `None`
     when there is no such section or it is a table (either form). Raises

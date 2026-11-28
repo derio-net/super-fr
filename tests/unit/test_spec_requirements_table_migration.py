@@ -137,8 +137,11 @@ def test_a_body_already_a_table_under_an_old_stamp_is_finished_in_place(tmp_path
     assert path.read_text() == TABLE_OUT
 
 
-PROSE_BETWEEN = "# X\n\n## Requirements\n\nR1. a\n\nsome prose\n\nR2. b\n"
+PROSE_BETWEEN = "# X\n\n## Requirements\n\nR1. a\n\nfirst prose\n\nsecond prose\n\nR2. b\n"
 BAD_ID = "# X\n\n## Requirements\n\nR1. a\nR9ab. b\n"
+OUT_OF_ORDER = "# X\n\n## Requirements\n\nR2. a\nR1. b\n"
+HEADER_IN_LIST = "# X\n\n## Requirements\n\nR1. a\n| ID | Requirement |\nR2. b\n"
+FENCED = "# X\n\n## Requirements\n\nR1. a\n\n```text\nR2. b\n```\n"
 
 
 @pytest.mark.parametrize(
@@ -146,8 +149,23 @@ BAD_ID = "# X\n\n## Requirements\n\nR1. a\nR9ab. b\n"
     [
         (PROSE_BETWEEN, 7, "prose between requirements", "move the prose out of"),
         (BAD_ID, 6, "malformed requirement id 'R9ab'", "fix the requirement id"),
+        (
+            OUT_OF_ORDER,
+            6,
+            "requirement id R1 is repeated or out of order",
+            "renumber the requirements so each id is greater than the one before",
+        ),
+        (
+            HEADER_IN_LIST,
+            6,
+            "an `| ID | Requirement |` header inside the requirements list",
+            "delete the header line, or finish the table by hand",
+        ),
+        # A fence inside the section is not special: its opening line is prose
+        # between R1 and the fenced R2, so the spec refuses (pinned behaviour).
+        (FENCED, 7, "prose between requirements", "move the prose out of"),
     ],
-    ids=["prose-between", "R9ab"],
+    ids=["prose-between", "R9ab", "out-of-order", "header-in-list", "fenced"],
 )
 def test_an_unconvertible_spec_is_left_byte_identical_and_named(
     tmp_path: Path, text: str, line: int, cause: str, fix: str
@@ -159,6 +177,7 @@ def test_an_unconvertible_spec_is_left_byte_identical_and_named(
     [failure] = report.failed
     assert failure.path == bad
     assert f"{bad}:{line}:" in failure.error
+    assert failure.error.count(f"{bad}:") == 1, "only the first offending line is named"
     assert cause in failure.error
     assert fix in failure.error
     assert good.read_text() == TABLE_OUT, "every other spec still migrates"
@@ -196,3 +215,70 @@ def test_a_lettered_id_is_converted(tmp_path: Path) -> None:
     assert "| R9a | inserted wrapped |\n" in out
     assert parse_requirements(out) == before
     assert validate_artifact(artifact_kind("spec"), path) == ()
+
+
+def test_the_round_trip_parse_error_branch_refuses_with_the_join_fix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fr.artifacts import spec_requirements_table as mod
+
+    monkeypatch.setattr(mod, "_row", lambda rid, text: f"| {rid} | {text} | extra |")
+    path = _spec(tmp_path, LIST_SPEC)
+    [failure] = _migrate(tmp_path).failed
+    assert path.read_bytes() == LIST_SPEC.encode()
+    assert f"{path}:5: round trip failed: line " in failure.error
+    assert "3 cells, expected 2" in failure.error
+    assert "join the requirement's lines into one line" in failure.error
+
+
+@pytest.mark.parametrize(
+    ("text", "out"),
+    [
+        (
+            "# X\n\n## Requirements\n\nR1. a\nR2. b",
+            "---\nfr_schema: 2\n---\n# X\n\n## Requirements\n\n"
+            "| ID | Requirement |\n|----|-------------|\n| R1 | a |\n| R2 | b |",
+        ),
+        (
+            "# X\n\n## Requirements\n\nR1. keep a \\| as is\n",
+            "---\nfr_schema: 2\n---\n# X\n\n## Requirements\n\n"
+            "| ID | Requirement |\n|----|-------------|\n| R1 | keep a \\\\| as is |\n",
+        ),
+        (
+            # Mixed endings: the table takes the FIRST requirement line's ending.
+            "# X\r\n\r\n## Requirements\r\n\r\nR1. a\nR2. b\r\n\r\n## D\r\n",
+            "---\r\nfr_schema: 2\r\n---\r\n# X\r\n\r\n## Requirements\r\n\r\n"
+            "| ID | Requirement |\n|----|-------------|\n| R1 | a |\n| R2 | b |\n\r\n## D\r\n",
+        ),
+    ],
+    ids=["no-final-newline", "literal-escaped-pipe", "mixed-endings"],
+)
+def test_edge_layouts_convert_exactly(tmp_path: Path, text: str, out: str) -> None:
+    path = _spec(tmp_path, text)
+    before = parse_requirements(text)
+    assert not _migrate(tmp_path).failed
+    assert path.read_bytes().decode() == out
+    assert parse_requirements(out) == before
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "| ID | Requirement |\n|----|----|\n| R1 | a | b |\n",
+        "| ID | Requirement |\n| R1 | a |\n",
+        "| ID | Requirement |\n|----|----|\n| R1 | a |\n| R2 | b\n",
+    ],
+    ids=["three-cells", "no-delimiter", "broken-row"],
+)
+def test_a_malformed_table_is_only_stamped_and_the_validator_names_the_row(
+    tmp_path: Path, body: str
+) -> None:
+    """Lens l-errors-r1 (a): a section in table form is only stamped (R4); the
+    stamp-2 validator (R7) then names the bad line."""
+    text = f"# X\n\n## Requirements\n\n{body}\n## Design\n"
+    path = _spec(tmp_path, text)
+    report = _migrate(tmp_path)
+    assert path.read_text() == "---\nfr_schema: 2\n---\n" + text
+    assert all(f.path != path or "requirements table" in f.error for f in report.failed)
+    issues = validate_artifact(artifact_kind("spec"), path)
+    assert any("requirements table" in str(i) and "line " in str(i) for i in issues), issues
