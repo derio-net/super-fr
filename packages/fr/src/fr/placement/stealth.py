@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import urlparse
 
 from fr.artifacts import paths
+from fr.config import transition
 from fr.config.space import CONFIG_SUFFIX, SPACE_DIR, rel
 from fr.settings import SettingsError
 
@@ -870,7 +871,9 @@ def write_target_settings(
     only the legacy copy is landed (a retry converges). Any other change is reviewed: a
     pull request on the TRACKING repo from `fr-config-change/<slug>` into
     `<branch>-config`, whose URL is returned; the legacy copy follows after the merge.
-    The legacy copy ends at R14's owed release (`s1-refuse-old-paths`)."""
+    The legacy copy is kept only before fr 9.2: past the end of S1's transition
+    (`fr.config.transition.keeps_old_copy`) only `<branch>-config` is written, and the old
+    file is never rewritten or deleted (spec 2026-11-28-s1-followups R4)."""
     cref = config_ref(ref)
     wt = ensure_worktree(root, ref)
     new_rel = f"{target}/{TARGET_SETTINGS}"
@@ -896,14 +899,19 @@ def write_target_settings(
                 clone, product=root, remote=ref.repo, base_branch=cref.branch,
                 base_ref=_remote_ref(cref), rel=new_rel, text=text, message=message,
             )  # fmt: skip
+            after = (
+                f"; once it merges, fr brings {ref.text}:{target}/{LEGACY_TARGET_SETTINGS} in "
+                "step (before fr 9.2)"
+                if transition.keeps_old_copy()
+                else ""
+            )
             print(
-                f"fr: opened {url}: the change to {new_rel} waits for review on "
-                f"{cref.text}; once it merges, fr brings {ref.text}:{target}/"
-                f"{LEGACY_TARGET_SETTINGS} in step",
+                f"fr: opened {url}: the change to {new_rel} waits for review on {cref.text}{after}",
                 file=sys.stderr,
             )
             return url
-    write_legacy_target(root, ref, target, text, message)
+    if transition.keeps_old_copy():
+        write_legacy_target(root, ref, target, text, message)
     return None
 
 
@@ -913,8 +921,12 @@ def settle_differing_target(
     """The target's two settings files differ (R6): refuse, saying whether the old one
     lags (an earlier first-parent version of the configuration branch's file, naming
     `fr settings sync`) or neither matches. Never writes; the quiet twin is
-    `fr.placement.quiet._settle_differing`."""
+    `fr.placement.quiet._settle_differing`. Past the end of S1's transition the old file is
+    not kept, so nothing is compared (spec 2026-11-28-s1-followups R4)."""
     from fr.placement.quiet import _blob, lag_refusal, legacy_lags, mismatch_refusal
+
+    if not transition.keeps_old_copy():
+        return
 
     del new_text
     cref = config_ref(ref)

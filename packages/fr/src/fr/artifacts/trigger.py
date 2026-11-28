@@ -83,6 +83,7 @@ from fr.artifacts.runner import (
     describe,
     inspection_failures,
 )
+from fr.config.movers import mover as _mover
 from fr.isolation.marker import valid_workspace
 
 # --- what is exempt ------------------------------------------------------
@@ -462,6 +463,7 @@ def _refuse_drift(root: Path, emit: Callable[[str], None]) -> None:
         )
 
 
+@_mover
 def ensure_artifacts_current(
     *,
     argv: Sequence[str] | None = None,

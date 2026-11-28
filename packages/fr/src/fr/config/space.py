@@ -419,7 +419,7 @@ def legacy(new: Path, old: Path, *, mover: bool = False) -> Path:
     if new.exists() or not old.exists():
         return new
     if transition.refusing():
-        if mover:
+        if mover or transition.is_moving():
             return old
         raise transition.old_path_refusal(old, new)
     key = str(old)

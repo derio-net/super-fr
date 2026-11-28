@@ -80,14 +80,18 @@ def init_cmd(
         except SettingsError as e:
             raise _refuse(e) from e
         return
+    from fr.config import transition
     from fr.placement.stealth import refuse_repo_config
 
     try:  # review p4-r3: from a stealth workspace, neither writes into the target
-        refuse_repo_config(
-            resolve_repo_root(),
-            "fr settings init --quiet" if quiet else "fr settings init",
-            "an `fr` branch on its origin" if quiet else SETTINGS_PATH,
-        )
+        # `--quiet` creating fr-config from the old switch is a mover (spec
+        # 2026-11-28-s1-followups R3): the old switch still reads as quiet here.
+        with transition.moving():
+            refuse_repo_config(
+                resolve_repo_root(),
+                "fr settings init --quiet" if quiet else "fr settings init",
+                "an `fr` branch on its origin" if quiet else SETTINGS_PATH,
+            )
     except SettingsError as e:
         raise _refuse(e) from e
     if quiet:
@@ -140,7 +144,10 @@ def init_quiet(root: Path) -> str:
             )
         probe = git_answer(root, "ls-remote", "--exit-code", "origin", QUIET_REF, CONFIG_REF)
         if probe.returncode == 0 and _origin_has_only_old_switch(root, probe.stdout):
-            return _create_from_old_switch(root)
+            from fr.config import transition
+
+            with transition.moving():  # a mover on both sides of S1's gate (R3)
+                return _create_from_old_switch(root)
         if probe.returncode == 0 and _origin_has_only_new_switch(probe.stdout):
             from fr.placement.quiet import finish_refusal, half_written
 
@@ -172,11 +179,14 @@ def init_quiet(root: Path) -> str:
     if probe.returncode != 2:
         raise unreachable(probe.stderr.strip() or "git ls-remote failed", None)
     # fr's own subject goes through the commit templates (R14), like every fr commit.
+    from fr.config import transition
+
     message = fr_message(root, "chore(fr): switch this repo to the quiet placement")
     write_settings(quiet_config_space(root), render_init("quiet"), message=message)
     commit = git_answer(root, "rev-parse", "--short=12", CONFIG_REF).stdout.strip()
+    also = f" and the `{QUIET_BRANCH}` branch" if transition.keeps_old_copy() else ""
     return (
-        f"pushed the `{CONFIG_BRANCH}` branch ({commit}) and the `{QUIET_BRANCH}` branch to "
+        f"pushed the `{CONFIG_BRANCH}` branch ({commit}){also} to "
         "origin: this repo is now quiet.\n"
         f"{QUIET_LIMITATION}\n"
         f"The policy keys are read from `{CONFIG_BRANCH}`: protect it as you protect the "
@@ -215,6 +225,7 @@ def _origin_has_only_new_switch(listing: str) -> bool:
 
 def _create_from_old_switch(root: Path) -> str:
     """Create `fr-config` holding the old switch's bytes (`quiet.ensure_config_branch`)."""
+    from fr.config import transition
     from fr.placement.quiet import CONFIG_BRANCH, QUIET_BRANCH, ensure_config_branch
 
     if not ensure_config_branch(root):
@@ -225,7 +236,12 @@ def _create_from_old_switch(root: Path) -> str:
     return (
         f"created the `{CONFIG_BRANCH}` branch on origin holding the quiet switch from "
         f"origin/{QUIET_BRANCH}:settings.yaml (byte for byte): this repo's configuration "
-        f"space now exists. The old file stays, in step, for older fr (R6)."
+        "space now exists. "
+        + (
+            "The old file stays, in step, for older fr (R6)."
+            if transition.keeps_old_copy()
+            else "The old file is left as it is; this fr no longer reads it."
+        )
     )
 
 
@@ -251,8 +267,10 @@ def init_stealth(root: Path, text: str) -> str:
     cref = stealth.config_ref(ref)
     if stealth._remote_has(cref, root):
         stealth.ensure_worktree(root, cref)
+    from fr.config import transition
+
     new, old = stealth.target_settings_texts(root, ref, target)
-    if new is not None and old is None:
+    if new is not None and old is None and transition.keeps_old_copy():
         # lens review l-errors-r1: an earlier init pushed the configuration branch and
         # stopped before the old file; `fr settings sync` (in a stealth workspace) lands it
         from fr.placement.quiet import SYNC_COMMAND
@@ -277,17 +295,25 @@ def init_stealth(root: Path, text: str) -> str:
         url = write_settings(space, old, message=message)
         if url is not None:
             return f"opened {url}: it adds {target}/{stealth.TARGET_SETTINGS} to {cref.text}"
+        stays = (
+            "the old file stays, in step, for older fr (R6)"
+            if transition.keeps_old_copy()
+            else "the old file is left as it is; this fr no longer reads it"
+        )
         return (
             f"moved {target}/{stealth.LEGACY_TARGET_SETTINGS} on {ref.text} to {target}/"
-            f"{stealth.TARGET_SETTINGS} on {cref.text} (byte for byte); the old file stays, "
-            "in step, for older fr (R6)"
+            f"{stealth.TARGET_SETTINGS} on {cref.text} (byte for byte); {stays}"
         )
     url = write_settings(space, render_init("stealth"), message=message)
     if url is not None:
         return f"opened {url}: it adds {target}/{stealth.TARGET_SETTINGS} to {cref.text}"
+    also = (
+        f" and {target}/{stealth.LEGACY_TARGET_SETTINGS} to {ref.text}"
+        if transition.keeps_old_copy()
+        else ""
+    )
     return (
-        f"pushed {target}/{stealth.TARGET_SETTINGS} to {cref.text} and "
-        f"{target}/{stealth.LEGACY_TARGET_SETTINGS} to {ref.text}: start a run with "
+        f"pushed {target}/{stealth.TARGET_SETTINGS} to {cref.text}{also}: start a run with "
         f"`fr isolation up --stealth {ref.text}` (stealth is chosen per run)"
     )
 
@@ -466,7 +492,21 @@ def sync_cmd(
         None, "--expect", help="With --yes: the configuration branch tip the preview showed."
     ),
 ) -> None:
-    """Bring the old settings copy in step after a reviewed change (spec R6)."""
+    """Bring the old settings copy in step after a reviewed change (retired in fr 9.2).
+
+    Before fr 9.2 it previews, and with `--yes` writes, the old copy S1 keeps in step (spec
+    2026-11-19 R6). Past the end of S1's transition fr keeps no old copy, so it refuses
+    (exit 2); it stays listed, with this help line on both sides of the gate, so the
+    generated CLI tree does not move with the version (spec 2026-11-28-s1-followups R5)."""
+    from fr.config import transition
+
+    if transition.refusing():
+        typer.echo(
+            "fr settings sync: this fr no longer keeps an old settings copy, so there is "
+            "nothing to sync (retired in fr 9.2)",
+            err=True,
+        )
+        raise typer.Exit(2)
     root = resolve_repo_root()
     try:
         placement = _sync_placement(root)

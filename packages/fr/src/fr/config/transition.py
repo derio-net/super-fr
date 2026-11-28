@@ -18,7 +18,22 @@ from typing import Final
 
 from packaging.version import InvalidVersion, Version
 
+from fr.config.movers import is_moving, mover, moving
 from fr.settings import SettingsError
+
+__all__ = [
+    "ENV",
+    "REFUSE_FROM",
+    "LegacyEnvRefused",
+    "TransitionError",
+    "is_moving",
+    "keeps_old_copy",
+    "mover",
+    "moving",
+    "old_path_refusal",
+    "refuses_old_read",
+    "refusing",
+]
 
 REFUSE_FROM: Final = (9, 2)
 """S1 ships in 9.1; the transition is one minor line."""
@@ -55,6 +70,11 @@ def refusing() -> bool:
 
     line = _line(str(fr.__version__))
     return line is None or line >= REFUSE_FROM
+
+
+def refuses_old_read() -> bool:
+    """Whether a READER must refuse an old form it found: past the gate, outside a mover."""
+    return refusing() and not is_moving()
 
 
 def keeps_old_copy() -> bool:

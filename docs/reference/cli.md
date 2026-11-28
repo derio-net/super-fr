@@ -233,7 +233,7 @@ one artifact kind.
   - `fr settings init`: Write `.fr/settings.yaml` with every key commented out at its default.
   - `fr settings show`: Print the effective settings and each key's source.
   - `fr settings paths`: Print the artifact path resolver's answers, for hooks and plugins.
-  - `fr settings sync`: Bring the old settings copy in step after a reviewed change.
+  - `fr settings sync`: Bring the old settings copy in step after a reviewed change (retired in fr 9.2).
   - `fr settings check`: Validate the settings: schema, servable placement, coherence.
 - `fr placement`: Move fr's artifacts between placements: move, migrate-branch.
   - `fr placement move`: Copy, verify, switch, then remove: every step idempotent and resumable.

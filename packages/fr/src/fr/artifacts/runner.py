@@ -67,6 +67,7 @@ from fr.artifacts.registry import (
     own_feature,
 )
 from fr.artifacts.text import NotUtf8Error
+from fr.config.movers import mover as _mover
 
 MIGRATING_ROOT: ContextVar[Path | None] = ContextVar("MIGRATING_ROOT", default=None)
 """The repo root `run_migrations` is applying under, for a hop whose artifact does not
@@ -383,6 +384,7 @@ MIGRATIONS = MigrationRegistry()
 # --- planning ------------------------------------------------------------
 
 
+@_mover
 def plan_migrations(
     repo_root: Path, *, registry: MigrationRegistry | None = None
 ) -> tuple[PlannedAction, ...]:
@@ -401,6 +403,7 @@ def plan_migrations(
     return tuple(actions)
 
 
+@_mover
 def is_stale(repo_root: Path, *, registry: MigrationRegistry | None = None) -> bool:
     """Is anything under `repo_root` out of date? Bails on the first `yes`.
 
@@ -660,6 +663,7 @@ def _held(
     return None
 
 
+@_mover
 def run_migrations(
     repo_root: Path,
     *,

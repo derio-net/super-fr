@@ -186,3 +186,24 @@ def test_the_migration_still_moves_every_old_path(tmp_path: Path) -> None:
     for old, new, _text in FILES.values():
         assert not (root / old).exists(), old
         assert (root / new).exists(), new
+
+
+@pytest.mark.usefixtures("ended")
+def test_under_quiet_the_migration_still_moves_from_the_old_switch(tmp_path: Path) -> None:
+    """R3: the old switch alone is refused to a reader past the gate, but the migration
+    still reads it, creates fr-config and moves the old file there."""
+    from tests.unit.settings_repo import git
+
+    root = _quiet(tmp_path)
+    for kind in ("models-config", "trackers-config"):
+        old, _new, text = FILES[kind]
+        _put(root, old, text)
+    report = run_migrations(root, dry_run=False)
+    assert report.ok, report.failed
+    outcome = commit_migration(root, report, fr_version="9.9.9")
+    assert outcome.committed, outcome.reason
+    origin = tmp_path / "origin.git"
+    tree = git(origin, "ls-tree", "-r", "--name-only", "fr-config").split()
+    assert ".fr/models.yaml" in tree and ".fr/settings.yaml" in tree
+    for kind in ("models-config", "trackers-config"):
+        assert not (root / FILES[kind][0]).exists()

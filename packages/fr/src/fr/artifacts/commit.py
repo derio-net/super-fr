@@ -47,6 +47,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fr.artifacts.runner import MigrationReport, PlannedAction
+from fr.config.movers import mover as _mover
 from fr.git import (
     GIT_TIMEOUT_SECONDS,
     GitRefusal,
@@ -531,6 +532,7 @@ def _staged_moves(repo_root: Path, report: MigrationReport) -> tuple[Path, ...]:
     return tuple(p for p in report.changed_paths if p not in drop)
 
 
+@_mover
 def commit_migration(
     repo_root: Path, report: MigrationReport, *, fr_version: str | None = None
 ) -> CommitOutcome:
