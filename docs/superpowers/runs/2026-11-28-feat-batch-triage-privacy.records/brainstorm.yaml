@@ -1,0 +1,78 @@
+schema_version: 12
+run: 2026-11-28-feat-batch-triage-privacy
+step: brainstorm
+outcome: done
+questions:
+  rounds: 2
+  trigger: operator-request
+  reason: the operator answered round-1 question 4 with a question about the scan's cost; round 2 put the measured cost to them and asked again
+journal:
+  - kind: discovery
+    id: operator-brief
+    input: true
+    title: The batch triage-privacy dispatch brief, verbatim
+    body: |
+      /fr-goal batch triage-privacy
+
+      Batch `triage-privacy` of derio-net/super-fr: 4 issues, delivered as ONE pull request.
+
+      (untrusted block, quoted from the issue tracker)
+      > Batch title: Triage privacy: outsider text never reaches worker sessions or the state ref unfenced
+      > #### super-fr#1633 — the admit digest pins title and body only; later outsider comments reach a worker reading the thread. `content_digest(title, body)` (`packages/fr/src/fr/triage/admit.py:34`) pins only title and body, so an outsider comment added after admission still reaches a worker reading the thread.
+      > #### super-fr#1634 — the privacy guard ignores other state-ref entries (merge-stops.json, history/, issues/, requests/sessions yaml). The privacy guard (`packages/fr/src/fr/triage/privacy.py:117` `leak_risk`, `check_or_refuse`) checks only issue keys against repo visibility; other state-ref entries are not inspected, so a private repo's content can reach a public state ref.
+      > #### super-fr#1632 — outside-author PR titles are never withheld (prs, gated_prs, batch_prs, judged_prs). Prompt-injection surface on a public repo, but nothing runs on it without an operator-driven dispatch.
+      > #### super-fr#1631 — A carried CLOSED judged PR that is later reopened stays carried as closed.
+
+      Delivery rules: branch `feat/batch-triage-privacy`; draft PR as soon as the spec is committed, body closing derio-net/super-fr#1633, #1634, #1632, #1631 one per line; no member issue as a phase `tracking_issue`; the wave driver owns mergeability and CI (no `fr pr settle` loop); never add `approved-fr`.
+  - kind: decision
+    id: d-admit-pins-comments
+    title: "#1633: the admit digest also pins every untrusted author's comment"
+    body: Operator chose (round 1 q1, recommended) to extend the digest over untrusted comments (login, time, body, in order); a new or edited untrusted comment voids the admission until re-admitted; the preview shows them. Rejected: void on a newer comment only; a brief-only fence.
+  - kind: decision
+    id: d-v1-markers-stop
+    title: "#1633: version-1 admit markers stop admitting"
+    body: Operator chose (round 1 q2, recommended) fail closed; a v1 marker gives a reason naming fr triage admit <key>. Rejected - keep v1 admitting while no untrusted comment exists.
+  - kind: decision
+    id: d-pr-title-login-rule
+    title: "#1632: a PR keeps its title only when its author is in the claim-trust set"
+    body: Operator chose (round 1 q3, recommended) the login rule (viewer + pr_authors), no new association read. Rejected - logins plus OWNER/MEMBER/COLLABORATOR via a PR association read.
+  - kind: decision
+    id: d-guard-scans-carried-files
+    title: "#1634: the guard scans every carried file for non-public repo names"
+    body: Operator leaned to the scan in round 1 q4 but asked about cost; measured on the host's state dirs (largest 50 carried files / 4.6 MB, ~150 ms cold; others < 5 ms), and in round 2 the operator chose the scan, with the short circuits (state repo public and some repo non-public). Rejected - per-file extractors.
+  - kind: decision
+    id: d-verification-none
+    title: "Verification: strategy none, CI unit tests; gate developer"
+    body: Operator chose (round 1 q5, recommended) strategy none; every requirement is engine behaviour fakes prove in CI.
+  - kind: decision
+    id: d-reopened-pr-truncation
+    title: "#1631: carry a CLOSED judged PR only when the open-PR list was complete"
+    body: Settled from the code, not asked - a reopened PR within the open-PR list's limit is already found there (listed_prs precedes finished_prs, collect.py:875); only a truncated list strands it, and carried closed issues already skip the carry on truncation (collect.py:881).
+acceptance:
+  - id: triage-admit-pins-comments
+    capability: triage-intake
+    acceptance: An admission pins the issue's untrusted comments with its title and body; an untrusted comment added or edited after admission, or a version-1 marker, leaves the issue ineligible until a maintainer re-admits it
+    origin: [spec:2026-11-28-triage-privacy#R1, spec:2026-11-28-triage-privacy#R2, spec:2026-11-28-triage-privacy#R3, spec:2026-11-28-triage-privacy#R4, spec:2026-11-28-triage-privacy#R5]
+    status: not-implemented
+    verify: none
+  - id: triage-pr-title-withheld
+    capability: triage-intake
+    acceptance: A PR whose author is not in the claim-trust set reaches facts, check and the pages with no title, in every PR list facts carry
+    origin: [spec:2026-11-28-triage-privacy#R6, spec:2026-11-28-triage-privacy#R7]
+    status: not-implemented
+    verify: none
+  - id: triage-state-scan-guard
+    capability: triage-privacy
+    acceptance: A push or export to a public state repo is refused when any carried file names a non-public repo of the scope, and a scope with nothing non-public reads no file for it
+    origin: [spec:2026-11-28-triage-privacy#R8, spec:2026-11-28-triage-privacy#R9]
+    status: not-implemented
+    verify: none
+  - id: triage-reopened-pr-uncarried
+    capability: triage-collect
+    acceptance: A judged PR that was closed and is reopened shows as open after the next collect, even when the repo's open-PR list is cut at its limit
+    origin: [spec:2026-11-28-triage-privacy#R10]
+    status: not-implemented
+    verify: none
+emitted:
+  spec: docs/superpowers/specs/2026-11-28-triage-privacy-design.md
+evidence: {}
